@@ -1,0 +1,46 @@
+[CmdletBinding()]
+param([int]$TimeoutMs = 120000)
+
+$ErrorActionPreference = 'Stop'
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
+Set-Location $ProjectRoot
+$Godot = Join-Path $ProjectRoot '.tools\godot-4.7.2\Godot_v4.7.2-stable_win64_console.exe'
+$Logs = Join-Path $ProjectRoot 'reports\logs'
+New-Item -ItemType Directory -Force -Path $Logs | Out-Null
+if (-not (Test-Path -LiteralPath $Godot)) { throw "Pinned Godot editor is missing: $Godot" }
+
+function Invoke-GodotBounded([string]$Name, [string[]]$Arguments) {
+    $log = Join-Path $Logs ("check-{0}.log" -f $Name)
+    $psi = New-Object Diagnostics.ProcessStartInfo
+    $psi.FileName = $Godot
+    $psi.WorkingDirectory = $ProjectRoot
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.Arguments = (($Arguments | ForEach-Object { '"' + $_.Replace('"','\\"') + '"' }) -join ' ')
+    $process = New-Object Diagnostics.Process; $process.StartInfo = $psi
+    if (-not $process.Start()) { throw "Could not start Godot for $Name" }
+    $stdout = $process.StandardOutput.ReadToEndAsync()
+    $stderr = $process.StandardError.ReadToEndAsync()
+    if (-not $process.WaitForExit($TimeoutMs)) {
+        $process.Kill(); $process.WaitForExit()
+        $text = $stdout.Result + [Environment]::NewLine + $stderr.Result + [Environment]::NewLine + 'TIMEOUT'
+        [IO.File]::WriteAllText($log, $text)
+        throw "Timed out: $Name; see $log"
+    }
+    $text = $stdout.Result + [Environment]::NewLine + $stderr.Result
+    [IO.File]::WriteAllText($log, $text)
+    Write-Output $text
+    if ($process.ExitCode -ne 0 -or $text -match '(?i)SCRIPT ERROR|ERROR:') { throw "Check failed: $Name; see $log" }
+}
+
+Invoke-GodotBounded 'import' @('--headless','--path','.','--editor','--import','--quit','--max-fps','60')
+Invoke-GodotBounded 'native-probe' @('--headless','--path','.','--scene','res://probes/dependency_probe.tscn','--max-fps','60','--','--probe')
+Invoke-GodotBounded 'checkpoint' @('--headless','--path','.','--script','res://tests/checkpoint_test.gd','--max-fps','60')
+Invoke-GodotBounded 'checkpoint-write-fixture' @('--headless','--path','.','--script','res://tests/checkpoint_test.gd','--max-fps','60','--','--write-fixture')
+Invoke-GodotBounded 'checkpoint-read-fixture' @('--headless','--path','.','--script','res://tests/checkpoint_test.gd','--max-fps','60','--','--read-fixture')
+Invoke-GodotBounded 'checkpoint-write-second' @('--headless','--path','.','--script','res://tests/checkpoint_test.gd','--max-fps','60','--','--write-second')
+Invoke-GodotBounded 'checkpoint-read-second' @('--headless','--path','.','--script','res://tests/checkpoint_test.gd','--max-fps','60','--','--read-second')
+Invoke-GodotBounded 'backend' @('--headless','--path','.','--script','res://tests/backend_test.gd','--max-fps','60')
+Invoke-GodotBounded 'controller' @('--headless','--path','.','--script','res://tests/controller_test.gd','--max-fps','60')
+Write-Output "check ok; logs=$Logs"

@@ -1,9 +1,10 @@
-; Hearthvale M0. Dependency probe is replaced by the M0 scene after export proof.
+; Hearthvale M0. Native dependency probes remain in probes/.
 config_version=5
 
 [application]
 config/name="Hearthvale M0"
-run/main_scene="res://probes/dependency_probe.tscn"
+run/main_scene="res://scenes/m0.tscn"
+config/icon="res://assets/icon.svg"
 config/features=PackedStringArray("4.7", "Mobile")
 
 [display]
@@ -15,5 +16,6 @@ window/handheld/orientation=0
 [rendering]
 renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="mobile"
+renderer/rendering_method.m0_compatibility="gl_compatibility"
 textures/default_filters/use_nearest_mipmap_filter=false
 textures/vram_compression/import_etc2_astc=true
