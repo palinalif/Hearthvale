@@ -1,7 +1,7 @@
 extends SceneTree
 
 ## Native M1 resolution probe. Public brush/plane coordinates stay in world
-## units while the authoritative VoxelBuffer uses 0.5-unit cells.
+## units while the authoritative VoxelBuffer uses 0.125-unit cells.
 
 const Backend := preload("res://scripts/terrain_backend.gd")
 const Generator := preload("res://scripts/m1_patch_generator.gd")
@@ -20,18 +20,18 @@ func _initialize() -> void:
 	backend.checkpoint_root = "user://m1-scaled-backend-%d" % Time.get_ticks_usec()
 	backend.require_building_document = true
 	root.add_child(backend)
-	var deadline := Time.get_ticks_msec() + 30000
+	var deadline := Time.get_ticks_msec() + 60000
 	while not backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame
 	_check(backend.is_ready(), "scaled native backend ready")
 	if not backend.is_ready():
 		_finish()
 		return
 	_check(backend.world_size().is_equal_approx(Vector3(48, 32, 48)), "M1 keeps 48×32×48 world bounds")
-	_check(backend.patch_size == Vector3i(96, 64, 96), "M1 uses 96×64×96 index grid")
-	_check(is_equal_approx(backend.voxel_scale, 0.5), "M1 uses half-unit voxel scale")
-	_check(backend.terrain.bounds.size == Vector3(96, 64, 96), "native bounds use index dimensions")
-	_check(backend.terrain.scale.is_equal_approx(Vector3.ONE * 0.5), "native terrain scales geometry uniformly")
-	_check(backend.voxel_at(Vector3i(95, 63, 95)) >= 0 and backend.voxel_at(Vector3i(96, 64, 96)) == 0, "index bounds are clamped")
+	_check(backend.patch_size == Vector3i(384, 256, 384) and backend.patch_size == Generator.PATCH_SIZE, "M1 uses 384×256×384 index grid")
+	_check(is_equal_approx(backend.voxel_scale, 0.125), "M1 uses eighth-unit editable voxels")
+	_check(backend.terrain.bounds.size == Vector3(Generator.PATCH_SIZE), "native bounds use index dimensions")
+	_check(backend.terrain.scale.is_equal_approx(Vector3.ONE * Generator.VOXEL_SCALE), "native terrain scales geometry uniformly")
+	_check(backend.voxel_at(Generator.PATCH_SIZE - Vector3i.ONE) >= 0 and backend.voxel_at(Generator.PATCH_SIZE) == 0, "index bounds are clamped")
 
 	var plane: Dictionary = backend.sample_surface_plane(Vector3(20.0, 8.0, 18.0), Vector3.UP, 3.0)
 	_check(bool(plane.get("valid", false)), "world-space surface sample is valid")
@@ -42,10 +42,10 @@ func _initialize() -> void:
 	var preview: Array[Vector3i] = backend.preview_sphere(Vector3(20.0, 8.0, 18.0), 2.0, true)
 	_check(not preview.is_empty(), "world radius converts to native sphere cells")
 	var preview_valid := true
-	var preview_min := Vector3i(96, 64, 96)
+	var preview_min := Generator.PATCH_SIZE
 	var preview_max := Vector3i.ZERO
 	for cell in preview:
-		preview_valid = preview_valid and cell.x >= 0 and cell.x < 96 and cell.y >= 0 and cell.y < 64 and cell.z >= 0 and cell.z < 96
+		preview_valid = preview_valid and cell.x >= 0 and cell.x < Generator.PATCH_SIZE.x and cell.y >= 0 and cell.y < Generator.PATCH_SIZE.y and cell.z >= 0 and cell.z < Generator.PATCH_SIZE.z
 		preview_min = Vector3i(mini(preview_min.x, cell.x), mini(preview_min.y, cell.y), mini(preview_min.z, cell.z))
 		preview_max = Vector3i(maxi(preview_max.x, cell.x), maxi(preview_max.y, cell.y), maxi(preview_max.z, cell.z))
 	_check(preview_valid, "preview cells remain inside M1 grid")
@@ -86,13 +86,21 @@ func _hash_buffer(buffer: Object) -> String:
 	return c.finish().hex_encode()
 
 func _changed_cells(before: Object, after: Object) -> int:
-	# Compare every native cell so this probe cannot pass on a hash-only or
-	# visual-only change.
+	# Inspect the native stroke's changed region, then undo only those reported
+	# cells in a clone. Equality of the entire payload proves the report omitted
+	# no changes, without a 37-million-cell GDScript traversal.
+	var restored: Object = backend._clone_buffer(after)
 	var count := 0
-	for x in 96:
-		for y in 64:
-			for z in 96:
-				if int(before.get_voxel(x, y, z, 0)) != int(after.get_voxel(x, y, z, 0)): count += 1
+	var seen := {}
+	for world_cell: Vector3 in backend.get_last_edit_cells():
+		var cell := Vector3i(floor(world_cell / Generator.VOXEL_SCALE))
+		if seen.has(cell): continue
+		seen[cell] = true
+		var prior := int(before.get_voxel(cell.x, cell.y, cell.z, 0))
+		if prior != int(after.get_voxel(cell.x, cell.y, cell.z, 0)): count += 1
+		restored.set_voxel(prior, cell.x, cell.y, cell.z, 0)
+	_check(count == seen.size(), "reported edit cells correspond to actual voxel changes")
+	_check(_hash_buffer(restored) == _hash_buffer(before), "reported changed cells account for every modified payload byte")
 	return count
 
 func _check(ok: bool, label: String) -> void:

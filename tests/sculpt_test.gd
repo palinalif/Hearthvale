@@ -246,6 +246,9 @@ func _init() -> void:
 	var smooth_before_full: Object = backend._clone_buffer(backend.voxels)
 	check(backend.begin_stroke("smooth", Vector3(16.0, 10.0, 16.0), {"radius": 3.0, "strength": 40.0, "falloff": 0.5}), "begin roughness smooth")
 	for _i in 120: backend.update_stroke(Vector3(16.0, 10.0, 16.0), 1.0 / 60.0)
+	var live_changes := _count_changed(smooth_before_full, backend.voxels)
+	check(backend.get_stroke_state().changed_count == live_changes, "incremental smooth changed count matches every authoritative voxel")
+	check(backend._stroke_positions.size() > live_changes, "smooth count fixture includes cells returned to their original value")
 	check(backend.end_stroke(), "end roughness smooth")
 	var rough_after := _surface_roughness(backend, 15, 17)
 	check(rough_after < rough_before, "smooth reduces local surface roughness")
@@ -282,10 +285,111 @@ func _init() -> void:
 	check(backend30.end_stroke() and backend60.end_stroke(), "end moving timing strokes")
 	check(_bytes(backend30) == _bytes(backend60), "moving 30fps and 60fps sculpt equivalent")
 
+	await _check_scaled_flatten(0.5)
+	await _check_scaled_flatten(0.25)
+
 	backend.queue_free(); backend30.queue_free(); backend60.queue_free()
 	await process_frame
 	print("sculpt_test checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures > 0 else 0)
+
+func _check_scaled_flatten(cell_size: float) -> void:
+	var scaled: Node = Backend.new()
+	scaled.voxel_scale = cell_size
+	scaled.checkpoint_root = "user://sculpt-pad-%d" % Time.get_ticks_usec()
+	root.add_child(scaled)
+	await _wait_ready(scaled, 16000)
+	check(scaled.is_ready(), "scaled flatten native backend ready %.2f" % cell_size)
+	if not scaled.is_ready():
+		scaled.queue_free()
+		return
+	# One pad with a low and a high side. The high side must descend farther
+	# than the sampling radius, while the captured plane remains immutable.
+	for x in range(12, 29):
+		for z in range(12, 21):
+			var top := 4 if x < 20 else (12 if x == 20 else 24)
+			for y in range(32):
+				scaled.voxels.set_voxel(1 if y < top else 0, x, y, z, PatchGenerator.CHANNEL_TYPE)
+	scaled.terrain.get_voxel_tool().paste(Vector3i.ZERO, scaled.voxels, 1)
+	var pad_base := _bytes(scaled)
+	var pad_before: Object = scaled._clone_buffer(scaled.voxels)
+	var plane: Dictionary = scaled.sample_surface_plane(Vector3(20, 12, 16) * cell_size, Vector3.UP, cell_size)
+	check(bool(plane.get("valid", false)) and is_equal_approx((plane.get("point", Vector3.ZERO) as Vector3).y, 12.0 * cell_size), "pad locks actual world height %.2f" % cell_size)
+	# Height flatten uses the actual hit even when its fitted surroundings are
+	# steep. Do not replace that normal in the fixture to bypass validation.
+	check((plane.get("normal", Vector3.UP) as Vector3).y < 0.5, "pad sample exercises steep fitted normal %.2f" % cell_size)
+	var settings := {"radius": 3.0 * cell_size, "strength": 6.0, "falloff": 0.5}
+	var low := Vector3(16, 4, 16) * cell_size
+	check(scaled.begin_stroke("level", low, settings, plane), "begin low pad extension %.2f" % cell_size)
+	check(scaled.get_stroke_state().reference.get("normal", Vector3.ZERO) == Vector3.UP, "height flatten stores horizontal reference %.2f" % cell_size)
+	for _i in 15: scaled.update_stroke(low, 1.0 / 60.0)
+	var rise: float = (scaled._column_surface_y(scaled.voxels, 16, 16) - 4.0) * cell_size
+	check(is_equal_approx(rise, 1.5), "six world units/sec raises 1.5 units in quarter second %.2f" % cell_size)
+	for _i in 105: scaled.update_stroke(low, 1.0 / 60.0)
+	check(scaled.end_stroke(), "commit low pad extension %.2f" % cell_size)
+	for x in range(15, 18):
+		check(scaled._column_surface_y(scaled.voxels, x, 16) == 12.0, "low pad reaches locked plane without overshoot %.2f" % cell_size)
+	var low_pad := _bytes(scaled)
+	var reported_cells: Array[Vector3] = scaled.get_last_edit_cells()
+	var reported_bounds: AABB = scaled.get_last_edit_bounds()
+	var expected_changes := 0
+	for x in scaled.patch_size.x:
+		for y in scaled.patch_size.y:
+			for z in scaled.patch_size.z:
+				if pad_before.get_voxel(x, y, z, 0) != scaled.voxels.get_voxel(x, y, z, 0): expected_changes += 1
+	var cells_valid := reported_cells.size() == expected_changes
+	var unique_cells := {}
+	for point in reported_cells:
+		var cell := Vector3i((point / cell_size).floor())
+		unique_cells[cell] = true
+		cells_valid = cells_valid and reported_bounds.has_point(point) and point.is_equal_approx((Vector3(cell) + Vector3.ONE * 0.5) * cell_size)
+		cells_valid = cells_valid and pad_before.get_voxel(cell.x, cell.y, cell.z, 0) != scaled.voxels.get_voxel(cell.x, cell.y, cell.z, 0)
+	check(cells_valid and unique_cells.size() == expected_changes, "last edit reports every changed world cell centre exactly %.2f" % cell_size)
+	var high := Vector3(24, 24, 16) * cell_size
+	check(scaled.begin_stroke("level", high, settings, plane), "begin high pad extension %.2f" % cell_size)
+	for _i in 180: scaled.update_stroke(high, 1.0 / 60.0)
+	for x in range(23, 26):
+		check(scaled._column_surface_y(scaled.voxels, x, 16) == 12.0, "high pad descends past sample reach to locked plane %.2f" % cell_size)
+	check(scaled.get_stroke_state().reference.point == plane.point, "pad reference stays fixed across strokes %.2f" % cell_size)
+	check(scaled.cancel_stroke() and _bytes(scaled) == low_pad, "cancel entire pad extension exactly %.2f" % cell_size)
+	check(scaled.get_last_edit_cells() == reported_cells, "cancel preserves committed edit metadata %.2f" % cell_size)
+	check(scaled.begin_stroke("level", high, settings, plane), "restart high pad extension %.2f" % cell_size)
+	for _i in 180: scaled.update_stroke(high, 1.0 / 60.0)
+	check(scaled.end_stroke(), "commit high pad extension %.2f" % cell_size)
+	var complete_pad := _bytes(scaled)
+	check(scaled.undo() and _bytes(scaled) == low_pad, "pad undo exact %.2f" % cell_size)
+	check(scaled.redo() and _bytes(scaled) == complete_pad, "pad redo exact %.2f" % cell_size)
+	check(scaled.undo(), "reset scaled level timing %.2f" % cell_size)
+	check(scaled.begin_stroke("level", high, settings, plane), "begin scaled 30fps level %.2f" % cell_size)
+	for _i in 90: scaled.update_stroke(high, 1.0 / 30.0)
+	check(scaled.end_stroke() and _bytes(scaled) == complete_pad, "scaled 30fps and 60fps level match exactly %.2f" % cell_size)
+	var fresh: Dictionary = scaled.sample_surface_plane(Vector3(24, 12, 16) * cell_size, Vector3.UP, cell_size)
+	var fresh_point: Vector3 = fresh.get("point", Vector3.ZERO)
+	check(bool(fresh.get("valid", false)) and fresh_point.y == plane.point.y, "fresh stroke samples edited pad height %.2f" % cell_size)
+	check(scaled.begin_stroke("raise", fresh_point, settings), "fresh raise targets edited pad %.2f" % cell_size)
+	for _i in 15: scaled.update_stroke(fresh_point, 1.0 / 60.0)
+	check(is_equal_approx((scaled._column_surface_y(scaled.voxels, 24, 16) - 12.0) * cell_size, 1.5), "fresh raise advances at configured world speed %.2f" % cell_size)
+	check(scaled.cancel_stroke() and _bytes(scaled) == complete_pad, "fresh raise cancel exact %.2f" % cell_size)
+	check(scaled.save_world() and scaled.load_world() and _bytes(scaled) == complete_pad, "completed pad checkpoint exact %.2f" % cell_size)
+	check(scaled.get_last_edit_cells().is_empty(), "checkpoint load clears stale edit metadata %.2f" % cell_size)
+	check(complete_pad != pad_base, "pad fixture changed %.2f" % cell_size)
+	# Flattening through a cave roof must stop at the newly exposed void. Its
+	# immutable front cannot reselect and lower the disconnected cave floor.
+	for y in 32:
+		scaled.voxels.set_voxel(1 if y < 4 or (y >= 10 and y < 14) else 0, 32, y, 16, 0)
+	scaled.terrain.get_voxel_tool().paste(Vector3i.ZERO, scaled.voxels, 1)
+	var cave_base := _bytes(scaled)
+	var cave_plane := {"valid": true, "point": Vector3(32, 2, 16) * cell_size, "normal": Vector3.UP}
+	var cave_center := Vector3(32, 14, 16) * cell_size
+	check(scaled.begin_stroke("level", cave_center, {"radius": cell_size, "strength": 6.0, "falloff": 0.5}, cave_plane), "begin scaled cave roof flatten %.2f" % cell_size)
+	for _i in 120: scaled.update_stroke(cave_center, 1.0 / 60.0)
+	var cave_preserved := true
+	for y in 4: cave_preserved = cave_preserved and scaled.voxel_at(Vector3i(32, y, 16)) != 0
+	for y in range(4, 14): cave_preserved = cave_preserved and scaled.voxel_at(Vector3i(32, y, 16)) == 0
+	check(cave_preserved, "flatten clears roof and preserves disconnected cave floor %.2f" % cell_size)
+	check(scaled.cancel_stroke() and _bytes(scaled) == cave_base, "scaled cave flatten cancel exact %.2f" % cell_size)
+	scaled.queue_free()
+	await process_frame
 
 func _wait_ready(backend: Node, timeout_ms: int) -> void:
 	var deadline := Time.get_ticks_msec() + timeout_ms
@@ -294,6 +398,15 @@ func _wait_ready(backend: Node, timeout_ms: int) -> void:
 
 func _bytes(backend: Node) -> PackedByteArray:
 	return backend.voxels.get_channel_as_byte_array(PatchGenerator.CHANNEL_TYPE)
+
+func _count_changed(before: Object, after: Object) -> int:
+	var dimensions: Vector3i = before.get_size()
+	var result := 0
+	for x in dimensions.x:
+		for y in dimensions.y:
+			for z in dimensions.z:
+				if before.get_voxel(x, y, z, 0) != after.get_voxel(x, y, z, 0): result += 1
+	return result
 
 func _outside_region_equal(before: Object, after: Object, region_min: Vector3i, region_max: Vector3i) -> bool:
 	for x in 48:

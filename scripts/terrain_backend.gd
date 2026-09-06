@@ -17,11 +17,12 @@ const SCULPT_TOOL_SLOPE := "slope"
 const SCULPT_TOOL_SMOOTH := "smooth"
 const PatchGenerator = preload("res://scripts/patch_generator.gd")
 const CheckpointStore = preload("res://scripts/checkpoint_store.gd")
+const M1Generator = preload("res://scripts/m1_patch_generator.gd")
 
 var terrain: Node
 var voxels: Object
-## Index dimensions remain 48×32×48 for M0. M1 supplies 96×64×96 at
-## half-unit voxels, keeping the authored world bounds at 48×32×48.
+## Index dimensions remain 48×32×48 for M0. M1 supplies 384×256×384 at
+## eighth-unit voxels, keeping the authored world bounds at 48×32×48.
 @export var patch_size: Vector3i = PATCH_SIZE
 @export var voxel_scale: float = 1.0
 var initial_generator: Script = PatchGenerator
@@ -32,6 +33,7 @@ var _revision := 0
 var _undo: Array[Dictionary] = []
 var _redo: Array[Dictionary] = []
 var _history_bytes := 0
+var _last_edit_command: Dictionary = {}
 var _last_edit_ms := 0.0
 var _last_edit_submitted_at_ms := -1
 var _save_status := "never"
@@ -51,14 +53,23 @@ var _stroke_front_distance := 0.0
 var _stroke_before_dirty := false
 var _stroke_before: Dictionary = {}
 var _stroke_positions: Array[Vector3i] = []
+var _stroke_changed_cells := 0
+var _stroke_mutations := 0
 var _stroke_accumulated: Dictionary = {}
 var _stroke_fronts: Dictionary = {}
+var _stroke_front_cache_center := Vector3.INF
+var _stroke_front_columns: Array[Vector3i] = []
+var _stroke_front_influence := PackedFloat64Array()
 var _stroke_front_axis := 1
 var _stroke_front_sign := 1
 var _stroke_segments: Array[Dictionary] = []
 var _stroke_pending_time := 0.0
 var _stroke_input_center := Vector3.ZERO
 var _current_region_min := Vector3i.ZERO
+var _defer_native_updates := false
+var _pending_native_region := false
+var _pending_native_min := Vector3i.ZERO
+var _pending_native_max := Vector3i.ZERO
 
 func _ready() -> void:
 	if voxel_scale <= 0.0 or not is_finite(voxel_scale) or patch_size.x <= 0 or patch_size.y <= 0 or patch_size.z <= 0:
@@ -73,6 +84,12 @@ func _ready() -> void:
 		return
 	terrain = ClassDB.instantiate("VoxelTerrain")
 	terrain.bounds = AABB(Vector3.ZERO, Vector3(patch_size))
+	# VoxelTerrain defaults to a 128-cell streaming cap. The fine finite
+	# valley needs its full extent editable, including its outer boundaries.
+	terrain.max_view_distance = maxi(128, ceili(Vector3(patch_size).length()))
+	# Pinned VoxelTerrain supports mesh blocks of 16 or 32 while its native
+	# data blocks stay 16. Group fine-grid surfaces to reduce draw overhead.
+	if patch_size.x > 96: terrain.mesh_block_size = 32
 	terrain.scale = Vector3.ONE * voxel_scale
 	var generator_script: Script = initial_generator if initial_generator != null else PatchGenerator
 	var mesher: Object = ClassDB.instantiate("VoxelMesherBlocky")
@@ -95,18 +112,19 @@ func _ready() -> void:
 		add_child(viewer)
 	voxels = generator_script.generate()
 	var full_area := AABB(Vector3.ZERO, Vector3(patch_size))
-	var load_deadline := Time.get_ticks_msec() + 15000
+	var initialization_budget_ms := 45000 if patch_size.x > 96 else 15000
+	var load_deadline := Time.get_ticks_msec() + initialization_budget_ms
 	var tool = terrain.get_voxel_tool()
 	while not tool.is_area_editable(full_area) and Time.get_ticks_msec() < load_deadline:
 		await get_tree().process_frame
 	if not tool.is_area_editable(full_area):
-		_error = "Native terrain area did not become editable within 15 seconds"
+		_error = "Native terrain area did not become editable within %d ms" % initialization_budget_ms
 		return
 	tool.paste(Vector3i.ZERO, voxels, 1)
 	while not terrain.is_area_meshed(full_area) and Time.get_ticks_msec() < load_deadline:
 		await get_tree().process_frame
 	if not terrain.is_area_meshed(full_area):
-		_error = "Native terrain area did not mesh within 15 seconds"
+		_error = "Native terrain area did not mesh within %d ms" % initialization_budget_ms
 		return
 	_initial_mesh_ready = true
 	_backend_ready = true
@@ -165,6 +183,7 @@ func apply_sphere(center: Vector3, radius: float, remove: bool) -> bool:
 	_history_bytes -= redo_bytes
 	voxels = after_full
 	_undo.append({"min": region_min, "size": region_size, "before": before_region, "after": after_region})
+	_last_edit_command = _undo.back()
 	_history_bytes += command_bytes
 	if _undo.size() > MAX_HISTORY:
 		_history_bytes -= _command_bytes(_undo.pop_front())
@@ -211,12 +230,14 @@ func begin_stroke(tool, center: Vector3, settings: Dictionary, reference_plane: 
 		if not reference_normal is Vector3 or not reference_normal.is_finite() or reference_normal.length_squared() < 0.000001:
 			return false
 		stroke_reference["normal"] = reference_normal.normalized()
-		# Flattening currently operates on vertical columns.  A wall or an
-		# underside needs a tangent-plane voxel operation, so reject those
-		# references instead of silently writing a vertical stack at the wrong
-		# orientation.
-		if stroke_reference["normal"].y < 0.5:
+		# Height flatten needs the hit height even on a steep upward slope.
+		# Its reference is horizontal. Surface flatten retains the fitted slope;
+		# walls and undersides still require a different tangent-plane operation.
+		var minimum_up := 0.000001 if normalized_tool == SCULPT_TOOL_LEVEL else 0.5
+		if stroke_reference["normal"].y < minimum_up:
 			return false
+		if normalized_tool == SCULPT_TOOL_LEVEL:
+			stroke_reference["normal"] = Vector3.UP
 		if not stroke_reference.has("slope_x") or not stroke_reference.has("slope_z"):
 			stroke_reference["slope_x"] = -reference_normal.x / maxf(absf(reference_normal.y), 0.000001)
 			stroke_reference["slope_z"] = -reference_normal.z / maxf(absf(reference_normal.y), 0.000001)
@@ -236,6 +257,8 @@ func begin_stroke(tool, center: Vector3, settings: Dictionary, reference_plane: 
 	_stroke_before_dirty = _dirty
 	_stroke_before.clear()
 	_stroke_positions.clear()
+	_stroke_changed_cells = 0
+	_stroke_mutations = 0
 	_stroke_accumulated.clear()
 	_stroke_fronts.clear()
 	_stroke_segments.clear()
@@ -253,20 +276,25 @@ func update_stroke(center: Vector3, delta_seconds: float) -> bool:
 	_stroke_input_center = clamped_center
 	_stroke_pending_time += delta_seconds
 	var started := Time.get_ticks_usec()
-	var changed_before := _stroke_changed_count()
+	var mutations_before := _stroke_mutations
+	_defer_native_updates = true
 	while _stroke_pending_time + 0.0000001 >= SCULPT_FIXED_DT:
 		_consume_stroke_time(SCULPT_FIXED_DT)
 		_stroke_pending_time -= SCULPT_FIXED_DT
-	var changed_now := _stroke_changed_count()
+	_defer_native_updates = false
+	_flush_native_updates()
 	_last_edit_ms = (Time.get_ticks_usec() - started) / 1000.0
-	return changed_now != changed_before
+	return _stroke_mutations != mutations_before
 
 func end_stroke() -> bool:
 	if not _stroke_active:
 		return false
 	if _stroke_pending_time > 0.0000001:
+		_defer_native_updates = true
 		_consume_stroke_time(_stroke_pending_time)
 		_stroke_pending_time = 0.0
+		_defer_native_updates = false
+		_flush_native_updates()
 	var changed_cells := _stroke_changed_count()
 	if changed_cells == 0:
 		_clear_stroke()
@@ -294,6 +322,7 @@ func end_stroke() -> bool:
 	_redo.clear()
 	_history_bytes -= redo_bytes
 	_undo.append({"min": region_min, "size": region_size, "before": before_region, "after": after_region})
+	_last_edit_command = _undo.back()
 	_history_bytes += command_bytes
 	if _undo.size() > MAX_HISTORY:
 		_history_bytes -= _command_bytes(_undo.pop_front())
@@ -342,6 +371,41 @@ func get_stroke_state() -> Dictionary:
 	if reference.get("point", null) is Vector3: reference["point"] = _cell_to_world(reference["point"])
 	return {"active": _stroke_active, "tool": _stroke_tool, "reference": reference, "changed_count": _stroke_changed_count(), "front_distance": _stroke_front_distance * voxel_scale}
 
+## Preview only: track the edited local frontier without moving the input
+## plane or raycasting through a newly opened void onto distant geometry.
+func get_stroke_preview_center(world_input_center: Vector3) -> Vector3:
+	if not _stroke_active or _stroke_tool not in [SCULPT_TOOL_RAISE, SCULPT_TOOL_DIG] or not world_input_center.is_finite(): return world_input_center
+	var point := _world_to_cell(world_input_center)
+	var column := Vector3i(point.floor())
+	column[_stroke_front_axis] = 0
+	var key := _column_key(column)
+	if not _stroke_fronts.has(key): return world_input_center
+	var coordinate := int(_stroke_fronts[key])
+	var boundary_offset := 1 if (_stroke_tool == SCULPT_TOOL_RAISE and _stroke_front_sign < 0) or (_stroke_tool == SCULPT_TOOL_DIG and _stroke_front_sign > 0) else 0
+	point[_stroke_front_axis] = clampf(float(coordinate + boundary_offset), 0.0, float(patch_size[_stroke_front_axis]))
+	return _cell_to_world(point)
+
+## Last committed edit, undo or redo, in backend world coordinates. Derive
+## exact changed cells from the existing history buffers instead of retaining
+## a second per-cell list for every transaction. Cancel leaves this unchanged.
+func get_last_edit_bounds() -> AABB:
+	if _last_edit_command.is_empty(): return AABB()
+	return AABB(Vector3(_last_edit_command["min"]) * voxel_scale, Vector3(_last_edit_command["size"]) * voxel_scale)
+
+func get_last_edit_cells() -> Array[Vector3]:
+	var result: Array[Vector3] = []
+	if _last_edit_command.is_empty(): return result
+	var origin: Vector3i = _last_edit_command["min"]
+	var size: Vector3i = _last_edit_command["size"]
+	var before: Object = _last_edit_command["before"]
+	var after: Object = _last_edit_command["after"]
+	for x in size.x:
+		for y in size.y:
+			for z in size.z:
+				if before.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE) != after.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE):
+					result.append((Vector3(origin + Vector3i(x, y, z)) + Vector3.ONE * 0.5) * voxel_scale)
+	return result
+
 func undo() -> bool:
 	if _stroke_active or not _backend_ready or _undo.is_empty(): return false
 	var command: Dictionary = _undo.pop_back()
@@ -382,19 +446,53 @@ func load_world() -> bool:
 		_save_status = "error"; _error = "backend not ready"; return false
 	loaded_building_document = {}
 	var loaded = _checkpoint.load()
+	var source_store: RefCounted = _checkpoint
+	var migrated := false
+	if loaded == null and initial_generator == M1Generator and generator_id == M1Generator.GENERATOR_ID and patch_size == M1Generator.PATCH_SIZE and is_equal_approx(voxel_scale, M1Generator.VOXEL_SCALE):
+		var legacy_store := CheckpointStore.new(checkpoint_root)
+		legacy_store.expected_dimensions = M1Generator.LEGACY_PATCH_SIZE
+		legacy_store.expected_generator_id = M1Generator.LEGACY_GENERATOR_ID
+		legacy_store.require_building_document = require_building_document
+		var legacy: Object = legacy_store.load()
+		if legacy != null:
+			loaded = _upsample_legacy_m1(legacy)
+			source_store = legacy_store
+			migrated = loaded != null
 	if loaded == null:
 		_save_status = "error"; _error = _checkpoint.last_error; return false
-	var loaded_revision: int = _checkpoint.loaded_revision
+	var loaded_revision: int = source_store.loaded_revision
 	voxels = loaded
-	loaded_building_document = _checkpoint.loaded_building_document.duplicate(true)
+	loaded_building_document = source_store.loaded_building_document.duplicate(true)
 	terrain.get_voxel_tool().paste(Vector3i.ZERO, voxels, 1)
 	_undo.clear(); _redo.clear(); _history_bytes = 0
+	_last_edit_command = {}
 	_revision = loaded_revision
-	_dirty = false
-	_save_status = "loaded"; _error = ""
+	_dirty = migrated
+	_save_status = "migrated" if migrated else "loaded"; _error = ""
 	_last_edit_submitted_at_ms = Time.get_ticks_msec()
 	changed.emit()
 	return true
+
+func _upsample_legacy_m1(source: Object) -> Object:
+	if source == null or source.get_size() != M1Generator.LEGACY_PATCH_SIZE: return null
+	var result: Object = ClassDB.instantiate("VoxelBuffer")
+	result.create(M1Generator.PATCH_SIZE.x, M1Generator.PATCH_SIZE.y, M1Generator.PATCH_SIZE.z)
+	result.set_channel_depth(PatchGenerator.CHANNEL_TYPE, source.get_channel_depth(PatchGenerator.CHANNEL_TYPE))
+	# Expand every vertical material run, including caves and disconnected
+	# overhangs. No sampling, surface reconstruction or save rewrite occurs.
+	var dimensions: Vector3i = source.get_size()
+	const FACTOR := 4
+	for x in dimensions.x:
+		for z in dimensions.z:
+			var start := 0
+			while start < dimensions.y:
+				var value := int(source.get_voxel(x, start, z, PatchGenerator.CHANNEL_TYPE))
+				var end := start + 1
+				while end < dimensions.y and int(source.get_voxel(x, end, z, PatchGenerator.CHANNEL_TYPE)) == value: end += 1
+				if value != 0:
+					result.fill_area(value, Vector3i(x, start, z) * FACTOR, Vector3i(x + 1, end, z + 1) * FACTOR, PatchGenerator.CHANNEL_TYPE)
+				start = end
+	return result
 
 func voxel_at(pos: Vector3i) -> int:
 	if not _backend_ready or pos.x < 0 or pos.y < 0 or pos.z < 0 or pos.x >= patch_size.x or pos.y >= patch_size.y or pos.z >= patch_size.z: return 0
@@ -435,6 +533,8 @@ func _dominant_axis(vector: Vector3) -> int:
 
 func _consume_stroke_time(duration: float) -> void:
 	var remaining := duration
+	var stationary_duration := 0.0
+	var stationary_center := Vector3.ZERO
 	while remaining > 0.0000001 and not _stroke_segments.is_empty():
 		var segment: Dictionary = _stroke_segments[0]
 		var segment_duration: float = segment["duration"]
@@ -448,12 +548,24 @@ func _consume_stroke_time(duration: float) -> void:
 		var finish: Vector3 = segment["b"]
 		var alpha0 := segment_elapsed / segment_duration if segment_duration > 0.0000001 else 1.0
 		var alpha1 := (segment_elapsed + consumed) / segment_duration if segment_duration > 0.0000001 else 1.0
-		_integrate_stroke_path(start.lerp(finish, alpha0), start.lerp(finish, alpha1), consumed)
+		if start == finish:
+			if stationary_duration > 0.0 and stationary_center != start:
+				_integrate_stroke_sample(stationary_center, stationary_duration)
+				stationary_duration = 0.0
+			stationary_center = start
+			stationary_duration += consumed
+		else:
+			if stationary_duration > 0.0:
+				_integrate_stroke_sample(stationary_center, stationary_duration)
+				stationary_duration = 0.0
+			_integrate_stroke_path(start.lerp(finish, alpha0), start.lerp(finish, alpha1), consumed)
 		segment["elapsed"] = segment_elapsed + consumed
 		_stroke_segments[0] = segment
 		remaining -= consumed
 		if float(segment["elapsed"]) >= segment_duration - 0.0000001:
 			_stroke_segments.pop_front()
+	if stationary_duration > 0.0:
+		_integrate_stroke_sample(stationary_center, stationary_duration)
 
 func _integrate_stroke_path(start: Vector3, finish: Vector3, duration: float) -> void:
 	var distance := start.distance_to(finish)
@@ -468,42 +580,65 @@ func _integrate_stroke_sample(center: Vector3, duration: float) -> void:
 	if _stroke_tool == SCULPT_TOOL_RAISE or _stroke_tool == SCULPT_TOOL_DIG:
 		_integrate_front_sample(center, duration)
 	elif _stroke_tool == SCULPT_TOOL_LEVEL or _stroke_tool == SCULPT_TOOL_SLOPE:
-		_integrate_level_sample(center, duration)
+		# Each plane pass follows one connected surface transition. Subdivide
+		# fast fine-grid input so its rate remains world units/sec, while every
+		# pass still stops precisely at its fixed plane or a newly opened void.
+		var steps := mini(patch_size.y, maxi(1, ceili(float(_stroke_settings["strength"]) * duration)))
+		for _i in steps: _integrate_level_sample(center, duration / float(steps))
 	else:
 		_integrate_smooth_sample(center, duration)
 
 func _integrate_front_sample(center: Vector3, duration: float) -> void:
 	var radius: float = _stroke_settings["radius"]
-	var columns := _stroke_columns(center, radius)
-	for column in columns:
-		_ensure_front(column, center)
-	if columns.is_empty():
+	# A held brush keeps its footprint and falloff; only its frontier moves.
+	# Reuse that footprint until input position changes, including across
+	# fixed ticks spanning two input frames with identical stationary centres.
+	if center != _stroke_front_cache_center:
+		_stroke_front_cache_center = center
+		_stroke_front_columns = _stroke_columns(center, radius)
+		_stroke_front_influence.resize(_stroke_front_columns.size())
+		var exponent := lerpf(1.0, 4.0, float(_stroke_settings["falloff"]))
+		for i in _stroke_front_columns.size():
+			var column := _stroke_front_columns[i]
+			_ensure_front(column, center)
+			_stroke_front_influence[i] = pow(maxf(0.0, 1.0 - _column_distance(column, center) / radius), exponent)
+	var ready_columns: Array[Vector3i] = []
+	var max_transitions := 0
+	var rate := float(_stroke_settings["strength"]) * duration
+	for i in _stroke_front_columns.size():
+		var column := _stroke_front_columns[i]
+		var accumulated := float(_stroke_accumulated.get(column, 0.0)) + rate * _stroke_front_influence[i]
+		_stroke_accumulated[column] = accumulated
+		if accumulated + 0.000001 >= 1.0:
+			ready_columns.append(column)
+			max_transitions = maxi(max_transitions, mini(patch_size[_stroke_front_axis], floori(accumulated + 0.000001)))
+	_stroke_front_distance += float(_stroke_settings["strength"]) * duration * 0.5
+	if ready_columns.is_empty():
 		return
-	var region := _front_region(columns)
+	var region := _front_region(ready_columns, max_transitions)
 	var region_min: Vector3i = region[0]
 	var region_max: Vector3i = region[1]
 	_current_region_min = region_min
 	var local: Object = _clone_region(voxels, region_min, region_max)
 	var changed := false
-	var exponent := lerpf(1.0, 4.0, float(_stroke_settings["falloff"]))
-	for column in columns:
-		var plane_distance := _column_distance(column, center)
-		if plane_distance > radius:
-			continue
-		var influence := pow(maxf(0.0, 1.0 - plane_distance / radius), exponent)
+	for column in ready_columns:
 		var key := _column_key(column)
-		var amount := float(_stroke_settings["strength"]) * duration * influence
-		_stroke_accumulated[key] = float(_stroke_accumulated.get(key, 0.0)) + amount
-		# One frontier transition per fixed sample keeps the bounded local
-		# buffer valid even at a deliberately high strength setting. Remainder
-		# carries into the next tick, preserving time based integration.
-		if float(_stroke_accumulated[key]) + 0.000001 >= 1.0:
+		# The local native buffer includes every transition due this sample.
+		# Fine cells must not cap a 16 world-unit/sec brush at 60 cells/sec.
+		var remaining := max_transitions
+		while float(_stroke_accumulated[key]) + 0.000001 >= 1.0 and remaining > 0:
 			_stroke_accumulated[key] = float(_stroke_accumulated[key]) - 1.0
+			remaining -= 1
+			var previous_front := int(_stroke_fronts[key])
 			if _advance_front(local, column):
 				changed = true
+			elif int(_stroke_fronts[key]) == previous_front:
+				# At a void or the finite boundary no work can advance. Avoid
+				# accumulating an ever-larger local buffer for a stopped front.
+				_stroke_accumulated[key] = 0.0
+				break
 	if changed:
 		_write_region(local, region_min)
-	_stroke_front_distance += float(_stroke_settings["strength"]) * duration * 0.5
 
 func _integrate_level_sample(center: Vector3, duration: float) -> void:
 	var radius: float = _stroke_settings["radius"]
@@ -516,7 +651,13 @@ func _integrate_level_sample(center: Vector3, duration: float) -> void:
 		var distance := Vector2(float(column.x) - center.x, float(column.z) - center.z).length()
 		if distance > radius:
 			continue
-		var surface_y := _surface_y_near(voxels, column.x, column.z, center.y, radius + 2.0)
+		var column_key := _column_key(column)
+		if not _stroke_fronts.has(column_key):
+			_stroke_fronts[column_key] = _surface_y_near(voxels, column.x, column.z, center.y, radius + 2.0)
+		# Keep following the same exposed surface as it moves beyond the
+		# original sampling reach. Re-querying here stalled deep cuts and could
+		# switch to a different floor after opening a cave.
+		var surface_y := float(_stroke_fronts[column_key])
 		if surface_y < 0.0:
 			continue
 		var probe := Vector3i(column.x, int(surface_y), column.z)
@@ -548,13 +689,20 @@ func _integrate_level_sample(center: Vector3, duration: float) -> void:
 		var current := int(local.get_voxel(local_pos.x, local_pos.y, local_pos.z, PatchGenerator.CHANNEL_TYPE))
 		if (desired == 0 and current == 0) or (desired != 0 and current != 0):
 			continue
-		var key := _stroke_key(position)
+		var key := _column_key(item["column"])
 		_stroke_accumulated[key] = float(_stroke_accumulated.get(key, 0.0)) + float(item["amount"])
 		if float(_stroke_accumulated[key]) + 0.000001 < 1.0:
 			continue
 		_stroke_accumulated[key] = float(_stroke_accumulated[key]) - 1.0
-		_remember_stroke_original(position)
+		_record_stroke_change(position, current, desired)
 		local.set_voxel(desired, local_pos.x, local_pos.y, local_pos.z, PatchGenerator.CHANNEL_TYPE)
+		if desired != 0:
+			_stroke_fronts[key] = float(position.y + 1)
+		else:
+			var below := position - Vector3i(0, 1, 0)
+			# An exposed void ends this column's front; do not cross a cave to
+			# edit a disconnected floor on a later fixed tick.
+			_stroke_fronts[key] = float(position.y) if below.y >= 0 and voxel_at(below) != 0 else -1.0
 		changed = true
 	if changed:
 		_write_region(local, region_min)
@@ -621,7 +769,7 @@ func _integrate_smooth_sample(center: Vector3, duration: float) -> void:
 		if float(_stroke_accumulated[key]) + 0.000001 < 1.0:
 			continue
 		_stroke_accumulated[key] = float(_stroke_accumulated[key]) - 1.0
-		_remember_stroke_original(position)
+		_record_stroke_change(position, current, desired)
 		local.set_voxel(desired, local_pos.x, local_pos.y, local_pos.z, PatchGenerator.CHANNEL_TYPE)
 		changed = true
 	if changed:
@@ -668,8 +816,8 @@ func _column_cell(column: Vector3i, coordinate: int) -> Vector3i:
 	if _stroke_front_axis == 1: return Vector3i(column.x, coordinate, column.z)
 	return Vector3i(column.x, column.y, coordinate)
 
-func _column_key(column: Vector3i) -> String:
-	return "%d,%d,%d" % [column.x, column.y, column.z]
+func _column_key(column: Vector3i) -> Vector3i:
+	return column
 
 func _ensure_front(column: Vector3i, center: Vector3) -> void:
 	var key := _column_key(column)
@@ -709,13 +857,14 @@ func _ensure_front(column: Vector3i, center: Vector3) -> void:
 				exposed += _stroke_front_sign
 		_stroke_fronts[key] = found + _stroke_front_sign if _stroke_tool == SCULPT_TOOL_RAISE else found
 
-func _front_region(columns: Array[Vector3i]) -> Array[Vector3i]:
+func _front_region(columns: Array[Vector3i], transitions: int = 1) -> Array[Vector3i]:
 	var min_pos := Vector3i(patch_size.x, patch_size.y, patch_size.z)
 	var max_pos := Vector3i.ZERO
 	for column in columns:
 		var front := int(_stroke_fronts[_column_key(column)])
 		var cell := _column_cell(column, front)
-		var adjacent := _column_cell(column, front + _stroke_front_sign)
+		var direction := _stroke_front_sign if _stroke_tool == SCULPT_TOOL_RAISE else -_stroke_front_sign
+		var adjacent := _column_cell(column, front + direction * transitions)
 		min_pos.x = mini(min_pos.x, mini(cell.x, adjacent.x)); min_pos.y = mini(min_pos.y, mini(cell.y, adjacent.y)); min_pos.z = mini(min_pos.z, mini(cell.z, adjacent.z))
 		max_pos.x = maxi(max_pos.x, maxi(cell.x, adjacent.x) + 1); max_pos.y = maxi(max_pos.y, maxi(cell.y, adjacent.y) + 1); max_pos.z = maxi(max_pos.z, maxi(cell.z, adjacent.z) + 1)
 	min_pos.x = clampi(min_pos.x, 0, patch_size.x - 1); min_pos.y = clampi(min_pos.y, 0, patch_size.y - 1); min_pos.z = clampi(min_pos.z, 0, patch_size.z - 1)
@@ -733,7 +882,7 @@ func _advance_front(local: Object, column: Vector3i) -> bool:
 	var changed := false
 	if _stroke_tool == SCULPT_TOOL_RAISE:
 		if current == 0:
-			_remember_stroke_original(cell)
+			_record_stroke_change(cell, current, int(_stroke_settings["material"]))
 			local.set_voxel(int(_stroke_settings["material"]), local_cell.x, local_cell.y, local_cell.z, PatchGenerator.CHANNEL_TYPE)
 			changed = true
 			coordinate += _stroke_front_sign
@@ -744,7 +893,7 @@ func _advance_front(local: Object, column: Vector3i) -> bool:
 		# through it and unexpectedly remove a distant floor or wall behind it.
 		if current == 0:
 			return false
-		_remember_stroke_original(cell)
+		_record_stroke_change(cell, current, 0)
 		local.set_voxel(0, local_cell.x, local_cell.y, local_cell.z, PatchGenerator.CHANNEL_TYPE)
 		changed = true
 		coordinate -= _stroke_front_sign
@@ -777,22 +926,42 @@ func _clone_region(source: Object, region_min: Vector3i, region_max: Vector3i) -
 func _write_region(local: Object, region_min: Vector3i) -> void:
 	_current_region_min = region_min
 	voxels.copy_channel_from_area(local, Vector3i.ZERO, local.get_size(), region_min, PatchGenerator.CHANNEL_TYPE)
-	terrain.get_voxel_tool().paste(region_min, local, 1)
+	if _defer_native_updates:
+		var region_max: Vector3i = region_min + local.get_size()
+		if not _pending_native_region:
+			_pending_native_min = region_min; _pending_native_max = region_max
+			_pending_native_region = true
+		else:
+			_pending_native_min = _pending_native_min.min(region_min)
+			_pending_native_max = _pending_native_max.max(region_max)
+	else:
+		terrain.get_voxel_tool().paste(region_min, local, 1)
 	_dirty = true
 
-func _remember_stroke_original(position: Vector3i) -> void:
+func _flush_native_updates() -> void:
+	if not _pending_native_region: return
+	# Authoritative voxels already contain every time-integrated step. Publish
+	# the bounded union once, avoiding repeated remesh submissions when a slow
+	# frame consumes several fixed ticks. No simulation time is discarded.
+	var local: Object = _clone_region(voxels, _pending_native_min, _pending_native_max)
+	terrain.get_voxel_tool().paste(_pending_native_min, local, 1)
+	_pending_native_region = false
+	_last_edit_submitted_at_ms = Time.get_ticks_msec()
+
+func _record_stroke_change(position: Vector3i, current: int, desired: int) -> void:
 	var key := _stroke_key(position)
 	if not _stroke_before.has(key):
-		_stroke_before[key] = int(voxels.get_voxel(position.x, position.y, position.z, PatchGenerator.CHANNEL_TYPE))
+		_stroke_before[key] = current
 		_stroke_positions.append(position)
+	var original := int(_stroke_before[key])
+	# Track exact net differences, including smoothing a cell back to its
+	# original value. Mutation count separately reports edits whose net count
+	# stays equal. Neither readout scans the growing stroke every frame.
+	_stroke_changed_cells += int(desired != original) - int(current != original)
+	if desired != current: _stroke_mutations += 1
 
 func _stroke_changed_count() -> int:
-	var count := 0
-	for position in _stroke_positions:
-		var key := _stroke_key(position)
-		if _stroke_before.has(key) and int(_stroke_before[key]) != int(voxels.get_voxel(position.x, position.y, position.z, PatchGenerator.CHANNEL_TYPE)):
-			count += 1
-	return count
+	return _stroke_changed_cells
 
 func _stroke_bounds() -> Array[Vector3i]:
 	var min_pos := _stroke_positions[0]
@@ -824,15 +993,20 @@ func _clear_stroke() -> void:
 	_stroke_normal = Vector3.UP
 	_stroke_front_distance = 0.0
 	_stroke_fronts.clear()
+	_stroke_front_cache_center = Vector3.INF
+	_stroke_front_columns.clear()
+	_stroke_front_influence.clear()
 	_stroke_before.clear()
 	_stroke_positions.clear()
+	_stroke_changed_cells = 0
+	_stroke_mutations = 0
 	_stroke_accumulated.clear()
 	_stroke_segments.clear()
 	_stroke_pending_time = 0.0
 	_stroke_input_center = Vector3.ZERO
 
-func _stroke_key(position: Vector3i) -> String:
-	return "%d,%d,%d" % [position.x, position.y, position.z]
+func _stroke_key(position: Vector3i) -> Vector3i:
+	return position
 
 func _find_surface_hit(center: Vector3, normal: Vector3, radius: float) -> Dictionary:
 	var horizontal := Vector2(normal.x, normal.z).length()
@@ -873,13 +1047,19 @@ func _fit_surface_slopes(point: Vector3, radius: float) -> Vector2:
 	var center_x := floori(point.x)
 	var center_z := floori(point.z)
 	var extent := ceili(radius)
+	# A plane needs distributed neighbouring samples, not every fine native
+	# column. Keep the same world-space neighbourhood with at most 7x7 probes
+	# so higher terrain resolution does not multiply cursor-preview CPU cost.
+	var stride := maxi(1, ceili(float(extent) / 3.0))
 	var xx := 0.0
 	var xz := 0.0
 	var zz := 0.0
 	var yx := 0.0
 	var yz := 0.0
-	for x in range(maxi(0, center_x - extent), mini(patch_size.x, center_x + extent + 1)):
-		for z in range(maxi(0, center_z - extent), mini(patch_size.z, center_z + extent + 1)):
+	for x in range(center_x - extent, center_x + extent + 1, stride):
+		if x < 0 or x >= patch_size.x: continue
+		for z in range(center_z - extent, center_z + extent + 1, stride):
+			if z < 0 or z >= patch_size.z: continue
 			var surface_y := _surface_y_near(voxels, x, z, point.y, radius + 1.0)
 			if surface_y < 0.0:
 				continue
@@ -990,6 +1170,7 @@ func _extract_region(source: Object, region_min: Vector3i, region_max: Vector3i)
 	return out
 
 func _apply_command_region(command: Dictionary, region: Object) -> void:
+	_last_edit_command = command
 	var region_min: Vector3i = command["min"]
 	var region_size: Vector3i = command["size"]
 	voxels.copy_channel_from_area(region, Vector3i.ZERO, region_size, region_min, PatchGenerator.CHANNEL_TYPE)

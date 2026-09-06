@@ -58,6 +58,7 @@ func _initialize() -> void:
 		return
 	_clear(ProjectSettings.globalize_path(ROOT))
 	_run_store_checks()
+	_run_format_retention_checks()
 	print(JSON.stringify({"ok": failures == 0, "checks": checks, "failures": failures, "root": ROOT}))
 	quit(1 if failures > 0 else 0)
 
@@ -135,6 +136,42 @@ func _run_store_checks() -> void:
 	check(not store.save(source, 7, "unknown_generator", document_one), "unknown M1 generator rejected")
 	var no_doc_store := _store()
 	check(not no_doc_store.save(source, 8, M1PatchGenerator.GENERATOR_ID), "required document cannot be omitted")
+	_run_landscape_checks(source, document_one, store)
+
+func _run_landscape_checks(source: Object, legacy_document: Dictionary, store: RefCounted) -> void:
+	var document: Dictionary = legacy_document.duplicate(true)
+	document["landscape"] = {"version": 1, "next_id": 4, "records": [
+		{"id": 1, "kind": "tree", "position": [12.0, 8.0, 16.0], "seed": 1042},
+		{"id": 2, "kind": "foliage", "position": [14.0, 8.0, 17.0], "seed": 1043},
+		{"id": 3, "kind": "rock", "position": [15.0, 8.0, 18.0], "seed": 1044}
+	]}
+	check(store.save(source, 10, M1PatchGenerator.GENERATOR_ID, document), "landscape saved in building generation")
+	var loaded = store.load(10)
+	check(loaded != null and _buffer_hash(loaded) == _buffer_hash(source) and _document_hash(store.loaded_building_document) == _document_hash(document), "landscape and terrain roundtrip as one generation")
+	var valid_manifests := _json_files(ProjectSettings.globalize_path(ROOT))
+	for malformed in [null, [], "invalid", {"version": 1, "next_id": 1, "records": "invalid"}, {"version": 1, "next_id": 2, "records": [{"id": 1, "kind": "tree", "position": [999, 8, 16], "seed": 1042}]}]:
+		var invalid: Dictionary = document.duplicate(true)
+		invalid["landscape"] = malformed
+		check(not store.save(source, 11, M1PatchGenerator.GENERATOR_ID, invalid), "malformed landscape rejected before save")
+		check(_json_files(ProjectSettings.globalize_path(ROOT)) == valid_manifests, "invalid landscape publishes no checkpoint")
+	check(store.load(10) != null and _document_hash(store.loaded_building_document) == _document_hash(document), "invalid landscape leaves prior generation intact")
+	var next_document: Dictionary = document.duplicate(true)
+	next_document["landscape"]["records"][0]["seed"] = 2000
+	check(store.save(source, 11, M1PatchGenerator.GENERATOR_ID, next_document), "second landscape generation")
+	var newest_path := _json_files(ProjectSettings.globalize_path(ROOT))[0]
+	var manifest: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(newest_path))
+	# Repair bytes and digest deliberately: the candidate must fail semantic
+	# landscape validation, rather than merely its JSON integrity checks.
+	var corrupt_document: Dictionary = next_document.duplicate(true)
+	corrupt_document["landscape"]["records"][0]["kind"] = "unsupported"
+	var corrupt_text := JSON.stringify(corrupt_document)
+	manifest["building_document_json"] = corrupt_text
+	manifest["building_document_bytes"] = corrupt_text.to_utf8_buffer().size()
+	manifest["building_document_sha256"] = corrupt_text.sha256_text()
+	_write(newest_path, JSON.stringify(manifest))
+	loaded = store.load()
+	check(loaded != null and store.loaded_revision == 10 and _buffer_hash(loaded) == _buffer_hash(source) and _document_hash(store.loaded_building_document) == _document_hash(document), "malformed newest landscape falls back to complete valid pair")
+	check(store.load(11) == null, "requested malformed landscape generation rejected")
 
 func _store() -> RefCounted:
 	var store := CheckpointStore.new(ROOT)
@@ -142,6 +179,37 @@ func _store() -> RefCounted:
 	store.expected_dimensions = DIMS
 	store.require_building_document = true
 	return store
+
+func _run_format_retention_checks() -> void:
+	# Tiny native buffers isolate retention policy from the full valley's I/O
+	# cost. The migration integration test covers real 96 -> 384 dimensions.
+	var retention_root := ROOT + "-format-retention"
+	_clear(ProjectSettings.globalize_path(retention_root))
+	var legacy := CheckpointStore.new(retention_root)
+	legacy.expected_dimensions = Vector3i(4, 4, 4)
+	legacy.expected_generator_id = M1PatchGenerator.LEGACY_GENERATOR_ID
+	var legacy_buffer: Object = ClassDB.instantiate("VoxelBuffer")
+	legacy_buffer.create(4, 4, 4)
+	legacy_buffer.fill(2, 0)
+	check(legacy.save(legacy_buffer, 1, legacy.expected_generator_id), "retention fixture saves predecessor format")
+	var legacy_path := _json_files(ProjectSettings.globalize_path(retention_root))[0]
+	var legacy_data_path := legacy_path.trim_suffix(".json") + ".bin"
+	var legacy_manifest_bytes := FileAccess.get_file_as_bytes(legacy_path)
+	var legacy_data_bytes := FileAccess.get_file_as_bytes(legacy_data_path)
+	var unknown_path := ProjectSettings.globalize_path(retention_root).path_join("checkpoint_0000000000000002.json")
+	_write(unknown_path, JSON.stringify({"schema": 99, "generator_id": M1PatchGenerator.GENERATOR_ID, "size": [8, 8, 8]}))
+	var unknown_bytes := FileAccess.get_file_as_bytes(unknown_path)
+	var current := CheckpointStore.new(retention_root)
+	current.expected_dimensions = Vector3i(8, 8, 8)
+	current.expected_generator_id = M1PatchGenerator.GENERATOR_ID
+	var current_buffer: Object = ClassDB.instantiate("VoxelBuffer")
+	current_buffer.create(8, 8, 8)
+	current_buffer.fill(3, 0)
+	for revision in [2, 3, 4]: check(current.save(current_buffer, revision, current.expected_generator_id), "new format checkpoint saves while predecessor exists")
+	check(FileAccess.get_file_as_bytes(legacy_path) == legacy_manifest_bytes and FileAccess.get_file_as_bytes(legacy_data_path) == legacy_data_bytes, "new-format GC preserves predecessor pair byte-for-byte")
+	check(legacy.load(1) != null, "predecessor remains independently recoverable")
+	check(FileAccess.get_file_as_bytes(unknown_path) == unknown_bytes, "GC preserves unknown checkpoint format")
+	check(current.load(4) != null and current.load(3) != null and current.load(2) == null, "new format retains its own two generations")
 
 func _buffer_hash(buffer: Object) -> String:
 	if buffer == null: return ""

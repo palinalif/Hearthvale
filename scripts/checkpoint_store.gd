@@ -14,6 +14,7 @@ const MAX_PAYLOAD_BYTES := DIMENSIONS.x * DIMENSIONS.y * DIMENSIONS.z * 2
 const GENERATION_RE := "^checkpoint_([0-9]{16,})\\.(json|bin)$"
 const PatchGenerator := preload("res://scripts/patch_generator.gd")
 const BuildingWorld := preload("res://scripts/building_world.gd")
+const LandscapeState := preload("res://scripts/landscape_state.gd")
 
 var root_path: String = ROOT
 ## M0 remains 48×32×48. M1 injects 96×64×96 while retaining the same
@@ -41,7 +42,7 @@ func save(buffer: Object, revision: int, generator_id: String, building_document
 	if require_building_document and not has_building_document: return _fail("building document required")
 	var building_text := ""
 	if has_building_document:
-		if not BuildingWorld.validate_document(building_document): return _fail("invalid building document")
+		if not _valid_building_document(building_document): return _fail("invalid building document")
 		building_text = JSON.stringify(building_document)
 		if building_text.to_utf8_buffer().size() > MAX_BUILDING_DOCUMENT_BYTES: return _fail("building document too large")
 	var payload := _encode(buffer)
@@ -183,22 +184,52 @@ func _validate_building_candidate(manifest: Dictionary, result: Dictionary) -> b
 	var trimmed_document := text.strip_edges()
 	if not trimmed_document.begins_with("{") or not trimmed_document.ends_with("}"): return invalid_reason.call("building document")
 	var parsed = _parse_json(text)
-	if not parsed is Dictionary or not BuildingWorld.validate_document(parsed): return invalid_reason.call("invalid building document")
+	if not parsed is Dictionary or not _valid_building_document(parsed): return invalid_reason.call("invalid building document")
 	result["building_document"] = parsed
 	return true
 
+func _valid_building_document(document: Dictionary) -> bool:
+	if not BuildingWorld.validate_document(document): return false
+	# Older M1 checkpoints have no landscape section. When present, it is part
+	# of this same generation and must validate before either save or recovery.
+	if not document.has("landscape"): return true
+	var landscape = document["landscape"]
+	return landscape is Dictionary and LandscapeState.validate(landscape)
+
 func _gc() -> void:
 	var candidates := _candidates(); var valid_generations: Array[String] = []
+	var owned_candidates: Array[Dictionary] = []
 	for item in candidates:
+		# A newer terrain format shares this folder with its migration source.
+		# Its incompatible predecessor is not corrupt and is never ours to prune.
+		if not _gc_owns_candidate(item): continue
+		owned_candidates.append(item)
 		var result: Dictionary = _validate_candidate(item)
 		if result["valid"]: valid_generations.append(item["generation"])
-	for item in candidates:
+	for item in owned_candidates:
 		var keep := false
 		for i in mini(KEEP_GENERATIONS, valid_generations.size()):
 			if item["generation"] == valid_generations[i]: keep = true; break
 		if not keep:
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(item["manifest"]))
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(item["data"]))
+
+func _gc_owns_candidate(item: Dictionary) -> bool:
+	var file := FileAccess.open(item["manifest"], FileAccess.READ)
+	if file == null: return false
+	if file.get_length() > MAX_BUILDING_MANIFEST_BYTES:
+		file.close()
+		return false
+	var parsed = _parse_json(file.get_as_text())
+	file.close()
+	if not parsed is Dictionary: return false
+	if str(parsed.get("generator_id", "")) != expected_generator_id: return false
+	var dimensions = parsed.get("size", null)
+	if not dimensions is Array or dimensions.size() != 3: return false
+	for axis in 3:
+		if not _is_exact_int(dimensions[axis], expected_dimensions[axis]): return false
+	if not _is_exact_int(parsed.get("schema", null), SCHEMA) and not _is_exact_int(parsed.get("schema", null), BUILDING_SCHEMA) and not _is_exact_int(parsed.get("schema", null), LEGACY_SCHEMA): return false
+	return true
 
 func _next_generation(absolute: String) -> String:
 	var d := DirAccess.open(absolute); if d == null: return ""
