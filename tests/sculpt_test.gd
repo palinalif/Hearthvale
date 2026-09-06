@@ -63,6 +63,27 @@ func _init() -> void:
 	check(backend.cancel_stroke(), "cancel cave dig")
 	check(_bytes(backend) == cave_base, "cancel restores cave exactly")
 
+	# A centreline query in a cave must distinguish the floor below the cursor
+	# from the ceiling above it.  This fixture has an air pocket between two
+	# separate solids on the exact sampled x/z column; neighbouring columns are
+	# intentionally irrelevant to the result.
+	var cave_planes_base := _bytes(backend)
+	for y in range(backend.patch_size.y):
+		backend.voxels.set_voxel(0, 20, y, 20, PatchGenerator.CHANNEL_TYPE)
+	for y in range(4):
+		backend.voxels.set_voxel(1, 20, y, 20, PatchGenerator.CHANNEL_TYPE)
+	for y in range(10, 13):
+		backend.voxels.set_voxel(1, 20, y, 20, PatchGenerator.CHANNEL_TYPE)
+	backend.terrain.get_voxel_tool().paste(Vector3i.ZERO, backend.voxels, 1)
+	var cave_floor_plane: Dictionary = backend.sample_surface_plane(Vector3(20.0, 8.0, 20.0), Vector3.UP, 5.0)
+	var cave_ceiling_plane: Dictionary = backend.sample_surface_plane(Vector3(20.0, 8.0, 20.0), Vector3.DOWN, 5.0)
+	check(bool(cave_floor_plane.get("valid", false)) and absf(float((cave_floor_plane.get("point", Vector3.ZERO) as Vector3).y) - 4.0) < 0.01, "cave floor samples centreline below cursor")
+	check(bool(cave_ceiling_plane.get("valid", false)) and absf(float((cave_ceiling_plane.get("point", Vector3.ZERO) as Vector3).y) - 10.0) < 0.01, "cave ceiling samples nearest underside above cursor")
+	check(not backend.begin_stroke("level", Vector3(20.0, 8.0, 20.0), {"radius": 2.0, "strength": 4.0}, {"valid": true, "point": Vector3(20.0, 8.0, 20.0), "normal": Vector3.RIGHT}), "level rejects horizontal wall reference")
+	check(not backend.begin_stroke("slope", Vector3(20.0, 8.0, 20.0), {"radius": 2.0, "strength": 4.0}, {"valid": true, "point": Vector3(20.0, 8.0, 20.0), "normal": Vector3.DOWN}), "slope rejects underside reference")
+	backend.voxels.set_channel_from_byte_array(PatchGenerator.CHANNEL_TYPE, cave_planes_base)
+	backend.terrain.get_voxel_tool().paste(Vector3i.ZERO, backend.voxels, 1)
+
 	# Flatten samples one center height and keeps it immutable while moving.
 	var plane: Dictionary = backend.sample_surface_plane(Vector3(10.0, 10.0, 10.0), Vector3.UP, 3.0)
 	check(bool(plane.get("valid", false)), "surface plane sample valid")

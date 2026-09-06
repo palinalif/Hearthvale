@@ -211,6 +211,12 @@ func begin_stroke(tool, center: Vector3, settings: Dictionary, reference_plane: 
 		if not reference_normal is Vector3 or not reference_normal.is_finite() or reference_normal.length_squared() < 0.000001:
 			return false
 		stroke_reference["normal"] = reference_normal.normalized()
+		# Flattening currently operates on vertical columns.  A wall or an
+		# underside needs a tangent-plane voxel operation, so reject those
+		# references instead of silently writing a vertical stack at the wrong
+		# orientation.
+		if stroke_reference["normal"].y < 0.5:
+			return false
 		if not stroke_reference.has("slope_x") or not stroke_reference.has("slope_z"):
 			stroke_reference["slope_x"] = -reference_normal.x / maxf(absf(reference_normal.y), 0.000001)
 			stroke_reference["slope_z"] = -reference_normal.z / maxf(absf(reference_normal.y), 0.000001)
@@ -833,7 +839,10 @@ func _find_surface_hit(center: Vector3, normal: Vector3, radius: float) -> Dicti
 	if absf(normal.y) >= horizontal:
 		var center_x := floori(center.x)
 		var center_z := floori(center.z)
-		var surface_y := _surface_y_near(voxels, center_x, center_z, center.y, radius + 1.0) if normal.y >= 0.0 else _column_floor_y(voxels, center_x, center_z)
+		# UP samples the exposed top below the cursor. DOWN samples the first
+		# ceiling underside above it; both stay on this exact x/z column so a
+		# nearby roof cannot replace the user's centre hit.
+		var surface_y := _surface_y_near(voxels, center_x, center_z, center.y, radius + 1.0) if normal.y >= 0.0 else _underside_y_near(voxels, center_x, center_z, center.y, radius + 1.0)
 		if surface_y >= 0.0 and absf(surface_y - center.y) <= radius + 1.0:
 			return {"valid": true, "point": Vector3(center.x, surface_y, center.z)}
 	else:
@@ -904,21 +913,35 @@ func _surface_y_near(source: Object, x: int, z: int, center_y: float, reach: flo
 		while top + 1 < patch_size.y and int(source.get_voxel(x, top + 1, z, PatchGenerator.CHANNEL_TYPE)) != 0:
 			top += 1
 		return float(top + 1)
+	# An air cursor normally targets the ground immediately below it. Search
+	# down first; searching upward first can select a distant cave roof.
+	for y in range(start - 1, maxi(-1, start - limit - 1), -1):
+		if int(source.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE)) != 0:
+			return float(y + 1)
 	for y in range(start + 1, mini(patch_size.y, start + limit + 1)):
 		if int(source.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE)) != 0:
 			var top := y
 			while top + 1 < patch_size.y and int(source.get_voxel(x, top + 1, z, PatchGenerator.CHANNEL_TYPE)) != 0:
 				top += 1
 			return float(top + 1)
-	for y in range(start - 1, maxi(-1, start - limit - 1), -1):
-		if int(source.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE)) != 0:
-			return float(y + 1)
 	return -1.0
 
-func _column_floor_y(source: Object, x: int, z: int) -> float:
-	for y in patch_size.y:
-		if int(source.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE)) != 0:
-			return float(y)
+func _underside_y_near(source: Object, x: int, z: int, center_y: float, reach: float) -> float:
+	if x < 0 or z < 0 or x >= patch_size.x or z >= patch_size.z:
+		return -1.0
+	var start := clampi(floori(center_y), 0, patch_size.y - 1)
+	var limit := ceili(maxf(reach, 1.0))
+	# Prefer the nearest solid cell whose lower face borders air. This is the
+	# underside of a ceiling, including when the cursor itself is inside it.
+	for distance in limit + 1:
+		var below := start - distance
+		if below >= 0 and int(source.get_voxel(x, below, z, PatchGenerator.CHANNEL_TYPE)) != 0:
+			if below == 0 or int(source.get_voxel(x, below - 1, z, PatchGenerator.CHANNEL_TYPE)) == 0:
+				return float(below)
+		var above := start + distance
+		if above < patch_size.y and int(source.get_voxel(x, above, z, PatchGenerator.CHANNEL_TYPE)) != 0:
+			if above == 0 or int(source.get_voxel(x, above - 1, z, PatchGenerator.CHANNEL_TYPE)) == 0:
+				return float(above)
 	return -1.0
 
 func _sphere_region(center: Vector3, radius: float) -> Array[Vector3i]:
