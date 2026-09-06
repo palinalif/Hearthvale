@@ -81,3 +81,6 @@ On Thor, update with `adb install -r builds/hearthvale-m1-debug.apk` only when t
 5. Measure frame pacing during sculpt/resize, sustained thermals and memory. New physical Thor results, M0's outstanding detailed device metrics and native per-revision mesh acknowledgement remain unavailable/not run.
 
 Stop here for M1 review; no M2 or expanded catalogue authorization is inferred.
+
+
+Subsequent player feedback: the visual rework is a big improvement, but all visible voxels must share one world-space size. The current implementation mixes detail sizes and has not passed that requirement. The audit and required M1 normalization are recorded in the design document and ticket. This feedback does not constitute approval of uniform voxel scale or change the exported build.

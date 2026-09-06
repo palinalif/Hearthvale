@@ -28,6 +28,10 @@ Prefer typed GDScript for orchestration, Godot resources for data, and the selec
 
 Separate authoritative data from derived meshes, collision, and navigation. Stable IDs and deterministic local generation must survive save/load. Asynchronous results need revision checks so an old job cannot overwrite a newer edit or an undo.
 
+## Shared visual voxel unit
+
+Use one world-space visible voxel size across buildings, vegetation, props and visible terrain detail, including after object transforms. Larger assets or resized buildings add/remove cells rather than stretch or enlarge voxels. A merged surface may represent multiple cells. Simulation/editing resolution stays independent; do not change the native backend or saved records to impose the visual grid. The current M1 generators are not yet compliant; complete the normalization and world-space validation before claiming uniform voxel size. See the design document's "Consistent visible voxel size" section.
+
 ## Building contract
 
 Automatic generation must not erase manual choices. Store overrides, locks, exclusions, and manual attachments separately from generated geometry. Surface anchors need stable identities, not incidental list indices. Invalid attachments remain recoverable and undoable; never silently delete them.

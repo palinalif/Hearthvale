@@ -50,3 +50,8 @@ Do not expand into an arbitrary building boolean system, interior furnishing, nu
 The first M1 physical playtest found invisible raise/dig targeting, Dig apparently resizing the cottage, and an oversized cottage. Verify the real menu transition from Cottage to Terrain, select Raise and Dig, hold/release and move the stick, and assert that terrain changes while every building record stays unchanged. Terrain and Cottage menus expose only relevant actions; switching modes cancels a preview and requires a fresh action press.
 
 Capture the target at normal/near/far zoom and behind an occluding cottage, with a restrained readable centre cue and influence footprint. A scene-tree visible flag alone is insufficient evidence. Show the smaller cottage within its surroundings; existing saved designs remain unchanged until an explicit undoable scale conversion. Verify transformed handles and full manual-choice/save/duplication preservation at miniature scale.
+
+
+## Visual voxel consistency correction
+
+Normalize derived visual geometry to one world-space voxel unit across the cottage, vegetation, props and terrain presentation. The current rework is not yet compliant. Validate cubic cell size after transforms, resizing and duplication, while preserving saved dimensions/anchors and independent native editing resolution. Larger forms use additional cells, not stretched voxels. Include side-by-side visual evidence and meaningful world-space geometry checks before marking this requirement passed.

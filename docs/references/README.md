@@ -46,3 +46,6 @@ The lead must inspect actual normal/close gameplay captures against these cues b
 ## Astra rework comparison
 
 The actual pre-rework Mobile captures are retained as `reports/screenshots/m1-controls-*.png`; the three render iterations and resized/moved-window views are recorded in `reports/M1-visual-rework.md`. The changes address the observed roof layering, facade depth, compact proportions and vegetation scale. Remaining gaps include the straight channel, raised pad edge, simple gable facade and still-stylized foliage. Reference imagery was inspected on the official pages; no reference-game assets were downloaded into production. Visual approval belongs to the player.
+
+
+The player additionally requires a single visible voxel size across all asset families and terrain detail. Reference matching must not introduce a different voxel density per asset. Compare assets side by side after their final transforms; larger forms use more cells. See `../design.md` for the requirement and current noncompliance audit.
