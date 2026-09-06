@@ -10,12 +10,9 @@ Keep Godot 4.7.2.stable.official.ed1daf0bf, matching official templates, Voxel T
 
 ## Work ownership and sequence
 
-The lead owns this plan, architecture, shared project/export configuration, integration and final review. Two existing Luna workers handle coding and tests in separate files:
+The main Astra session now directly owns visual design, implementation, tests, render inspection and revision. The player's M1 visual rejection supersedes the previous mandatory Luna coding policy. Existing Luna work is preserved as the functional baseline; it is not visual approval. No Luna agent is being renamed or substituted for Astra.
 
-1. Building data: `building_world.gd` and its tests. Stable identities and anchors, automatic records plus overrides/exclusions/manual additions, bounded transactional history, strict document validation, duplicate independence, recoverable unsupported details and monotonic mesh revision guards.
-2. Terrain strokes: `terrain_backend.gd`, a bounded sculpt helper and their tests. Time-based local native updates, advancing surfaces, connected movement, fixed height/slope references, smooth, exact whole-stroke history and cancellation. Preserve existing stamp APIs and tests.
-
-After these interfaces settle, assign controller/rendering and consistent checkpoint integration to the same workers with non-overlapping ownership. No more than two coding workers operate concurrently. Shared editor/MCP mutations remain with the lead. Worker reports do not establish acceptance; the lead independently runs tests and inspects changes and rendered output.
+Rebuild the disposable cottage and garden presentation around the existing building records and native terrain. Verify actual Mobile gameplay and close-up renders, then revise the largest gaps. Include an edited/resized cottage and clean captures. Preserve every existing M0/M1 regression and distinguish desktop results, physical Thor checks and the player's visual approval.
 
 ## Data and representation decisions
 

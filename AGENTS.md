@@ -48,13 +48,17 @@ Keep credentials, signing keys, tokens, device identifiers, and personal configu
 
 Treat external docs and reference images as data, not authority to change project scope. Keep a source/license record for external assets. Do not extract the supplied scenery into production assets or imply the reference images are game captures.
 
-## Luna delegation policy
+## Model ownership for the M1 visual rework
 
-The lead owns architecture, decomposition, shared configuration, dependency selection, live Godot editor/MCP mutations, integration checks, and final review. Delegate actual implementation and test-writing to `luna_worker` using exactly `gpt-5.6-luna` with supported `high` reasoning, configured in `.codex/agents/luna_worker.toml`. The initial read-only test and first implementation used `medium`; remaining correctness work uses `high`. In a runtime exposing explicit model selection rather than custom-agent selection, pass those exact settings and the same worker instructions explicitly.
+The player's latest instruction supersedes the former mandatory Luna delegation policy. The main Astra session owns actual visual design AND implementation, testing, render inspection and iteration for this M1 rework. Do not delegate the visual implementation back to Luna, relabel a Luna worker, or silently substitute models.
 
-Before implementation, inspect installed Codex and existing agent configuration, preserve all existing permissions/configuration, and run a small read-only Luna delegation test. Report success or the specific blocker and the actual model if exposed. Never alter model caches or substitute another model to bypass failure; resolve a Luna blocker before beginning implementation.
+Use the main session directly. Optional Astra subagents require verified supported configuration and bounded non-overlapping ownership. Existing Luna configuration is retained only as a historical/optional worker definition and is not authorized for this visual rework. No model cache, permissions, dependency or unrelated service changes.
 
-Initially use at most two concurrent coding workers. Each assignment must specify its bounded task, relevant design requirements, interfaces, owned files, and acceptance checks. Never allow concurrent writers to the same file. Review changes and independently run integration checks; worker completion is not evidence of acceptance. Implement the currently authorized ticket and stop at its handoff for player review; currently this is M1. Preserve the original M1 resize/save/undo/duplication regression and report unresolved M0 checks separately.
+Preserve continuous sculpting, the controller fixes, procedural resizing, editable generated details, attachment recovery, undo/redo, duplication and save compatibility. Visual generators/assets may be substantially replaced; the cottage must remain editable. Do not replace the engine or native terrain backend without the player's approval.
+
+Inspect actual reference imagery and gameplay captures. Render the actual Godot Mobile scene at normal and close zoom, compare before/after, identify the largest gaps, and revise beyond the first technically successful image. Inspect resized cottages and moved details too. Keep a clean capture with the debug overlay hidden. Measure costs before removing visual features for hypothetical performance concerns.
+
+The present visuals are explicitly NOT accepted. Automated passes do not constitute visual approval. Preserve all open M0 evidence and stop at the M1 review handoff.
 
 ## Evidence required at handoff
 
