@@ -73,11 +73,11 @@ func is_ready() -> bool:
 	return _backend_ready
 
 func apply_sphere(center: Vector3, radius: float, remove: bool) -> bool:
-	if not _backend_ready or voxels == null or not center.is_finite() or not is_finite(radius) or radius <= 0.0 or radius > 8.0:
+	var started := Time.get_ticks_usec()
+	var simulation := _simulate_sphere(center, radius, remove)
+	if simulation.is_empty():
 		return false
-	if center.x < 0.0 or center.y < 0.0 or center.z < 0.0 or center.x >= PATCH_SIZE.x or center.y >= PATCH_SIZE.y or center.z >= PATCH_SIZE.z:
-		return false
-	var region := _sphere_region(center, radius)
+	var region: Array[Vector3i] = simulation["region"]
 	var region_size: Vector3i = region[1] - region[0]
 	var command_bytes := region_size.x * region_size.y * region_size.z * VOXEL_BYTES * 2
 	var redo_bytes := _stack_bytes(_redo)
@@ -86,17 +86,11 @@ func apply_sphere(center: Vector3, radius: float, remove: bool) -> bool:
 		projected_bytes -= _command_bytes(_undo[0])
 	if projected_bytes > MAX_HISTORY_BYTES:
 		return false
-	var started := Time.get_ticks_usec()
-	var before_full: Object = _clone_buffer(voxels)
-	var after_full: Object = _clone_buffer(voxels)
-	var buffer_tool = after_full.get_voxel_tool()
-	buffer_tool.channel = PatchGenerator.CHANNEL_TYPE
-	buffer_tool.mode = 2
-	buffer_tool.value = 0 if remove else 2
-	buffer_tool.do_sphere(center, radius)
+	var before_full: Object = simulation["before"]
+	var after_full: Object = simulation["after"]
 	var region_min: Vector3i = region[0]
 	var region_max: Vector3i = region[1]
-	if not _region_differs(before_full, after_full, region_min, region_max):
+	if simulation["changed"].is_empty():
 		return false
 	var before_region: Object = _extract_region(before_full, region_min, region_max)
 	var after_region: Object = _extract_region(after_full, region_min, region_max)
@@ -116,6 +110,12 @@ func apply_sphere(center: Vector3, radius: float, remove: bool) -> bool:
 	_error = ""
 	changed.emit()
 	return true
+
+func preview_sphere(center: Vector3, radius: float, remove: bool) -> Array[Vector3i]:
+	var simulation := _simulate_sphere(center, radius, remove)
+	if simulation.is_empty():
+		return []
+	return simulation["changed"]
 
 func undo() -> bool:
 	if not _backend_ready or _undo.is_empty(): return false
@@ -187,6 +187,29 @@ func _sphere_region(center: Vector3, radius: float) -> Array[Vector3i]:
 	max_pos.x = mini(PATCH_SIZE.x, max_pos.x); max_pos.y = mini(PATCH_SIZE.y, max_pos.y); max_pos.z = mini(PATCH_SIZE.z, max_pos.z)
 	return [min_pos, max_pos]
 
+func _simulate_sphere(center: Vector3, radius: float, remove: bool) -> Dictionary:
+	if not _backend_ready or voxels == null or not center.is_finite() or not is_finite(radius) or radius <= 0.0 or radius > 8.0:
+		return {}
+	if center.x < 0.0 or center.y < 0.0 or center.z < 0.0 or center.x >= PATCH_SIZE.x or center.y >= PATCH_SIZE.y or center.z >= PATCH_SIZE.z:
+		return {}
+	var region := _sphere_region(center, radius)
+	var region_min: Vector3i = region[0]
+	var region_max: Vector3i = region[1]
+	var before_full: Object = _clone_buffer(voxels)
+	var after_full: Object = _clone_buffer(voxels)
+	var buffer_tool = after_full.get_voxel_tool()
+	buffer_tool.channel = PatchGenerator.CHANNEL_TYPE
+	buffer_tool.mode = 2
+	buffer_tool.value = 0 if remove else 2
+	buffer_tool.do_sphere(center, radius)
+	var changed: Array[Vector3i] = []
+	for x in range(region_min.x, region_max.x):
+		for y in range(region_min.y, region_max.y):
+			for z in range(region_min.z, region_max.z):
+				if before_full.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE) != after_full.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE):
+					changed.append(Vector3i(x, y, z))
+	return {"region": region, "before": before_full, "after": after_full, "changed": changed}
+
 func _clone_buffer(source: Object) -> Object:
 	var copy: Object = ClassDB.instantiate("VoxelBuffer")
 	copy.create(PATCH_SIZE.x, PATCH_SIZE.y, PATCH_SIZE.z)
@@ -199,13 +222,6 @@ func _extract_region(source: Object, region_min: Vector3i, region_max: Vector3i)
 	out.create(size.x, size.y, size.z)
 	out.copy_channel_from_area(source, region_min, region_max, Vector3i.ZERO, PatchGenerator.CHANNEL_TYPE)
 	return out
-
-func _region_differs(a: Object, b: Object, region_min: Vector3i, region_max: Vector3i) -> bool:
-	for x in range(region_min.x, region_max.x):
-		for y in range(region_min.y, region_max.y):
-			for z in range(region_min.z, region_max.z):
-				if a.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE) != b.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE): return true
-	return false
 
 func _apply_command_region(command: Dictionary, region: Object) -> void:
 	var region_min: Vector3i = command["min"]
