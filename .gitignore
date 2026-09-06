@@ -10,3 +10,4 @@ dev/mcp/addons/
 addons/zylann.voxel/
 .codex/config.toml
 override.cfg
+__pycache__/

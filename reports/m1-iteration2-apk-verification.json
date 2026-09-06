@@ -1,0 +1,24 @@
+[
+  {
+    "apk": "builds\\hearthvale-m1-iteration2-debug.apk",
+    "ok": true,
+    "version_code": 5,
+    "version_name": "0.1.2-m1-garden",
+    "manifest_renderer": "mobile",
+    "renderer_verified": true,
+    "metadata_verified": true,
+    "signature_verified": true,
+    "certificate_matches_previous_build": true,
+    "native_library": "lib/arm64-v8a/libvoxel.android.editor.arm64.so",
+    "native_matches_pinned": true,
+    "architectures": [
+      "arm64-v8a"
+    ],
+    "m1_compiled_scene_present": true,
+    "excluded_development_resources": true,
+    "aapt2_exit": 0,
+    "aapt2_warning": "warn: resource com.godot.game:mipmap/themed_icon for config 'anydpi-v26' is a file reference to 'res/mipmap-anydpi-v26/themed_icon.xml' but no such path exists.",
+    "bytes": 37612945,
+    "sha256": "0138d46cf80982154a25da499c9796dcdae9157718095482091cdd46b8c5393e"
+  }
+]

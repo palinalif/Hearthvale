@@ -8,6 +8,8 @@ Implement only the approved milestone. The player's current instruction authoriz
 
 The player also explicitly authorizes `tasks/M1-terrain-sculpting.md` as a required M1 workstream alongside the cottage. Continuous sculpting is the default hold/release interaction; preserve the cottage's full regression and the optional stamp preview feedback.
 
+The next physical-feedback iteration explicitly includes faster sculpting, repaired flattening, a substantially smaller cottage, automatic window count/layout on resize, finer consistent visual cells and rebuilt trees, foliage/tree brushes, and saved default vegetation/rock scattering cleared locally by terrain edits. See tasks/M1-playtest-iteration-2.md. Main Astra owns visual implementation; explicitly configured Astra workers may handle bounded data fixes/tests under the existing policy. The earlier Luna experiment does not authorize Luna for this production pass.
+
 ## Preserve these requirements
 
 True volumetric terrain editing, including caves and overhangs. A finite small valley. Stretchable smart buildings with editable generated details. Humans and animals using functional places. Several non-modern architectural styles. Detailed visual treatment. One gameplay screen. Every normal interaction available through a controller, including TV play.
@@ -30,7 +32,7 @@ Separate authoritative data from derived meshes, collision, and navigation. Stab
 
 ## Shared visual voxel unit
 
-Use one world-space visible voxel size across buildings, vegetation, props and visible terrain detail, including after object transforms. Larger assets or resized buildings add/remove cells rather than stretch or enlarge voxels. A merged surface may represent multiple cells. Simulation/editing resolution stays independent; do not change the native backend or saved records to impose the visual grid. The current M1 generators are not yet compliant; complete the normalization and world-space validation before claiming uniform voxel size. See the design document's "Consistent visible voxel size" section.
+Use one world-space visible voxel size across buildings, vegetation, props and visible terrain detail, including after object transforms. Larger assets or resized buildings add/remove cells rather than stretch or enlarge voxels. A merged surface may represent multiple cells. The player rejected coarse terrain beside finer plants: iteration 2 explicitly authorizes a .125 native grid and exact legacy-volume migration, retaining the same backend and original checkpoint files. Use VisualGrid.UNIT for asset steps and validate actual world-space geometry. Simulation remains separate from decorative geometry; decorative cells are not independently simulated blocks. See the design document's "Consistent visible voxel size" section.
 
 ## Building contract
 
@@ -65,6 +67,8 @@ Inspect actual reference imagery and gameplay captures. Render the actual Godot 
 The present visuals are explicitly NOT accepted. Automated passes do not constitute visual approval. Preserve all open M0 evidence and stop at the M1 review handoff.
 
 ## Evidence required at handoff
+
+The player requests future debug APKs be uploaded directly to their Google Drive for downloading on the Thor. This authorizes build uploads once a writable destination is available; preserve existing files and use versioned APK names. Record the upload result and provide its link. As of this request, no Drive upload connector or local Google Drive mount was available in the session; destination/access setup remains pending. Do not claim an upload from a local copy alone or make files publicly accessible without explicit permission.
 
 Report changed files and design effects; commands and tests actually run; precise dependency versions; known failures; desktop versus Thor results; and relevant screenshots/logs. Provide the APK and reproducible build steps when device work has really been completed. Unavailable device checks must be marked **not run**, not passed.
 

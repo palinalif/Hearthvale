@@ -133,6 +133,8 @@ The terrain must be genuinely volumetric: caves and overhangs cannot be reduced 
 
 ## Terrain tools
 
+The second M1 playtest iteration explicitly adds controller foliage and tree brushes and a restrained default scatter of trees, foliage and rocks. Terrain changes clear nearby decoration whose roots intersect the changed cells; a single undo restores the terrain and removed decoration together. Saved placement records prevent cleared areas from repopulating on reload. This supersedes the earlier M1-only limitation to non-editable presentation planting. Palette refinement is still pending player review.
+
 Raise/add, lower/remove, smooth, flatten to a sampled level, terrace, and paint surface materials. Add an accessible tunnel/arch brush for carving through a cliff, plus vegetation and rock brushes with density, scale, and variation controls. A broad brush should create a hillside; a smaller one should clean up its silhouette.
 
 Expose brush radius and strength with controller-friendly steps and a clear footprint. Sampling a surface provides a flatten height or material without typing. Terrain strokes are transactions: a full stroke is one undo action, not hundreds of controller taps.
@@ -600,7 +602,7 @@ The cottage should read as a small placed miniature within the landscape. Reduce
 
 ### Astra M1 visual rework
 
-The player explicitly rejected the first M1 visuals. The main Astra session now owns actual visual design and implementation, superseding mandatory Luna coding. Current review geometry uses recessed editable windows with wall openings, stepped tile courses and ridge caps, shutter joinery, a bracketed entrance canopy, foundation courses, clustered voxel crowns and rooted garden beds. Fresh cottages are 18 x 7 x 14 local units at uniform 0.5 scale (9 x 3.5 x 7 world units before the roof). Loaded designs retain their saved dimensions and transform. Roof/window/plant detail remains independent of the native 0.5-unit terrain grid.
+The player explicitly rejected the first M1 visuals. The main Astra session now owns actual visual design and implementation, superseding mandatory Luna coding. Current review geometry uses recessed editable windows with wall openings, stepped tile courses and ridge caps, shutter joinery, a bracketed entrance canopy, foundation courses, clustered voxel crowns and rooted garden beds. In the first visual rework, fresh cottages were 18 x 7 x 14 local units at uniform 0.5 scale (9 x 3.5 x 7 world units before the roof). Loaded designs retain their saved dimensions and transform. That build still mixed roof/window/plant detail with a coarse native 0.5-unit terrain grid; the next iteration below replaces this mismatch.
 
 This is an M1 review candidate, not accepted final art. The pad/channel remain geometrically simple, vegetation still needs player judgment, and planted beds are terrain-rooted scenery rather than resizing building attachments. Do not infer M2 authorization or visual approval from automated tests or this description.
 
@@ -613,4 +615,13 @@ This preserves the distinction between appearance and simulation. The native ter
 
 Before further asset production, establish a shared visual-unit constant and enforce it in generators/imports. Test final world-space cell edge lengths, cubic proportions, and cell counts after building resizing, legacy miniature conversion, duplication and asset transforms. Review different asset families side by side at gameplay zoom. Preserve saved authoritative dimensions/anchors and the native backend; regenerate derived presentation rather than silently rewriting saves.
 
-Audit of the current M1 review build: this requirement is NOT yet fully satisfied. Tree crowns use a 0.24-world-unit grid (0.255 cube size including overlap), while roof pieces derive widths/depths from the building extent and its transform; shrubs and other accents use additional independently sized boxes. The existing render tests do not establish common voxel size. Treat normalization as an explicit remaining M1 visual correction; do not claim this documentation changes the APK or validates a final numeric unit.
+Historical audit of the preceding M1 review build: tree crowns used a 0.24-world-unit grid (0.255 cube size including overlap), while roof pieces derived widths/depths from building extent and transform; shrubs used further independently sized boxes. That build did not satisfy this requirement. Iteration 2 below replaces those generators and adds world-space geometry checks; visual approval remains the player's decision.
+
+
+## M1 physical-feedback iteration 2
+
+The next build uses `VisualGrid.UNIT = 0.125` for actual native terrain cells and derived asset steps. Native dimensions increase to 384 x 256 x 384 while retaining the 48 x 32 x 48 world. The player explicitly rejected keeping visibly coarse terrain while calling it merged fine cells. Legacy .5-grid checkpoints migrate by exact material-run expansion, retaining caves, edits and original files. Existing stepped landforms retain their shape; freshly generated terrain uses finer contour increments. This increases raw terrain payload to 72 MiB per generation and requires separate Thor performance review.
+
+Fresh cottages now use uniform .25 scale (4.5 x 1.75 x 3.5 before the roof); existing saved cottage transforms use the explicit undoable Miniature scale action. Trees have rebuilt overlapping crowns about 4.8–6 world units tall. Automatic window counts and spacing respond to wall length, yield to manual choices, and reserve suppressed footprints; optional shutters hide if crowded. Manual shutters and flower boxes remain editable/recoverable attachments.
+
+Controller foliage/tree brushes and default tree/foliage/rock scatter use saved placements in the same checkpoint envelope. Terrain edits clear roots near actual changed cells; undo restores both layers. The sage/olive palette remains a review candidate, and the player requested a dedicated palette pass soon. This iteration does not establish visual approval.

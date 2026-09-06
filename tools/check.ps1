@@ -33,7 +33,7 @@ function Invoke-GodotBounded([string]$Name, [string[]]$Arguments) {
     Write-Output $text
     if ($process.ExitCode -ne 0 -or $text -match '(?i)SCRIPT ERROR|ERROR:') { throw "Check failed: $Name; see $log" }
     if ($text -match '(?m)^FAIL:') { throw "Check reported FAIL lines: $Name; see $log" }
-    $requiresFinalJson = ($Name -eq 'm1-controller' -or $Name -like 'm1-acceptance*')
+    $requiresFinalJson = ($Name -eq 'm1-controller' -or $Name -like 'm1-acceptance*' -or $Name -like 'terrain-resolution*' -or $Name -like 'm1-landscape*' -or $Name -eq 'visual-grid')
     if ($requiresFinalJson -and -not [regex]::IsMatch($text, '(?m)^\s*\{.*"ok"\s*:\s*true.*\}\s*$')) {
         throw "Check did not emit a passing final JSON sentinel: $Name; see $log"
     }
@@ -56,6 +56,13 @@ Invoke-GodotBounded 'sculpt' @('--headless','--path','.','--script','res://tests
 Invoke-GodotBounded 'm1-scaled-backend' @('--headless','--path','.','--script','res://tests/m1_scaled_backend_test.gd','--max-fps','60')
 Invoke-GodotBounded 'm1-visual' @('--headless','--path','.','--script','res://tests/m1_visual_test.gd','--max-fps','60')
 Invoke-GodotBounded 'building-world' @('--headless','--path','.','--script','res://tests/building_world_test.gd','--max-fps','60')
+Invoke-GodotBounded 'visual-grid' @('--headless','--path','.','--script','res://tests/visual_grid_test.gd','--max-fps','60')
+Invoke-GodotBounded 'plant-target' @('--headless','--path','.','--script','res://tests/plant_target_test.gd','--max-fps','60')
+$fixtureTag = [DateTime]::UtcNow.Ticks.ToString()
+Invoke-GodotBounded 'terrain-resolution' @('--headless','--path','.','--script','res://tests/terrain_resolution_test.gd','--max-fps','60','--',("--fixture-root=user://resolution-check-"+$fixtureTag))
+Invoke-GodotBounded 'terrain-resolution-cold' @('--headless','--path','.','--script','res://tests/terrain_resolution_test.gd','--max-fps','60','--','--read-fixture',("--fixture-root=user://resolution-check-"+$fixtureTag))
+Invoke-GodotBounded 'm1-landscape' @('--headless','--path','.','--script','res://tests/m1_landscape_test.gd','--max-fps','60','--',("--fixture-root=user://landscape-check-"+$fixtureTag))
+Invoke-GodotBounded 'm1-landscape-cold' @('--headless','--path','.','--script','res://tests/m1_landscape_test.gd','--max-fps','60','--','--read-fixture',("--fixture-root=user://landscape-check-"+$fixtureTag))
 Invoke-GodotBounded 'controller' @('--headless','--path','.','--script','res://tests/controller_test.gd','--max-fps','60')
 Invoke-GodotBounded 'm1-controller' @('--headless','--path','.','--script','res://tests/m1_controller_test.gd','--max-fps','60')
 Invoke-GodotBounded 'm1-acceptance' @('--headless','--path','.','--script','res://tests/m1_acceptance_test.gd','--max-fps','60')

@@ -63,7 +63,19 @@ The APK retains the application ID and development signing identity so the devic
 
 The default Android debug identity is for personal sideload testing, not production distribution. Preserve it outside source control to retain update compatibility. The stable application ID is `org.hearthvale.game`; both modes use the same identity on this host. Export presets include ARM64 only. Verify signatures with your SDK's `apksigner verify` and inspect the archive for the respective native voxel `.so`. The MCP sandbox and reference artwork must not be in either APK.
 
-Install only on an authorised attached device: `adb install -r builds/hearthvale-m1-debug.apk`. This command was not run while no Thor was connected. Do not uninstall an existing app or erase its saves to work around signing errors. M1 exports use Android version code 4, version name `0.1.1-m1-rework`, with the same package ID and signing identity as M0.
+Install only on an authorised attached device: `adb install -r builds/hearthvale-m1-iteration2-debug.apk`. This command was not run while no Thor was connected. Do not uninstall an existing app or erase its saves to work around signing errors. Iteration 2 uses Android version code 5, version name `0.1.2-m1-garden`, with the same package ID and signing identity as M0. The preceding v4 APK is retained separately.
+
+For a versioned iteration-2 debug export, preserving the previous playtest file:
+
+```powershell
+./tools/check.ps1 -TimeoutMs 240000
+& $godot --headless --path . --export-debug 'Android ARM64' builds/hearthvale-m1-iteration2-debug.apk
+& $godot --headless --path . --export-debug 'Windows' builds/hearthvale-m1-iteration2-debug.exe
+python tools/verify-m1-apks.py --apk builds/hearthvale-m1-iteration2-debug.apk --report reports/m1-iteration2-apk-verification.json
+& $godot --path . --script res://tests/visual_grid_test.gd -- --require-rendering
+```
+
+Check full export logs for script errors as well as exit codes. The actual Mobile geometry test is additional to the headless suite: headless MultiMesh transform readback is unavailable and is reported as unverified. Fine terrain uses .125-unit cells in the same world bounds; old terrain is exactly upsampled, preserving its existing shape and legacy files. Each new raw terrain generation is 72 MiB. Saved cottages retain their transform until the undoable Cottage → Miniature scale action.
 
 ## Retained M0 renderer fixture
 
