@@ -38,12 +38,12 @@ static func build_library() -> Object:
 	var empty: Object = ClassDB.instantiate("VoxelBlockyModelEmpty")
 	var stone: Object = ClassDB.instantiate("VoxelBlockyModelCube")
 	var stone_material := StandardMaterial3D.new()
-	stone_material.albedo_color = Color(0.48, 0.43, 0.38)
+	stone_material.albedo_color = Color("#ac9677")
 	stone_material.vertex_color_use_as_albedo = true
 	stone.set_material_override(0, stone_material)
 	var grass: Object = ClassDB.instantiate("VoxelBlockyModelCube")
 	var grass_material := StandardMaterial3D.new()
-	grass_material.albedo_color = Color(0.42, 0.52, 0.34)
+	grass_material.albedo_color = Color("#7d9957")
 	grass_material.vertex_color_use_as_albedo = true
 	grass.set_material_override(0, grass_material)
 	library.add_model(empty)

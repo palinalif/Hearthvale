@@ -22,6 +22,52 @@ func _initialize() -> void:
 		_finish(); return
 	_check(scene.backend.patch_size == Vector3i(96, 64, 96), "M1 uses doubled native terrain resolution")
 	_check(is_equal_approx(float(scene.backend.voxel_scale), 0.5), "M1 preserves authored world scale")
+	_check(scene.view_context == "terrain", "default context is terrain")
+	await process_frame
+	_check(scene._terrain_target_valid, "default terrain cursor has a target")
+	_check(scene.cursor_reticle != null and scene.cursor_reticle.visible, "terrain reticle is visible")
+	scene.camera_distance = 12.0
+	await process_frame
+	_check(scene.cursor_reticle != null and scene.cursor_reticle.visible, "reticle is visible at minimum zoom")
+	_check(_reticle_screen_span_pixels() >= 10.0, "projected reticle cue is readable at minimum zoom")
+	scene.camera_distance = 52.0
+	await process_frame
+	_check(scene.cursor_reticle != null and scene.cursor_reticle.visible, "reticle is visible at maximum zoom")
+	_check(_reticle_screen_span_pixels() >= 10.0, "projected reticle cue is readable at maximum zoom")
+	var terrain_menu_hash: String = _terrain_hash()
+	await _press(JOY_BUTTON_X)
+	_check(scene.tools_open and not scene.detail_open and _context_menu_is_filtered("terrain"), "X opens filtered terrain menu")
+	await _hold_button(JOY_BUTTON_A, 30)
+	_check(not scene.stroke_active and _terrain_hash() == terrain_menu_hash, "held menu A is consumed")
+	await _choose_action("Dig")
+	_check(scene.view_context == "terrain" and scene.sculpt_tool == "dig", "Dig selects terrain mode")
+	scene.cursor = Vector3(32.0, 8.0, 28.0)
+	await process_frame
+	var terrain_document: Dictionary = scene.building_world.get_document()
+	var terrain_before_hash: String = _terrain_hash()
+	await _hold_button(JOY_BUTTON_A, 90)
+	_check(_terrain_hash() != terrain_before_hash and not scene.stroke_active, "held Dig changes terrain")
+	_check(scene.building_world.get_document() == terrain_document, "Dig leaves building records unchanged")
+	await _press(JOY_BUTTON_BACK)
+	_check(scene.view_context == "building", "View switches to building mode")
+	await _press(JOY_BUTTON_X)
+	_check(_context_menu_is_filtered("building"), "building menu is filtered")
+	await _press(JOY_BUTTON_B)
+	scene.cursor = Vector3(22.0, 10.0, 18.0)
+	var deadzone_cursor: Vector3 = scene.cursor
+	await _axis(JOY_AXIS_LEFT_X, 0.08)
+	_check(scene.cursor == deadzone_cursor, "small analog deflection stays inside deadzone")
+	await _axis(JOY_AXIS_LEFT_X, 0.35)
+	_check(scene.cursor.distance_to(deadzone_cursor) > 0.0, "moderate analog deflection moves cursor")
+	scene.cursor = deadzone_cursor
+	await _hold_axis(JOY_AXIS_LEFT_X, 1.0, 20)
+	var normal_travel: float = scene.cursor.distance_to(deadzone_cursor)
+	scene.cursor = deadzone_cursor
+	await _press(JOY_BUTTON_LEFT_STICK)
+	await _hold_axis(JOY_AXIS_LEFT_X, 1.0, 20)
+	var precision_travel: float = scene.cursor.distance_to(deadzone_cursor)
+	await _press(JOY_BUTTON_LEFT_STICK)
+	_check(normal_travel > precision_travel and precision_travel > 0.0, "precision mode reduces analog travel")
 
 	var cursor_start: Vector3 = scene.cursor
 	await _axis(JOY_AXIS_LEFT_X, 1.0)
@@ -38,8 +84,7 @@ func _initialize() -> void:
 
 	# Open details and move the selected window through the focused action.
 	await _press(JOY_BUTTON_X)
-	for _i in 17: await _press(JOY_BUTTON_DPAD_DOWN)
-	await _press(JOY_BUTTON_A)
+	await _choose_action("Move selected window")
 	_check(scene.detail_move_active, "Move action opens detail preview")
 	var move_start: Vector3 = scene.detail_move_position
 	var cursor_during_move: Vector3 = scene.cursor
@@ -53,9 +98,7 @@ func _initialize() -> void:
 	_check(not scene.detail_move_active, "B cancels detail move")
 
 	# Reopen, choose Move, then commit and verify the authoritative state changed.
-	await _press(JOY_BUTTON_X)
-	for _i in 17: await _press(JOY_BUTTON_DPAD_DOWN)
-	await _press(JOY_BUTTON_A)
+	await _choose_action("Move selected window")
 	var detail_id := str(scene.selected_detail_id)
 	var before_move: Dictionary = scene.building_world.get_building("building-1")
 	await _axis(JOY_AXIS_LEFT_X, 1.0)
@@ -124,6 +167,70 @@ func _axis(axis: JoyAxis, value: float) -> void:
 	var release := InputEventJoypadMotion.new()
 	release.axis = axis; release.axis_value = 0.0
 	Input.parse_input_event(release); Input.flush_buffered_events(); await process_frame
+
+func _hold_button(button: JoyButton, frames: int) -> void:
+	var event := InputEventJoypadButton.new()
+	event.button_index = button; event.pressed = true
+	Input.parse_input_event(event); Input.flush_buffered_events()
+	for _i in frames: await process_frame
+	var release := InputEventJoypadButton.new()
+	release.button_index = button; release.pressed = false
+	Input.parse_input_event(release); Input.flush_buffered_events(); await process_frame
+
+func _hold_axis(axis: JoyAxis, value: float, frames: int) -> void:
+	var event := InputEventJoypadMotion.new()
+	event.axis = axis; event.axis_value = value
+	Input.parse_input_event(event); Input.flush_buffered_events()
+	for _i in frames: await process_frame
+	var release := InputEventJoypadMotion.new()
+	release.axis = axis; release.axis_value = 0.0
+	Input.parse_input_event(release); Input.flush_buffered_events(); await process_frame
+
+func _choose_action(label: String) -> void:
+	if not scene.tools_open and not scene.detail_open: await _press(JOY_BUTTON_X)
+	var labels: Array = scene._visible_action_labels() if scene.has_method("_visible_action_labels") else scene._tool_buttons.keys()
+	var buttons: Array = scene._visible_action_buttons() if scene.has_method("_visible_action_buttons") else scene._tool_buttons.values()
+	var index := labels.find(label)
+	if index < 0:
+		_check(false, "action is visible: %s" % label)
+		return
+	var focus := scene.get_viewport().gui_get_focus_owner()
+	var start := buttons.find(focus)
+	if start < 0: start = 0
+	for _i in posmod(index - start, labels.size()): await _press(JOY_BUTTON_DPAD_DOWN)
+	await _press(JOY_BUTTON_A)
+
+func _context_menu_is_filtered(context: String) -> bool:
+	var expected: Array = scene._terrain_action_labels if context == "terrain" else scene._cottage_action_labels
+	var visible_count := 0
+	for label in scene._tool_buttons.keys():
+		var button: Button = scene._tool_buttons[label]
+		var should_show := expected.has(str(label))
+		if button.visible: visible_count += 1
+		if button.visible != should_show or button.disabled == should_show: return false
+	return visible_count == expected.size()
+
+func _terrain_hash() -> String:
+	var context := HashingContext.new()
+	context.start(HashingContext.HASH_SHA256)
+	context.update(scene.backend.voxels.get_channel_as_byte_array(0))
+	return context.finish().hex_encode()
+
+func _reticle_screen_span_pixels() -> float:
+	if scene.camera == null or scene.cursor_reticle == null: return -1.0
+	var center: MeshInstance3D = scene.cursor_reticle.get_node_or_null("CenterDiamond")
+	if center == null or not center.mesh is ArrayMesh: return -1.0
+	var arrays: Array = (center.mesh as ArrayMesh).surface_get_arrays(0)
+	if arrays.size() <= Mesh.ARRAY_VERTEX or not arrays[Mesh.ARRAY_VERTEX] is PackedVector3Array: return -1.0
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	if vertices.is_empty(): return -1.0
+	var min_pixel := Vector2(INF, INF)
+	var max_pixel := Vector2(-INF, -INF)
+	for vertex in vertices:
+		var pixel: Vector2 = scene.camera.unproject_position(center.global_transform * vertex)
+		min_pixel.x = minf(min_pixel.x, pixel.x); min_pixel.y = minf(min_pixel.y, pixel.y)
+		max_pixel.x = maxf(max_pixel.x, pixel.x); max_pixel.y = maxf(max_pixel.y, pixel.y)
+	return maxf(max_pixel.x - min_pixel.x, max_pixel.y - min_pixel.y)
 
 func _check(condition: bool, label: String) -> void:
 	if not condition:

@@ -32,6 +32,11 @@ function Invoke-GodotBounded([string]$Name, [string[]]$Arguments) {
     [IO.File]::WriteAllText($log, $text)
     Write-Output $text
     if ($process.ExitCode -ne 0 -or $text -match '(?i)SCRIPT ERROR|ERROR:') { throw "Check failed: $Name; see $log" }
+    if ($text -match '(?m)^FAIL:') { throw "Check reported FAIL lines: $Name; see $log" }
+    $requiresFinalJson = ($Name -eq 'm1-controller' -or $Name -like 'm1-acceptance*')
+    if ($requiresFinalJson -and -not [regex]::IsMatch($text, '(?m)^\s*\{.*"ok"\s*:\s*true.*\}\s*$')) {
+        throw "Check did not emit a passing final JSON sentinel: $Name; see $log"
+    }
 }
 
 Invoke-GodotBounded 'import' @('--headless','--path','.','--editor','--import','--quit','--max-fps','60')
@@ -49,6 +54,7 @@ Invoke-GodotBounded 'm1-checkpoint-read-second' @('--headless','--path','.','--s
 Invoke-GodotBounded 'backend' @('--headless','--path','.','--script','res://tests/backend_test.gd','--max-fps','60')
 Invoke-GodotBounded 'sculpt' @('--headless','--path','.','--script','res://tests/sculpt_test.gd','--max-fps','60')
 Invoke-GodotBounded 'm1-scaled-backend' @('--headless','--path','.','--script','res://tests/m1_scaled_backend_test.gd','--max-fps','60')
+Invoke-GodotBounded 'm1-visual' @('--headless','--path','.','--script','res://tests/m1_visual_test.gd','--max-fps','60')
 Invoke-GodotBounded 'building-world' @('--headless','--path','.','--script','res://tests/building_world_test.gd','--max-fps','60')
 Invoke-GodotBounded 'controller' @('--headless','--path','.','--script','res://tests/controller_test.gd','--max-fps','60')
 Invoke-GodotBounded 'm1-controller' @('--headless','--path','.','--script','res://tests/m1_controller_test.gd','--max-fps','60')

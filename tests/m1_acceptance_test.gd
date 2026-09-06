@@ -42,8 +42,47 @@ func _run_acceptance() -> void:
 	_check(scene.building_world != null, "building document available")
 	if scene.building_world == null:
 		return
+	# Terrain is the safe default context.  X opens only terrain tools here;
+	# accepting a focused menu item must not leak a held A into sculpting.
+	_check(scene.view_context == "terrain", "default context is terrain")
+	await process_frame
+	_check(scene._terrain_target_valid, "default terrain cursor has a target")
+	_check(scene.cursor_reticle != null and scene.cursor_reticle.visible, "terrain target reticle is visible")
+	scene.camera_distance = 12.0
+	await process_frame
+	_check(scene.cursor_reticle != null and scene.cursor_reticle.visible, "reticle remains visible at minimum zoom")
+	var min_zoom_reticle_span: float = _reticle_screen_span_pixels()
+	_check(min_zoom_reticle_span >= 10.0, "reticle projected cue remains readable at minimum zoom")
+	scene.camera_distance = 52.0
+	await process_frame
+	_check(scene.cursor_reticle != null and scene.cursor_reticle.visible, "reticle remains visible at maximum zoom")
+	var max_zoom_reticle_span: float = _reticle_screen_span_pixels()
+	_check(max_zoom_reticle_span >= 10.0, "reticle projected cue remains readable at maximum zoom")
+	scene.cursor = Vector3(23.0, 13.0, 20.0)
+	await process_frame
+	var occluded_footprint: Node = scene.cursor_reticle.get_node_or_null("OccludedFootprint") if scene.cursor_reticle else null
+	_check(scene._terrain_target_valid and scene.cursor_reticle != null and scene.cursor_reticle.visible and occluded_footprint != null and (occluded_footprint as MeshInstance3D).visible, "occluded ground keeps projected reticle cue")
+	var terrain_menu_hash := _terrain_hash()
+	await _press(JOY_BUTTON_X)
+	_check(scene.tools_open and not scene.detail_open, "X opens terrain context menu")
+	_check(_context_menu_is_filtered("terrain"), "terrain menu shows only relevant actions")
+	await _hold_button(JOY_BUTTON_A, 30)
+	_check(not scene.stroke_active and _terrain_hash() == terrain_menu_hash, "held A in terrain menu is consumed")
+	await _choose_action("Dig")
+	_check(scene.view_context == "terrain" and scene.sculpt_tool == "dig", "Dig selects terrain context")
+	var dig_document_before: Dictionary = scene.building_world.get_document()
+	var dig_hash_before := _terrain_hash()
+	await _hold_button(JOY_BUTTON_A, 90)
+	_check(not scene.stroke_active and _terrain_hash() != dig_hash_before, "held Dig changes authoritative terrain")
+	_check(scene.building_world.get_document() == dig_document_before, "terrain Dig leaves all building records unchanged")
+	await _press(JOY_BUTTON_BACK)
+	_check(scene.view_context == "building", "View toggles to cottage context safely")
+	await _press(JOY_BUTTON_X)
+	_check(_context_menu_is_filtered("building"), "cottage menu shows only relevant actions")
+	await _press(JOY_BUTTON_B)
 	var original_id := str(scene.selected_building_id)
 	var original_before: Dictionary = scene.building_world.get_building(original_id)
+	_check((original_before["transform"] as Transform3D).basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorldScript.MINIATURE_SCALE), "selected cottage starts as miniature")
 	var original_details: Array = original_before.get("details", [])
 	var windows: Array[String] = []
 	for item_value in original_details:
@@ -91,6 +130,17 @@ func _run_acceptance() -> void:
 	var preview_before: Vector3 = scene.resize_preview_dimensions
 	await _press(JOY_BUTTON_DPAD_UP)
 	_check(scene.resize_active and scene.resize_preview_dimensions.y > preview_before.y, "height resize preview is constrained")
+	var resize_cursor_before: Vector3 = scene.cursor
+	await _press(JOY_BUTTON_DPAD_DOWN)
+	_check(scene.cursor == resize_cursor_before, "D-pad resize does not move world cursor")
+	await process_frame
+	var resize_view: Dictionary = scene.building_world.get_building(original_id)
+	var resize_transform: Transform3D = resize_view["transform"]
+	var authored_handle := Vector3(scene.resize_preview_dimensions.x * 0.5 + 0.5, scene.resize_preview_dimensions.y * 0.5, 0)
+	if scene.resize_handles and scene.resize_handles.get_child_count() > 0:
+		_check((scene.resize_handles.get_child(0) as Node3D).position.is_equal_approx(resize_transform * authored_handle), "resize handles follow miniature transform")
+	else:
+		_missing_api("transformed resize handles")
 	await _press(JOY_BUTTON_B)
 	_check(not scene.resize_active and scene.building_world.get_building(original_id).get("dimensions", Vector3.ZERO) == dims_before, "B cancels resize without mutation")
 	await _press(JOY_BUTTON_A)
@@ -126,6 +176,10 @@ func _run_acceptance() -> void:
 	_check(_same_design(scene.building_world.get_document(), material_before), "building material undo is exact")
 	await _press(JOY_BUTTON_RIGHT_SHOULDER)
 	_check(_same_design(scene.building_world.get_document(), material_after), "building material redo is exact")
+	var miniature_before: Dictionary = scene.building_world.get_document()
+	await _choose_action("Miniature scale")
+	_check((scene.building_world.get_building(original_id)["transform"] as Transform3D).basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorldScript.MINIATURE_SCALE), "Miniature scale action keeps half scale")
+	_check(_same_design(scene.building_world.get_document(), miniature_before), "repeated Miniature scale is an idempotent action")
 
 	# Duplicate through UI, switch to the copy with D-pad, and edit only it.
 	var buildings_before: int = scene.building_world.get_buildings().size()
@@ -134,6 +188,7 @@ func _run_acceptance() -> void:
 	var copy_id := str(scene.selected_building_id)
 	_check(copy_id != original_id, "duplicate selection moves to the copy")
 	var original_after_duplicate: Dictionary = scene.building_world.get_building(original_id)
+	_check((scene.building_world.get_building(copy_id)["transform"] as Transform3D).basis.get_scale().is_equal_approx((original_after_duplicate["transform"] as Transform3D).basis.get_scale()), "duplicate preserves miniature transform scale")
 	await _select_window_for_building(copy_id, 0)
 	await _choose_action("Suppress / restore")
 	_check(scene.building_world.get_building(original_id) == original_after_duplicate, "copy edit leaves original unchanged")
@@ -158,8 +213,11 @@ func _run_acceptance() -> void:
 	_check(str(scene.backend.stats().get("save_status", "")) == "saved", "focused pause Save publishes terrain and design")
 	await _press(JOY_BUTTON_DPAD_DOWN)
 	await _press(JOY_BUTTON_A)
-	_check(scene.building_world.get_document() == save_doc, "Reload restores complete building document")
+	_check(str(scene.backend.stats().get("save_status", "")) == "loaded", "focused pause Reload reports loaded")
+	_check(_same_design(scene.building_world.get_document(), save_doc), "Reload restores complete building document")
 	_check(int(scene.backend.stats().get("revision", -1)) == save_revision, "Reload restores saved terrain revision")
+	await _press(JOY_BUTTON_B)
+	_check(not scene.menu_open, "B closes pause after Reload")
 
 	# Terrain context: tool selection, held A progress, drag, release, and
 	# history are all physical joypad events.
@@ -353,18 +411,28 @@ func _select_window_for_building(building_id: String, index: int) -> void:
 
 func _choose_action(label: String) -> void:
 	if not scene.tools_open and not scene.detail_open: await _press(JOY_BUTTON_X)
-	var labels: Array = scene._tool_buttons.keys()
+	var labels: Array = scene._visible_action_labels() if scene.has_method("_visible_action_labels") else scene._tool_buttons.keys()
+	var buttons: Array = scene._visible_action_buttons() if scene.has_method("_visible_action_buttons") else scene._tool_buttons.values()
 	var index := labels.find(label)
 	if index < 0:
 		_missing_api("focused action: %s" % label)
 		return
 	var focus := scene.get_viewport().gui_get_focus_owner()
-	var buttons: Array = scene._tool_buttons.values()
 	var start := buttons.find(focus)
 	if start < 0: start = 0
 	var steps: int = posmod(index - start, labels.size())
 	for _i in steps: await _press(JOY_BUTTON_DPAD_DOWN)
 	await _press(JOY_BUTTON_A)
+
+func _context_menu_is_filtered(context: String) -> bool:
+	var expected: Array = scene._terrain_action_labels if context == "terrain" else scene._cottage_action_labels
+	var visible_count := 0
+	for label in scene._tool_buttons.keys():
+		var button: Button = scene._tool_buttons[label]
+		var should_show := expected.has(str(label))
+		if button.visible: visible_count += 1
+		if button.visible != should_show or button.disabled == should_show: return false
+	return visible_count == expected.size()
 
 func _hold_button(button: JoyButton, frames: int) -> void:
 	var event := InputEventJoypadButton.new(); event.button_index = button; event.pressed = true
@@ -445,13 +513,31 @@ func _same_design(left: Dictionary, right: Dictionary) -> bool:
 	b["revision"] = 0
 	a["next_id"] = 0
 	b["next_id"] = 0
-	return a == b
+	# JSON restores integral metadata as floats; compare every design field in
+	# the same persisted representation, without dropping or tolerating fields.
+	return JSON.parse_string(JSON.stringify(a)) == JSON.parse_string(JSON.stringify(b))
 
 func _terrain_hash() -> String:
 	var context := HashingContext.new()
 	context.start(HashingContext.HASH_SHA256)
 	context.update(scene.backend.voxels.get_channel_as_byte_array(0))
 	return context.finish().hex_encode()
+
+func _reticle_screen_span_pixels() -> float:
+	if scene.camera == null or scene.cursor_reticle == null: return -1.0
+	var center: MeshInstance3D = scene.cursor_reticle.get_node_or_null("CenterDiamond")
+	if center == null or not center.mesh is ArrayMesh: return -1.0
+	var arrays: Array = (center.mesh as ArrayMesh).surface_get_arrays(0)
+	if arrays.size() <= Mesh.ARRAY_VERTEX or not arrays[Mesh.ARRAY_VERTEX] is PackedVector3Array: return -1.0
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	if vertices.is_empty(): return -1.0
+	var min_pixel := Vector2(INF, INF)
+	var max_pixel := Vector2(-INF, -INF)
+	for vertex in vertices:
+		var pixel: Vector2 = scene.camera.unproject_position(center.global_transform * vertex)
+		min_pixel.x = minf(min_pixel.x, pixel.x); min_pixel.y = minf(min_pixel.y, pixel.y)
+		max_pixel.x = maxf(max_pixel.x, pixel.x); max_pixel.y = maxf(max_pixel.y, pixel.y)
+	return maxf(max_pixel.x - min_pixel.x, max_pixel.y - min_pixel.y)
 
 func _design_hash(document: Dictionary) -> String:
 	var copy := document.duplicate(true)

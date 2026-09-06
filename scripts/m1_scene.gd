@@ -7,6 +7,8 @@ const M1PatchGenerator = preload("res://scripts/m1_patch_generator.gd")
 const BuildingWorldScript = preload("res://scripts/building_world.gd")
 const CottageVisualScript = preload("res://scripts/cottage_visual.gd")
 const BrushPreviewScript = preload("res://scripts/brush_preview.gd")
+const CursorReticleScript = preload("res://scripts/m1_cursor_reticle.gd")
+const GardenVisualScript = preload("res://scripts/m1_garden_visual.gd")
 
 @export var checkpoint_root := "user://m1_checkpoints"
 @export var test_mode := false
@@ -19,17 +21,19 @@ var brush_preview: Node3D
 var preview_cells: Array[Vector3i] = []
 var preview_center := Vector3.ZERO
 var _preview_key := ""
-var cursor := Vector3(22.0, 10.0, 18.0)
+var cursor := Vector3(32.0, 8.0, 28.0)
+var terrain_cursor := Vector3(32.0, 8.0, 28.0)
+var cottage_cursor := Vector3(22.0, 10.0, 18.0)
 var camera_yaw := -1.1
 var camera_pitch := 0.66
-var camera_distance := 44.0
+var camera_distance := 36.0
 var brush_radius := 2.0
 var brush_strength := 1.5
 var brush_falloff := 0.75
 var height_snap_enabled := false
 var reference_mode := "ground"
 var sculpt_tool := "raise"
-var view_context := "building"
+var view_context := "terrain"
 var precision_mode := false
 var menu_open := false
 var tools_open := false
@@ -49,6 +53,7 @@ var resize_axis := "width"
 var stroke_active := false
 var stroke_reference: Dictionary = {}
 var stroke_surface_normal := Vector3.UP
+var stroke_aim_offset := Vector3.ZERO
 var keep_reference := false
 var status_text := "Loading cottage…"
 var _last_focus := true
@@ -62,6 +67,8 @@ var _building_dirty := false
 var _restoring := false
 var _player_restored := false
 var _review_menu_after_ready := false
+var _review_clean := false
+var _review_edited := false
 var _blocked_until_accept_release := false
 
 var camera: Camera3D
@@ -76,6 +83,13 @@ var decor_root: Node3D
 var resize_handles: Node3D
 var reference_plane: MeshInstance3D
 var terrain_hit_marker: MeshInstance3D
+var cursor_reticle: Node3D
+var garden_visual: Node3D
+var _terrain_target_valid := false
+var _terrain_target_point := Vector3.ZERO
+var _terrain_target_normal := Vector3.UP
+var _terrain_action_labels: Array[String] = ["Raise", "Dig", "Level", "Slope", "Smooth", "Radius +", "Radius -", "Strength +", "Strength -", "Falloff +", "Falloff -", "Height snap: off", "Reference: ground", "Reference: wall", "Reference: ceiling", "Resample reference", "Keep reference"]
+var _cottage_action_labels: Array[String] = ["Move selected window", "Support: next", "Support: previous", "Replace selected", "Suppress / restore", "Reattach selected", "Add flower box", "Delete selected surface", "Material: warm plaster", "Miniature scale", "Duplicate cottage", "Close"]
 
 func _ready() -> void:
 	get_window().title = "Hearthvale — M1"
@@ -83,6 +97,7 @@ func _ready() -> void:
 	_apply_review_args()
 	_build_world()
 	_build_ui()
+	if _review_clean: hud.visible = false
 	_create_backend()
 	_last_focus = get_window().has_focus()
 	_update_camera()
@@ -102,9 +117,10 @@ func _process(delta: float) -> void:
 	if detail_move_active and not menu_open and not tools_open and not detail_open:
 		_read_detail_move(delta)
 	if stroke_active and backend and backend.has_method("update_stroke"):
-		backend.update_stroke(cursor, delta)
+		backend.update_stroke(cursor + stroke_aim_offset, delta)
 	_update_camera()
 	_update_brush_preview()
+	_update_cursor_reticle()
 	_update_presentation()
 	_update_debug_overlay()
 	var focused := get_window().has_focus()
@@ -132,17 +148,15 @@ func _input(event: InputEvent) -> void:
 		_set_menu(not menu_open)
 		get_viewport().set_input_as_handled()
 		return
+	if event.is_action_pressed("m1_view") and not menu_open:
+		_set_view_context("terrain" if view_context == "building" else "building", "Context changed")
+		get_viewport().set_input_as_handled()
+		return
 	if menu_open:
 		_handle_menu_input(event)
 		return
 	if tools_open or detail_open:
 		_handle_overlay_input(event)
-		return
-	if event.is_action_pressed("m1_view"):
-		_cancel_current_edit("Context changed")
-		view_context = "terrain" if view_context == "building" else "building"
-		_set_status("Context: %s" % view_context)
-		get_viewport().set_input_as_handled()
 		return
 	if view_context == "building" and event.is_action_pressed("m1_cycle_left"):
 		if resize_active:
@@ -162,13 +176,9 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("m1_tools"):
-		_cancel_current_edit("Actions opened")
-		if view_context == "building": detail_open = true
-		else: tools_open = true
-		tools_panel.visible = true
-		var buttons: Array = _tool_buttons.values()
+		_open_actions_for_context()
+		var buttons: Array = _visible_action_buttons()
 		if not buttons.is_empty(): (buttons[0] as Button).grab_focus()
-		_set_status("Choose a tool")
 		get_viewport().set_input_as_handled()
 		return
 	if view_context == "terrain":
@@ -176,7 +186,8 @@ func _input(event: InputEvent) -> void:
 			_cancel_current_edit("Stroke cancelled")
 			get_viewport().set_input_as_handled()
 		elif event.is_action_pressed("m1_accept"):
-			_begin_stroke()
+			if _terrain_target_valid: _begin_stroke()
+			else: _set_status("No terrain target under cursor")
 			get_viewport().set_input_as_handled()
 		elif event.is_action_released("m1_accept"):
 			_end_stroke()
@@ -234,6 +245,10 @@ func _setup_input_map() -> void:
 
 func _ensure_action(action: String) -> void:
 	if not InputMap.has_action(action): InputMap.add_action(action)
+	if action.begins_with("m1_move_") or action.begins_with("m1_orbit_"):
+		InputMap.action_set_deadzone(action, 0.18)
+	elif action.begins_with("m1_zoom_"):
+		InputMap.action_set_deadzone(action, 0.05)
 func _button(action: String, button: JoyButton) -> void:
 	var event := InputEventJoypadButton.new(); event.button_index = button; InputMap.action_add_event(action, event)
 func _axis(action: String, axis: JoyAxis, value: float) -> void:
@@ -242,13 +257,11 @@ func _key(action: String, key: Key) -> void:
 	var event := InputEventKey.new(); event.keycode = key; InputMap.action_add_event(action, event)
 
 func _build_world() -> void:
-	var sun := DirectionalLight3D.new(); sun.rotation_degrees = Vector3(-52, -28, 0); sun.light_color = Color("#ffd7a8"); sun.light_energy = 1.05; sun.shadow_enabled = true; add_child(sun)
-	var environment_node := WorldEnvironment.new(); var environment := Environment.new(); environment.background_mode = Environment.BG_COLOR; environment.background_color = Color("#9bb8c9"); environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR; environment.ambient_light_color = Color("#a8bbc2"); environment.ambient_light_energy = 0.38; environment.fog_enabled = true; environment.fog_light_color = Color("#9aaeb7"); environment.fog_density = 0.003; environment_node.environment = environment; add_child(environment_node)
-	var water := MeshInstance3D.new(); var water_mesh := PlaneMesh.new(); water_mesh.size = Vector2(8, 33); water.mesh = water_mesh; water.position = Vector3(43, 5.0, 26.5); var water_material := StandardMaterial3D.new(); water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; water_material.albedo_color = Color(0.20, 0.52, 0.62, 0.72); water_material.metallic = 0.12; water.material_override = water_material; add_child(water)
-	decor_root = Node3D.new(); decor_root.name = "SteppedTrees"; add_child(decor_root)
-	_add_tree(Vector3(8, 8, 8), 3.0)
-	_add_tree(Vector3(39, 6, 30), 3.5)
-	_add_tree(Vector3(6, 7.5, 38), 2.6)
+	var sun := DirectionalLight3D.new(); sun.rotation_degrees = Vector3(-52, -28, 0); sun.light_color = Color("#fff0d5"); sun.light_energy = 1.25; sun.shadow_enabled = true; add_child(sun)
+	var environment_node := WorldEnvironment.new(); var environment := Environment.new(); environment.background_mode = Environment.BG_COLOR; environment.background_color = Color("#c3d2c5"); environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR; environment.ambient_light_color = Color("#c2d5e0"); environment.ambient_light_energy = 0.55; environment.fog_enabled = false; environment.fog_light_color = Color("#9aaeb7"); environment.fog_density = 0.003; environment_node.environment = environment; add_child(environment_node)
+	var water := MeshInstance3D.new(); var water_mesh := PlaneMesh.new(); water_mesh.size = Vector2(8, 33); water.mesh = water_mesh; water.position = Vector3(43, 5.0, 26.5); var water_material := StandardMaterial3D.new(); water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; water_material.albedo_color = Color(0.25, 0.58, 0.58, 0.88); water_material.metallic = 0.12; water.material_override = water_material; add_child(water)
+	decor_root = Node3D.new(); decor_root.name = "GardenDecor"; add_child(decor_root)
+	garden_visual = GardenVisualScript.new(); garden_visual.name = "M1GardenVisual"; decor_root.add_child(garden_visual)
 	camera = Camera3D.new(); camera.current = true; camera.fov = 52; add_child(camera)
 	resize_handles = Node3D.new(); resize_handles.name = "ResizeHandles"; resize_handles.visible = false; add_child(resize_handles)
 	for axis_name in ["width", "depth", "height"]:
@@ -273,17 +286,10 @@ func _build_world() -> void:
 	terrain_hit_marker = MeshInstance3D.new(); terrain_hit_marker.name = "TerrainHitMarker"
 	var marker_mesh := SphereMesh.new(); marker_mesh.radius = 0.12; marker_mesh.height = 0.24; marker_mesh.radial_segments = 12; marker_mesh.rings = 6; terrain_hit_marker.mesh = marker_mesh
 	var marker_material := StandardMaterial3D.new(); marker_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; marker_material.albedo_color = Color(0.55, 0.92, 0.96, 0.82); marker_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; marker_material.no_depth_test = true; terrain_hit_marker.material_override = marker_material; terrain_hit_marker.visible = false; add_child(terrain_hit_marker)
-
-func _add_tree(origin: Vector3, scale_value: float) -> void:
-	if not decor_root: return
-	var tree := Node3D.new()
-	tree.position = origin
-	var trunk := MeshInstance3D.new(); var trunk_mesh := CylinderMesh.new(); trunk_mesh.top_radius = 0.22; trunk_mesh.bottom_radius = 0.3; trunk_mesh.height = scale_value; trunk.mesh = trunk_mesh
-	var trunk_material := StandardMaterial3D.new(); trunk_material.albedo_color = Color("#76523c"); trunk.material_override = trunk_material; trunk.position.y = scale_value * 0.5; tree.add_child(trunk)
-	for step in 3:
-		var crown := MeshInstance3D.new(); var crown_mesh := BoxMesh.new(); var crown_width := 2.3 - float(step) * 0.5; crown_mesh.size = Vector3(crown_width, 0.7, crown_width); crown.mesh = crown_mesh
-		var crown_material := StandardMaterial3D.new(); crown_material.albedo_color = Color("#668b68") if step % 2 == 0 else Color("#7b9c70"); crown.material_override = crown_material; crown.position.y = scale_value + 0.55 + float(step) * 0.9; tree.add_child(crown)
-	decor_root.add_child(tree)
+	cursor_reticle = CursorReticleScript.new()
+	cursor_reticle.name = "M1CursorReticle"
+	cursor_reticle.visible = false
+	add_child(cursor_reticle)
 
 func _create_backend() -> void:
 	var backend_script := load("res://scripts/terrain_backend.gd")
@@ -301,6 +307,8 @@ func _create_backend() -> void:
 	backend.set("patch_size", Vector3i(96, 64, 96))
 	backend.set("voxel_scale", 0.5)
 	add_child(backend)
+	if garden_visual and garden_visual.has_method("attach_backend"):
+		garden_visual.attach_backend(backend)
 
 func _update_brush_preview() -> void:
 	if not brush_preview:
@@ -310,6 +318,8 @@ func _update_brush_preview() -> void:
 	if not visible_now:
 		if reference_plane: reference_plane.visible = false
 		if terrain_hit_marker: terrain_hit_marker.visible = false
+		if cursor_reticle and cursor_reticle.has_method("set_target_visible"): cursor_reticle.set_target_visible(false)
+		_terrain_target_valid = false
 		return
 	var scale_value := float(backend.get("voxel_scale")) if backend.get("voxel_scale") != null else 1.0
 	if scale_value <= 0.0:
@@ -321,15 +331,31 @@ func _update_brush_preview() -> void:
 	var snapped_center := Vector3(snappedf(target_center.x, scale_value), snappedf(target_center.y, scale_value), snappedf(target_center.z, scale_value))
 	var remove := sculpt_tool == "dig"
 	var preview_normal := _active_reference_normal()
-	var surface_sample: Dictionary = backend.sample_surface_plane(target_center, preview_normal, brush_radius + 1.0) if backend.has_method("sample_surface_plane") else {}
+	var sample_center := cursor + stroke_aim_offset if stroke_active else target_center
+	var sample_normal := stroke_surface_normal if stroke_active else preview_normal
+	var surface_sample: Dictionary = backend.sample_surface_plane(sample_center, sample_normal, brush_radius + 1.0) if backend.has_method("sample_surface_plane") else {}
 	var display_center: Vector3 = target_center
 	if bool(surface_sample.get("valid", false)) and surface_sample.get("point", null) is Vector3:
 		display_center = surface_sample["point"]
 	else:
-		var local_surface := _find_local_surface(target_center, preview_normal, scale_value)
+		var local_surface := _find_local_surface(sample_center, sample_normal, scale_value)
 		if bool(local_surface.get("valid", false)) and local_surface.get("point", null) is Vector3:
 			surface_sample = local_surface
 			display_center = local_surface["point"]
+	var target_valid := bool(surface_sample.get("valid", false)) and surface_sample.get("point", null) is Vector3
+	_terrain_target_valid = target_valid
+	if target_valid:
+		_terrain_target_point = display_center
+		_terrain_target_normal = surface_sample.get("normal", Vector3.UP) if surface_sample.get("normal", Vector3.UP) is Vector3 else Vector3.UP
+	else:
+		preview_center = Vector3.ZERO
+		preview_cells.clear()
+		brush_preview.visible = false
+		if reference_plane: reference_plane.visible = false
+		if terrain_hit_marker: terrain_hit_marker.visible = false
+		if cursor_reticle and cursor_reticle.has_method("set_target_visible"): cursor_reticle.set_target_visible(false)
+		_set_status("No terrain target under cursor")
+		return
 	var revision := int(backend.stats().get("revision", -1)) if backend.has_method("stats") else -1
 	var key := "%d|%s|%s|%s|%.3f|%s|%s|%s|%s|%s|%d" % [revision, str(snapped_center), str(display_center), str(preview_normal), brush_radius, str(remove), sculpt_tool, reference_mode, str(keep_reference), str(stroke_reference), get_instance_id()]
 	if key == _preview_key:
@@ -346,6 +372,22 @@ func _update_brush_preview() -> void:
 	if brush_preview.has_method("update_geometry"):
 		brush_preview.update_geometry(native_center, native_radius, remove, preview_cells)
 	_update_reference_guides(display_center, surface_sample)
+	if cursor_reticle and cursor_reticle.has_method("update_target"):
+		cursor_reticle.update_target(display_center, _terrain_target_normal, brush_radius, sculpt_tool, camera, true)
+
+func _update_cursor_reticle() -> void:
+	if not cursor_reticle or not cursor_reticle.has_method("update_target"):
+		return
+	var visible_now := not menu_open and not tools_open and not detail_open and not _restoring and not _shutting_down
+	if not visible_now:
+		if cursor_reticle.has_method("set_target_visible"): cursor_reticle.set_target_visible(false)
+		return
+	if view_context == "building" and not menu_open and not tools_open and not detail_open and not _restoring and not _shutting_down:
+		cursor_reticle.update_target(cottage_cursor, Vector3.UP, 1.2, "cottage", camera, true)
+		return
+	var point := _terrain_target_point if _terrain_target_valid else (cursor + stroke_aim_offset if stroke_active else cursor)
+	var normal := _terrain_target_normal if _terrain_target_valid else Vector3.UP
+	cursor_reticle.update_target(point, normal, brush_radius, sculpt_tool, camera, _terrain_target_valid)
 
 func _find_local_surface(center: Vector3, normal: Vector3, scale_value: float) -> Dictionary:
 	var result: Dictionary = {"valid": false}
@@ -479,22 +521,57 @@ func _on_backend_ready(ready: bool) -> void:
 		else: _set_status("Cottage and riverbank ready")
 	_player_restored = true
 	_restoring = false
+	if _review_edited:
+		var review_view: Dictionary = building_world.get_building(BUILDING_ID)
+		var review_detail: Dictionary = review_view["details"][0]
+		building_world.move_detail(BUILDING_ID, str(review_detail["id"]), str(review_detail["anchor"]["surface_id"]), Vector3(-4.0, 3.5, -7.02))
+		building_world.resize(BUILDING_ID, Vector3(23, 8, 12))
 	if _review_menu_after_ready:
 		view_context = "building"
 		detail_open = true
 		tools_panel.visible = true
-		var buttons: Array = _tool_buttons.values()
+		_update_action_buttons()
+		var buttons: Array = _visible_action_buttons()
 		if not buttons.is_empty(): (buttons[0] as Button).grab_focus()
+	if garden_visual and garden_visual.has_method("refresh_terrain"):
+		garden_visual.refresh_terrain()
 	_update_presentation()
 
 func _apply_review_args() -> void:
-	for argument in OS.get_cmdline_args():
+	var review_run := false
+	var review_arguments: Array = []
+	review_arguments.append_array(OS.get_cmdline_args())
+	review_arguments.append_array(OS.get_cmdline_user_args())
+	for argument in review_arguments:
+		if str(argument).begins_with("--review-"): review_run = true
 		match str(argument):
-			"--review-close": camera_distance = 26.0
+			"--review-close":
+				view_context = "building"
+				cursor = cottage_cursor
+				camera_distance = 26.0
+			"--review-cottage":
+				view_context = "building"
+				cursor = cottage_cursor
+				camera_distance = 36.0
+			"--review-near": camera_distance = 12.0
+			"--review-far": camera_distance = 52.0
 			"--review-terrain":
 				view_context = "terrain"
-				cursor = Vector3(32.0, 8.0, 28.0)
+				cursor = terrain_cursor
+			"--review-dig":
+				view_context = "terrain"
+				sculpt_tool = "dig"
+				cursor = terrain_cursor
+			"--review-occluded":
+				view_context = "terrain"
+				cursor = Vector3(23.0, 13.0, 20.0)
+			"--review-front": camera_yaw = -2.1
+			"--review-clean": _review_clean = true
+			"--review-edited": _review_edited = true
 			"--review-menu": _review_menu_after_ready = true
+	if review_run:
+		checkpoint_root = "user://m1-review-%s" % Time.get_ticks_usec()
+		test_mode = true
 
 func _on_joy_connection_changed(_device: int, connected: bool) -> void:
 	if connected or _shutting_down:
@@ -504,6 +581,8 @@ func _on_joy_connection_changed(_device: int, connected: bool) -> void:
 	_set_status("Controller disconnected; world paused")
 
 func _on_backend_changed() -> void:
+	if garden_visual and garden_visual.has_method("refresh_terrain"):
+		garden_visual.refresh_terrain()
 	_update_presentation()
 
 func _on_building_changed() -> void:
@@ -532,12 +611,14 @@ func _read_camera_and_cursor(delta: float) -> void:
 				var speed := lerpf(2.5, 10.0, pow(magnitude, 0.85)); if precision_mode: speed *= 0.35
 				var forward := Vector3(sin(camera_yaw), 0, cos(camera_yaw)); var right := Vector3(forward.z, 0, -forward.x); cursor += (right * move.x + forward * move.y) * delta * speed; cursor.x = clampf(cursor.x, 0.5, 47.5); cursor.z = clampf(cursor.z, 0.5, 47.5)
 	var orbit_x := Input.get_axis("m1_orbit_left", "m1_orbit_right"); var orbit_y := Input.get_axis("m1_orbit_up", "m1_orbit_down"); camera_yaw += orbit_x * delta * 2.2; camera_pitch = clampf(camera_pitch + orbit_y * delta * 1.5, 0.15, 1.25); var zoom := Input.get_axis("m1_zoom_out", "m1_zoom_in"); camera_distance = clampf(camera_distance - zoom * delta * 18.0, 12, 52)
-	if not detail_move_active and Input.is_action_just_pressed("m1_height_up"): cursor.y = clampf(cursor.y + 1.0, 0.0, 31.0)
-	if not detail_move_active and Input.is_action_just_pressed("m1_height_down"): cursor.y = clampf(cursor.y - 1.0, 0.0, 31.0)
+	if not detail_move_active and not resize_active and Input.is_action_just_pressed("m1_height_up"): cursor.y = clampf(cursor.y + 1.0, 0.0, 31.0)
+	if not detail_move_active and not resize_active and Input.is_action_just_pressed("m1_height_down"): cursor.y = clampf(cursor.y - 1.0, 0.0, 31.0)
 	if Input.is_action_just_pressed("m1_focus"):
 		_focus_selected_building()
 	if Input.is_action_just_pressed("m1_debug") and debug_label:
 		debug_label.visible = not debug_label.visible
+	if view_context == "terrain": terrain_cursor = cursor
+	else: cottage_cursor = cursor
 
 func _read_detail_move(delta: float) -> void:
 	if detail_move_active and not resize_locked:
@@ -564,16 +645,95 @@ func _update_camera() -> void:
 	if not camera: return
 	var target := cursor + Vector3(0, 2, 0); var offset := Vector3(sin(camera_yaw) * cos(camera_pitch), sin(camera_pitch), cos(camera_yaw) * cos(camera_pitch)) * camera_distance; camera.position = target + offset; camera.look_at(target, Vector3.UP)
 
+func _set_view_context(next_context: String, reason: String = "Context changed") -> bool:
+	var normalized := "terrain" if next_context == "terrain" else "building"
+	if normalized == view_context:
+		_set_status("Terrain mode" if normalized == "terrain" else "Cottage mode")
+		return false
+	_cancel_current_edit(reason)
+	if view_context == "terrain": terrain_cursor = cursor
+	else: cottage_cursor = cursor
+	view_context = normalized
+	cursor = terrain_cursor if normalized == "terrain" else cottage_cursor
+	tools_open = false
+	detail_open = false
+	if tools_panel: tools_panel.visible = false
+	if normalized == "terrain":
+		_set_status("Terrain mode • %s • A hold / release, B cancel" % sculpt_tool.capitalize())
+	else:
+		_set_status("Cottage mode • A resize, X actions")
+	_update_action_buttons()
+	_preview_key = ""
+	return true
+
+func _set_sculpt_tool(tool: String) -> bool:
+	var normalized := tool.to_lower()
+	if normalized not in ["raise", "dig", "level", "slope", "smooth"]:
+		return false
+	sculpt_tool = normalized
+	if view_context != "terrain":
+		_set_view_context("terrain", "Terrain tool selected")
+	else:
+		_cancel_current_edit("Terrain tool selected")
+		tools_open = false
+		detail_open = false
+		if tools_panel: tools_panel.visible = false
+	_set_status("Terrain mode • %s • A hold / release, B cancel" % sculpt_tool.capitalize())
+	_preview_key = ""
+	return true
+
+func _open_actions_for_context() -> void:
+	_cancel_current_edit("Actions opened")
+	if view_context == "building":
+		detail_open = true
+		tools_open = false
+	else:
+		tools_open = true
+		detail_open = false
+	if tools_panel: tools_panel.visible = true
+	_update_action_buttons()
+	var buttons := _visible_action_buttons()
+	if not buttons.is_empty(): (buttons[0] as Button).grab_focus()
+	_set_status("Cottage actions • D-pad choose / A select" if view_context == "building" else "Terrain tools • D-pad choose / A select")
+
+func _visible_action_labels() -> Array[String]:
+	return _terrain_action_labels if view_context == "terrain" else _cottage_action_labels
+
+func _visible_action_buttons() -> Array:
+	var result: Array = []
+	for label in _visible_action_labels():
+		if _tool_buttons.has(label): result.append(_tool_buttons[label])
+	return result
+
+func _update_action_buttons() -> void:
+	var visible_labels := _visible_action_labels()
+	for label in _tool_buttons.keys():
+		var button: Button = _tool_buttons[label]
+		button.visible = visible_labels.has(str(label))
+		button.disabled = not button.visible
+
 func _begin_stroke() -> void:
-	if stroke_active or not backend or not backend.has_method("begin_stroke"): return
+	if view_context != "terrain":
+		_set_status("Switch to Terrain mode to sculpt")
+		return
+	if stroke_active or resize_active or detail_move_active or menu_open or tools_open or detail_open:
+		return
+	if not _terrain_target_valid:
+		_set_status("No terrain target under cursor")
+		return
+	if not backend or not backend.has_method("begin_stroke"):
+		_set_status("Terrain backend unavailable")
+		return
+	var stroke_center := _terrain_target_point if _terrain_target_valid else cursor
+	stroke_aim_offset = stroke_center - cursor
 	var reference := {}
 	if sculpt_tool in ["level", "slope"] and backend.has_method("sample_surface_plane"):
 		if keep_reference and not stroke_reference.is_empty(): reference = stroke_reference.duplicate(true)
-		else: reference = backend.sample_surface_plane(cursor, _reference_normal(), brush_radius + 1.0)
+		else: reference = backend.sample_surface_plane(stroke_center, _reference_normal(), brush_radius + 1.0)
 		reference = _snap_reference(reference)
 	var facing := _reference_normal()
 	var settings := {"radius": brush_radius, "strength": brush_strength, "falloff": brush_falloff, "surface_normal": facing}
-	if backend.begin_stroke(sculpt_tool, cursor, settings, reference):
+	if backend.begin_stroke(sculpt_tool, stroke_center, settings, reference):
 		stroke_active = true; stroke_reference = reference; stroke_surface_normal = facing; _set_status("Sculpting %s… release A to finish" % sculpt_tool)
 
 func resample_reference() -> void:
@@ -591,7 +751,7 @@ func _snap_reference(reference: Dictionary) -> Dictionary:
 
 func _end_stroke() -> void:
 	if not stroke_active: return
-	var ok: bool = backend.end_stroke() if backend and backend.has_method("end_stroke") else false; stroke_active = false; if ok: _record_history("terrain"); _set_status("Stroke committed" if ok else "Stroke unchanged")
+	var ok: bool = backend.end_stroke() if backend and backend.has_method("end_stroke") else false; stroke_active = false; stroke_aim_offset = Vector3.ZERO; if ok: _record_history("terrain"); _set_status("Stroke committed" if ok else "Stroke unchanged")
 
 func _begin_resize() -> void:
 	if detail_move_active: return
@@ -649,6 +809,7 @@ func _cancel_current_edit(reason: String) -> void:
 	var accept_was_down: bool = stroke_active or Input.is_action_pressed("m1_accept")
 	if stroke_active and backend and backend.has_method("cancel_stroke"): backend.cancel_stroke()
 	stroke_active = false
+	stroke_aim_offset = Vector3.ZERO
 	if resize_active: _cancel_resize()
 	if detail_move_active: _cancel_detail_move()
 	if accept_was_down: _blocked_until_accept_release = true
@@ -732,17 +893,16 @@ func _update_presentation() -> void:
 					cottage_visuals.erase(existing_id)
 		_presentation_key = key
 	if target_label:
-		var target_text := "Building" if view_context == "building" else "Terrain"
-		if detail_move_active: target_text = "Move %s at (%.1f, %.1f, %.1f)" % [selected_detail_id, detail_move_position.x, detail_move_position.y, detail_move_position.z]
 		if view_context == "terrain":
 			var mode_name := sculpt_tool.capitalize()
-			if not preview_center.is_zero_approx():
-				target_text = "%s influence (%.1f, %.1f, %.1f)  •  radius %.1f" % [mode_name, preview_center.x, preview_center.y, preview_center.z, brush_radius]
-			else:
-				target_text = "%s influence  •  radius %.1f" % [mode_name, brush_radius]
+			var target_text := "%s target (%.1f, %.1f, %.1f)  •  radius %.1f" % [mode_name, preview_center.x, preview_center.y, preview_center.z, brush_radius] if _terrain_target_valid else "%s • NO TERRAIN TARGET" % mode_name
 			if sculpt_tool in ["level", "slope"] and stroke_reference.get("point", null) is Vector3:
 				target_text += "  •  locked y %.1f" % (stroke_reference["point"] as Vector3).y
-		target_label.text = "%s  •  strength %.2f  falloff %.2f  %s" % [target_text, brush_strength, brush_falloff, "PRECISION" if precision_mode else "NORMAL"]
+			target_label.text = "%s  •  str %.1f falloff %.1f  %s  •  A hold/release B cancel  R3 refocus" % [target_text, brush_strength, brush_falloff, "PRECISION" if precision_mode else "NORMAL"]
+		else:
+			var cottage_text := "Cottage %s" % selected_building_id
+			if detail_move_active: cottage_text = "Move %s at (%.1f, %.1f, %.1f)" % [selected_detail_id, detail_move_position.x, detail_move_position.y, detail_move_position.z]
+			target_label.text = "%s  •  A resize  B cancel  •  sticks move/orbit  R3 refocus" % cottage_text
 	_update_resize_handles()
 
 func _update_resize_handles() -> void:
@@ -754,11 +914,11 @@ func _update_resize_handles() -> void:
 		return
 	var view: Dictionary = building_world.get_building(selected_building_id)
 	var transform_value = view.get("transform", Transform3D.IDENTITY)
-	var origin: Vector3 = transform_value.origin if transform_value is Transform3D else Vector3.ZERO
+	var building_transform: Transform3D = transform_value if transform_value is Transform3D else Transform3D.IDENTITY
 	var dims := resize_preview_dimensions
-	var positions := [origin + Vector3(dims.x * 0.5 + 0.5, dims.y * 0.5, 0), origin + Vector3(0, dims.y * 0.5, dims.z * 0.5 + 0.5), origin + Vector3(0, dims.y + 0.5, 0)]
-	for index in mini(positions.size(), resize_handles.get_child_count()):
-		(resize_handles.get_child(index) as Node3D).position = positions[index]
+	var authored_positions := [Vector3(dims.x * 0.5 + 0.5, dims.y * 0.5, 0), Vector3(0, dims.y * 0.5, dims.z * 0.5 + 0.5), Vector3(0, dims.y + 0.5, 0)]
+	for index in mini(authored_positions.size(), resize_handles.get_child_count()):
+		(resize_handles.get_child(index) as Node3D).position = building_transform * authored_positions[index]
 
 func _update_debug_overlay() -> void:
 	if not debug_label or not debug_label.visible:
@@ -778,7 +938,7 @@ func _build_ui() -> void:
 	var margin := MarginContainer.new(); margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); margin.add_theme_constant_override("margin_left", 28); margin.add_theme_constant_override("margin_top", 24); hud.add_child(margin)
 	var column := VBoxContainer.new(); column.add_theme_constant_override("separation", 5); margin.add_child(column)
 	status_label = Label.new(); status_label.add_theme_font_size_override("font_size", 26); column.add_child(status_label)
-	context_label = Label.new(); context_label.text = "View: cottage  •  View switches terrain/building  •  X opens actions"; context_label.add_theme_font_size_override("font_size", 22); column.add_child(context_label)
+	context_label = Label.new(); context_label.text = "COTTAGE • Select/Back: Terrain ↔ Cottage • X actions"; context_label.add_theme_font_size_override("font_size", 20); column.add_child(context_label)
 	target_label = Label.new(); target_label.add_theme_font_size_override("font_size", 22); target_label.add_theme_color_override("font_color", Color("#ffe0a8")); column.add_child(target_label)
 	debug_label = Label.new(); debug_label.position = Vector2(28, 285); debug_label.add_theme_font_size_override("font_size", 20); debug_label.visible = false; hud.add_child(debug_label)
 	_build_pause_panel(); _build_tools_panel()
@@ -790,29 +950,34 @@ func _build_pause_panel() -> void:
 		var button := Button.new(); button.text = label; button.focus_mode = Control.FOCUS_ALL; button.custom_minimum_size = Vector2(0, 56); button.add_theme_font_size_override("font_size", 24); button.pressed.connect(_pause_choice.bind(label)); box.add_child(button); _pause_buttons[label] = button
 
 func _build_tools_panel() -> void:
-	tools_panel = PanelContainer.new(); tools_panel.position = Vector2(360, 100); tools_panel.size = Vector2(560, 560); tools_panel.visible = false; hud.add_child(tools_panel)
+	tools_panel = PanelContainer.new(); tools_panel.position = Vector2(330, 80); tools_panel.size = Vector2(560, 560); tools_panel.visible = false; hud.add_child(tools_panel)
 	var scroll := ScrollContainer.new(); scroll.follow_focus = true; scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; tools_panel.add_child(scroll)
-	var box := VBoxContainer.new(); scroll.add_child(box); var title := Label.new(); title.text = "TOOLS / DETAILS"; title.add_theme_font_size_override("font_size", 26); box.add_child(title)
-	for label in ["Raise", "Dig", "Level", "Slope", "Smooth", "Radius +", "Radius -", "Strength +", "Strength -", "Falloff +", "Falloff -", "Height snap: off", "Reference: ground", "Reference: wall", "Reference: ceiling", "Resample reference", "Keep reference", "Move selected window", "Support: next", "Support: previous", "Replace selected", "Suppress / restore", "Reattach selected", "Add flower box", "Delete selected surface", "Material: warm plaster", "Duplicate cottage", "Close"]:
+	var box := VBoxContainer.new(); scroll.add_child(box); var title := Label.new(); title.text = "ACTIONS"; title.add_theme_font_size_override("font_size", 24); box.add_child(title)
+	var all_labels: Array[String] = []
+	all_labels.append_array(_terrain_action_labels)
+	for label in _cottage_action_labels:
+		if not all_labels.has(label): all_labels.append(label)
+	for label in all_labels:
 		var button := Button.new(); button.text = label; button.focus_mode = Control.FOCUS_ALL; button.custom_minimum_size = Vector2(0, 42); button.pressed.connect(_tool_choice.bind(label)); box.add_child(button); _tool_buttons[label] = button
+	_update_action_buttons()
 
 func _handle_menu_input(event: InputEvent) -> void:
 	if event.is_action_pressed("m1_cancel"): _set_menu(false); get_viewport().set_input_as_handled(); return
 	if event.is_action_pressed("m1_accept"):
-		var focus := get_viewport().gui_get_focus_owner(); if focus is Button: (focus as Button).pressed.emit(); get_viewport().set_input_as_handled()
-	if event.is_action_pressed("m1_height_down"): _move_focus(_pause_buttons.values(), 1)
-	if event.is_action_pressed("m1_height_up"): _move_focus(_pause_buttons.values(), -1)
+		var focus := get_viewport().gui_get_focus_owner(); if focus is Button: (focus as Button).pressed.emit(); get_viewport().set_input_as_handled(); return
+	if event.is_action_pressed("m1_height_down"): _move_focus(_pause_buttons.values(), 1); get_viewport().set_input_as_handled(); return
+	if event.is_action_pressed("m1_height_up"): _move_focus(_pause_buttons.values(), -1); get_viewport().set_input_as_handled(); return
 
 func _handle_overlay_input(event: InputEvent) -> void:
 	if event.is_action_pressed("m1_cancel"): tools_open = false; detail_open = false; tools_panel.visible = false; _set_status("Actions closed"); get_viewport().set_input_as_handled(); return
 	if event.is_action_pressed("m1_accept"):
-		var focus := get_viewport().gui_get_focus_owner(); if focus is Button: (focus as Button).pressed.emit(); get_viewport().set_input_as_handled()
+		var focus := get_viewport().gui_get_focus_owner(); if focus is Button: (focus as Button).pressed.emit(); get_viewport().set_input_as_handled(); return
 	if tools_open and event.is_action_pressed("m1_height_down"):
-		_move_focus(_tool_buttons.values(), 1); get_viewport().set_input_as_handled(); return
+		_move_focus(_visible_action_buttons(), 1); get_viewport().set_input_as_handled(); return
 	if tools_open and event.is_action_pressed("m1_height_up"):
-		_move_focus(_tool_buttons.values(), -1); get_viewport().set_input_as_handled(); return
-	if detail_open and event.is_action_pressed("m1_cycle_left"): _select_detail(-1); get_viewport().set_input_as_handled()
-	if detail_open and event.is_action_pressed("m1_cycle_right"): _select_detail(1); get_viewport().set_input_as_handled()
+		_move_focus(_visible_action_buttons(), -1); get_viewport().set_input_as_handled(); return
+	if detail_open and event.is_action_pressed("m1_cycle_left"): _select_detail(-1); get_viewport().set_input_as_handled(); return
+	if detail_open and event.is_action_pressed("m1_cycle_right"): _select_detail(1); get_viewport().set_input_as_handled(); return
 
 func _move_focus(values: Array, direction: int) -> void:
 	if values.is_empty(): return
@@ -865,18 +1030,23 @@ func _cycle_building(direction: int) -> void:
 
 func _focus_selected_building() -> void:
 	if view_context == "terrain":
-		cursor = Vector3(22.0, 10.0, 18.0)
+		_cancel_current_edit("Terrain focus reset")
+		terrain_cursor = Vector3(32.0, 8.0, 28.0)
+		cursor = terrain_cursor
+		_terrain_target_valid = false
+		_terrain_target_point = Vector3.ZERO
 	else:
 		var view: Dictionary = building_world.get_building(selected_building_id)
 		var transform_value = view.get("transform", Transform3D.IDENTITY)
 		if transform_value is Transform3D:
-			cursor = transform_value.origin + Vector3(0, 2, 0)
+			cursor = transform_value * Vector3(0, 2, 0)
 		cursor.x = clampf(cursor.x, 0.5, 47.5)
 		cursor.y = clampf(cursor.y, 0.5, 31.5)
 		cursor.z = clampf(cursor.z, 0.5, 47.5)
+		cottage_cursor = cursor
 	camera_yaw = -1.1
 	camera_pitch = 0.66
-	camera_distance = 44.0
+	camera_distance = 36.0
 
 func _pause_choice(choice: String) -> void:
 	match choice:
@@ -887,10 +1057,16 @@ func _pause_choice(choice: String) -> void:
 
 func _tool_choice(choice: String) -> void:
 	if choice in ["Raise", "Dig", "Level", "Slope", "Smooth"]:
-		sculpt_tool = choice.to_lower()
+		if view_context != "terrain":
+			_set_status("Terrain tool unavailable in Cottage mode")
+			return
+		_set_sculpt_tool(choice)
 		if sculpt_tool in ["level", "slope", "smooth"]: reference_mode = "ground"
-		tools_open = false; detail_open = false; tools_panel.visible = false; _set_status("Terrain tool: %s / %s reference" % [sculpt_tool, reference_mode]); return
+		tools_open = false; detail_open = false; tools_panel.visible = false; _set_status("Terrain mode • %s • A hold / release, B cancel" % sculpt_tool.capitalize()); return
 	if choice in ["Radius +", "Radius -", "Strength +", "Strength -", "Falloff +", "Falloff -", "Height snap: off", "Reference: ground", "Reference: wall", "Reference: ceiling", "Resample reference", "Keep reference"]:
+		if view_context != "terrain":
+			_set_status("Terrain settings unavailable in Cottage mode")
+			return
 		match choice:
 			"Radius +": brush_radius = minf(8.0, brush_radius + (0.25 if precision_mode else 1.0))
 			"Radius -": brush_radius = maxf(0.25, brush_radius - (0.25 if precision_mode else 1.0))
@@ -911,6 +1087,9 @@ func _tool_choice(choice: String) -> void:
 		_set_status("Brush %.1f / strength %.1f / falloff %.1f / snap %s / %s%s" % [brush_radius, brush_strength, brush_falloff, "on" if height_snap_enabled else "off", reference_mode, " / keep" if keep_reference else ""])
 		_update_presentation()
 		return
+	if view_context != "building":
+		_set_status("Cottage action unavailable in Terrain mode")
+		return
 	var view: Dictionary = building_world.get_building(selected_building_id); var details: Array = view.get("details", [])
 	if selected_detail_id.is_empty() and not details.is_empty(): selected_detail_id = str(details[0]["id"])
 	var selected_detail: Dictionary = {}
@@ -920,6 +1099,12 @@ func _tool_choice(choice: String) -> void:
 	if selected_surface_id.is_empty() and not selected_detail.is_empty(): selected_surface_id = str(selected_detail.get("anchor", {}).get("surface_id", ""))
 	var operation_ok := false
 	match choice:
+		"Miniature scale":
+			if building_world.has_method("set_miniature_scale"):
+				operation_ok = building_world.set_miniature_scale(selected_building_id)
+				if operation_ok: _set_status("Miniature cottage scale applied")
+			else:
+				_set_status("Miniature scale API unavailable")
 		"Move selected window":
 			_begin_detail_move()
 		"Support: next":
@@ -979,6 +1164,7 @@ func _tool_choice(choice: String) -> void:
 	if choice != "Move selected window":
 		if operation_ok: _record_history("building")
 		tools_open = false; detail_open = false; tools_panel.visible = false
+		_update_action_buttons()
 		_update_presentation()
 
 func _set_menu(open: bool) -> void:
@@ -989,7 +1175,9 @@ func _set_menu(open: bool) -> void:
 		if tools_panel: tools_panel.visible = false
 		_cancel_current_edit("Paused")
 		(_pause_buttons["Save"] as Button).grab_focus()
-	else: _set_status("Cottage view")
+	else:
+		_update_action_buttons()
+		_set_status("Terrain mode" if view_context == "terrain" else "Cottage mode")
 
 func _save_all() -> bool:
 	var ok := false
@@ -1023,7 +1211,8 @@ func _reload_all() -> bool:
 func _set_status(message: String) -> void:
 	status_text = message
 	if status_label: status_label.text = "HEARTHVALE / M1   %s" % message
-	if context_label: context_label.text = "View: %s  •  View switches terrain/building  •  X opens %s" % [view_context, "actions" if view_context == "building" else "tools"]
+	if context_label:
+		context_label.text = ("TERRAIN • Select/Back: Cottage ↔ Terrain • X tools • A hold/release • B cancel" if view_context == "terrain" else "COTTAGE • Select/Back: Terrain ↔ Cottage • X actions • A resize • B cancel")
 
 func _quit_cleanly() -> void:
 	if _shutting_down: return

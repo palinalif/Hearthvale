@@ -15,6 +15,7 @@ const DOCUMENT_BYTES_LIMIT := 256 * 1024
 const MAX_BUILDINGS := 8
 const MAX_SURFACES := 64
 const MAX_DETAILS := 256
+const MINIATURE_SCALE := 0.5
 const MIN_DIMENSIONS := Vector3(4.0, 4.0, 4.0)
 const MAX_DIMENSIONS := Vector3(32.0, 18.0, 32.0)
 
@@ -31,7 +32,7 @@ static func validate_document(document: Dictionary) -> bool:
 
 func _init() -> void:
 	_document = {"schema_version": SCHEMA_VERSION, "generator_version": GENERATOR_VERSION, "revision": 0, "next_id": 1, "buildings": []}
-	var building := _new_cottage("building-1", Vector3(18.0, 10.0, 14.0), Vector3(22.0, 8.0, 18.0), 1042)
+	var building := _new_cottage("building-1", Vector3(18.0, 7.0, 14.0), Vector3(22.0, 8.0, 18.0), 1042)
 	_document["buildings"] = [building]
 	_next_id = 2
 	_document["next_id"] = _next_id
@@ -84,6 +85,26 @@ func resize(building_id: String, dimensions: Vector3) -> bool:
 	var building: Dictionary = buildings[index]
 	building["dimensions"] = _vec(dimensions)
 	_refresh_buckets(building)
+	buildings[index] = building
+	return _record_change(before)
+
+## Convert a building to the authored miniature presentation scale.  This is a
+## document transform edit, so the origin, rotation, dimensions, anchors and
+## all manual detail records remain untouched and the existing whole-record
+## history machinery makes the conversion undoable.
+func set_miniature_scale(building_id: String) -> bool:
+	var index := _building_index(building_id)
+	if index < 0: return false
+	var buildings: Array = _document["buildings"]
+	var building: Dictionary = buildings[index]
+	var current_transform: Dictionary = building.get("transform", {})
+	var current_scale := _as_vec(current_transform.get("scale", [1.0, 1.0, 1.0]))
+	var miniature_scale := Vector3.ONE * MINIATURE_SCALE
+	if current_scale.is_equal_approx(miniature_scale): return false
+	var before := _copy(_document) as Dictionary
+	var updated_transform: Dictionary = _copy(current_transform)
+	updated_transform["scale"] = _vec(miniature_scale)
+	building["transform"] = updated_transform
 	buildings[index] = building
 	return _record_change(before)
 
@@ -313,7 +334,7 @@ func _new_cottage(building_id: String, dimensions: Vector3, position: Vector3, s
 		details.append(_window("window-front-%d" % index, "wall-front", 0.18 + float(index) * 0.32, 0.48))
 	for index in 3:
 		details.append(_window("window-back-%d" % index, "wall-back", 0.18 + float(index) * 0.32, 0.48))
-	var building := {"id": building_id, "name": "Riverside Cottage", "schema_version": SCHEMA_VERSION, "generator_version": GENERATOR_VERSION, "dimensions": _vec(dimensions), "transform": _transform(position), "seed": seed, "style_id": STYLE_ID, "roof_profile": "gabled", "material_id": "stone_plaster", "material_overrides": {}, "surfaces": surfaces, "details": details, "automatic_defaults": [], "overrides": {}, "exclusions": [], "modified_locked": [], "suppressed": [], "manual_attachments": []}
+	var building := {"id": building_id, "name": "Riverside Cottage", "schema_version": SCHEMA_VERSION, "generator_version": GENERATOR_VERSION, "dimensions": _vec(dimensions), "transform": _transform(position, MINIATURE_SCALE), "seed": seed, "style_id": STYLE_ID, "roof_profile": "gabled", "material_id": "stone_plaster", "material_overrides": {}, "surfaces": surfaces, "details": details, "automatic_defaults": [], "overrides": {}, "exclusions": [], "modified_locked": [], "suppressed": [], "manual_attachments": []}
 	_refresh_buckets(building)
 	return building
 
@@ -624,8 +645,8 @@ func _as_vec(value: Variant) -> Vector3:
 	if value is Array and (value as Array).size() == 3: return Vector3(float(value[0]), float(value[1]), float(value[2]))
 	return Vector3.ZERO
 
-func _transform(position: Vector3) -> Dictionary:
-	return {"position": _vec(position), "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]}
+func _transform(position: Vector3, uniform_scale: float = 1.0) -> Dictionary:
+	return {"position": _vec(position), "rotation": [0.0, 0.0, 0.0], "scale": _vec(Vector3.ONE * uniform_scale)}
 
 func _transform_from_transform(value: Transform3D, position: Vector3) -> Dictionary:
 	return {"position": _vec(position), "rotation": _vec(value.basis.get_euler()), "scale": _vec(value.basis.get_scale())}

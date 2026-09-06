@@ -12,9 +12,13 @@ func _initialize() -> void:
 	var initial: Dictionary = world.get_building(building_id)
 	_check(initial.get("schema_version") == BuildingWorld.SCHEMA_VERSION, "schema version")
 	_check(initial.get("generator_version") == BuildingWorld.GENERATOR_VERSION, "generator version")
-	_check(initial.get("dimensions") == Vector3(18, 10, 14), "default dimensions")
+	_check(initial.get("dimensions") == Vector3(18, 7, 14), "default dimensions")
+	_check((initial["transform"] as Transform3D).basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorld.MINIATURE_SCALE), "default cottage is half-scale miniature")
 	_check((initial.get("details", []) as Array).size() == 6, "six automatic windows")
 	_check((initial.get("surfaces", []) as Array).size() >= 6, "stable cottage surfaces")
+	for detail_value in initial["details"]:
+		var detail: Dictionary = detail_value
+		_check(str(detail.get("kind", "")) == "window" and bool(detail.get("visible", false)) and not bool(detail.get("needs_placement", true)) and detail.get("resolved_position") is Vector3, "default window remains valid")
 
 	var details: Array = initial["details"]
 	var first_id := str(details[0]["id"])
@@ -62,6 +66,44 @@ func _initialize() -> void:
 	_check(world.redo(), "redo resize")
 	_check(world.redo(), "redo material")
 	_check(world.get_document()["buildings"][0]["material_id"] == after_edits["buildings"][0]["material_id"], "undo redo restores recipe")
+
+	# A pre-miniature save loads at its authored scale until the player invokes
+	# the explicit conversion.  Conversion is one whole-record transaction and
+	# must leave edited details, dimensions, origin and rotation intact.
+	var old_source := BuildingWorld.new()
+	var old_window_id := str((old_source.get_building(building_id)["details"] as Array)[0]["id"])
+	_check(old_source.move_detail(building_id, old_window_id, "wall-front", Vector3(-5.0, 4.0, -7.02)), "old save edited window")
+	_check(old_source.replace_detail(building_id, str((old_source.get_building(building_id)["details"] as Array)[1]["id"]), "window_round"), "old save replaced window")
+	_check(old_source.suppress_detail(building_id, str((old_source.get_building(building_id)["details"] as Array)[2]["id"])), "old save suppressed window")
+	var old_document: Dictionary = old_source.get_document()
+	old_document["buildings"][0]["transform"]["scale"] = [1.0, 1.0, 1.0]
+	old_document["buildings"][0]["transform"]["rotation"] = [0.0, 0.4, 0.0]
+	var old_loaded := BuildingWorld.new()
+	_check(old_loaded.load_document(old_document), "load pre-miniature save")
+	var old_before: Dictionary = old_loaded.get_building(building_id)
+	var old_before_transform: Transform3D = old_before["transform"]
+	var old_before_details: Array = old_before["details"]
+	var old_before_dimensions: Vector3 = old_before["dimensions"]
+	_check(old_before_transform.basis.get_scale().is_equal_approx(Vector3.ONE), "old save keeps original scale")
+	_check(old_loaded.set_miniature_scale(building_id), "explicit miniature conversion")
+	var converted: Dictionary = old_loaded.get_building(building_id)
+	var converted_transform: Transform3D = converted["transform"]
+	_check(converted_transform.basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorld.MINIATURE_SCALE), "conversion sets uniform half scale")
+	_check(converted_transform.origin == old_before_transform.origin and converted_transform.basis.get_euler().is_equal_approx(old_before_transform.basis.get_euler()), "conversion preserves origin and rotation")
+	_check(converted["dimensions"] == old_before_dimensions and converted["details"] == old_before_details, "conversion preserves dimensions and edited details")
+	_check(not old_loaded.set_miniature_scale(building_id), "repeated miniature conversion is a no-op")
+	_check(old_loaded.undo(), "undo miniature conversion")
+	_check((old_loaded.get_building(building_id)["transform"] as Transform3D).basis.get_scale().is_equal_approx(Vector3.ONE), "undo restores old scale")
+	_check(old_loaded.redo(), "redo miniature conversion")
+	_check((old_loaded.get_building(building_id)["transform"] as Transform3D).basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorld.MINIATURE_SCALE), "redo restores miniature scale")
+	var converted_serialized := old_loaded.serialize_document()
+	var converted_reload := BuildingWorld.new()
+	_check(converted_reload.load_serialized_document(converted_serialized), "save converted miniature")
+	_check((converted_reload.get_building(building_id)["transform"] as Transform3D).basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorld.MINIATURE_SCALE), "reload preserves miniature scale")
+	var converted_copy_id := converted_reload.duplicate_building(building_id)
+	_check(not converted_copy_id.is_empty(), "duplicate converted miniature")
+	_check((converted_reload.get_building(converted_copy_id)["transform"] as Transform3D).basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorld.MINIATURE_SCALE), "duplicate preserves miniature scale")
+	_check((converted_reload.get_building(converted_copy_id)["details"] as Array).size() == 6, "converted duplicate keeps all six windows")
 
 	var serialized := world.serialize_document()
 	_check(serialized.length() < BuildingWorld.HISTORY_BYTES_LIMIT, "bounded serialized document")
@@ -138,6 +180,23 @@ func _initialize() -> void:
 	_check(has_round and not has_suppressed, "replacement and suppression render")
 	var front_wall: Node = visual.get_node_or_null("WallFront")
 	_check(front_wall != null and (front_wall as MeshInstance3D).material_override.albedo_color == Color("#d5a982"), "material reaches shell")
+	_check(visual.transform.basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorld.MINIATURE_SCALE), "renderer applies authored miniature transform")
+	_check(visual.get_node_or_null("Door") != null and visual.get_node_or_null("Detail_%s" % visual_second) != null, "renderer transforms door and edited detail")
+	var door_mesh := (visual.get_node("Door") as MeshInstance3D).mesh as BoxMesh
+	_check(door_mesh != null and door_mesh.size.y < 5.0 and door_mesh.size.z < 2.2, "door proportions stay small at miniature scale")
+	var roof_tile_batches := 0
+	var roof_tile_vertices := 0
+	for child_value in visual.get_children():
+		var child: Node = child_value
+		if not child.name.begins_with("RoofTiles_"): continue
+		roof_tile_batches += 1
+		if child is MultiMeshInstance3D:
+			var tile_instances: MultiMesh = child.multimesh
+			_check(tile_instances.mesh is BoxMesh, "roof instances use native outward cube faces")
+			roof_tile_vertices += tile_instances.instance_count * 24
+
+	_check(roof_tile_batches == 6 and roof_tile_vertices > 10000 and roof_tile_vertices < 40000, "roof tiles use bounded batched geometry")
+	_check(visual.get_child_count() < 140, "cottage detail node budget remains bounded")
 	_check(visual_world.delete_surface(building_id, "wall-front"), "visual delete support source")
 	visual.request_revision(visual_world.get_revision())
 	_check(visual.apply_building(visual_world.get_building(building_id), visual_world.get_revision()), "apply deleted support")
