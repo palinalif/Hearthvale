@@ -1,0 +1,52 @@
+{
+  "game": "Tiny Glade",
+  "source": "https://store.steampowered.com/api/appdetails?appids=2198150&l=english",
+  "page": "https://store.steampowered.com/app/2198150/",
+  "screenshots": [
+    {
+      "id": 0,
+      "path_thumbnail": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_1a98b0d5e8111f100b3ececda8f682333337e3cb.600x338.jpg?t=1782371576",
+      "path_full": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_1a98b0d5e8111f100b3ececda8f682333337e3cb.1920x1080.jpg?t=1782371576"
+    },
+    {
+      "id": 1,
+      "path_thumbnail": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_6a8c7a510715796a659bd9fd828cc02cf73e11de.600x338.jpg?t=1782371576",
+      "path_full": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_6a8c7a510715796a659bd9fd828cc02cf73e11de.1920x1080.jpg?t=1782371576"
+    },
+    {
+      "id": 2,
+      "path_thumbnail": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_c9086858afd32f9c2bd49c164ddc2494af1e7f31.600x338.jpg?t=1782371576",
+      "path_full": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_c9086858afd32f9c2bd49c164ddc2494af1e7f31.1920x1080.jpg?t=1782371576"
+    },
+    {
+      "id": 3,
+      "path_thumbnail": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_83248b45f1431127f94ab7bcfc246e5efb26848e.600x338.jpg?t=1782371576",
+      "path_full": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_83248b45f1431127f94ab7bcfc246e5efb26848e.1920x1080.jpg?t=1782371576"
+    },
+    {
+      "id": 4,
+      "path_thumbnail": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_ed5a338f98da1acd76d232e581e7ca0c2e088958.600x338.jpg?t=1782371576",
+      "path_full": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_ed5a338f98da1acd76d232e581e7ca0c2e088958.1920x1080.jpg?t=1782371576"
+    },
+    {
+      "id": 5,
+      "path_thumbnail": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_533b0699cd1d6692cfa332f234ce03a36c547480.600x338.jpg?t=1782371576",
+      "path_full": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_533b0699cd1d6692cfa332f234ce03a36c547480.1920x1080.jpg?t=1782371576"
+    },
+    {
+      "id": 6,
+      "path_thumbnail": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_6dd1a3c571d91d81ee60cda2f21a553dc8fc6e70.600x338.jpg?t=1782371576",
+      "path_full": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_6dd1a3c571d91d81ee60cda2f21a553dc8fc6e70.1920x1080.jpg?t=1782371576"
+    },
+    {
+      "id": 7,
+      "path_thumbnail": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_ed8d49e1bdc02b0c8caadb66e06b6d6ad6218c1f.600x338.jpg?t=1782371576",
+      "path_full": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_ed8d49e1bdc02b0c8caadb66e06b6d6ad6218c1f.1920x1080.jpg?t=1782371576"
+    },
+    {
+      "id": 8,
+      "path_thumbnail": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_2ec8d6fd1be5aa321e0b82ae33f8a766db94535b.600x338.jpg?t=1782371576",
+      "path_full": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2198150/ss_2ec8d6fd1be5aa321e0b82ae33f8a766db94535b.1920x1080.jpg?t=1782371576"
+    }
+  ]
+}
