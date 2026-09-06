@@ -1,0 +1,36 @@
+{
+  "adapter": "NVIDIA GeForce RTX 3070",
+  "idle": {
+    "draw_calls": 282.0,
+    "frame_ms_max": 17.298,
+    "frame_ms_p50": 16.661,
+    "frame_ms_p95": 16.7,
+    "godot_static_bytes": 87547590.0,
+    "primitives": 604864.0,
+    "samples": 180
+  },
+  "physical_thor": "not run",
+  "renderer": "mobile",
+  "resize": {
+    "draw_calls": 282.0,
+    "frame_ms_max": 41.159,
+    "frame_ms_p50": 27.965,
+    "frame_ms_p95": 32.799,
+    "godot_static_bytes": 87834010.0,
+    "presentation_cpu_ms_p95": 28.013,
+    "primitives": 566392.0,
+    "samples": 120
+  },
+  "resolution": "(1280, 720)",
+  "sculpt": {
+    "draw_calls": 281.0,
+    "frame_ms_max": 19.284,
+    "frame_ms_p50": 16.661,
+    "frame_ms_p95": 17.025,
+    "godot_static_bytes": 87599346.0,
+    "primitives": 598136.0,
+    "samples": 180
+  },
+  "method": "Desktop editor runtime; Mobile renderer; VSync disabled; max-fps 60; 120 warmup frames; 180 idle/sculpt frames; 120 consecutive dimension rebuilds. No competing Godot checks during measurement.",
+  "limitations": "Short desktop measurement, not Thor; frame times include frame cap. Primitive monitor includes rendered passes. Native/GPU memory and long-session growth not measured."
+}

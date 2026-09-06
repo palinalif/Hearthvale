@@ -1,0 +1,26 @@
+[
+  {
+    "sha256": "0fbf42f52be3990c8089a8c038aaf2246896c0d120f6f46f2fea398089a2d967",
+    "exit_code": 0,
+    "passed": true,
+    "runtime_log": "reports/logs/astra-windows-debug.out.log",
+    "frames": 120,
+    "flavor": "debug"
+  },
+  {
+    "sha256": "f8740aaa9573f1e782a6bf1b60439e916da9d2983a9240ad2dd0a39aa2ccbe35",
+    "exit_code": 0,
+    "passed": true,
+    "runtime_log": "reports/logs/astra-windows-release.out.log",
+    "frames": 120,
+    "flavor": "release"
+  },
+  {
+    "sha256": "f8740aaa9573f1e782a6bf1b60439e916da9d2983a9240ad2dd0a39aa2ccbe35",
+    "exit_code": 0,
+    "passed": true,
+    "runtime_log": "reports/logs/astra-windows-compatibility.out.log",
+    "frames": 120,
+    "flavor": "compatibility"
+  }
+]

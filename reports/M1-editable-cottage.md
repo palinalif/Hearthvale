@@ -1,6 +1,6 @@
 # M1 — editable cottage and continuous sculpting handoff
 
-Date: 6 September 2026. **Ready for physical playtest; M1 is not complete.** Both authorized tickets are implemented for review. Required Thor controller/visual/performance evidence is not run on this build. No M2 or catalogue expansion has started.
+Date: 6 September 2026. This is the first M1 build record; subsequent physical feedback and fixes are tracked in [the controls follow-up](M1-controls-followup.md). **Ready for physical playtest; M1 is not complete.** Both authorized tickets are implemented for review. Required Thor controller/visual/performance evidence is not run on this build. No M2 or catalogue expansion has started.
 
 ## Delivered behavior
 
@@ -73,9 +73,9 @@ Command: **./tools/build.ps1 -Windows -Compatibility** — **exit 0**, all six e
 
 | Android artifact | Bytes | Renderer |
 | --- | ---: | --- |
-| [M1 debug APK](../builds/hearthvale-m1-debug.apk) | 37,562,970 | Mobile |
-| [M1 release-mode APK](../builds/hearthvale-m1-release.apk) | 34,011,269 | Mobile |
-| [M1 Compatibility APK](../builds/hearthvale-m1-compatibility.apk) | 37,562,970 | OpenGL Compatibility |
+| [M1 debug APK](../builds/m1-first-playtest/hearthvale-m1-debug.apk) | 37,562,970 | Mobile |
+| [M1 release-mode APK](../builds/m1-first-playtest/hearthvale-m1-release.apk) | 34,011,269 | Mobile |
+| [M1 Compatibility APK](../builds/m1-first-playtest/hearthvale-m1-compatibility.apk) | 37,562,970 | OpenGL Compatibility |
 
 All APKs passed apksigner verify; signing certificates match the previous M0 debug build. These personal builds use the existing development signing identity, including release mode. Each contains only ARM64 native libraries, the compiled M1 script and the exact pinned voxel library bytes for its export mode. Development tools/tests/docs/reference resources are excluded. Manifest package, version and renderer metadata passed inspection. [Exact SHA-256 values and APK verification](m1-apk-verification.json).
 
@@ -96,3 +96,6 @@ The player's earlier successful M0 Thor report is preserved, but does not establ
 **Not run:** M1 physical Thor controller regression, sustained sculpt/render/save costs, thermals, device launcher/update behavior and player visual approval. The overlay cannot provide an unavailable native per-revision completion acknowledgement. Use the [seven-step Thor checklist](../docs/M1-thor-playtest.md), including cold restart and held-input interruption checks. Terrain scale and controller feel require that feedback.
 
 Stop here for the M1 handoff. Neither M1 completion nor catalogue expansion is declared.
+
+
+The later [Astra visual rework](M1-visual-rework.md) supersedes the art blockout and provides version 0.1.1-m1-rework builds. This original report remains historical evidence; its first-playtest APKs are archived. The player has not approved the reworked visuals.

@@ -63,7 +63,7 @@ The APK retains the application ID and development signing identity so the devic
 
 The default Android debug identity is for personal sideload testing, not production distribution. Preserve it outside source control to retain update compatibility. The stable application ID is `org.hearthvale.game`; both modes use the same identity on this host. Export presets include ARM64 only. Verify signatures with your SDK's `apksigner verify` and inspect the archive for the respective native voxel `.so`. The MCP sandbox and reference artwork must not be in either APK.
 
-Install only on an authorised attached device: `adb install -r builds/hearthvale-m1-debug.apk`. This command was not run while no Thor was connected. Do not uninstall an existing app or erase its saves to work around signing errors. M1 exports use Android version code 3, version name `0.1.0-m1`, with the same package ID and signing identity as M0.
+Install only on an authorised attached device: `adb install -r builds/hearthvale-m1-debug.apk`. This command was not run while no Thor was connected. Do not uninstall an existing app or erase its saves to work around signing errors. M1 exports use Android version code 4, version name `0.1.1-m1-rework`, with the same package ID and signing identity as M0.
 
 ## Retained M0 renderer fixture
 
@@ -75,3 +75,12 @@ Install only on an authorised attached device: `adb install -r builds/hearthvale
 Benchmark JSON is written under the game's user-data directory, named by renderer. Benchmark writes use a test checkpoint root. The measured frame intervals include editing and saving; the cycle cost includes edit, undo, redo, and checkpoint writing. VSync and the frame cap must be recorded: this host showed substantially different pacing with VSync enabled. Desktop results do not establish Android performance, sustained thermals, native GPU memory, or controller feel. Use the same fixture and settings on the Thor before comparing.
 
 In the retained M0 scene, open Start → Run 60s fixture. It saves dirty player data first, uses a fresh private benchmark backend, and shows the result with Return to valley and Quit choices. These measurements cover the M0 fixture, not the denser M1 terrain and cottage. Record default Thor VSync/display settings separately from the explicit desktop CLI settings above.
+
+
+## Reproduce the Astra M1 review
+
+From the project root, `./tools/check.ps1` runs the full regressions. `./tools/capture-m1.ps1 -View cottage -Clean -Name my-normal` renders the actual Mobile scene in an isolated review world. Use `-View close -Clean -Edited -Front -Name my-edited` for a resized cottage with a moved window. These captures hide HUD/debug; they are not performance measurements.
+
+For a bounded desktop profile, run the pinned Godot executable with `--path . --disable-vsync --max-fps 60 --script res://tools/m1_visual_profile.gd`. The script uses a separate temporary save root. Compare results only under the recorded renderer/resolution and distinguish desktop from Thor.
+
+Build with `./tools/build.ps1 -Windows -Compatibility`, then verify APKs with `python tools/verify-m1-apks.py` (requires the recorded SDK/JDK and archived first M1 APK for signing continuity). Read `reports/M1-visual-rework.md` for actual results, limitations, captures and device checklist. `tools/*` is excluded from runtime exports along with MCP and other development resources.

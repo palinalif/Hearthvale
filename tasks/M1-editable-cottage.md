@@ -44,3 +44,9 @@ Repeat with shrinking past an attachment, deleting its supporting surface, cance
 Automated data-level tests actually pass; the rendered cottage reflects those records; the save survives restart; and the player can complete the full interaction comfortably on the Thor with only a controller. Present the cottage-and-riverbank scene for visual review and record the player's feedback before catalogue expansion. Record screenshots and device feedback separately from unit-test output.
 
 Do not expand into an arbitrary building boolean system, interior furnishing, numerous roof styles, or a large catalogue before this interaction is dependable and pleasant.
+
+## Follow-up regression from physical feedback
+
+The first M1 physical playtest found invisible raise/dig targeting, Dig apparently resizing the cottage, and an oversized cottage. Verify the real menu transition from Cottage to Terrain, select Raise and Dig, hold/release and move the stick, and assert that terrain changes while every building record stays unchanged. Terrain and Cottage menus expose only relevant actions; switching modes cancels a preview and requires a fresh action press.
+
+Capture the target at normal/near/far zoom and behind an occluding cottage, with a restrained readable centre cue and influence footprint. A scene-tree visible flag alone is insufficient evidence. Show the smaller cottage within its surroundings; existing saved designs remain unchanged until an explicit undoable scale conversion. Verify transformed handles and full manual-choice/save/duplication preservation at miniature scale.

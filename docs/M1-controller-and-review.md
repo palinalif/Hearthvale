@@ -1,27 +1,36 @@
-# M1 controller route and review requirements
+# M1 controls — follow-up build
 
-This is the integration contract, not a claim of completed implementation or Thor validation. Read both M1 tickets. Physical checks below are **not run** until the player tests the new build.
+The first Thor playtest exposed a real mode-routing failure. The follow-up uses separate Terrain and Cottage modes and action menus. Physical comfort must be checked again on version 0.1.1-m1-rework.
 
 ## Shared controls
 
-Preserve left-stick fine movement, right-stick orbit, triggers zoom, LB/RB undo/redo, Start pause, Y debug and R3 focus. Use View to switch terrain/building context and L3 for a visible precision toggle. D-pad and A/B operate menus; menus consume input and cannot modify the world behind them. Contextual labels must explain the current operation without covering the working area.
+- Select/Back switches Terrain and Cottage modes and cancels any pending edit.
+- Left stick moves the terrain target; right stick orbits; triggers zoom.
+- X opens actions for the current mode only. D-pad up/down chooses an action, A selects, B closes.
+- LB/RB undo/redo; Start pauses and provides Save/Reload; L3 toggles precision; R3 refocuses; Y toggles debug information.
 
-## Sculpting
+Mode changes, menus, pause, focus loss and controller disconnection cancel unfinished work. A held action cannot restart until released and pressed again. The visible mode and action prompts describe what A will do.
 
-Terrain defaults to continuous sculpting. A press begins, holding applies time-based influence, and release finishes one transaction. B during a stroke restores the entire pre-stroke terrain. Pause, disconnect and focus loss cancel uncommitted work and require release followed by a fresh press. Keep the target stable through excavation.
+## Terrain
 
-X opens the scrollable tools/settings menu: raise, dig, horizontal level, slope level and smooth; radius, strength, falloff, keep reference, resample, and optional height snap. D-pad up/down changes cursor height; adjust radius in the menu. Ground, wall and ceiling references support raise/dig; level, slope and smooth use ground references to extend pads and banks. The faint influence volume is distinct from the exact changed-cell ghost retained in the separate M0 stamping scene. Flatten tools show their fixed reference plane and height. Sampling uses the centre terrain hit; no hit is an unavailable state, not an invented plane.
+Choose Raise, Dig, Level, Slope or Smooth from the Terrain menu. Hold A to sculpt, move while holding to draw a connected stroke, release to commit one undo transaction, or B to cancel the whole stroke.
+
+The contrasting centre marker identifies the target even when geometry obscures it. The thin local highlight and faint ghost show the area of influence, not an instantaneous exact cut. An unavailable target is labelled explicitly.
+
+The tools menu contains radius, strength, falloff, reference direction, fixed-plane resampling/keep-reference and optional height snapping. D-pad up/down adjusts aiming height. Ground/wall/ceiling references support raise/dig; level/slope/smooth use ground references for pads and banks. Flatten references remain fixed during a stroke. No mouse, touch or keyboard is required.
 
 ## Cottage
 
-D-pad left/right cycles cottages. A begins resizing; D-pad left/right chooses width/depth, the left stick changes that axis, and D-pad up/down changes height. A commits and B cancels. L3 changes the increment from 1 to 0.25 world units. Visible handles identify the three dimensions. Orbit and zoom stay available while inspecting a preview.
+D-pad left/right selects a cottage. A starts a resize preview; left/right selects width/depth, left stick changes that dimension, and up/down changes height. A commits and B cancels. L3 provides finer increments. Handles follow the cottage's actual transform.
 
-X opens details/actions. D-pad left/right cycles generated, manual, suppressed and needs-placement records; up/down selects actions. Move in the supporting wall plane; replace; suppress/restore; add a flower box; choose another surviving wall with Support next/previous and reattach; change material; duplicate the same cottage. The recovery list remains reachable after shrinking or deleting support. The M1 detail set contains windows and flower boxes; it does not add roof-mounted decorations.
+X opens cottage actions, without terrain tools. D-pad left/right cycles its details; up/down selects an action. Move, replace, suppress/restore, add a flower box, recover an unsupported detail, change material or duplicate the cottage. While moving a detail, the left stick operates in its supporting wall plane; orbit and zoom remain available.
 
-## Required controller playtest
+New cottages use half-scale proportions: 9 × 5 × 7 world units for the initial shell, with coherently scaled roof and details. Existing saves retain their authored scale. Choose **Miniature scale** in Cottage actions to convert the selected older cottage in one undoable operation. Local dimensions, attachments, manual choices and position are preserved.
 
-Run the full cottage ticket scenario with six automatic windows: move one, replace another, suppress another, add a flower box, widen, shorten, change material, undo/redo, save/restart, duplicate and edit the copy independently. Shrink past a moved attachment and recover it. Delete its support and reattach it. Cancel a resize. Verify the rendered result follows the persistent records.
+## Regression and physical review
 
-Around that same cottage, hold raise and dig stationary, drag a connected stroke, extend a level pad with a fixed height, retain that height across strokes, resample, extend a slope, smooth its edges, and excavate a wall without losing the overhang. Cancel, undo and redo whole strokes. Save and cold restart. Open menus and disconnect/reconnect while holding A: no unattended sculpting may resume.
+Retain the full six-window regression from the M1 ticket: move, replace, suppress, add a flower box, resize, change material, undo/redo, save/restart, duplicate independently, shrink past an attachment, delete support and recover it.
 
-Record controller comfort, target legibility, fine terrain/detail scale and visual feedback separately from automated tests. Review a normal-distance and a close view against Town to City and Station to Station. No catalogue expansion follows without the required visual review. Retain the separate unresolved M0 checklist.
+Specifically repeat the reported failure: switch from Cottage to Terrain, choose Dig, then hold A and move. Only terrain must change; the cottage must never start resizing. Repeat with Raise and through menu/mode interruptions. Check the centre marker near, far and behind the cottage.
+
+Run the [Thor checklist](M1-thor-playtest.md). Automated state checks and desktop screenshots do not establish handheld comfort. No catalogue expansion follows without the required review.

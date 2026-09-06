@@ -31,3 +31,18 @@ These three images were supplied by the player as inspiration. They are not scre
 `03-valley-overview.jpg` shows a broad mountain valley and river, with AURELION / Kingsfall Basin labels.
 
 Use them for private design discussion about terrain and geography: landforms, terraces, arches, river placement, valley scale, and atmospheric depth. The primary games above guide the overall visual treatment. Do not strip attribution, claim the imagery as project work, or extract and redistribute the depicted scenery as assets. Seek permission before reusing these images in a public project presentation.
+
+## Lead visual review — first M1 correction
+
+The player explicitly rejected the first M1 scene's weak adherence to these references. Naming the games in a worker prompt did not establish a visual match. The lead re-opened the official Steam pages and inspected their in-page gameplay imagery during the controls follow-up.
+
+Observed Town to City cues: compact buildings within a larger composed scene; layered terracotta roof edges and small repeated tile steps; relatively small windows with contrasting frames/shutters; warm plaster, restrained cornices and planting that links buildings to paths. Observed Station to Station cues: fine stepped roof surfaces, clear tree silhouettes made from many small foliage clusters, layered greens/ochres, and warm light against cooler shaded land.
+
+For this same M1 cottage, require finer derived roof/trim geometry, a smaller proportioned door, coherent half-scale details, clustered foliage and limited bank planting. Keep broad surfaces calm. Use shared materials and batched geometry; visible detail must not become individually simulated blocks. Do not copy reference assets, add reference-game systems, or call the art approved solely because geometry counts increased.
+
+The lead must inspect actual normal/close gameplay captures against these cues before handoff and explicitly report remaining differences. Player visual approval is still required.
+
+
+## Astra rework comparison
+
+The actual pre-rework Mobile captures are retained as `reports/screenshots/m1-controls-*.png`; the three render iterations and resized/moved-window views are recorded in `reports/M1-visual-rework.md`. The changes address the observed roof layering, facade depth, compact proportions and vegetation scale. Remaining gaps include the straight channel, raised pad edge, simple gable facade and still-stylized foliage. Reference imagery was inspected on the official pages; no reference-game assets were downloaded into production. Visual approval belongs to the player.

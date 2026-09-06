@@ -1,0 +1,68 @@
+[
+  {
+    "apk": "builds\\hearthvale-m1-debug.apk",
+    "ok": true,
+    "version_code": 4,
+    "version_name": "0.1.1-m1-rework",
+    "manifest_renderer": "mobile",
+    "renderer_verified": true,
+    "metadata_verified": true,
+    "signature_verified": true,
+    "certificate_matches_previous_build": true,
+    "native_library": "lib/arm64-v8a/libvoxel.android.editor.arm64.so",
+    "native_matches_pinned": true,
+    "architectures": [
+      "arm64-v8a"
+    ],
+    "m1_compiled_scene_present": true,
+    "excluded_development_resources": true,
+    "aapt2_exit": 0,
+    "aapt2_warning": "warn: resource com.godot.game:mipmap/themed_icon for config 'anydpi-v26' is a file reference to 'res/mipmap-anydpi-v26/themed_icon.xml' but no such path exists.",
+    "bytes": 37591978,
+    "sha256": "fd1c2f342355c22f9e39641b1f73ac6be4b85586ab0ad623302d2fe8bf2e9423"
+  },
+  {
+    "apk": "builds\\hearthvale-m1-release.apk",
+    "ok": true,
+    "version_code": 4,
+    "version_name": "0.1.1-m1-rework",
+    "manifest_renderer": "mobile",
+    "renderer_verified": true,
+    "metadata_verified": true,
+    "signature_verified": true,
+    "certificate_matches_previous_build": true,
+    "native_library": "lib/arm64-v8a/libvoxel.android.template_release.arm64.so",
+    "native_matches_pinned": true,
+    "architectures": [
+      "arm64-v8a"
+    ],
+    "m1_compiled_scene_present": true,
+    "excluded_development_resources": true,
+    "aapt2_exit": 0,
+    "aapt2_warning": "warn: resource com.godot.game:mipmap/themed_icon for config 'anydpi-v26' is a file reference to 'res/mipmap-anydpi-v26/themed_icon.xml' but no such path exists.",
+    "bytes": 34040277,
+    "sha256": "1aa57d627b20b321666d83a05e554ed392be27cea097cf3f1acf3785edd0e33f"
+  },
+  {
+    "apk": "builds\\hearthvale-m1-compatibility.apk",
+    "ok": true,
+    "version_code": 4,
+    "version_name": "0.1.1-m1-rework",
+    "manifest_renderer": "gl_compatibility",
+    "renderer_verified": true,
+    "metadata_verified": true,
+    "signature_verified": true,
+    "certificate_matches_previous_build": true,
+    "native_library": "lib/arm64-v8a/libvoxel.android.editor.arm64.so",
+    "native_matches_pinned": true,
+    "architectures": [
+      "arm64-v8a"
+    ],
+    "m1_compiled_scene_present": true,
+    "excluded_development_resources": true,
+    "aapt2_exit": 0,
+    "aapt2_warning": "warn: resource com.godot.game:mipmap/themed_icon for config 'anydpi-v26' is a file reference to 'res/mipmap-anydpi-v26/themed_icon.xml' but no such path exists.",
+    "bytes": 37591978,
+    "sha256": "264823f6017a0032629737045a9159e80cacafe11bf6ee93210ed86f9801e27d"
+  }
+]

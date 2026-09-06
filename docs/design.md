@@ -588,3 +588,18 @@ Research checked on **6 September 2026**. Version references describe the pages 
 [S23] **Station to Station — official Steam store page, Galaxy Grove / Prismatika.** Primary visual reference selected by the player for landscape palettes, vegetation, and detailed voxel miniatures. https://store.steampowered.com/app/2272400/Station_to_Station/
 
 [S24] **Tiny Glade — official Steam store page, Pounce Light.** Building-interaction reference retained by the player. https://store.steampowered.com/app/2198150/Tiny_Glade/
+
+## Physical feedback correction — controls and miniature scale
+
+The player tested the first M1 APK and reported that raise/dig targeting was effectively invisible, choosing Dig appeared to resize the cottage, and the cottage felt much too large. The first M1 automated suite did not establish usable physical controls.
+
+The follow-up must provide explicit Terrain and Cottage modes with separate relevant action lists. Tool choice and input routing must agree; terrain actions must never resize a building. Keep a readable centre target, thin influence highlight and ghost volume, including feedback when geometry occludes the target. Preserve hold/release, exact cancellation/history, and fresh-press safety across mode/menu transitions.
+
+The cottage should read as a small placed miniature within the landscape. Reduce its default world scale coherently, including details, and keep the camera from filling the screen with the building. Preserve loaded designs; offer an explicit undoable miniature-scale action for older cottages rather than silently rewriting their saved dimensions or attachments. Test transformed resize handles, saving and duplication. This is M1 feedback, not catalogue expansion.
+
+
+### Astra M1 visual rework
+
+The player explicitly rejected the first M1 visuals. The main Astra session now owns actual visual design and implementation, superseding mandatory Luna coding. Current review geometry uses recessed editable windows with wall openings, stepped tile courses and ridge caps, shutter joinery, a bracketed entrance canopy, foundation courses, clustered voxel crowns and rooted garden beds. Fresh cottages are 18 x 7 x 14 local units at uniform 0.5 scale (9 x 3.5 x 7 world units before the roof). Loaded designs retain their saved dimensions and transform. Roof/window/plant detail remains independent of the native 0.5-unit terrain grid.
+
+This is an M1 review candidate, not accepted final art. The pad/channel remain geometrically simple, vegetation still needs player judgment, and planted beds are terrain-rooted scenery rather than resizing building attachments. Do not infer M2 authorization or visual approval from automated tests or this description.
