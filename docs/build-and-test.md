@@ -1,4 +1,4 @@
-# Build and test M0
+# Build and test Hearthvale
 
 Run PowerShell from the repository root (`Hearthvale`). The pinned runtime is project-local; do not use the existing Godot 4.2.2 Mono installation.
 
@@ -21,6 +21,8 @@ The game uses Mobile by default. The explicit desktop launch flags avoid the poo
 & $godot --path . --rendering-method gl_compatibility --disable-vsync --max-fps 60
 ```
 
+M1 is the current implementation milestone. Its controller route is in `M1-controller-and-review.md`; its evidence and remaining device checks are in `../reports/M1-editable-cottage.md`. The retained M0 scene can be launched explicitly with `--scene res://scenes/m0.tscn`. The internal application name remains unchanged to preserve the existing desktop user-data directory. M1 uses a separate checkpoint root and never overwrites M0 player checkpoints.
+
 ## Native probe and tests
 
 For the M0 placement follow-up, the terrain tool shows a live affected-cell preview. Use small left-stick nudges for fine placement, D-pad up/down for height, and left/right for radius. X switches ADD/REMOVE. A locks the target; orbit and zoom to inspect it, then A commits or B cancels. Cancel before repositioning a locked target. The preview is a display aid and does not change terrain until confirmation.
@@ -31,6 +33,11 @@ For the M0 placement follow-up, the terrain tool shows a live affected-cell prev
 & $godot --headless --path . res://probes/dependency_probe.tscn -- --probe
 & $godot --headless --max-fps 60 --path . --script tests/backend_test.gd
 & $godot --headless --max-fps 60 --path . --script tests/controller_test.gd
+& $godot --headless --max-fps 60 --path . --script tests/building_world_test.gd
+& $godot --headless --max-fps 60 --path . --script tests/sculpt_test.gd
+& $godot --headless --max-fps 60 --path . --script tests/m1_controller_test.gd
+& $godot --headless --max-fps 60 --path . --script tests/m1_acceptance_test.gd
+& $godot --headless --max-fps 60 --path . --script tests/m1_checkpoint_test.gd
 & $godot --headless --path . --script tests/checkpoint_test.gd
 & $godot --headless --path . --script tests/checkpoint_test.gd -- --write-fixture
 & $godot --headless --path . --script tests/checkpoint_test.gd -- --read-fixture
@@ -56,15 +63,15 @@ The APK retains the application ID and development signing identity so the devic
 
 The default Android debug identity is for personal sideload testing, not production distribution. Preserve it outside source control to retain update compatibility. The stable application ID is `org.hearthvale.game`; both modes use the same identity on this host. Export presets include ARM64 only. Verify signatures with your SDK's `apksigner verify` and inspect the archive for the respective native voxel `.so`. The MCP sandbox and reference artwork must not be in either APK.
 
-Install only on an authorised attached device: `adb install -r builds/hearthvale-m0-debug.apk`. This command was not run while no Thor was connected. Do not uninstall an existing app or erase its saves to work around signing errors.
+Install only on an authorised attached device: `adb install -r builds/hearthvale-m1-debug.apk`. This command was not run while no Thor was connected. Do not uninstall an existing app or erase its saves to work around signing errors. M1 exports use Android version code 3, version name `0.1.0-m1`, with the same package ID and signing identity as M0.
 
-## Renderer fixture
+## Retained M0 renderer fixture
 
 ```powershell
-& $godot --path . --rendering-method mobile --disable-vsync --max-fps 60 -- --benchmark --benchmark-seconds=60
-& $godot --path . --rendering-method gl_compatibility --disable-vsync --max-fps 60 -- --benchmark --benchmark-seconds=60
+& $godot --path . --scene res://scenes/m0.tscn --rendering-method mobile --disable-vsync --max-fps 60 -- --benchmark --benchmark-seconds=60
+& $godot --path . --scene res://scenes/m0.tscn --rendering-method gl_compatibility --disable-vsync --max-fps 60 -- --benchmark --benchmark-seconds=60
 ```
 
 Benchmark JSON is written under the game's user-data directory, named by renderer. Benchmark writes use a test checkpoint root. The measured frame intervals include editing and saving; the cycle cost includes edit, undo, redo, and checkpoint writing. VSync and the frame cap must be recorded: this host showed substantially different pacing with VSync enabled. Desktop results do not establish Android performance, sustained thermals, native GPU memory, or controller feel. Use the same fixture and settings on the Thor before comparing.
 
-On a controller, open Start → Run 60s fixture. The game saves dirty player data first, uses a fresh private benchmark backend, and shows the result with Return to valley and Quit choices. This gives the Thor a repeatable route without an external keyboard. Record its default VSync/display settings separately from the explicit desktop CLI settings above.
+In the retained M0 scene, open Start → Run 60s fixture. It saves dirty player data first, uses a fresh private benchmark backend, and shows the result with Return to valley and Quit choices. These measurements cover the M0 fixture, not the denser M1 terrain and cottage. Record default Thor VSync/display settings separately from the explicit desktop CLI settings above.

@@ -21,11 +21,13 @@ After these interfaces settle, assign controller/rendering and consistent checkp
 
 Authoritative building records are independent of derived meshes. Deterministic procedural details keep stable semantic identities; resizing never replaces manual intent with fresh defaults. Invalid anchors are visible and recoverable. A stale derived result may apply only to its current entity revision. Duplication allocates new identities and deep-copies the design.
 
+Undo restores the complete building design records. Revision and ID-allocation counters remain monotonic bookkeeping so a later command cannot reuse an identity or accept stale derived work; tests compare every design record while excluding those counters.
+
 The current native terrain uses a 16-bit TYPE channel and blocky meshing. Native grow/smooth helpers are SDF-only in the pinned source. Retain TYPE saves and native meshing; integrate fractional time/strength/falloff locally before committing discrete cell transitions. This is an application brush operation, not a replacement voxel engine. Accumulate first-touch originals for the stroke, not full-world snapshots each frame. Final algorithm and limits must be tested before claiming the sculpting requirements met.
 
 Extend the existing complete-generation checkpoint publication to include the bounded cottage document in the same published generation as terrain. Validate both before publication and during recovery. Preserve the old M0 reader and data; use a separate M1 checkpoint root and test cold restart and corrupt/interrupted newest-generation fallback. Do not introduce a second independently published building save that could disagree with terrain.
 
-For the bounded visual experiment, retain the native patch dimensions and test a smaller physical terrain scale around a proportionate cottage. Fine building/vegetation geometry has its own smaller step size. This is a candidate for visual and performance review, not a final terrain-grid decision. Physical Thor measurements and player visual review remain required before locking it.
+For the bounded visual experiment, use 96 × 64 × 96 native cells at 0.5 world units per cell, retaining the same 48 × 32 × 48 world-unit footprint. This doubles terrain resolution on every axis without expanding the world. M0 retains its original 48 × 32 × 48 grid and scale, scene and checkpoint root. M1's combined checkpoint validates the larger dimensions explicitly. Sculpt APIs use world coordinates; native buffer indices use cell coordinates. Fine building/vegetation geometry has its own smaller step size. This is a candidate for visual and performance review, not a final terrain-grid decision. Physical Thor measurements and player visual review remain required before locking it.
 
 ## Integration checks
 

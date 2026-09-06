@@ -13,7 +13,7 @@ The pinned bundle is official Godot 4.7.2 with matching export templates and Vox
 ## Contents
 
 - `docs/design.md`: complete design, hardware specifications, engineering targets, dependency research, and numbered sources.
-- `docs/design.pdf`: illustrated reading copy of the same draft.
+- `docs/design.pdf`: original illustrated planning draft; current milestone corrections and art direction are authoritative in `docs/design.md`.
 - `docs/references/`: the three supplied inspiration images, with attribution and usage notes.
 - `AGENTS.md`: project boundaries and development workflow.
 - `tasks/M0-platform-spike.md`: first implementation ticket and evidence requirements.
