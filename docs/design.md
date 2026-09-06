@@ -1,11 +1,11 @@
 # Hearthvale
 ## A cozy voxel town-builder for AYN Thor Max
 
-**Working title only • Design draft 0.1 • 6 September 2026**
+**Working title only • Design draft 0.2 • 6 September 2026**
 
 A small valley to shape, a village to make your own, and little lives unfolding inside it.
 
-**Project purpose:** a personal wind-down game, implemented primarily by a coding agent with the player's direction and review. This is a design and implementation plan, not a tested prototype. Hardware and dependency claims are sourced; numerical budgets are provisional engineering targets.
+**Project purpose:** a personal wind-down game, implemented primarily by a coding agent with the player's direction and review. This is the living design and implementation plan; actual prototype evidence is recorded separately in `../reports/M0-platform-spike.md`. Hardware and dependency claims are sourced; numerical budgets are provisional engineering targets. The supplied `design.pdf` preserves the original planning draft; this Markdown document is authoritative for subsequent clarifications.
 
 ---
 
@@ -74,9 +74,20 @@ A persistent undo/redo route, local autosaves, optional activity pause, adjustab
 
 ## What to take from the references
 
-The supplied images suggest warm terraced stone, dark pine silhouettes, turquoise water, large arches, dramatic valley walls, and atmospheric separation between foreground and distant ridges. Borrow those relationships rather than the enormous visible world or the exact assets.
+The player's art-direction clarification establishes these distinct roles. Station to Station and Town to City are the primary visual references; their gameplay systems are not part of this reference brief. Source links and attribution notes are in `references/README.md`.
 
-The desired look is detailed and tactile, not a field of oversized toy cubes. Use a hierarchy: clear large landforms first, readable buildings second, small architectural and material variation third. Voxel steps should describe the form instead of becoming uniform visual noise.
+| Reference | Role in Hearthvale |
+| --- | --- |
+| Town to City | Architecture, street decoration, planting, and intimate village composition. [S22] |
+| Station to Station | Landscape palettes, vegetation, and the detailed voxel-miniature aesthetic. [S23] |
+| Tiny Glade | Building interaction: drawing, stretching, and responsive architectural details. [S24] |
+| Original supplied screenshots | Terrain and geography: terraced stone, arches, valley walls, river relationships, and depth between landforms. |
+
+Target readable silhouettes, fine stepped details, coherent colours, inviting lighting, and restrained surface variation. Use a hierarchy: clear large landforms first, readable buildings second, small architectural and material variation third. Detail must support the form. Oversized cubes, noisy textures, and photorealism are not the target.
+
+The player reports that M0 works in manual Thor testing, but its terrain resolution is much too coarse for the intended appearance. Future visual work must show substantially finer terrain forms and stepped detail at normal play and close inspection distances. M0's large blocks are platform-test placeholders, not an approved art style. Keep decorative detail resolution independent of the terrain editing grid; a visible voxel does not need to be an independently simulated block.
+
+The supplied terrain images retain their role: warm terraced stone, dark pine silhouettes, turquoise water, large arches, dramatic valley walls, and atmospheric separation between foreground and distant ridges. Borrow those geographic relationships rather than the enormous visible world or the exact assets. This clarification adds no railway systems or economic management and does not change M0's scope.
 
 **Reference status:** the supplied images are inspiration, not screenshots of Hearthvale. Visible labels include AURELION, Kingsfall Basin, and The Old Crossing; the first image includes a Reddit attribution to u/LostRequirement4828 in r/codex. Do not redistribute their scenery as project assets or imply it is our work.
 
@@ -103,6 +114,8 @@ Create attractive daytime and golden-hour presets first. A manually adjustable t
 Build the first kit from a small number of reusable, consistently scaled parts. Use procedural geometry for shells and roofs, and authored or generated mesh pieces for windows, doors, signs, plants, and furniture. Keep style manifests and attachment dimensions explicit so new art can replace placeholders without rewriting building logic.
 
 The agent can implement generators, assemble kits, and validate imports; the player approves silhouettes, materials, lighting, and animations. Start inhabitants with a minimal reusable rig and a small activity set. Record the origin and permitted use of every external mesh, texture, font, and audio file. Supplied inspiration images are reference material, never an asset library to extract from.
+
+During M1, present one small cottage-and-riverbank scene for player visual review before expanding the building catalogue. Judge it at normal controller camera distance and close inspection: cottage proportions, fine roof/stone/trim steps, riverbank contours, a small amount of planting and street decoration, coherent landscape colours, and inviting lighting. Keep it to one cottage and a bounded scenic riverbank; this review does not require a full river-editing system or additional architectural kits.
 
 ## Sound
 
@@ -171,7 +184,9 @@ This test is a milestone gate, not polish to add after the generator.
 
 ## Relationship to voxels
 
-Use a coarser world grid for terrain and a finer building-local construction grid for stepped walls, roofs, stonework, and trim. A first test might use 0.5-metre terrain cells and 0.125- to 0.25-metre building units. Decorative meshes can be finer without increasing the resolution of the whole valley.
+Choose the terrain editing grid, building-local construction grid, and decorative geometry resolution independently. The earlier 0.5-metre terrain cells and 0.125- to 0.25-metre building units are provisional engineering experiments, not an approved visible step size or a lower limit on detail. The coarse M0 appearance must become substantially finer to meet the references. Compare candidate scales in the bounded M1 review scene and measure native edit costs on Thor before locking the terrain cell size; keep true volumetric editing and the existing world-size boundary.
+
+Fine roof trim, stonework, planting, and surface steps can use batched geometry or mesh details without raising the entire valley's data resolution. Do not assume every visible voxel needs its own simulation, collision body, node, or authoritative block record. Decorative detail must remain independent of the terrain editing grid.
 
 Render building forms as batched, exposed-surface geometry, with selective mesh details where appropriate. Everything need not share one global cube grid to look coherent. Full manual voxel surgery on building shells is deferred; the required freedom is individual control over generated architectural details and structural handles.
 
@@ -446,7 +461,9 @@ Build the smallest Android scene with the selected voxel backend, basic controll
 
 Implement one rectangular building, one roof profile, procedural details, stable surface IDs, manual overrides, suppression, and transactional resizing. Add the controller handles and a small terrain pad.
 
-**Exit:** the moved/replaced/deleted-window test from section 5 passes after resize, undo/redo, save/load, and duplication. The player can comfortably perform it using only a controller.
+**Visual review gate:** present a small cottage-and-riverbank scene following section 3 before expanding the building catalogue. Show substantially finer terrain and decorative steps than M0, readable silhouettes, coherent colours, restrained variation, and inviting light. Player review is required; the scene remains a bounded presentation of the one-cottage milestone.
+
+**Exit:** the moved/replaced/deleted-window test from section 5 passes after resize, undo/redo, save/load, and duplication. The player can comfortably perform it using only a controller, and has reviewed the cottage-and-riverbank visual target.
 
 ## M2 — A small place worth visiting
 
@@ -506,7 +523,7 @@ A small reviewable change; acceptance tests that were actually run; no unreporte
 
 # Sources and research notes
 
-Research checked on **6 September 2026**. Version references describe the pages inspected on that date and must be rechecked before installation. No plugin integration, engine benchmark, or APK has been executed as part of this document.
+Research checked on **6 September 2026**. Version references describe the pages inspected on that date and must be rechecked before installation. The original draft preceded implementation; pinned dependencies, executed checks, and subsequent player feedback are recorded in the M0 report. The reference roles below are player-directed art choices, not claims about the referenced games' internal implementation.
 
 [S1] **AYN — Thor current product listing.** Current Max memory/storage options, advertised OS and battery. https://www.ayntec.com/products/ayn-thor
 
@@ -549,3 +566,9 @@ Research checked on **6 September 2026**. Version references describe the pages 
 [S20] **Nous Research — Hermes MCP documentation.** Local and remote MCP configuration. https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/mcp.md
 
 [S21] **Godot — command-line tutorial.** Headless imports, scripts, and exports. https://docs.godotengine.org/en/stable/tutorials/editor/command_line_tutorial.html
+
+[S22] **Town to City — official Steam store page, Galaxy Grove / Kwalee.** Primary visual reference selected by the player for architecture, street decoration, planting, and intimate village composition. https://store.steampowered.com/app/3115220/Town_to_City/
+
+[S23] **Station to Station — official Steam store page, Galaxy Grove / Prismatika.** Primary visual reference selected by the player for landscape palettes, vegetation, and detailed voxel miniatures. https://store.steampowered.com/app/2272400/Station_to_Station/
+
+[S24] **Tiny Glade — official Steam store page, Pounce Light.** Building-interaction reference retained by the player. https://store.steampowered.com/app/2198150/Tiny_Glade/

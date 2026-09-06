@@ -3,7 +3,15 @@
 **Status:** blocked on M0 and player approval.  
 **Objective:** prove the core interaction and non-destructive generation model before adding content.
 
-Read section 5 of `../docs/design.md`. Keep the scope to one rectangular building volume, one gabled roof profile, a tiny detail set, one small terrain pad, and controller-operated handles.
+Read sections 3 and 5 of `../docs/design.md` and `../docs/references/README.md`. Keep the scope to one rectangular building volume, one gabled roof profile, a tiny detail set, one small terrain pad presented as a scenic riverbank, and controller-operated handles.
+
+## Visual review before catalogue expansion
+
+During M1, present a small cottage-and-riverbank scene to the player before expanding the building catalogue. Town to City guides architecture, street decoration, planting, and intimate village composition. Station to Station guides landscape palettes, vegetation, and the detailed voxel-miniature aesthetic. Tiny Glade remains the building-interaction reference; the original screenshots remain terrain/geography references.
+
+Show readable silhouettes, fine stepped details, coherent colours, inviting lighting, and restrained surface variation at normal controller camera distance and close inspection. The player found M0's terrain much too coarse: this scene must demonstrate substantially finer terrain forms and decorative detail. Oversized cubes, noisy textures, and photorealism do not meet the target.
+
+Keep decorative geometry resolution independent of the terrain editing grid. Visible voxels need not be independently simulated blocks. Compare candidate detail scales in this bounded scene, retain native volumetric editing, and record Thor edit/render measurements before choosing a terrain cell size. A few plants and nearby decorative pieces support this review; no catalogue expansion, railway systems, economic management, or full river-editing system is added by this gate.
 
 ## Authoritative data
 
@@ -27,6 +35,6 @@ Repeat with shrinking past an attachment, deleting its supporting surface, cance
 
 ## Done means
 
-Automated data-level tests actually pass; the rendered cottage reflects those records; the save survives restart; and the player can complete the full interaction comfortably on the Thor with only a controller. Record screenshots and device feedback separately from unit-test output.
+Automated data-level tests actually pass; the rendered cottage reflects those records; the save survives restart; and the player can complete the full interaction comfortably on the Thor with only a controller. Present the cottage-and-riverbank scene for visual review and record the player's feedback before catalogue expansion. Record screenshots and device feedback separately from unit-test output.
 
 Do not expand into an arbitrary building boolean system, interior furnishing, numerous roof styles, or a large catalogue before this interaction is dependable and pleasant.

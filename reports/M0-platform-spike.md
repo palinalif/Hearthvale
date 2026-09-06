@@ -1,6 +1,12 @@
 # M0 evidence report
 
-Date: 6 September 2026. Status: M0 handoff for player review and physical Thor testing. **M0 is not complete**: required device evidence is unavailable and the MCP smoke has a documented persistence failure. M1 is not started.
+Date: 6 September 2026. Status: M0 handoff with subsequent player-reported Thor playtest success. **M0 is not complete**: detailed acceptance evidence remains outstanding and the MCP smoke has a documented persistence failure. M1 is not started.
+
+## Subsequent player feedback
+
+On 6 September 2026, the player reported manual testing on the Thor and said it was working fine. Record this as **user-reported physical playtest success**. The APK variant, firmware, exact checks performed, and performance measurements were not supplied; the original per-check ledger below records the lead's handoff evidence and is not retroactively marked passed by this general report.
+
+The player also found terrain resolution much too coarse. `docs/design.md` and `docs/references/README.md` now establish Town to City and Station to Station as primary visual references, retain Tiny Glade for building interaction and the original images for terrain/geography, and require substantially finer visual detail independent of the terrain editing grid. The M1 ticket records a cottage-and-riverbank visual review before catalogue expansion. This documentation update changes no M0 runtime, APK, scope, or test result.
 
 ## Environment and delegation
 
