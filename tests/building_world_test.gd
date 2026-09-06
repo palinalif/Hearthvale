@@ -4,6 +4,7 @@ extends SceneTree
 ## directory; every check runs against the authoritative building document.
 
 var failures := 0
+const CottageVisualScript = preload("res://scripts/cottage_visual.gd")
 
 func _initialize() -> void:
 	var world := BuildingWorld.new()
@@ -28,6 +29,8 @@ func _initialize() -> void:
 	_check(not flower_id.is_empty(), "add flower box")
 	var edited: Dictionary = world.get_building(building_id)
 	_check(edited["details"][2]["state"] == "suppressed" and edited["details"][2]["visible"] == false, "suppression persists")
+	_check(not world.suppress_detail(building_id, third_id), "repeated suppression is a no-op")
+	_check(not world.move_detail(building_id, third_id, source_surface, Vector3(0, 3, -7)), "suppressed detail cannot move")
 	_check((edited["automatic_defaults"] as Array).size() == 6, "generated defaults remain complete")
 	_check((edited["manual_attachments"] as Array).size() == 1, "manual attachment record")
 	_check((edited["modified_locked"] as Array).size() == 2, "modified records")
@@ -87,8 +90,19 @@ func _initialize() -> void:
 	_check((copy["automatic_defaults"] as Array)[0]["id"] != world.get_building(building_id)["automatic_defaults"][0]["id"], "duplicate remaps generated defaults")
 	_check(copy["details"][0]["id"] != world.get_building(building_id)["details"][0]["id"], "duplicate remaps detail ids")
 	_check(copy["surfaces"][0]["id"] != world.get_building(building_id)["surfaces"][0]["id"], "duplicate remaps surface ids")
+	_check(copy["details"][0]["default"]["id"] != world.get_building(building_id)["details"][0]["default"]["id"], "duplicate remaps default detail ids")
+	_check(copy["details"][0]["default"]["anchor"]["surface_id"] == copy["details"][0]["anchor"]["surface_id"], "duplicate remaps default anchor")
 	_check(world.resize(copy_id, Vector3(20, 10, 14)), "edit duplicate")
 	_check(world.get_building(building_id)["dimensions"] == Vector3(4.5, 10, 14), "source independent from duplicate")
+
+	# Duplicating a design must respect the global detail budget, including the
+	# automatic records already present on every building.
+	var budget_world := BuildingWorld.new()
+	var added_details := 0
+	for _i in 250:
+		if not budget_world.add_detail("building-1", "flower_box", "wall-front", Vector3(0, 2, -7.02), "flower_box_wood").is_empty(): added_details += 1
+	_check(added_details == 250, "detail budget fixture fills one cottage")
+	_check(budget_world.duplicate_building("building-1").is_empty(), "duplicate rejects global detail overflow")
 
 	var stale_revision := world.get_revision()
 	_check(world.set_material(building_id, "stone_plaster"), "new revision edit")
@@ -101,6 +115,41 @@ func _initialize() -> void:
 		if bool((detail as Dictionary).get("needs_placement", false)): deleted_needs += 1
 	_check(deleted_needs > 0, "deleted surface keeps needs placement records")
 	_check(not world.reattach_detail(building_id, first_id, source_surface, Vector3(-1, 3, -7)), "reject reattach to deleted surface")
+
+	# The presentation consumes resolved records and honors replacement,
+	# suppression, material and deleted support metadata.
+	var visual_world := BuildingWorld.new()
+	var visual_view: Dictionary = visual_world.get_building(building_id)
+	var visual_details: Array = visual_view["details"]
+	var visual_second := str(visual_details[1]["id"])
+	var visual_third := str(visual_details[2]["id"])
+	_check(visual_world.replace_detail(building_id, visual_second, "window_round"), "visual replacement source")
+	_check(visual_world.suppress_detail(building_id, visual_third), "visual suppression source")
+	_check(visual_world.set_material(building_id, "warm_plaster"), "visual material source")
+	var visual := CottageVisualScript.new()
+	visual.request_revision(visual_world.get_revision())
+	_check(visual.apply_building(visual_world.get_building(building_id), visual_world.get_revision()), "apply cottage presentation")
+	var has_round := false
+	var has_suppressed := false
+	for child in visual.get_children():
+		var node: Node = child
+		if node.name == "Detail_%s" % visual_second: has_round = node.mesh is CylinderMesh
+		if node.name == "Detail_%s" % visual_third: has_suppressed = true
+	_check(has_round and not has_suppressed, "replacement and suppression render")
+	var front_wall: Node = visual.get_node_or_null("WallFront")
+	_check(front_wall != null and (front_wall as MeshInstance3D).material_override.albedo_color == Color("#d5a982"), "material reaches shell")
+	_check(visual_world.delete_surface(building_id, "wall-front"), "visual delete support source")
+	visual.request_revision(visual_world.get_revision())
+	_check(visual.apply_building(visual_world.get_building(building_id), visual_world.get_revision()), "apply deleted support")
+	_check(visual.get_node_or_null("WallFront") == null, "deleted support is hidden")
+	var visual_copy_id: String = visual_world.duplicate_building(building_id, Vector3(22, 0, 0))
+	var visual_copy := CottageVisualScript.new()
+	visual_copy.request_revision(visual_world.get_revision())
+	_check(visual_copy.apply_building(visual_world.get_building(visual_copy_id), visual_world.get_revision()), "apply duplicated cottage")
+	_check(visual_copy.get_node_or_null("WallBack") != null, "duplicate orientation resolves by metadata")
+	visual.free()
+	visual_copy.free()
+	await process_frame
 
 	_print_result()
 	quit(1 if failures > 0 else 0)

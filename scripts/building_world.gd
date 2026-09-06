@@ -11,6 +11,7 @@ const GENERATOR_VERSION := "m1-cottage-v1"
 const STYLE_ID := "riverside_cottage"
 const HISTORY_LIMIT := 50
 const HISTORY_BYTES_LIMIT := 8 * 1024 * 1024
+const DOCUMENT_BYTES_LIMIT := 256 * 1024
 const MAX_BUILDINGS := 8
 const MAX_SURFACES := 64
 const MAX_DETAILS := 256
@@ -42,10 +43,11 @@ func get_document() -> Dictionary:
 	return _copy(_document) as Dictionary
 
 func serialize_document() -> String:
-	return JSON.stringify(_document)
+	var serialized := JSON.stringify(_document)
+	return serialized if serialized.to_utf8_buffer().size() <= DOCUMENT_BYTES_LIMIT else ""
 
 func load_serialized_document(serialized: String) -> bool:
-	if serialized.length() > HISTORY_BYTES_LIMIT: return false
+	if serialized.to_utf8_buffer().size() > DOCUMENT_BYTES_LIMIT: return false
 	var parsed = JSON.parse_string(serialized)
 	return parsed is Dictionary and load_document(parsed as Dictionary)
 
@@ -114,6 +116,8 @@ func replace_detail(building_id: String, detail_id: String, asset_id: String) ->
 	var building: Dictionary = buildings[index]
 	var detail_index := _detail_index(building, detail_id)
 	if detail_index < 0: return false
+	var current_detail: Dictionary = (building["details"] as Array)[detail_index]
+	if str(current_detail.get("state", "")) == "suppressed": return false
 	var before := _copy(_document) as Dictionary
 	var details: Array = building["details"]
 	var detail: Dictionary = details[detail_index]
@@ -165,7 +169,9 @@ func add_detail(building_id: String, kind: String, surface_id: String, local_pos
 	var index := _building_index(building_id)
 	if index < 0: return ""
 	var current_details: Array = ((_document["buildings"] as Array)[index] as Dictionary).get("details", [])
-	if current_details.size() >= MAX_DETAILS: return ""
+	var total_details := 0
+	for building_value in _document.get("buildings", []): total_details += (building_value as Dictionary).get("details", []).size()
+	if current_details.size() >= MAX_DETAILS or total_details >= MAX_DETAILS: return ""
 	var before := _copy(_document) as Dictionary
 	var detail_id := _allocate_id("detail")
 	var detail := {"id": detail_id, "kind": kind, "asset_id": asset_id if not asset_id.is_empty() else kind, "state": "manual", "generated": false, "anchor": {"surface_id": surface_id, "policy": "surface_local", "local_position": _vec(local_position)}, "needs_placement": false}
@@ -213,6 +219,9 @@ func duplicate_building(building_id: String, offset: Vector3 = Vector3(4.0, 0.0,
 	if index < 0 or (_document["buildings"] as Array).size() >= MAX_BUILDINGS: return ""
 	var before := _copy(_document) as Dictionary
 	var source: Dictionary = (_document["buildings"] as Array)[index]
+	var total_details := 0
+	for building_value in _document.get("buildings", []): total_details += (building_value as Dictionary).get("details", []).size()
+	if total_details + (source.get("details", []) as Array).size() > MAX_DETAILS: return ""
 	var copy: Dictionary = _copy(source)
 	var id_map := {}
 	var new_id := _allocate_id("building")
@@ -236,6 +245,14 @@ func duplicate_building(building_id: String, offset: Vector3 = Vector3(4.0, 0.0,
 		var anchor: Dictionary = detail.get("anchor", {})
 		anchor["surface_id"] = id_map.get(str(anchor.get("surface_id", "")), anchor.get("surface_id", ""))
 		detail["anchor"] = anchor
+		var original_default = detail.get("default", null)
+		if original_default is Dictionary:
+			var remapped_default: Dictionary = _copy(original_default)
+			remapped_default["id"] = fresh_detail_id
+			var default_anchor: Dictionary = remapped_default.get("anchor", {})
+			default_anchor["surface_id"] = id_map.get(str(default_anchor.get("surface_id", "")), default_anchor.get("surface_id", ""))
+			remapped_default["anchor"] = default_anchor
+			detail["default"] = remapped_default
 		var detail_override: Dictionary = detail.get("override", {})
 		if detail_override.has("surface_id"): detail_override["surface_id"] = id_map.get(str(detail_override["surface_id"]), detail_override["surface_id"])
 		detail["override"] = detail_override
@@ -324,7 +341,8 @@ func _resolved_details(building: Dictionary) -> Array[Dictionary]:
 			var orientation := str(surface.get("orientation", "front"))
 			var tangential := absf(local.x) if orientation in ["front", "back"] else absf(local.z)
 			var extent := dimensions.x if orientation in ["front", "back"] else dimensions.z
-			needs = tangential > extent * 0.5 + 0.5 or local.y < 0.0 or local.y > dimensions.y
+			var footprint := _detail_footprint(detail)
+			needs = tangential + footprint.x > extent * 0.5 or local.y - footprint.y < 0.0 or local.y + footprint.y > dimensions.y
 		var position = null
 		if not needs: position = _resolve_position(surface, anchor, dimensions)
 		detail["resolved_position"] = position
@@ -364,6 +382,14 @@ func _surface_fits(building: Dictionary, surface: Dictionary, dimensions: Vector
 	var extent := dimensions.x if axis == "x" else dimensions.z
 	return extent >= float(surface.get("min_extent", 0.0))
 
+func _detail_footprint(detail: Dictionary) -> Vector2:
+	var kind := str(detail.get("kind", "window"))
+	var asset := str(detail.get("asset_id", ""))
+	if kind == "flower_box": return Vector2(0.8, 0.2)
+	if kind == "door": return Vector2(1.5, 3.25)
+	if asset.contains("round"): return Vector2(0.65, 0.65)
+	return Vector2(1.1, 1.5)
+
 func _set_detail_anchor(building_id: String, detail_id: String, surface_id: String, local_position: Vector3, state: String) -> bool:
 	if not local_position.is_finite() or not _surface_exists(building_id, surface_id): return false
 	var index := _building_index(building_id)
@@ -372,6 +398,7 @@ func _set_detail_anchor(building_id: String, detail_id: String, surface_id: Stri
 	var building: Dictionary = buildings[index]
 	var detail_index := _detail_index(building, detail_id)
 	if detail_index < 0: return false
+	if str((building["details"] as Array)[detail_index].get("state", "")) == "suppressed": return false
 	var before := _copy(_document) as Dictionary
 	var details: Array = building["details"]
 	var detail: Dictionary = details[detail_index]
@@ -390,6 +417,12 @@ func _set_detail_anchor(building_id: String, detail_id: String, surface_id: Stri
 func _record_change(before: Dictionary) -> bool:
 	var after: Dictionary = _copy(_document) as Dictionary
 	if JSON.stringify(before) == JSON.stringify(after): return false
+	if not _validate_document(after):
+		_document = before
+		return false
+	if JSON.stringify(after).to_utf8_buffer().size() > DOCUMENT_BYTES_LIMIT:
+		_document = before
+		return false
 	var bytes: int = _estimate(before) + _estimate(after)
 	var redo_bytes := 0
 	for redo_entry in _redo_stack: redo_bytes += int((redo_entry as Dictionary).get("bytes", 0))
@@ -420,6 +453,7 @@ func _record_change(before: Dictionary) -> bool:
 	return true
 
 func _validate_document(document: Dictionary) -> bool:
+	if JSON.stringify(document).to_utf8_buffer().size() > DOCUMENT_BYTES_LIMIT: return false
 	if not _valid_int(document.get("schema_version", null)) or int(document["schema_version"]) != SCHEMA_VERSION: return false
 	if str(document.get("generator_version", "")) != GENERATOR_VERSION: return false
 	if not _valid_int(document.get("revision", null)) or not _valid_int(document.get("next_id", null)) or int(document["revision"]) < 0 or int(document["next_id"]) < 1: return false
@@ -432,7 +466,7 @@ func _validate_document(document: Dictionary) -> bool:
 		if not building_value is Dictionary: return false
 		var building: Dictionary = building_value
 		var building_id := str(building.get("id", ""))
-		if not _valid_int(building.get("schema_version", null)) or int(building["schema_version"]) != SCHEMA_VERSION or building_id.is_empty() or ids.has(building_id): return false
+		if not _valid_int(building.get("schema_version", null)) or int(building["schema_version"]) != SCHEMA_VERSION or building_id.is_empty() or ids.has(building_id) or all_ids.has(building_id): return false
 		ids[building_id] = true
 		all_ids[building_id] = true
 		var dimensions = building.get("dimensions", null)
@@ -444,7 +478,9 @@ func _validate_document(document: Dictionary) -> bool:
 		for surface_value in surfaces:
 			if not surface_value is Dictionary or str((surface_value as Dictionary).get("id", "")).is_empty() or surface_ids.has(str((surface_value as Dictionary)["id"])) or all_ids.has(str((surface_value as Dictionary)["id"])): return false
 			var surface: Dictionary = surface_value
-			if not ["wall", "roof"].has(str(surface.get("kind", ""))) or not ["front", "back", "left", "right"].has(str(surface.get("orientation", ""))) or not ["x", "z"].has(str(surface.get("extent_axis", ""))) or not _valid_number(surface.get("min_extent", null)) or float(surface.get("min_extent", 0.0)) < 0.0 or not (surface.get("deleted", null) is bool): return false
+			var orientation := str(surface.get("orientation", ""))
+			var expected_axis := "x" if str(surface.get("kind", "")) == "roof" or orientation in ["front", "back"] else "z" if orientation in ["left", "right"] else ""
+			if not ["wall", "roof"].has(str(surface.get("kind", ""))) or not ["front", "back", "left", "right"].has(orientation) or str(surface.get("extent_axis", "")) != expected_axis or not _valid_number(surface.get("min_extent", null)) or float(surface.get("min_extent", 0.0)) < 0.0 or not (surface.get("deleted", null) is bool): return false
 			surface_ids[str((surface_value as Dictionary)["id"])] = true
 			all_ids[str((surface_value as Dictionary)["id"])] = true
 		var details = building.get("details", null)
@@ -466,6 +502,12 @@ func _validate_document(document: Dictionary) -> bool:
 				if not _valid_number(anchor.get("u", null)) or not _valid_number(anchor.get("v", null)) or not _valid_number(anchor.get("fixed_offset", null)): return false
 			else:
 				if not _valid_vec_data(anchor.get("local_position", null)): return false
+			if detail.has("default"):
+				var default_record = detail.get("default")
+				if not default_record is Dictionary or str(default_record.get("id", "")).is_empty() or str(default_record.get("asset_id", "")).is_empty() or not default_record.get("anchor", null) is Dictionary: return false
+				var default_anchor: Dictionary = default_record["anchor"]
+				if not surface_ids.has(str(default_anchor.get("surface_id", ""))) or str(default_anchor.get("policy", "")) != "proportional" or not _valid_number(default_anchor.get("u", null)) or not _valid_number(default_anchor.get("v", null)) or not _valid_number(default_anchor.get("fixed_offset", null)): return false
+			if detail.has("override") and not detail.get("override") is Dictionary: return false
 	return true
 
 func _valid_number(value: Variant) -> bool:
