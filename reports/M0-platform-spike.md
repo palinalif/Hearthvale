@@ -8,6 +8,8 @@ On 6 September 2026, the player reported manual testing on the Thor and said it 
 
 The player also found terrain resolution much too coarse. `docs/design.md` and `docs/references/README.md` now establish Town to City and Station to Station as primary visual references, retain Tiny Glade for building interaction and the original images for terrain/geography, and require substantially finer visual detail independent of the terrain editing grid. The M1 ticket records a cottage-and-riverbank visual review before catalogue expansion. This documentation update changes no M0 runtime, APK, scope, or test result.
 
+Subsequent feedback about uncertain terrain placement, clunky controls, the thick cyan ring, and a desired ghost volume is tracked separately in `M0-placement-followup.md`. The measurements and artifact hashes below describe the original `0.0.1-m0` handoff; follow-up results must not be inferred from them.
+
 ## Environment and delegation
 
 Windows 11 Pro x64 10.0.26200; AMD Ryzen 7 2700X (8 cores/16 threads), 31.9 GiB RAM; NVIDIA RTX 3070, driver 591.86. A Parsec virtual display adapter is also installed. Existing Godot 4.2.2 Mono and templates were preserved. JDK: Eclipse Temurin 17.0.19+10. Existing SDK platforms 34/35/36, build-tools 34.0.0/35.0.0/36.0.0; exports selected 36.0.0. ADB 1.0.41 / platform-tools 37.0.0-14910828 listed no authorised device. Thor firmware, handheld and external controller mappings, TV/dock, and Android GPU results: **not run**.

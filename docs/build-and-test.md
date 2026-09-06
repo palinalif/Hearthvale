@@ -23,6 +23,8 @@ The game uses Mobile by default. The explicit desktop launch flags avoid the poo
 
 ## Native probe and tests
 
+For the M0 placement follow-up, the terrain tool shows a live affected-cell preview. Use small left-stick nudges for fine placement, D-pad up/down for height, and left/right for radius. X switches ADD/REMOVE. A locks the target; orbit and zoom to inspect it, then A commits or B cancels. Cancel before repositioning a locked target. The preview is a display aid and does not change terrain until confirmation.
+
 ```powershell
 ./tools/check.ps1
 # Individual diagnostic checks:

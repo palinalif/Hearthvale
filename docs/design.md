@@ -253,6 +253,12 @@ Menus suspend world editing. The same press must never activate a menu and modif
 
 Magnetise selection to relevant walls, roofs, handles, and nearby details. Provide an explicit overlapping-target cycle. An attachment moves on its selected surface plane, not freely through three dimensions. Resizing uses a constrained axis with visible extent and snap increments. A precision mode reduces movement speed and step size.
 
+Thor playtest feedback identified uncertain terrain placement and clunky cursor control. Before committing add/remove, show the affected terrain clearly, including the brush's height and depth relative to the land. Distinguish addition from subtraction with both colour and text, show when nothing would change, and keep gentle stick nudges slow enough to place the brush precisely. A confirmation preview must hold the chosen target while the player orbits to inspect it; cancellation must release it without changing terrain. The committed result must agree with the displayed affected cells.
+
+Use a subtle affected-voxel highlight and thin outline in terrain-editing mode. The player explicitly rejected M0's thick cyan circle. Keep the target readable without a heavy ring or an opaque brush shape covering the terrain; any centre or depth marker should be small and secondary to the highlighted edit.
+
+Include a faint three-dimensional ghost of the full brush volume during aiming and confirmation. Highlight the voxels that would actually change more clearly within it, so empty space remains distinguishable from a real addition or subtraction. The ghost, highlight, and committed operation must share the same centre and radius.
+
 Cave editing includes an adjustable cutaway view or slice plane so the cursor can reach interior surfaces without blindly excavating the roof. The same cutaway approach can help edit details obscured by foreground scenery. The render view, terrain hit-testing, and hidden-surface selection must agree.
 
 ## Camera and interface
