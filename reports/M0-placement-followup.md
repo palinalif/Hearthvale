@@ -54,4 +54,4 @@ Install `builds/hearthvale-m0-debug.apk` as an update, preserving saves. In part
 2. Use small stick nudges, lock with A, orbit/zoom, then A to apply or B to cancel. Compare the affected-cell highlight with the actual result and undo it.
 3. Save, quit, and reload your existing terrain. Report whether the new controls feel clearer and whether the highlight is too faint or too prominent on the Thor.
 
-M1 has not started; terrain-resolution/art-direction work remains governed by its separate visual-review gate.
+M1 had not started at this follow-up handoff. The player subsequently authorized the editable cottage, continuous terrain sculpting and supporting visual checkpoint. This does not change any M0 test result or close its outstanding checks.

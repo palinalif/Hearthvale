@@ -14,7 +14,9 @@ Target readable silhouettes, fine stepped details, coherent colours, inviting li
 
 Keep decorative detail resolution independent of the terrain editing grid. A visible voxel need not be an independently simulated block; fine geometry can supply decorative detail while the native terrain remains volumetrically editable. Judge scale at the normal gameplay camera and in close inspection, rather than choosing one global cube size for everything.
 
-During M1, present a small cottage-and-riverbank scene for player visual review before expanding the building catalogue. Review architecture and nearby decoration/planting against Town to City, landscape colour and vegetation against Station to Station, and building interaction against Tiny Glade. The original images below continue to guide terrain and geography. This is an art-direction refinement: it adds no railways or economic management, changes no M0 scope, and does not authorize starting M1.
+During M1, present a small cottage-and-riverbank scene for player visual review before expanding the building catalogue. Review architecture and nearby decoration/planting against Town to City, landscape colour and vegetation against Station to Station, and building interaction against Tiny Glade. The original images below continue to guide terrain and geography. The player has separately authorized M1's editable cottage and continuous terrain sculpting; these visual references add no railways or economic management and change no M0 evidence.
+
+Planet Coaster / Planet Zoo additionally guide continuous terrain-sculpting interaction: gentle held strokes, brush influence, fixed flattening references and local smoothing. This is an interaction reference, not a replacement for the visual direction above. See `../../tasks/M1-terrain-sculpting.md` for the authoritative requirements.
 
 The linked game imagery remains the property of its respective rights holders. Links are reference sources, not an asset licence; no game assets or screenshots have been copied into production content.
 

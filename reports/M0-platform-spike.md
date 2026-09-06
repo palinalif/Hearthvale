@@ -1,6 +1,6 @@
 # M0 evidence report
 
-Date: 6 September 2026. Status: M0 handoff with subsequent player-reported Thor playtest success. **M0 is not complete**: detailed acceptance evidence remains outstanding and the MCP smoke has a documented persistence failure. M1 is not started.
+Date: 6 September 2026. Status: M0 handoff with subsequent player-reported Thor playtest success. **M0 is not complete**: detailed acceptance evidence remains outstanding and the MCP smoke has a documented persistence failure. M1 was not started at this handoff; the player subsequently authorized its implementation with these evidence gaps still open.
 
 ## Subsequent player feedback
 
@@ -105,5 +105,5 @@ After the final telemetry change, the lead rebuilt all artifacts and launched th
 3. Test TV/dock, external pad and audio when available; otherwise retain **not run**.
 4. Resolve or explicitly accept the pinned MCP bridge's existing-script overwrite persistence failure. Core editor operations passed; the full smoke is not marked passed.
 
-Use `docs/thor-playtest.md` for the short device checklist. Do not start M1 until this M0 handoff is reviewed and the required evidence is accepted. Save-cycle stalls, unavailable per-edit native mesh acknowledgements, release memory telemetry limits, and the MCP failure remain explicit limitations.
+Use `docs/thor-playtest.md` for the short device checklist. The original M0 gate prohibited M1 before acceptance; the player's subsequent authorization supersedes that implementation restriction, while leaving the required evidence open. Save-cycle stalls, unavailable per-edit native mesh acknowledgements, release memory telemetry limits, and the MCP failure remain explicit limitations.
 

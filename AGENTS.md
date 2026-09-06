@@ -4,7 +4,9 @@
 
 Build a personal wind-down game, not a generic engine or a commercial city simulator. The player directs the project and judges the feel; the agent implements, tests, and reports evidence. `docs/design.md` is the current design draft. “Hearthvale” is a temporary title.
 
-Implement only the approved milestone. The initial instruction is M0. The existence of later tickets is not approval to execute them simultaneously.
+Implement only the approved milestone. The player's current instruction authorizes M1 under `tasks/M1-editable-cottage.md`: one functioning stretchable procedural cottage, with a modest visual checkpoint around the same cottage. Earlier M0-only and postcard-only interpretations are superseded. Existing M0 checks remain open until supported by evidence; M1 authorization does not mark them passed. No M2 or catalogue expansion is authorized.
+
+The player also explicitly authorizes `tasks/M1-terrain-sculpting.md` as a required M1 workstream alongside the cottage. Continuous sculpting is the default hold/release interaction; preserve the cottage's full regression and the optional stamp preview feedback.
 
 ## Preserve these requirements
 
@@ -52,7 +54,7 @@ The lead owns architecture, decomposition, shared configuration, dependency sele
 
 Before implementation, inspect installed Codex and existing agent configuration, preserve all existing permissions/configuration, and run a small read-only Luna delegation test. Report success or the specific blocker and the actual model if exposed. Never alter model caches or substitute another model to bypass failure; resolve a Luna blocker before beginning implementation.
 
-Initially use at most two concurrent coding workers. Each assignment must specify its bounded task, relevant design requirements, interfaces, owned files, and acceptance checks. Never allow concurrent writers to the same file. Review changes and independently run integration checks; worker completion is not evidence of acceptance. Implement M0 only and stop at its handoff for player review.
+Initially use at most two concurrent coding workers. Each assignment must specify its bounded task, relevant design requirements, interfaces, owned files, and acceptance checks. Never allow concurrent writers to the same file. Review changes and independently run integration checks; worker completion is not evidence of acceptance. Implement the currently authorized ticket and stop at its handoff for player review; currently this is M1. Preserve the original M1 resize/save/undo/duplication regression and report unresolved M0 checks separately.
 
 ## Evidence required at handoff
 

@@ -2,7 +2,7 @@
 
 **Status:** M0 handoff awaiting player review and physical Thor evidence; not complete. See `../reports/M0-platform-spike.md`.
 
-**Blocks:** every later milestone.  
+**Evidence gate:** M0 remains open. The player's subsequent explicit authorization permits M1 implementation while these checks remain unresolved; it does not mark them passed.
 **Objective:** one reproducible native Android ARM64 test scene that proves the engine/voxel/controller/save path on the actual Thor Max.
 
 Read `../AGENTS.md` and sections 8–13 of `../docs/design.md` first. The candidate versions and primary sources are in the design; they are not a prevalidated bundle.

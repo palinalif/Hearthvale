@@ -1,5 +1,5 @@
 name = "luna_worker"
-description = "Implement bounded Hearthvale M0 coding and tests in explicitly owned files."
+description = "Implement bounded Hearthvale milestone coding and tests in explicitly owned files."
 model = "gpt-5.6-luna"
 model_reasoning_effort = "high"
 developer_instructions = """

@@ -137,6 +137,12 @@ Raise/add, lower/remove, smooth, flatten to a sampled level, terrace, and paint 
 
 Expose brush radius and strength with controller-friendly steps and a clear footprint. Sampling a surface provides a flatten height or material without typing. Terrain strokes are transactions: a full stroke is one undo action, not hundreds of controller taps.
 
+The player explicitly adds continuous sculpting to M1; see `../tasks/M1-terrain-sculpting.md`. Planet Coaster / Planet Zoo guide this interaction only. Holding the sculpt action gradually changes terrain, including when stationary; dragging creates a connected stroke and release commits without another confirmation. Radius, time-based strength and falloff are independently controller-adjustable with gentle defaults. The restrained footprint describes influence, not an instant geometric stamp. Geometric stamping is optional and separate.
+
+M1 includes raise/add, volumetric lower/dig, flatten to height, flatten to surface/slope, and local geometric smooth. Height flatten captures the cursor-centre terrain hit's world height at stroke start; surface flatten captures a meaningful neighbourhood slope. Both reference planes remain fixed throughout a stroke. Provide an explicit keep-target toggle, resample action, visible reference plane/height, and optional height snapping. Flatten converges without overshoot. Smoothing changes local geometry while retaining the voxel art style.
+
+One stroke is one exact undo transaction; cancel restores its complete pre-stroke state. Menus, pause, disconnect and focus loss stop editing and require a fresh press. Excavation must not retarget distant terrain behind the working area. Use local native updates and stroke deltas, not full-world snapshots per update. Preserve existing saves or document an explicit migration. Demonstrate connected strokes, stationary growth/excavation, fixed level/slope targets, smoothing, caves, cancel/undo/redo/save/restart and comparable timed input at 30 and 60 fps. Use the same cottage pad/riverbank; report desktop and Thor evidence separately.
+
 Trees, buildings, paths, water, and ground are separate edit layers. Terrain brushes do not accidentally delete buildings. Where excavation removes a building's support, preserve the building and preview foundation adjustment; do not introduce collapse physics. Where an edit intersects existing objects, show the effect before committing and offer an explicit affected-object action.
 
 ## Water: editable scenery with defined rules
@@ -465,7 +471,11 @@ Build the smallest Android scene with the selected voxel backend, basic controll
 
 ## M1 — One excellent editable cottage
 
+The player's current scope correction authorizes this milestone with `../tasks/M1-editable-cottage.md` as the authoritative ticket. The functioning procedural cottage and its full regression are the main deliverable. Any earlier postcard-only/no-procedural-building suggestion is superseded. M0 evidence gaps remain open and must be reported separately.
+
 Implement one rectangular building, one roof profile, procedural details, stable surface IDs, manual overrides, suppression, and transactional resizing. Add the controller handles and a small terrain pad.
+
+The separately authorized `../tasks/M1-terrain-sculpting.md` is also required: continuous raise/dig, level/slope flatten and smooth around that same cottage. It does not replace the editable-building regression or visual checkpoint.
 
 **Visual review gate:** present a small cottage-and-riverbank scene following section 3 before expanding the building catalogue. Show substantially finer terrain and decorative steps than M0, readable silhouettes, coherent colours, restrained variation, and inviting light. Player review is required; the scene remains a bounded presentation of the one-cottage milestone.
 
@@ -479,7 +489,7 @@ Combine a 128-metre riverside scene, cottage kit, paths, simple bridge, vegetati
 
 ## M3 — Full valley-editing freedom
 
-Expand to the provisional 256-metre valley after benchmarking. Add the complete brush set, terrace/flatten/smooth, tunnel and cutaway tools, editable river/lake boundaries, a waterfall, foundation responses, and robust dirty-region navigation.
+Expand to the provisional 256-metre valley after benchmarking. Extend the M1 sculpting tools with terrace, dedicated tunnel and cutaway tools, editable river/lake boundaries, a waterfall, foundation responses, and robust dirty-region navigation.
 
 **Exit:** a tunnel under a lake, an overhang beside buildings, a moved riverbank, a deleted bridge, and a large undo all behave correctly. No hidden substitution of a heightmap-only system.
 
@@ -517,7 +527,7 @@ No calendar estimate until M0 and M1 reveal the two largest unknowns: device/bac
 
 Final terrain cell size and mesher; reliable engine/extension package; achievable 60 fps settings; preferred camera distance and snap increments; whether the second style should lean alpine or northern; and whether enterable interiors or literal shell-voxel editing are worth later effort. None prevents starting M0.
 
-## First implementation instruction
+## Original M0 implementation instruction (historical; M1 now authorized)
 
 “Read this design and implement M0 only. Start by verifying the engine and native voxel dependency on desktop and Android ARM64. Create a minimal controller-driven test scene, terrain add/remove with a tunnel, chunk save/load, and a performance overlay. Keep MCP setup a separate development smoke test. Record exact versions, build steps, actual device results, and unresolved failures. Do not implement villagers, a catalogue of buildings, complex water, or a custom voxel engine yet.”
 

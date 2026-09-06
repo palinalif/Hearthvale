@@ -1,13 +1,19 @@
 # M1 — one cottage that does not eat your edits
 
-**Status:** blocked on M0 and player approval.  
+**Status:** implementation authorized by the player's scope correction; unresolved M0 evidence remains open and must be reported separately.
 **Objective:** prove the core interaction and non-destructive generation model before adding content.
+
+**Parallel required workstream:** [M1 continuous terrain sculpting](M1-terrain-sculpting.md), explicitly added by the player. It supports the same cottage pad/riverbank and does not replace or reduce any building requirement below. Continuous sculpting uses hold/release; lock/confirm remains appropriate for optional geometric stamping and discrete building previews.
+
+**Authority:** this is the authoritative M1 ticket. The main deliverable is one stretchable procedural cottage, including editable generated details and persistent manual choices. Disregard any postcard-only/no-procedural-building interpretation. A static cottage or screenshot cannot satisfy this ticket. Duplication tests may create another instance of this same cottage; they do not authorize a building catalogue.
 
 Read sections 3 and 5 of `../docs/design.md` and `../docs/references/README.md`. Keep the scope to one rectangular building volume, one gabled roof profile, a tiny detail set, one small terrain pad presented as a scenic riverbank, and controller-operated handles.
 
 ## Visual review before catalogue expansion
 
 During M1, present a small cottage-and-riverbank scene to the player before expanding the building catalogue. Town to City guides architecture, street decoration, planting, and intimate village composition. Station to Station guides landscape palettes, vegetation, and the detailed voxel-miniature aesthetic. Tiny Glade remains the building-interaction reference; the original screenshots remain terrain/geography references.
+
+This is a modest visual checkpoint supporting the editable cottage: a landscaped pad or riverbank, a few trees, considered materials and lighting. It does not replace the procedural-building deliverable or require a full valley, bridge system, day/night cycle, villagers, or expanded catalogue. Retain the latest controller feedback: precise, legible targets, restrained highlights/thin outlines, ghost previews, and reliable cancellation.
 
 Show readable silhouettes, fine stepped details, coherent colours, inviting lighting, and restrained surface variation at normal controller camera distance and close inspection. The player found M0's terrain much too coarse: this scene must demonstrate substantially finer terrain forms and decorative detail. Oversized cubes, noisy textures, and photorealism do not meet the target.
 
