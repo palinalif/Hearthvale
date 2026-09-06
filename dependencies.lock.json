@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "engine": {
+    "templates_url": "https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz",
+    "templates_sha512": "ca4d71c4d7b81dfc15d1a98baa07534aa95b03fdda78a0075b06672e1648d2e5f40980c9adc28d23e1b92e732ee7bf3461997aa804af74ec2fcd7a93ccb84079",
+    "editor_url": "https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_win64.exe.zip",
+    "editor_sha512": "83decd58fdf67b9d657958a1ae6bf1929c20785315a81effe245874cdc57acb709bf868e00778a96984338c1b29dafdb453c6847747694621c6ecf5da2259993",
+    "tag": "4.7.2-stable",
+    "version": "4.7.2.stable.official.ed1daf0bf"
+  },
+  "voxel": {
+    "sha256": "600737572a5e25541ba6f503e842a3717ba19afafa5474510a6ceff995a1d2d8",
+    "edition": "GDExtension",
+    "commit": "75d3c6d996ed2331c80edcd8c3ebc947afc0f041",
+    "tag": "v1.7x",
+    "url": "https://github.com/Zylann/godot_voxel/releases/download/v1.7x/GodotVoxelExtension.zip"
+  },
+  "mcp": {
+    "documentation": "https://github.com/hi-godot/godot-ai/blob/v3.2.5/README.md",
+    "package": "godot-ai",
+    "plugin_sha256": "72c7d4a0abc28d7aa4ab7b07d875c011f7e68399f90b25fcbe35e4a5e2a795eb",
+    "plugin_url": "https://github.com/hi-godot/godot-ai/releases/download/v3.2.5/godot-ai-plugin.zip",
+    "runtime_included": false,
+    "version": "3.2.5"
+  },
+  "host": {
+    "sdk_platforms": [
+      34,
+      35,
+      36
+    ],
+    "driver": "591.86",
+    "jdk": "Temurin 17.0.19+10",
+    "gpu": "NVIDIA RTX 3070",
+    "codex": "0.153.1",
+    "os": "Windows 11 Pro 10.0.26200",
+    "android_build_tools": "36.0.0"
+  },
+  "luna": {
+    "requested_model": "gpt-5.6-luna",
+    "independent_runtime_model": "not exposed",
+    "readonly_test": "passed",
+    "reasoning": "medium"
+  }
+}
