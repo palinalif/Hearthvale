@@ -1,0 +1,32 @@
+[
+  {
+    "apk": "hearthvale-m0-debug.apk",
+    "native_library": "lib/arm64-v8a/libvoxel.android.editor.arm64.so",
+    "native_bytes": 9031288,
+    "matches_pinned_library": true,
+    "excluded_development_resources": true,
+    "architectures": [
+      "arm64-v8a"
+    ]
+  },
+  {
+    "apk": "hearthvale-m0-release.apk",
+    "native_library": "lib/arm64-v8a/libvoxel.android.template_release.arm64.so",
+    "native_bytes": 7301800,
+    "matches_pinned_library": true,
+    "excluded_development_resources": true,
+    "architectures": [
+      "arm64-v8a"
+    ]
+  },
+  {
+    "apk": "hearthvale-m0-compatibility.apk",
+    "native_library": "lib/arm64-v8a/libvoxel.android.editor.arm64.so",
+    "native_bytes": 9031288,
+    "matches_pinned_library": true,
+    "excluded_development_resources": true,
+    "architectures": [
+      "arm64-v8a"
+    ]
+  }
+]

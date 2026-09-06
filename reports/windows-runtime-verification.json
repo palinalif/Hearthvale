@@ -1,0 +1,41 @@
+[
+  {
+    "flavor": "debug",
+    "exit_code": 0,
+    "renderer": "mobile",
+    "actual_seconds": 3.013037,
+    "edits": 2,
+    "undos": 2,
+    "redos": 2,
+    "saves": 2,
+    "static_memory_available": true,
+    "static_memory_bytes": 58963189.0,
+    "errors": []
+  },
+  {
+    "flavor": "release",
+    "exit_code": 0,
+    "renderer": "mobile",
+    "actual_seconds": 3.012048,
+    "edits": 2,
+    "undos": 2,
+    "redos": 2,
+    "saves": 2,
+    "static_memory_available": false,
+    "static_memory_bytes": null,
+    "errors": []
+  },
+  {
+    "flavor": "compatibility",
+    "exit_code": 0,
+    "renderer": "gl_compatibility",
+    "actual_seconds": 3.000332,
+    "edits": 2,
+    "undos": 2,
+    "redos": 2,
+    "saves": 2,
+    "static_memory_available": false,
+    "static_memory_bytes": null,
+    "errors": []
+  }
+]

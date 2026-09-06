@@ -1,0 +1,23 @@
+[
+  {
+    "apk": "hearthvale-m0-debug.apk",
+    "signature_verified": true,
+    "development_certificate_matches_debug": true,
+    "bytes": 37451371,
+    "sha256": "1a7b3dc8ab9142bb1162558c28183bec68022950802e621e3021cf47f301e2cf"
+  },
+  {
+    "apk": "hearthvale-m0-release.apk",
+    "signature_verified": true,
+    "development_certificate_matches_debug": true,
+    "bytes": 33903766,
+    "sha256": "6431d59c932d7f4785f9d70a40ad6ae2b45f549fc2e5c7f4bdf02314346cdfe2"
+  },
+  {
+    "apk": "hearthvale-m0-compatibility.apk",
+    "signature_verified": true,
+    "development_certificate_matches_debug": true,
+    "bytes": 37451371,
+    "sha256": "f5fecb7fa10befe7569f7d20cf048b299e1cb03d6f8db70f92e9e16769139b4c"
+  }
+]

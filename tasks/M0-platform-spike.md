@@ -1,6 +1,7 @@
 # M0 — prove the platform before building the game
 
-**Status:** ready for implementation planning; not executed.  
+**Status:** M0 handoff awaiting player review and physical Thor evidence; not complete. See `../reports/M0-platform-spike.md`.
+
 **Blocks:** every later milestone.  
 **Objective:** one reproducible native Android ARM64 test scene that proves the engine/voxel/controller/save path on the actual Thor Max.
 
