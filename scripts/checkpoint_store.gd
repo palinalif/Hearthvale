@@ -3,29 +3,49 @@ class_name CheckpointStore
 
 const ROOT := "user://checkpoints"
 const SCHEMA := 2
+const BUILDING_SCHEMA := 3
 const LEGACY_SCHEMA := 1
 const KEEP_GENERATIONS := 2
 const DIMENSIONS := Vector3i(48, 32, 48)
 const MAX_MANIFEST_BYTES := 16 * 1024
+const MAX_BUILDING_DOCUMENT_BYTES := 256 * 1024
+const MAX_BUILDING_MANIFEST_BYTES := 512 * 1024
 const MAX_PAYLOAD_BYTES := DIMENSIONS.x * DIMENSIONS.y * DIMENSIONS.z * 2
 const GENERATION_RE := "^checkpoint_([0-9]{16,})\\.(json|bin)$"
 const PatchGenerator := preload("res://scripts/patch_generator.gd")
+const BuildingWorld := preload("res://scripts/building_world.gd")
 
 var root_path: String = ROOT
+## M0 remains 48×32×48. M1 injects 96×64×96 while retaining the same
+## generation files and manifest schema.
+var expected_dimensions: Vector3i = DIMENSIONS
+var expected_generator_id: String = PatchGenerator.GENERATOR_ID
+var require_building_document := false
 var last_error := ""
 var loaded_revision := -1
+var loaded_building_document: Dictionary = {}
+
+func _payload_bytes() -> int:
+	return expected_dimensions.x * expected_dimensions.y * expected_dimensions.z * 2
 
 func _init(test_root: String = "") -> void:
 	if not test_root.is_empty(): root_path = test_root
 
-func save(buffer: Object, revision: int, generator_id: String) -> bool:
-	last_error = ""; loaded_revision = -1
+func save(buffer: Object, revision: int, generator_id: String, building_document: Dictionary = {}) -> bool:
+	last_error = ""; loaded_revision = -1; loaded_building_document = {}
 	if revision < 0: return _fail("invalid revision")
 	if buffer == null or not buffer.has_method("get_voxel"): return _fail("invalid voxel buffer")
-	if not buffer.has_method("get_size") or buffer.get_size() != DIMENSIONS: return _fail("invalid voxel dimensions")
-	if generator_id != PatchGenerator.GENERATOR_ID: return _fail("generator")
+	if not buffer.has_method("get_size") or buffer.get_size() != expected_dimensions: return _fail("invalid voxel dimensions")
+	if generator_id.is_empty() or generator_id != expected_generator_id: return _fail("generator")
+	var has_building_document := not building_document.is_empty()
+	if require_building_document and not has_building_document: return _fail("building document required")
+	var building_text := ""
+	if has_building_document:
+		if not BuildingWorld.validate_document(building_document): return _fail("invalid building document")
+		building_text = JSON.stringify(building_document)
+		if building_text.to_utf8_buffer().size() > MAX_BUILDING_DOCUMENT_BYTES: return _fail("building document too large")
 	var payload := _encode(buffer)
-	if payload.size() != MAX_PAYLOAD_BYTES: return _fail("payload encoding")
+	if payload.size() != _payload_bytes(): return _fail("payload encoding")
 	var absolute := ProjectSettings.globalize_path(root_path)
 	if DirAccess.make_dir_recursive_absolute(absolute) != OK: return _fail("cannot create checkpoint root")
 	var generation := _next_generation(absolute)
@@ -44,7 +64,12 @@ func save(buffer: Object, revision: int, generator_id: String) -> bool:
 	f.store_buffer(payload); f.flush(); f.close()
 	if not _verify_data_file(staged_data, payload): return _fail("staged data verification failed")
 	if DirAccess.rename_absolute(ProjectSettings.globalize_path(staged_data), ProjectSettings.globalize_path(final_data)) != OK: return _fail("data rename failed")
-	var manifest := {"schema": SCHEMA, "generator_id": generator_id, "revision": revision, "size": [DIMENSIONS.x, DIMENSIONS.y, DIMENSIONS.z], "payload_bytes": MAX_PAYLOAD_BYTES, "payload_layout": "voxelbuffer_channel_raw_zxy", "channel": PatchGenerator.CHANNEL_TYPE, "depth": 1, "sha256": _hash(payload), "generation": generation}
+	var schema := BUILDING_SCHEMA if has_building_document else SCHEMA
+	var manifest := {"schema": schema, "generator_id": generator_id, "revision": revision, "size": [expected_dimensions.x, expected_dimensions.y, expected_dimensions.z], "payload_bytes": _payload_bytes(), "payload_layout": "voxelbuffer_channel_raw_zxy", "channel": PatchGenerator.CHANNEL_TYPE, "depth": 1, "sha256": _hash(payload), "generation": generation}
+	if schema == BUILDING_SCHEMA:
+		manifest["building_document_bytes"] = building_text.to_utf8_buffer().size()
+		manifest["building_document_sha256"] = _hash_text(building_text)
+		manifest["building_document_json"] = building_text
 	var manifest_text := JSON.stringify(manifest)
 	f = FileAccess.open(staged_manifest, FileAccess.WRITE)
 	if f == null: return _fail("cannot open staged manifest")
@@ -56,7 +81,7 @@ func save(buffer: Object, revision: int, generator_id: String) -> bool:
 	return true
 
 func load(revision: int = -1) -> Object:
-	last_error = ""; loaded_revision = -1
+	last_error = ""; loaded_revision = -1; loaded_building_document = {}
 	if revision < -1: last_error = "invalid revision"; return null
 	var saw_candidate := false
 	for item in _candidates():
@@ -70,10 +95,12 @@ func load(revision: int = -1) -> Object:
 		if revision >= 0 and candidate_revision != revision: continue
 		var f := FileAccess.open(item["data"], FileAccess.READ)
 		if f == null: last_error = "data open"; continue
-		var payload := f.get_buffer(MAX_PAYLOAD_BYTES); f.close()
+		var payload := f.get_buffer(_payload_bytes()); f.close()
 		var buffer: Object = _decode(payload, int(manifest["schema"]))
 		if buffer == null: last_error = "VoxelBuffer unavailable"; continue
 		loaded_revision = candidate_revision
+		if int(manifest["schema"]) == BUILDING_SCHEMA:
+			loaded_building_document = result["building_document"].duplicate(true)
 		return buffer
 	if not saw_candidate: last_error = "no valid checkpoint" if last_error.is_empty() else last_error
 	elif revision >= 0: last_error = "no checkpoint for revision %d" % revision
@@ -100,29 +127,39 @@ func _validate_candidate(item: Dictionary) -> Dictionary:
 	if not FileAccess.file_exists(item["manifest"]): return invalid.call("manifest missing")
 	var mf := FileAccess.open(item["manifest"], FileAccess.READ)
 	if mf == null: return invalid.call("manifest open")
-	if mf.get_length() > MAX_MANIFEST_BYTES: mf.close(); return invalid.call("manifest too large")
-	var parsed = JSON.parse_string(mf.get_as_text()); mf.close()
+	if mf.get_length() > MAX_BUILDING_MANIFEST_BYTES: mf.close(); return invalid.call("manifest too large")
+	var manifest_length := mf.get_length()
+	var manifest_text := mf.get_as_text(); mf.close()
+	var trimmed_manifest := manifest_text.strip_edges()
+	if not trimmed_manifest.begins_with("{") or not trimmed_manifest.ends_with("}"): return invalid.call("manifest schema")
+	var parsed = _parse_json(manifest_text)
 	if not parsed is Dictionary: return invalid.call("manifest schema")
-	if not _is_exact_int(parsed.get("schema", null), SCHEMA) and not _is_exact_int(parsed.get("schema", null), LEGACY_SCHEMA): return invalid.call("manifest schema")
-	if typeof(parsed.get("generator_id", null)) != TYPE_STRING or parsed["generator_id"] != PatchGenerator.GENERATOR_ID: return invalid.call("generator")
+	if not _is_exact_int(parsed.get("schema", null), SCHEMA) and not _is_exact_int(parsed.get("schema", null), BUILDING_SCHEMA) and not _is_exact_int(parsed.get("schema", null), LEGACY_SCHEMA): return invalid.call("manifest schema")
+	var parsed_schema := int(parsed["schema"])
+	if require_building_document and parsed_schema != BUILDING_SCHEMA: return invalid.call("building document required")
+	if parsed_schema != BUILDING_SCHEMA and manifest_length > MAX_MANIFEST_BYTES: return invalid.call("manifest too large")
+	if typeof(parsed.get("generator_id", null)) != TYPE_STRING or parsed["generator_id"] != expected_generator_id: return invalid.call("generator")
 	if not _is_integer(parsed.get("revision", null)) or int(parsed["revision"]) < 0: return invalid.call("revision")
 	var dims = parsed.get("size", null)
 	if not dims is Array or dims.size() != 3: return invalid.call("dimensions")
-	var expected_dims := [DIMENSIONS.x, DIMENSIONS.y, DIMENSIONS.z]
+	var expected_dims := [expected_dimensions.x, expected_dimensions.y, expected_dimensions.z]
 	for i in 3:
 		if not _is_exact_int(dims[i], expected_dims[i]): return invalid.call("dimensions")
-	if not _is_exact_int(parsed.get("payload_bytes", null), MAX_PAYLOAD_BYTES): return invalid.call("payload bytes")
-	var schema: int = int(parsed["schema"])
-	if schema == SCHEMA:
+	if not _is_exact_int(parsed.get("payload_bytes", null), _payload_bytes()): return invalid.call("payload bytes")
+	var schema: int = parsed_schema
+	if schema == SCHEMA or schema == BUILDING_SCHEMA:
 		if parsed.get("payload_layout", null) != "voxelbuffer_channel_raw_zxy" or not _is_exact_int(parsed.get("channel", null), PatchGenerator.CHANNEL_TYPE) or not _is_exact_int(parsed.get("depth", null), 1): return invalid.call("payload layout")
 	if typeof(parsed.get("sha256", null)) != TYPE_STRING or not _is_sha256(parsed["sha256"]): return invalid.call("hash")
 	if typeof(parsed.get("generation", null)) != TYPE_STRING or parsed["generation"] != item["generation"]: return invalid.call("generation")
 	var f := FileAccess.open(item["data"], FileAccess.READ)
 	if f == null: return invalid.call("data missing")
-	if f.get_length() != MAX_PAYLOAD_BYTES: f.close(); return invalid.call("data length")
-	var payload := f.get_buffer(MAX_PAYLOAD_BYTES); f.close()
+	if f.get_length() != _payload_bytes(): f.close(); return invalid.call("data length")
+	var payload := f.get_buffer(_payload_bytes()); f.close()
 	if _hash(payload) != parsed["sha256"]: return invalid.call("hash")
-	return {"valid": true, "error": "", "manifest": parsed}
+	var result := {"valid": true, "error": "", "manifest": parsed}
+	if schema == BUILDING_SCHEMA:
+		if not _validate_building_candidate(parsed, result): return invalid.call(result.get("error", "building document"))
+	return result
 
 func _verify_data_file(path: String, expected: PackedByteArray) -> bool:
 	var r := FileAccess.open(path, FileAccess.READ)
@@ -130,6 +167,25 @@ func _verify_data_file(path: String, expected: PackedByteArray) -> bool:
 		if r != null: r.close()
 		return false
 	var bytes := r.get_buffer(expected.size()); r.close(); return _hash(bytes) == _hash(expected)
+
+func _validate_building_candidate(manifest: Dictionary, result: Dictionary) -> bool:
+	var invalid_reason := func(reason: String) -> bool:
+		result["error"] = reason
+		return false
+	if typeof(manifest.get("building_document_json", null)) != TYPE_STRING: return invalid_reason.call("building document")
+	if not _is_integer(manifest.get("building_document_bytes", null)):
+		return invalid_reason.call("building document bytes")
+	var byte_count := int(manifest["building_document_bytes"])
+	if byte_count <= 0 or byte_count > MAX_BUILDING_DOCUMENT_BYTES: return invalid_reason.call("building document bytes")
+	if typeof(manifest.get("building_document_sha256", null)) != TYPE_STRING or not _is_sha256(manifest["building_document_sha256"]): return invalid_reason.call("building document hash")
+	var text: String = manifest["building_document_json"]
+	if text.to_utf8_buffer().size() != byte_count or _hash_text(text) != manifest["building_document_sha256"]: return invalid_reason.call("building document hash")
+	var trimmed_document := text.strip_edges()
+	if not trimmed_document.begins_with("{") or not trimmed_document.ends_with("}"): return invalid_reason.call("building document")
+	var parsed = _parse_json(text)
+	if not parsed is Dictionary or not BuildingWorld.validate_document(parsed): return invalid_reason.call("invalid building document")
+	result["building_document"] = parsed
+	return true
 
 func _gc() -> void:
 	var candidates := _candidates(); var valid_generations: Array[String] = []
@@ -175,23 +231,23 @@ func _encode(buffer: Object) -> PackedByteArray:
 	if int(buffer.get_channel_depth(PatchGenerator.CHANNEL_TYPE)) != 1:
 		return PackedByteArray()
 	var native_bytes: PackedByteArray = buffer.get_channel_as_byte_array(PatchGenerator.CHANNEL_TYPE)
-	if native_bytes.size() != MAX_PAYLOAD_BYTES:
+	if native_bytes.size() != _payload_bytes():
 		return PackedByteArray()
 	return native_bytes
 
 func _decode(payload: PackedByteArray, schema: int) -> Object:
 	var buffer: Object = ClassDB.instantiate("VoxelBuffer")
 	if buffer == null: return null
-	buffer.create(DIMENSIONS.x, DIMENSIONS.y, DIMENSIONS.z)
-	if schema == SCHEMA and buffer.has_method("set_channel_from_byte_array"):
+	buffer.create(expected_dimensions.x, expected_dimensions.y, expected_dimensions.z)
+	if (schema == SCHEMA or schema == BUILDING_SCHEMA) and buffer.has_method("set_channel_from_byte_array"):
 		buffer.set_channel_depth(PatchGenerator.CHANNEL_TYPE, 1)
 		buffer.set_channel_from_byte_array(PatchGenerator.CHANNEL_TYPE, payload)
 		return buffer
-	if schema == SCHEMA: return null
+	if schema == SCHEMA or schema == BUILDING_SCHEMA: return null
 	var offset := 0
-	for x in DIMENSIONS.x:
-		for y in DIMENSIONS.y:
-			for z in DIMENSIONS.z:
+	for x in expected_dimensions.x:
+		for y in expected_dimensions.y:
+			for z in expected_dimensions.z:
 				buffer.set_voxel(payload.decode_u16(offset), x, y, z, PatchGenerator.CHANNEL_TYPE); offset += 2
 	return buffer
 
@@ -207,6 +263,14 @@ func _is_exact_int(value: Variant, expected: int) -> bool:
 
 func _hash(payload: PackedByteArray) -> String:
 	var c := HashingContext.new(); c.start(HashingContext.HASH_SHA256); c.update(payload); return c.finish().hex_encode()
+
+func _hash_text(value: String) -> String:
+	return _hash(value.to_utf8_buffer())
+
+func _parse_json(text: String):
+	var parser := JSON.new()
+	if parser.parse(text) != OK: return null
+	return parser.data
 
 func _fail(message: String) -> bool:
 	last_error = message; return false

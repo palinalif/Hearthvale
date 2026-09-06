@@ -131,28 +131,107 @@ func _init() -> void:
 	backend.voxels.set_channel_from_byte_array(PatchGenerator.CHANNEL_TYPE, adversarial_base)
 	backend.terrain.get_voxel_tool().paste(Vector3i.ZERO, backend.voxels, 1)
 
-	# A horizontal normal digs an actual wall front, while a remote surface is
-	# left untouched. This guards the normal-oriented volumetric path against
-	# accidentally falling back to a vertical heightmap operation.
+	# A horizontal normal digs an explicit wall ray. Once x8..10 are removed,
+	# the newly exposed void at x7 must stop the front before x0..3.
+	for x in range(0, 21):
+		for y in range(4, 7):
+			for z in range(9, 12): backend.voxels.set_voxel(0, x, y, z, PatchGenerator.CHANNEL_TYPE)
+	for x in range(0, 4): backend.voxels.set_voxel(1, x, 5, 10, PatchGenerator.CHANNEL_TYPE)
+	for x in range(8, 11): backend.voxels.set_voxel(1, x, 5, 10, PatchGenerator.CHANNEL_TYPE)
+	backend.terrain.get_voxel_tool().paste(Vector3i.ZERO, backend.voxels, 1)
 	var wall_base := _bytes(backend)
-	var far_before: int = backend.voxel_at(Vector3i(40, 11, 10))
-	check(backend.begin_stroke("dig", Vector3(10.0, 5.0, 10.0), {"radius": 1.25, "strength": 3.0, "falloff": 0.4, "surface_normal": Vector3(1.0, 0.0, 0.0)}), "begin horizontal wall dig")
-	for _i in 30: backend.update_stroke(Vector3(10.0, 5.0, 10.0), 1.0 / 60.0)
+	var wall_before_full: Object = backend._clone_buffer(backend.voxels)
+	var wall_plane: Dictionary = backend.sample_surface_plane(Vector3(11.0, 5.0, 10.0), Vector3.RIGHT, 3.0)
+	check(bool(wall_plane.get("valid", false)), "centerline wall plane valid")
+	if bool(wall_plane.get("valid", false)):
+		var wall_point: Vector3 = wall_plane["point"]
+		check(absf(wall_point.y - 5.0) <= 0.51 and absf(wall_point.z - 10.0) <= 0.51 and wall_point.x >= 7.0 and wall_point.x <= 12.0, "wall sample stays on cursor line")
+	check(backend.begin_stroke("dig", Vector3(11.0, 5.0, 10.0), {"radius": 1.25, "strength": 4.0, "falloff": 0.4, "surface_normal": Vector3(1.0, 0.0, 0.0)}), "begin horizontal wall dig")
+	for _i in 60: backend.update_stroke(Vector3(11.0, 5.0, 10.0), 1.0 / 60.0)
 	check(backend.end_stroke(), "end horizontal wall dig")
-	check(backend.voxel_at(Vector3i(10, 5, 10)) == 0, "horizontal dig removes wall front")
-	check(backend.voxel_at(Vector3i(40, 11, 10)) == far_before, "horizontal dig remains local")
+	for x in range(8, 11): check(backend.voxel_at(Vector3i(x, 5, 10)) == 0, "horizontal dig removes wall ray")
+	for x in range(0, 4): check(backend.voxel_at(Vector3i(x, 5, 10)) != 0, "horizontal dig stops before solid behind void")
+	for x in range(4, 8): check(backend.voxel_at(Vector3i(x, 5, 10)) == 0, "horizontal dig leaves exposed void")
+	var wall_after_full: Object = backend._clone_buffer(backend.voxels)
+	check(_outside_region_equal(wall_before_full, wall_after_full, Vector3i(7, 4, 9), Vector3i(13, 7, 12)), "horizontal dig changes only its bounded patch")
 	check(backend.undo(), "horizontal wall dig undo")
 	check(_bytes(backend) == wall_base, "horizontal wall dig undo exact")
+	backend.voxels.set_channel_from_byte_array(PatchGenerator.CHANNEL_TYPE, adversarial_base)
+	backend.terrain.get_voxel_tool().paste(Vector3i.ZERO, backend.voxels, 1)
 
-	# A distant floating lump must not become the raise front when the cursor
-	# is working on a nearer connected surface.
+	# A local ground fixture plus a disconnected floating lump proves that the
+	# raise front follows the attached surface and does not jump to y20.
+	for x in range(6, 11):
+		for z in range(6, 11):
+			for y in range(32): backend.voxels.set_voxel(0, x, y, z, PatchGenerator.CHANNEL_TYPE)
+			for y in range(8): backend.voxels.set_voxel(1, x, y, z, PatchGenerator.CHANNEL_TYPE)
 	for y in range(20, 22): backend.voxels.set_voxel(1, 8, y, 8, PatchGenerator.CHANNEL_TYPE)
 	backend.terrain.get_voxel_tool().paste(Vector3i.ZERO, backend.voxels, 1)
-	var floating_before := int(backend.voxel_at(Vector3i(8, 20, 8)))
-	check(backend.begin_stroke("raise", Vector3(8.0, 10.0, 8.0), {"radius": 1.5, "strength": 40.0, "falloff": 0.5}), "begin raise near floating lump")
-	for _i in 30: backend.update_stroke(Vector3(8.0, 10.0, 8.0), 1.0 / 60.0)
-	check(backend.voxel_at(Vector3i(8, 20, 8)) == floating_before, "raise does not jump to distant floating lump")
-	check(backend.cancel_stroke(), "cancel floating lump raise")
+	var floating_base := _bytes(backend)
+	var floating_before_full: Object = backend._clone_buffer(backend.voxels)
+	check(backend.begin_stroke("raise", Vector3(8.0, 8.0, 8.0), {"radius": 1.5, "strength": 4.0, "falloff": 0.5}), "begin raise attached front")
+	for _i in 30: backend.update_stroke(Vector3(8.0, 8.0, 8.0), 1.0 / 60.0)
+	check(backend.end_stroke(), "end raise attached front")
+	check(backend.voxel_at(Vector3i(8, 8, 8)) != 0 and backend.voxel_at(Vector3i(8, 9, 8)) != 0, "raise advances attached front two cells")
+	for y in range(10, 20): check(backend.voxel_at(Vector3i(8, y, 8)) == 0, "raise creates no disconnected cells")
+	check(backend.voxel_at(Vector3i(8, 20, 8)) != 0 and backend.voxel_at(Vector3i(8, 21, 8)) != 0 and backend.voxel_at(Vector3i(8, 22, 8)) == 0, "raise leaves distant lump and air above it")
+	var floating_after_full: Object = backend._clone_buffer(backend.voxels)
+	check(_outside_region_equal(floating_before_full, floating_after_full, Vector3i(6, 7, 6), Vector3i(11, 11, 11)), "raise changes only its bounded patch")
+	check(backend.undo(), "attached front raise undo")
+	check(_bytes(backend) == floating_base, "attached front raise undo exact")
+	backend.voxels.set_channel_from_byte_array(PatchGenerator.CHANNEL_TYPE, adversarial_base)
+	backend.terrain.get_voxel_tool().paste(Vector3i.ZERO, backend.voxels, 1)
+
+	# Construct an incline, capture its center hit and fitted normal, then add a
+	# local bump. Slope moves the bump toward that immutable captured plane.
+	var incline_base := _bytes(backend)
+	for x in range(14, 19):
+		for z in range(14, 19):
+			for y in range(32): backend.voxels.set_voxel(0, x, y, z, PatchGenerator.CHANNEL_TYPE)
+			var top := 8 + (x - 14)
+			for y in range(top): backend.voxels.set_voxel(1, x, y, z, PatchGenerator.CHANNEL_TYPE)
+	backend.terrain.get_voxel_tool().paste(Vector3i.ZERO, backend.voxels, 1)
+	var incline_plane: Dictionary = backend.sample_surface_plane(Vector3(16.0, 10.0, 16.0), Vector3.UP, 3.0)
+	check(bool(incline_plane.get("valid", false)), "constructed incline sample valid")
+	check(incline_plane.get("point", Vector3.ZERO) == Vector3(16.0, 10.0, 16.0), "surface hit keeps exact center point and height")
+	var incline_normal: Vector3 = incline_plane.get("normal", Vector3.UP)
+	check(absf(incline_normal.x) > 0.25, "constructed incline has fitted nonhorizontal normal")
+	for y in range(10, 14): backend.voxels.set_voxel(1, 17, y, 16, PatchGenerator.CHANNEL_TYPE)
+	backend.terrain.get_voxel_tool().paste(Vector3i.ZERO, backend.voxels, 1)
+	var slope_target := float((incline_plane["point"] as Vector3).y) + float(incline_plane.get("slope_x", 0.0))
+	var slope_before_error := absf(backend._column_surface_y(backend.voxels, 17, 16) - slope_target)
+	var slope_fixture_base := _bytes(backend)
+	check(backend.begin_stroke("slope", Vector3(16.0, 10.0, 16.0), {"radius": 3.0, "strength": 40.0, "falloff": 0.6}, incline_plane), "begin incline slope")
+	for _i in 120: backend.update_stroke(Vector3(16.0, 10.0, 16.0), 1.0 / 60.0)
+	check(backend.end_stroke(), "end incline slope")
+	var slope_after_error := absf(backend._column_surface_y(backend.voxels, 17, 16) - slope_target)
+	check(slope_after_error < slope_before_error and backend._column_surface_y(backend.voxels, 17, 16) <= slope_target + 0.5, "slope reduces surface error without overshoot")
+	check(backend.undo(), "incline slope undo")
+	check(_bytes(backend) == slope_fixture_base, "incline slope undo exact")
+	backend.voxels.set_channel_from_byte_array(PatchGenerator.CHANNEL_TYPE, incline_base)
+	backend.terrain.get_voxel_tool().paste(Vector3i.ZERO, backend.voxels, 1)
+
+	# Alternating local surfaces must become less rough under smooth, while the
+	# untouched world remains byte-for-byte unchanged outside the brush patch.
+	var smooth_fixture_base := _bytes(backend)
+	for x in range(14, 19):
+		for z in range(14, 19):
+			for y in range(32): backend.voxels.set_voxel(0, x, y, z, PatchGenerator.CHANNEL_TYPE)
+			var top := 8 if (x + z) % 2 == 0 else 12
+			for y in range(top): backend.voxels.set_voxel(1, x, y, z, PatchGenerator.CHANNEL_TYPE)
+	backend.terrain.get_voxel_tool().paste(Vector3i.ZERO, backend.voxels, 1)
+	var smooth_fixture_base_after_setup := _bytes(backend)
+	var rough_before := _surface_roughness(backend, 15, 17)
+	var smooth_before_full: Object = backend._clone_buffer(backend.voxels)
+	check(backend.begin_stroke("smooth", Vector3(16.0, 10.0, 16.0), {"radius": 3.0, "strength": 40.0, "falloff": 0.5}), "begin roughness smooth")
+	for _i in 120: backend.update_stroke(Vector3(16.0, 10.0, 16.0), 1.0 / 60.0)
+	check(backend.end_stroke(), "end roughness smooth")
+	var rough_after := _surface_roughness(backend, 15, 17)
+	check(rough_after < rough_before, "smooth reduces local surface roughness")
+	var smooth_after_full: Object = backend._clone_buffer(backend.voxels)
+	check(_outside_region_equal(smooth_before_full, smooth_after_full, Vector3i(13, 7, 13), Vector3i(20, 14, 20)), "smooth changes only its bounded patch")
+	check(backend.undo(), "roughness smooth undo")
+	check(_bytes(backend) == smooth_fixture_base_after_setup, "roughness smooth undo exact")
 	backend.voxels.set_channel_from_byte_array(PatchGenerator.CHANNEL_TYPE, adversarial_base)
 	backend.terrain.get_voxel_tool().paste(Vector3i.ZERO, backend.voxels, 1)
 
@@ -194,3 +273,23 @@ func _wait_ready(backend: Node, timeout_ms: int) -> void:
 
 func _bytes(backend: Node) -> PackedByteArray:
 	return backend.voxels.get_channel_as_byte_array(PatchGenerator.CHANNEL_TYPE)
+
+func _outside_region_equal(before: Object, after: Object, region_min: Vector3i, region_max: Vector3i) -> bool:
+	for x in 48:
+		for y in 32:
+			for z in 48:
+				if x >= region_min.x and x < region_max.x and y >= region_min.y and y < region_max.y and z >= region_min.z and z < region_max.z:
+					continue
+				if before.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE) != after.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE):
+					return false
+	return true
+
+func _surface_roughness(backend: Node, min_x: int, max_x: int) -> float:
+	var roughness := 0.0
+	for x in range(min_x, max_x + 1):
+		for z in range(15, 18):
+			var height: float = backend._column_surface_y(backend.voxels, x, z)
+			for neighbour in [Vector2i(x + 1, z), Vector2i(x, z + 1)]:
+				if neighbour.x <= max_x and neighbour.y <= 17:
+					roughness += absf(height - backend._column_surface_y(backend.voxels, neighbour.x, neighbour.y))
+	return roughness

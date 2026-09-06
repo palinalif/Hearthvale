@@ -20,6 +20,10 @@ const CheckpointStore = preload("res://scripts/checkpoint_store.gd")
 
 var terrain: Node
 var voxels: Object
+## Index dimensions remain 48×32×48 for M0. M1 supplies 96×64×96 at
+## half-unit voxels, keeping the authored world bounds at 48×32×48.
+@export var patch_size: Vector3i = PATCH_SIZE
+@export var voxel_scale: float = 1.0
 var initial_generator: Script = PatchGenerator
 var generator_id: String = PatchGenerator.GENERATOR_ID
 var _backend_ready := false
@@ -35,6 +39,8 @@ var _error := ""
 var _dirty := false
 var _checkpoint: RefCounted
 @export var checkpoint_root := ""
+@export var require_building_document := false
+var loaded_building_document: Dictionary = {}
 
 var _stroke_active := false
 var _stroke_tool := ""
@@ -55,17 +61,27 @@ var _stroke_input_center := Vector3.ZERO
 var _current_region_min := Vector3i.ZERO
 
 func _ready() -> void:
+	if voxel_scale <= 0.0 or not is_finite(voxel_scale) or patch_size.x <= 0 or patch_size.y <= 0 or patch_size.z <= 0:
+		_error = "invalid terrain grid configuration"
+		return
 	_checkpoint = CheckpointStore.new(checkpoint_root)
+	_checkpoint.expected_generator_id = generator_id
+	_checkpoint.expected_dimensions = patch_size
+	_checkpoint.require_building_document = require_building_document
 	if not ClassDB.class_exists("VoxelTerrain") or not ClassDB.class_exists("VoxelMesherBlocky"):
 		_error = "Native VoxelTerrain/VoxelMesherBlocky unavailable"
 		return
 	terrain = ClassDB.instantiate("VoxelTerrain")
-	terrain.bounds = AABB(Vector3.ZERO, Vector3(PATCH_SIZE))
+	terrain.bounds = AABB(Vector3.ZERO, Vector3(patch_size))
+	terrain.scale = Vector3.ONE * voxel_scale
 	var generator_script: Script = initial_generator if initial_generator != null else PatchGenerator
 	var mesher: Object = ClassDB.instantiate("VoxelMesherBlocky")
 	mesher.library = generator_script.build_library()
 	terrain.mesher = mesher
-	if generator_script == PatchGenerator and ClassDB.class_exists("VoxelGeneratorFlat"):
+	# The deterministic patch script supplies authoritative voxel contents, but
+	# the native empty generator is still needed to initialize streaming/data
+	# blocks for every generator (including M1 cottage patches).
+	if ClassDB.class_exists("VoxelGeneratorFlat"):
 		var generator: Object = ClassDB.instantiate("VoxelGeneratorFlat")
 		generator.channel = 0
 		generator.height = -1.0
@@ -74,11 +90,11 @@ func _ready() -> void:
 	add_child(terrain)
 	if ClassDB.class_exists("VoxelViewer"):
 		var viewer: Node3D = ClassDB.instantiate("VoxelViewer")
-		viewer.position = CENTER
-		viewer.view_distance = 64
+		viewer.position = _world_size() * 0.5
+		viewer.view_distance = 64.0 / voxel_scale
 		add_child(viewer)
 	voxels = generator_script.generate()
-	var full_area := AABB(Vector3.ZERO, Vector3(PATCH_SIZE))
+	var full_area := AABB(Vector3.ZERO, Vector3(patch_size))
 	var load_deadline := Time.get_ticks_msec() + 15000
 	var tool = terrain.get_voxel_tool()
 	while not tool.is_area_editable(full_area) and Time.get_ticks_msec() < load_deadline:
@@ -98,6 +114,25 @@ func _ready() -> void:
 
 func is_ready() -> bool:
 	return _backend_ready
+
+func world_size() -> Vector3:
+	return _world_size()
+
+func _world_size() -> Vector3:
+	return Vector3(patch_size) * voxel_scale
+
+func _world_to_cell(point: Vector3) -> Vector3:
+	return point / voxel_scale
+
+func _cell_to_world(point: Vector3) -> Vector3:
+	return point * voxel_scale
+
+func _world_radius_to_cells(radius: float) -> float:
+	return radius / voxel_scale
+
+func _world_center_valid(center: Vector3) -> bool:
+	var extent := _world_size()
+	return center.is_finite() and center.x >= 0.0 and center.y >= 0.0 and center.z >= 0.0 and center.x < extent.x and center.y < extent.y and center.z < extent.z
 
 func apply_sphere(center: Vector3, radius: float, remove: bool) -> bool:
 	if _stroke_active:
@@ -141,6 +176,8 @@ func apply_sphere(center: Vector3, radius: float, remove: bool) -> bool:
 	changed.emit()
 	return true
 
+## Public coordinates are world units; returned positions are authoritative
+## native grid cells (the same cells apply_sphere would write).
 func preview_sphere(center: Vector3, radius: float, remove: bool) -> Array[Vector3i]:
 	var simulation := _simulate_sphere(center, radius, remove)
 	if simulation.is_empty():
@@ -150,20 +187,24 @@ func preview_sphere(center: Vector3, radius: float, remove: bool) -> Array[Vecto
 func begin_stroke(tool, center: Vector3, settings: Dictionary, reference_plane: Dictionary = {}) -> bool:
 	if _stroke_active or not _backend_ready or voxels == null or not center.is_finite():
 		return false
+	if not _world_center_valid(center): return false
 	var normalized_tool := _normalize_sculpt_tool(tool)
 	if normalized_tool.is_empty():
 		return false
-	var radius := clampf(float(settings.get("radius", 2.0)), 0.25, 8.0)
+	var radius_world := clampf(float(settings.get("radius", 2.0)), 0.25, 8.0)
+	var radius := _world_radius_to_cells(radius_world)
 	var strength := float(settings.get("strength", 1.0))
 	var falloff := clampf(float(settings.get("falloff", 0.75)), 0.0, 1.0)
 	if not is_finite(radius) or not is_finite(strength) or not is_finite(falloff) or strength <= 0.0:
 		return false
-	if center.x < 0.0 or center.y < 0.0 or center.z < 0.0 or center.x >= PATCH_SIZE.x or center.y >= PATCH_SIZE.y or center.z >= PATCH_SIZE.z:
-		return false
 	var stroke_reference := reference_plane.duplicate(true)
+	if not stroke_reference.is_empty() and stroke_reference.get("point", null) is Vector3:
+		stroke_reference["point"] = _world_to_cell(stroke_reference["point"])
 	if normalized_tool == SCULPT_TOOL_LEVEL or normalized_tool == SCULPT_TOOL_SLOPE:
 		if stroke_reference.is_empty():
-			stroke_reference = sample_surface_plane(center, _settings_normal(settings), radius + 1.0)
+			stroke_reference = sample_surface_plane(center, _settings_normal(settings), radius_world + 1.0)
+			if stroke_reference.get("point", null) is Vector3:
+				stroke_reference["point"] = _world_to_cell(stroke_reference["point"])
 		if not bool(stroke_reference.get("valid", false)):
 			return false
 		var reference_normal = stroke_reference.get("normal", Vector3.UP)
@@ -178,7 +219,9 @@ func begin_stroke(tool, center: Vector3, settings: Dictionary, reference_plane: 
 		normal = Vector3.UP
 	_stroke_active = true
 	_stroke_tool = normalized_tool
-	_stroke_settings = {"radius": radius, "strength": strength, "falloff": falloff, "material": clampi(int(settings.get("material", 2)), 1, 65535)}
+	# Strength is expressed in world units per second; one grid transition is
+	# voxel_scale world units, so the accumulator works in grid-cell units.
+	_stroke_settings = {"radius": radius, "strength": strength / voxel_scale, "falloff": falloff, "material": clampi(int(settings.get("material", 2)), 1, 65535)}
 	_stroke_reference = stroke_reference
 	_stroke_normal = normal.normalized()
 	_stroke_front_axis = _dominant_axis(_stroke_normal)
@@ -191,21 +234,26 @@ func begin_stroke(tool, center: Vector3, settings: Dictionary, reference_plane: 
 	_stroke_fronts.clear()
 	_stroke_segments.clear()
 	_stroke_pending_time = 0.0
-	_stroke_input_center = center
+	_stroke_input_center = _world_to_cell(center)
 	return true
 
 func update_stroke(center: Vector3, delta_seconds: float) -> bool:
 	if not _stroke_active or not center.is_finite() or not is_finite(delta_seconds) or delta_seconds < 0.0:
 		return false
-	var clamped_center := Vector3(clampf(center.x, 0.0, PATCH_SIZE.x - 0.001), clampf(center.y, 0.0, PATCH_SIZE.y - 0.001), clampf(center.z, 0.0, PATCH_SIZE.z - 0.001))
+	if not _world_center_valid(center): return false
+	var cell_center := _world_to_cell(center)
+	var clamped_center := Vector3(clampf(cell_center.x, 0.0, patch_size.x - 0.001), clampf(cell_center.y, 0.0, patch_size.y - 0.001), clampf(cell_center.z, 0.0, patch_size.z - 0.001))
 	_stroke_segments.append({"a": _stroke_input_center, "b": clamped_center, "duration": delta_seconds, "elapsed": 0.0})
 	_stroke_input_center = clamped_center
 	_stroke_pending_time += delta_seconds
+	var started := Time.get_ticks_usec()
 	var changed_before := _stroke_changed_count()
 	while _stroke_pending_time + 0.0000001 >= SCULPT_FIXED_DT:
 		_consume_stroke_time(SCULPT_FIXED_DT)
 		_stroke_pending_time -= SCULPT_FIXED_DT
-	return _stroke_changed_count() != changed_before
+	var changed_now := _stroke_changed_count()
+	_last_edit_ms = (Time.get_ticks_usec() - started) / 1000.0
+	return changed_now != changed_before
 
 func end_stroke() -> bool:
 	if not _stroke_active:
@@ -234,6 +282,7 @@ func end_stroke() -> bool:
 		projected_bytes -= _command_bytes(_undo[0])
 	if projected_bytes > MAX_HISTORY_BYTES:
 		_restore_stroke()
+		_dirty = _stroke_before_dirty
 		_clear_stroke()
 		return false
 	_redo.clear()
@@ -265,21 +314,27 @@ func cancel_stroke() -> bool:
 func sample_surface_plane(center: Vector3, normal: Vector3 = Vector3.UP, radius: float = 3.0) -> Dictionary:
 	if not _backend_ready or voxels == null or not center.is_finite() or not normal.is_finite() or not is_finite(radius) or radius <= 0.0:
 		return {"valid": false, "error": "invalid surface sample"}
+	if not _world_center_valid(center): return {"valid": false, "error": "surface outside terrain bounds"}
 	if normal.length_squared() < 0.000001:
 		return {"valid": false, "error": "surface normal is zero"}
 	var query_normal := normal.normalized()
-	var hit := _find_surface_hit(center, query_normal, clampf(radius, 1.0, 8.0))
+	var cell_center := _world_to_cell(center)
+	var cell_radius := clampf(_world_radius_to_cells(radius), 1.0, 8.0 / voxel_scale)
+	var hit := _find_surface_hit(cell_center, query_normal, cell_radius)
 	if not bool(hit.get("valid", false)):
 		return hit
 	var point: Vector3 = hit["point"]
-	var slope := _fit_surface_slopes(point, clampf(radius, 1.0, 8.0))
+	var slope := _fit_surface_slopes(point, cell_radius) if absf(query_normal.y) >= 0.5 else Vector2.ZERO
 	var fitted_normal := Vector3(-slope.x, 1.0, -slope.y).normalized()
+	if absf(query_normal.y) < 0.5: fitted_normal = query_normal
 	if query_normal.y < -0.5:
 		fitted_normal = -fitted_normal
-	return {"valid": true, "point": point, "normal": fitted_normal, "slope_x": slope.x, "slope_z": slope.y}
+	return {"valid": true, "point": _cell_to_world(point), "normal": fitted_normal, "slope_x": slope.x, "slope_z": slope.y}
 
 func get_stroke_state() -> Dictionary:
-	return {"active": _stroke_active, "tool": _stroke_tool, "reference": _stroke_reference.duplicate(true), "changed_count": _stroke_changed_count(), "front_distance": _stroke_front_distance}
+	var reference := _stroke_reference.duplicate(true)
+	if reference.get("point", null) is Vector3: reference["point"] = _cell_to_world(reference["point"])
+	return {"active": _stroke_active, "tool": _stroke_tool, "reference": reference, "changed_count": _stroke_changed_count(), "front_distance": _stroke_front_distance * voxel_scale}
 
 func undo() -> bool:
 	if _stroke_active or not _backend_ready or _undo.is_empty(): return false
@@ -303,12 +358,12 @@ func redo() -> bool:
 	changed.emit()
 	return true
 
-func save_world() -> bool:
+func save_world(building_document: Dictionary = {}) -> bool:
 	if _stroke_active:
 		_save_status = "error"; _error = "cannot save while a sculpt stroke is active"; return false
 	if not _backend_ready:
 		_save_status = "error"; _error = "backend not ready"; return false
-	var ok: bool = _checkpoint.save(voxels, _revision, generator_id)
+	var ok: bool = _checkpoint.save(voxels, _revision, generator_id, building_document)
 	_save_status = "saved" if ok else "error"
 	if ok: _dirty = false
 	if not ok: _error = _checkpoint.last_error
@@ -319,11 +374,13 @@ func load_world() -> bool:
 		_save_status = "error"; _error = "cannot load while a sculpt stroke is active"; return false
 	if not _backend_ready:
 		_save_status = "error"; _error = "backend not ready"; return false
+	loaded_building_document = {}
 	var loaded = _checkpoint.load()
 	if loaded == null:
 		_save_status = "error"; _error = _checkpoint.last_error; return false
 	var loaded_revision: int = _checkpoint.loaded_revision
 	voxels = loaded
+	loaded_building_document = _checkpoint.loaded_building_document.duplicate(true)
 	terrain.get_voxel_tool().paste(Vector3i.ZERO, voxels, 1)
 	_undo.clear(); _redo.clear(); _history_bytes = 0
 	_revision = loaded_revision
@@ -334,7 +391,7 @@ func load_world() -> bool:
 	return true
 
 func voxel_at(pos: Vector3i) -> int:
-	if not _backend_ready or pos.x < 0 or pos.y < 0 or pos.z < 0 or pos.x >= PATCH_SIZE.x or pos.y >= PATCH_SIZE.y or pos.z >= PATCH_SIZE.z: return 0
+	if not _backend_ready or pos.x < 0 or pos.y < 0 or pos.z < 0 or pos.x >= patch_size.x or pos.y >= patch_size.y or pos.z >= patch_size.z: return 0
 	return int(voxels.get_voxel(pos.x, pos.y, pos.z, PatchGenerator.CHANNEL_TYPE))
 
 func stats() -> Dictionary:
@@ -434,7 +491,7 @@ func _integrate_front_sample(center: Vector3, duration: float) -> void:
 		# One frontier transition per fixed sample keeps the bounded local
 		# buffer valid even at a deliberately high strength setting. Remainder
 		# carries into the next tick, preserving time based integration.
-		if float(_stroke_accumulated[key]) >= 1.0:
+		if float(_stroke_accumulated[key]) + 0.000001 >= 1.0:
 			_stroke_accumulated[key] = float(_stroke_accumulated[key]) - 1.0
 			if _advance_front(local, column):
 				changed = true
@@ -446,7 +503,7 @@ func _integrate_level_sample(center: Vector3, duration: float) -> void:
 	var radius: float = _stroke_settings["radius"]
 	var columns := _vertical_columns(center, radius)
 	var candidates: Array[Dictionary] = []
-	var region_min := Vector3i(PATCH_SIZE.x, PATCH_SIZE.y, PATCH_SIZE.z)
+	var region_min := Vector3i(patch_size.x, patch_size.y, patch_size.z)
 	var region_max := Vector3i.ZERO
 	var exponent := lerpf(1.0, 4.0, float(_stroke_settings["falloff"]))
 	for column in columns:
@@ -468,7 +525,7 @@ func _integrate_level_sample(center: Vector3, duration: float) -> void:
 			desired = 0
 		else:
 			continue
-		if candidate.y < 0 or candidate.y >= PATCH_SIZE.y:
+		if candidate.y < 0 or candidate.y >= patch_size.y:
 			continue
 		candidates.append({"column": column, "position": candidate, "desired": desired, "amount": float(_stroke_settings["strength"]) * duration * pow(maxf(0.0, 1.0 - distance / radius), exponent)})
 		region_min.x = mini(region_min.x, candidate.x); region_min.y = mini(region_min.y, candidate.y); region_min.z = mini(region_min.z, candidate.z)
@@ -487,7 +544,7 @@ func _integrate_level_sample(center: Vector3, duration: float) -> void:
 			continue
 		var key := _stroke_key(position)
 		_stroke_accumulated[key] = float(_stroke_accumulated.get(key, 0.0)) + float(item["amount"])
-		if float(_stroke_accumulated[key]) < 1.0:
+		if float(_stroke_accumulated[key]) + 0.000001 < 1.0:
 			continue
 		_stroke_accumulated[key] = float(_stroke_accumulated[key]) - 1.0
 		_remember_stroke_original(position)
@@ -505,7 +562,7 @@ func _integrate_smooth_sample(center: Vector3, duration: float) -> void:
 		if surface_y >= 0.0:
 			surfaces[_column_key(column)] = surface_y
 	var candidates: Array[Dictionary] = []
-	var region_min := Vector3i(PATCH_SIZE.x, PATCH_SIZE.y, PATCH_SIZE.z)
+	var region_min := Vector3i(patch_size.x, patch_size.y, patch_size.z)
 	var region_max := Vector3i.ZERO
 	for column in columns:
 		var key := _column_key(column)
@@ -533,7 +590,7 @@ func _integrate_smooth_sample(center: Vector3, duration: float) -> void:
 			desired = 0
 		else:
 			continue
-		if candidate.y < 0 or candidate.y >= PATCH_SIZE.y:
+		if candidate.y < 0 or candidate.y >= patch_size.y:
 			continue
 		var distance := Vector2(float(column.x) - center.x, float(column.z) - center.z).length()
 		if distance > radius:
@@ -555,7 +612,7 @@ func _integrate_smooth_sample(center: Vector3, duration: float) -> void:
 			continue
 		var key := _stroke_key(position)
 		_stroke_accumulated[key] = float(_stroke_accumulated.get(key, 0.0)) + float(item["amount"])
-		if float(_stroke_accumulated[key]) < 1.0:
+		if float(_stroke_accumulated[key]) + 0.000001 < 1.0:
 			continue
 		_stroke_accumulated[key] = float(_stroke_accumulated[key]) - 1.0
 		_remember_stroke_original(position)
@@ -567,9 +624,9 @@ func _integrate_smooth_sample(center: Vector3, duration: float) -> void:
 func _vertical_columns(center: Vector3, radius: float) -> Array[Vector3i]:
 	var result: Array[Vector3i] = []
 	var min_x := maxi(0, floori(center.x - radius))
-	var max_x := mini(PATCH_SIZE.x, ceili(center.x + radius) + 1)
+	var max_x := mini(patch_size.x, ceili(center.x + radius) + 1)
 	var min_z := maxi(0, floori(center.z - radius))
-	var max_z := mini(PATCH_SIZE.z, ceili(center.z + radius) + 1)
+	var max_z := mini(patch_size.z, ceili(center.z + radius) + 1)
 	for x in range(min_x, max_x):
 		for z in range(min_z, max_z):
 			if Vector2(float(x) - center.x, float(z) - center.z).length() <= radius:
@@ -582,16 +639,16 @@ func _stroke_columns(center: Vector3, radius: float) -> Array[Vector3i]:
 	var extent := ceili(radius) + 1
 	var center_cell := Vector3i(floori(center.x), floori(center.y), floori(center.z))
 	if axis == 1:
-		for x in range(maxi(0, center_cell.x - extent), mini(PATCH_SIZE.x, center_cell.x + extent + 1)):
-			for z in range(maxi(0, center_cell.z - extent), mini(PATCH_SIZE.z, center_cell.z + extent + 1)):
+		for x in range(maxi(0, center_cell.x - extent), mini(patch_size.x, center_cell.x + extent + 1)):
+			for z in range(maxi(0, center_cell.z - extent), mini(patch_size.z, center_cell.z + extent + 1)):
 				if Vector2(float(x) - center.x, float(z) - center.z).length() <= radius: result.append(Vector3i(x, 0, z))
 	elif axis == 0:
-		for y in range(maxi(0, center_cell.y - extent), mini(PATCH_SIZE.y, center_cell.y + extent + 1)):
-			for z in range(maxi(0, center_cell.z - extent), mini(PATCH_SIZE.z, center_cell.z + extent + 1)):
+		for y in range(maxi(0, center_cell.y - extent), mini(patch_size.y, center_cell.y + extent + 1)):
+			for z in range(maxi(0, center_cell.z - extent), mini(patch_size.z, center_cell.z + extent + 1)):
 				if Vector2(float(y) - center.y, float(z) - center.z).length() <= radius: result.append(Vector3i(0, y, z))
 	else:
-		for x in range(maxi(0, center_cell.x - extent), mini(PATCH_SIZE.x, center_cell.x + extent + 1)):
-			for y in range(maxi(0, center_cell.y - extent), mini(PATCH_SIZE.y, center_cell.y + extent + 1)):
+		for x in range(maxi(0, center_cell.x - extent), mini(patch_size.x, center_cell.x + extent + 1)):
+			for y in range(maxi(0, center_cell.y - extent), mini(patch_size.y, center_cell.y + extent + 1)):
 				if Vector2(float(x) - center.x, float(y) - center.y).length() <= radius: result.append(Vector3i(x, y, 0))
 	return result
 
@@ -612,7 +669,7 @@ func _ensure_front(column: Vector3i, center: Vector3) -> void:
 	var key := _column_key(column)
 	if _stroke_fronts.has(key): return
 	var center_coordinate := floori(center[_stroke_front_axis])
-	var max_coordinate := PATCH_SIZE[_stroke_front_axis]
+	var max_coordinate := patch_size[_stroke_front_axis]
 	var reach := ceili(float(_stroke_settings["radius"])) + 1
 	var found := -1
 	var coordinate := center_coordinate
@@ -647,7 +704,7 @@ func _ensure_front(column: Vector3i, center: Vector3) -> void:
 		_stroke_fronts[key] = found + _stroke_front_sign if _stroke_tool == SCULPT_TOOL_RAISE else found
 
 func _front_region(columns: Array[Vector3i]) -> Array[Vector3i]:
-	var min_pos := Vector3i(PATCH_SIZE.x, PATCH_SIZE.y, PATCH_SIZE.z)
+	var min_pos := Vector3i(patch_size.x, patch_size.y, patch_size.z)
 	var max_pos := Vector3i.ZERO
 	for column in columns:
 		var front := int(_stroke_fronts[_column_key(column)])
@@ -655,15 +712,15 @@ func _front_region(columns: Array[Vector3i]) -> Array[Vector3i]:
 		var adjacent := _column_cell(column, front + _stroke_front_sign)
 		min_pos.x = mini(min_pos.x, mini(cell.x, adjacent.x)); min_pos.y = mini(min_pos.y, mini(cell.y, adjacent.y)); min_pos.z = mini(min_pos.z, mini(cell.z, adjacent.z))
 		max_pos.x = maxi(max_pos.x, maxi(cell.x, adjacent.x) + 1); max_pos.y = maxi(max_pos.y, maxi(cell.y, adjacent.y) + 1); max_pos.z = maxi(max_pos.z, maxi(cell.z, adjacent.z) + 1)
-	min_pos.x = clampi(min_pos.x, 0, PATCH_SIZE.x - 1); min_pos.y = clampi(min_pos.y, 0, PATCH_SIZE.y - 1); min_pos.z = clampi(min_pos.z, 0, PATCH_SIZE.z - 1)
-	max_pos.x = clampi(max_pos.x, min_pos.x + 1, PATCH_SIZE.x); max_pos.y = clampi(max_pos.y, min_pos.y + 1, PATCH_SIZE.y); max_pos.z = clampi(max_pos.z, min_pos.z + 1, PATCH_SIZE.z)
+	min_pos.x = clampi(min_pos.x, 0, patch_size.x - 1); min_pos.y = clampi(min_pos.y, 0, patch_size.y - 1); min_pos.z = clampi(min_pos.z, 0, patch_size.z - 1)
+	max_pos.x = clampi(max_pos.x, min_pos.x + 1, patch_size.x); max_pos.y = clampi(max_pos.y, min_pos.y + 1, patch_size.y); max_pos.z = clampi(max_pos.z, min_pos.z + 1, patch_size.z)
 	return [min_pos, max_pos]
 
 func _advance_front(local: Object, column: Vector3i) -> bool:
 	var key := _column_key(column)
 	var coordinate := int(_stroke_fronts[key])
 	var cell := _column_cell(column, coordinate)
-	if coordinate < 0 or coordinate >= PATCH_SIZE[_stroke_front_axis]:
+	if coordinate < 0 or coordinate >= patch_size[_stroke_front_axis]:
 		return false
 	var local_cell := cell - _current_region_min
 	var current := int(local.get_voxel(local_cell.x, local_cell.y, local_cell.z, PatchGenerator.CHANNEL_TYPE))
@@ -701,7 +758,7 @@ func _sphere_region_for_radius(center: Vector3, radius: float) -> Array[Vector3i
 	var min_pos := Vector3i(floori(center.x - radius), floori(center.y - radius), floori(center.z - radius))
 	var max_pos := Vector3i(ceili(center.x + radius) + 1, ceili(center.y + radius) + 1, ceili(center.z + radius) + 1)
 	min_pos.x = maxi(0, min_pos.x); min_pos.y = maxi(0, min_pos.y); min_pos.z = maxi(0, min_pos.z)
-	max_pos.x = mini(PATCH_SIZE.x, max_pos.x); max_pos.y = mini(PATCH_SIZE.y, max_pos.y); max_pos.z = mini(PATCH_SIZE.z, max_pos.z)
+	max_pos.x = mini(patch_size.x, max_pos.x); max_pos.y = mini(patch_size.y, max_pos.y); max_pos.z = mini(patch_size.z, max_pos.z)
 	return [min_pos, max_pos]
 
 func _clone_region(source: Object, region_min: Vector3i, region_max: Vector3i) -> Object:
@@ -772,42 +829,36 @@ func _stroke_key(position: Vector3i) -> String:
 	return "%d,%d,%d" % [position.x, position.y, position.z]
 
 func _find_surface_hit(center: Vector3, normal: Vector3, radius: float) -> Dictionary:
-	var best_distance := INF
-	var best_point := Vector3.ZERO
 	var horizontal := Vector2(normal.x, normal.z).length()
 	if absf(normal.y) >= horizontal:
 		var center_x := floori(center.x)
 		var center_z := floori(center.z)
 		var surface_y := _surface_y_near(voxels, center_x, center_z, center.y, radius + 1.0) if normal.y >= 0.0 else _column_floor_y(voxels, center_x, center_z)
 		if surface_y >= 0.0 and absf(surface_y - center.y) <= radius + 1.0:
-			best_distance = (surface_y - center.y) * (surface_y - center.y)
-			best_point = Vector3(center.x, surface_y, center.z)
+			return {"valid": true, "point": Vector3(center.x, surface_y, center.z)}
 	else:
-		var axis := 0
-		if absf(normal.y) > absf(normal.x) and absf(normal.y) >= absf(normal.z): axis = 1
-		elif absf(normal.z) > absf(normal.x): axis = 2
+		var axis := _dominant_axis(normal)
 		var direction := 1 if (normal[axis] >= 0.0) else -1
 		var center_cell := Vector3i(floori(center.x), floori(center.y), floori(center.z))
-		var extent := ceili(radius) + 1
-		for x in range(maxi(0, center_cell.x - extent), mini(PATCH_SIZE.x, center_cell.x + extent + 1)):
-			for y in range(maxi(0, center_cell.y - extent), mini(PATCH_SIZE.y, center_cell.y + extent + 1)):
-				for z in range(maxi(0, center_cell.z - extent), mini(PATCH_SIZE.z, center_cell.z + extent + 1)):
-					var cell := Vector3i(x, y, z)
-					if int(voxels.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE)) == 0:
-						continue
-					var neighbour := cell
-					neighbour[axis] += direction
-					if neighbour[axis] < 0 or neighbour[axis] >= PATCH_SIZE[axis] or int(voxels.get_voxel(neighbour.x, neighbour.y, neighbour.z, PatchGenerator.CHANNEL_TYPE)) != 0:
-						continue
-					var candidate := Vector3(cell) + Vector3(0.5, 0.5, 0.5)
-					candidate[axis] = float(cell[axis] + (1 if direction > 0 else 0))
-					var distance := candidate.distance_squared_to(center)
-					if distance <= (radius + 1.0) * (radius + 1.0) and distance < best_distance:
-						best_distance = distance
-						best_point = candidate
-	if best_distance == INF:
-		return {"valid": false, "error": "no nearby surface hit"}
-	return {"valid": true, "point": best_point}
+		var limit := ceili(radius) + 1
+		# Keep the two non-facing coordinates on the exact cursor line. Search
+		# both directions so a cursor in air can still find the nearby wall.
+		for sign in [direction, -direction]:
+			for step in limit + 1:
+				var coordinate: int = center_cell[axis] + int(sign) * step
+				if coordinate < 0 or coordinate >= patch_size[axis]: continue
+				var cell := center_cell
+				cell[axis] = coordinate
+				var neighbour := cell
+				neighbour[axis] += sign
+				if neighbour[axis] < 0 or neighbour[axis] >= patch_size[axis]: continue
+				if int(voxels.get_voxel(cell.x, cell.y, cell.z, PatchGenerator.CHANNEL_TYPE)) == 0: continue
+				if int(voxels.get_voxel(neighbour.x, neighbour.y, neighbour.z, PatchGenerator.CHANNEL_TYPE)) != 0: continue
+				var candidate := Vector3(cell) + Vector3(0.5, 0.5, 0.5)
+				candidate[axis] = float(cell[axis] + (1 if sign > 0 else 0))
+				if candidate.distance_squared_to(center) <= (radius + 1.0) * (radius + 1.0):
+					return {"valid": true, "point": candidate}
+	return {"valid": false, "error": "no nearby surface hit"}
 
 func _fit_surface_slopes(point: Vector3, radius: float) -> Vector2:
 	var center_x := floori(point.x)
@@ -818,8 +869,8 @@ func _fit_surface_slopes(point: Vector3, radius: float) -> Vector2:
 	var zz := 0.0
 	var yx := 0.0
 	var yz := 0.0
-	for x in range(maxi(0, center_x - extent), mini(PATCH_SIZE.x, center_x + extent + 1)):
-		for z in range(maxi(0, center_z - extent), mini(PATCH_SIZE.z, center_z + extent + 1)):
+	for x in range(maxi(0, center_x - extent), mini(patch_size.x, center_x + extent + 1)):
+		for z in range(maxi(0, center_z - extent), mini(patch_size.z, center_z + extent + 1)):
 			var surface_y := _surface_y_near(voxels, x, z, point.y, radius + 1.0)
 			if surface_y < 0.0:
 				continue
@@ -838,25 +889,25 @@ func _fit_surface_slopes(point: Vector3, radius: float) -> Vector2:
 	return Vector2((yx * zz - yz * xz) / determinant, (yz * xx - yx * xz) / determinant)
 
 func _column_surface_y(source: Object, x: int, z: int) -> float:
-	for y in range(PATCH_SIZE.y - 1, -1, -1):
+	for y in range(patch_size.y - 1, -1, -1):
 		if int(source.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE)) != 0:
 			return float(y + 1)
 	return -1.0
 
 func _surface_y_near(source: Object, x: int, z: int, center_y: float, reach: float) -> float:
-	if x < 0 or z < 0 or x >= PATCH_SIZE.x or z >= PATCH_SIZE.z:
+	if x < 0 or z < 0 or x >= patch_size.x or z >= patch_size.z:
 		return -1.0
-	var start := clampi(floori(center_y), 0, PATCH_SIZE.y - 1)
+	var start := clampi(floori(center_y), 0, patch_size.y - 1)
 	var limit := ceili(maxf(reach, 1.0))
 	if int(source.get_voxel(x, start, z, PatchGenerator.CHANNEL_TYPE)) != 0:
 		var top := start
-		while top + 1 < PATCH_SIZE.y and int(source.get_voxel(x, top + 1, z, PatchGenerator.CHANNEL_TYPE)) != 0:
+		while top + 1 < patch_size.y and int(source.get_voxel(x, top + 1, z, PatchGenerator.CHANNEL_TYPE)) != 0:
 			top += 1
 		return float(top + 1)
-	for y in range(start + 1, mini(PATCH_SIZE.y, start + limit + 1)):
+	for y in range(start + 1, mini(patch_size.y, start + limit + 1)):
 		if int(source.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE)) != 0:
 			var top := y
-			while top + 1 < PATCH_SIZE.y and int(source.get_voxel(x, top + 1, z, PatchGenerator.CHANNEL_TYPE)) != 0:
+			while top + 1 < patch_size.y and int(source.get_voxel(x, top + 1, z, PatchGenerator.CHANNEL_TYPE)) != 0:
 				top += 1
 			return float(top + 1)
 	for y in range(start - 1, maxi(-1, start - limit - 1), -1):
@@ -865,7 +916,7 @@ func _surface_y_near(source: Object, x: int, z: int, center_y: float, reach: flo
 	return -1.0
 
 func _column_floor_y(source: Object, x: int, z: int) -> float:
-	for y in PATCH_SIZE.y:
+	for y in patch_size.y:
 		if int(source.get_voxel(x, y, z, PatchGenerator.CHANNEL_TYPE)) != 0:
 			return float(y)
 	return -1.0
@@ -874,15 +925,17 @@ func _sphere_region(center: Vector3, radius: float) -> Array[Vector3i]:
 	var min_pos := Vector3i(floori(center.x - radius), floori(center.y - radius), floori(center.z - radius))
 	var max_pos := Vector3i(ceili(center.x + radius) + 1, ceili(center.y + radius) + 1, ceili(center.z + radius) + 1)
 	min_pos.x = maxi(0, min_pos.x); min_pos.y = maxi(0, min_pos.y); min_pos.z = maxi(0, min_pos.z)
-	max_pos.x = mini(PATCH_SIZE.x, max_pos.x); max_pos.y = mini(PATCH_SIZE.y, max_pos.y); max_pos.z = mini(PATCH_SIZE.z, max_pos.z)
+	max_pos.x = mini(patch_size.x, max_pos.x); max_pos.y = mini(patch_size.y, max_pos.y); max_pos.z = mini(patch_size.z, max_pos.z)
 	return [min_pos, max_pos]
 
 func _simulate_sphere(center: Vector3, radius: float, remove: bool) -> Dictionary:
 	if not _backend_ready or voxels == null or not center.is_finite() or not is_finite(radius) or radius <= 0.0 or radius > 8.0:
 		return {}
-	if center.x < 0.0 or center.y < 0.0 or center.z < 0.0 or center.x >= PATCH_SIZE.x or center.y >= PATCH_SIZE.y or center.z >= PATCH_SIZE.z:
+	if not _world_center_valid(center):
 		return {}
-	var region := _sphere_region(center, radius)
+	var cell_center := _world_to_cell(center)
+	var cell_radius := _world_radius_to_cells(radius)
+	var region := _sphere_region(cell_center, cell_radius)
 	var region_min: Vector3i = region[0]
 	var region_max: Vector3i = region[1]
 	var before_full: Object = _clone_buffer(voxels)
@@ -891,7 +944,7 @@ func _simulate_sphere(center: Vector3, radius: float, remove: bool) -> Dictionar
 	buffer_tool.channel = PatchGenerator.CHANNEL_TYPE
 	buffer_tool.mode = 2
 	buffer_tool.value = 0 if remove else 2
-	buffer_tool.do_sphere(center, radius)
+	buffer_tool.do_sphere(cell_center, cell_radius)
 	var changed: Array[Vector3i] = []
 	for x in range(region_min.x, region_max.x):
 		for y in range(region_min.y, region_max.y):
@@ -902,7 +955,7 @@ func _simulate_sphere(center: Vector3, radius: float, remove: bool) -> Dictionar
 
 func _clone_buffer(source: Object) -> Object:
 	var copy: Object = ClassDB.instantiate("VoxelBuffer")
-	copy.create(PATCH_SIZE.x, PATCH_SIZE.y, PATCH_SIZE.z)
+	copy.create(patch_size.x, patch_size.y, patch_size.z)
 	copy.copy_channel_from(source, PatchGenerator.CHANNEL_TYPE)
 	return copy
 
