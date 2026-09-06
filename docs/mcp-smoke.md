@@ -25,3 +25,5 @@ The full MCP acceptance check is therefore **partial/failed**, not passed. Creat
 The MCP protocol initialization reports `serverInfo.version=3.4.7`, the FastMCP framework version; the Godot session and `godot-ai --version` report the actual bridge package version 3.2.5.
 
 Local raw evidence: `reports/logs/mcp-smoke.jsonl`, editor/restart logs, generated-command log, and `mcp-stdio-check.log`. These logs may include local paths and are excluded from source control. This bridge check does not establish any Thor testing.
+
+During M1 review, the pinned local `handlers/script_handler.gd` was inspected again. `_refresh_loaded_gdscript` assigns and reloads the cached GDScript resource; it does not explicitly replace an open editor text buffer. This is consistent with the observed persistence failure, but source inspection is not a new smoke pass. The bridge remains pinned and isolated; the failed overwrite check remains open while game integration uses command-line tools.

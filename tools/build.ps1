@@ -46,7 +46,7 @@ function Export-AndroidCompatibility {
     try {
         [IO.File]::WriteAllBytes($projectPath, $temporaryBytes)
         $mutated = $true
-        Export-Target 'debug' 'Android ARM64 Compatibility' 'builds/hearthvale-m0-compatibility.apk'
+        Export-Target 'debug' 'Android ARM64 Compatibility' 'builds/hearthvale-m1-compatibility.apk'
     } finally {
         if ($mutated) {
             $currentBytes = [IO.File]::ReadAllBytes($projectPath)
@@ -72,8 +72,8 @@ if ([string]::IsNullOrWhiteSpace($savedRelease['GODOT_ANDROID_KEYSTORE_RELEASE_P
 }
 try {
     if (-not $CompatibilityOnly) {
-        Export-Target 'debug' 'Android ARM64' 'builds/hearthvale-m0-debug.apk'
-        Export-Target 'release' 'Android ARM64' 'builds/hearthvale-m0-release.apk'
+        Export-Target 'debug' 'Android ARM64' 'builds/hearthvale-m1-debug.apk'
+        Export-Target 'release' 'Android ARM64' 'builds/hearthvale-m1-release.apk'
     }
     if ($Compatibility -or $CompatibilityOnly) { Export-AndroidCompatibility }
 } finally {
@@ -81,9 +81,9 @@ try {
 }
 if ($Windows) {
     if (-not $CompatibilityOnly) {
-        Export-Target 'debug' 'Windows' 'builds/hearthvale-m0-debug.exe'
-        Export-Target 'release' 'Windows' 'builds/hearthvale-m0-release.exe'
+        Export-Target 'debug' 'Windows' 'builds/hearthvale-m1-debug.exe'
+        Export-Target 'release' 'Windows' 'builds/hearthvale-m1-release.exe'
     }
-    if ($Compatibility -or $CompatibilityOnly) { Export-Target 'release' 'Windows Compatibility' 'builds/hearthvale-m0-compatibility.exe' }
+    if ($Compatibility -or $CompatibilityOnly) { Export-Target 'release' 'Windows Compatibility' 'builds/hearthvale-m1-compatibility.exe' }
 }
 "build ok mobile=$(-not $CompatibilityOnly) compatibility=$($Compatibility -or $CompatibilityOnly) windows=$Windows" | Tee-Object -FilePath (Join-Path $Logs 'build-summary.log')

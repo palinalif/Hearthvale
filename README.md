@@ -2,11 +2,13 @@
 
 **Working title. Design draft 0.1, 6 September 2026.**
 
-This repository began as a planning package for a personal cozy voxel town-builder on AYN Thor Max. It now contains the M0 Godot project. M0 remains subject to its evidence gate and player review; desktop tests and exported APKs do not establish physical Thor results.
+This repository began as a planning package for a personal cozy voxel town-builder on AYN Thor Max. It now contains the Godot project, the retained M0 platform scene, and an M1 build ready for physical playtest. M0 remains subject to its evidence gate and player review; desktop tests and exported APKs do not establish physical Thor results.
+
+M1 artifacts, exact verification results, screenshots and remaining checks are recorded in [the M1 handoff](reports/M1-editable-cottage.md).
 
 ## Start here
 
-Read `AGENTS.md`, then `docs/design.md`, then the authoritative `tasks/M1-editable-cottage.md`. The player has authorized M1 implementation: one editable procedural cottage with a modest visual checkpoint. M0 evidence gaps remain open; see `reports/M0-platform-spike.md` and `reports/M0-placement-followup.md`. Existing build instructions and Thor routes remain in `docs/build-and-test.md` and `docs/thor-playtest.md`.
+Read `AGENTS.md`, then `docs/design.md`, then both authoritative M1 tickets: `tasks/M1-editable-cottage.md` and `tasks/M1-terrain-sculpting.md`. The player has authorized one editable procedural cottage, continuous volumetric sculpting and a modest visual checkpoint. Build instructions are in `docs/build-and-test.md`; M1 controls and physical checks are in `docs/M1-controller-and-review.md` and `docs/M1-thor-playtest.md`. M0 evidence gaps remain open in `reports/M0-platform-spike.md`, `reports/M0-placement-followup.md` and `docs/thor-playtest.md`.
 
 The pinned bundle is official Godot 4.7.2 with matching export templates and Voxel Tools GDExtension v1.7x. Exact origins, commits, and hashes are in `dependencies.lock.json`. The Godot AI 3.2.5 MCP sandbox is development-only under `dev/mcp`.
 

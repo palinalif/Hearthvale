@@ -10,13 +10,13 @@ Preserve left-stick fine movement, right-stick orbit, triggers zoom, LB/RB undo/
 
 Terrain defaults to continuous sculpting. A press begins, holding applies time-based influence, and release finishes one transaction. B during a stroke restores the entire pre-stroke terrain. Pause, disconnect and focus loss cancel uncommitted work and require release followed by a fresh press. Keep the target stable through excavation.
 
-X opens controller-focused tools/settings: raise, dig, horizontal level, slope level, smooth, optional stamp; radius, strength, falloff, keep reference, resample, and optional height snap. D-pad brush size/height remains available in the world. Show a subtle footprint and faint influence volume, clearly distinct from the optional stamp's exact changed-cell ghost. Flatten tools show their fixed reference plane and height. Sampling must use the centre terrain hit; no hit is a visible unavailable state, not an invented plane.
+X opens the scrollable tools/settings menu: raise, dig, horizontal level, slope level and smooth; radius, strength, falloff, keep reference, resample, and optional height snap. D-pad up/down changes cursor height; adjust radius in the menu. Ground, wall and ceiling references support raise/dig; level, slope and smooth use ground references to extend pads and banks. The faint influence volume is distinct from the exact changed-cell ghost retained in the separate M0 stamping scene. Flatten tools show their fixed reference plane and height. Sampling uses the centre terrain hit; no hit is an unavailable state, not an invented plane.
 
 ## Cottage
 
-Select/cycle the cottage, select a width/depth/height handle, preview a snapped constrained resize, A commit or B cancel. L3 precision changes the displayed increment. Orbit and zoom stay available while inspecting a preview.
+D-pad left/right cycles cottages. A begins resizing; D-pad left/right chooses width/depth, the left stick changes that axis, and D-pad up/down changes height. A commits and B cancels. L3 changes the increment from 1 to 0.25 world units. Visible handles identify the three dimensions. Orbit and zoom stay available while inspecting a preview.
 
-X opens details/actions: controller selection of generated, manual, suppressed and needs-placement records; move in the supporting plane; replace; suppress/restore; add a flower box; reattach unsupported detail to a valid surface; change material; duplicate the same cottage. The recovery list must remain reachable after shrinking or deleting support. An invalid preview must explain why it cannot be committed.
+X opens details/actions. D-pad left/right cycles generated, manual, suppressed and needs-placement records; up/down selects actions. Move in the supporting wall plane; replace; suppress/restore; add a flower box; choose another surviving wall with Support next/previous and reattach; change material; duplicate the same cottage. The recovery list remains reachable after shrinking or deleting support. The M1 detail set contains windows and flower boxes; it does not add roof-mounted decorations.
 
 ## Required controller playtest
 

@@ -27,6 +27,8 @@ The current native terrain uses a 16-bit TYPE channel and blocky meshing. Native
 
 Extend the existing complete-generation checkpoint publication to include the bounded cottage document in the same published generation as terrain. Validate both before publication and during recovery. Preserve the old M0 reader and data; use a separate M1 checkpoint root and test cold restart and corrupt/interrupted newest-generation fallback. Do not introduce a second independently published building save that could disagree with terrain.
 
+Terrain and building revisions count their respective edits independently; equal numeric revisions are not required. Consistency means one synchronous snapshot of both current authoritative states, verified and published by one generation manifest. The M1 reader must reject terrain-only generations, while the M0 reader retains its legacy compatibility.
+
 For the bounded visual experiment, use 96 × 64 × 96 native cells at 0.5 world units per cell, retaining the same 48 × 32 × 48 world-unit footprint. This doubles terrain resolution on every axis without expanding the world. M0 retains its original 48 × 32 × 48 grid and scale, scene and checkpoint root. M1's combined checkpoint validates the larger dimensions explicitly. Sculpt APIs use world coordinates; native buffer indices use cell coordinates. Fine building/vegetation geometry has its own smaller step size. This is a candidate for visual and performance review, not a final terrain-grid decision. Physical Thor measurements and player visual review remain required before locking it.
 
 ## Integration checks

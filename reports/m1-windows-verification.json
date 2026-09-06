@@ -1,0 +1,23 @@
+[
+  {
+    "variant": "debug",
+    "exit_code": 0,
+    "errors": false,
+    "output": "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\r\nVulkan 1.4.325 - Forward Mobile - Using Device #0: NVIDIA - NVIDIA GeForce RTX 3070\r\nRequested V-Sync mode: Disabled\r\n\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\n",
+    "scope": "600-frame idle desktop exported-runtime smoke; not a Thor or sculpt performance benchmark"
+  },
+  {
+    "variant": "release",
+    "exit_code": 0,
+    "errors": false,
+    "output": "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\r\nVulkan 1.4.325 - Forward Mobile - Using Device #0: NVIDIA - NVIDIA GeForce RTX 3070\r\nRequested V-Sync mode: Disabled\r\n\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\n",
+    "scope": "600-frame idle desktop exported-runtime smoke; not a Thor or sculpt performance benchmark"
+  },
+  {
+    "variant": "compatibility",
+    "exit_code": 0,
+    "errors": false,
+    "output": "Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org\r\nRequested V-Sync mode: Disabled\r\nOpenGL API 3.3.0 NVIDIA 591.86 - Compatibility - Using Device: NVIDIA - NVIDIA GeForce RTX 3070\r\n\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\nProject FPS: 60 (16.66 mspf)\r\n",
+    "scope": "600-frame idle desktop exported-runtime smoke; not a Thor or sculpt performance benchmark"
+  }
+]
