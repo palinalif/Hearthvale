@@ -69,3 +69,8 @@ The present visuals are explicitly NOT accepted. Automated passes do not constit
 Report changed files and design effects; commands and tests actually run; precise dependency versions; known failures; desktop versus Thor results; and relevant screenshots/logs. Provide the APK and reproducible build steps when device work has really been completed. Unavailable device checks must be marked **not run**, not passed.
 
 No unsupported claims about 60 fps, memory safety, functioning undo, full controller support, or MCP connectivity. A successful script parse is one check, not a completed feature.
+
+
+## Explicit Luna tree-variation trial
+
+The player explicitly authorizes Luna to implement a small tree-variation experiment. This is a bounded exception to the Astra-owned M1 rework, not restoration of mandatory Luna delegation. Use gpt-5.6-luna/high, verify a read-only delegation first, and retain lead review of images and tests. Own new files under dev/tree_variations and its dedicated test captures only; do not change the live game, saves, shared project settings, dependencies or playtest APK. Produce three variations with one fixed world-space cubic cell size across their foliage, trunks and branches; larger silhouettes use more cells. Inspect the selected rulebook images and render/revise the actual Godot Mobile review scene. This trial does not select the final global numeric voxel unit or claim the existing cottage is already normalized.

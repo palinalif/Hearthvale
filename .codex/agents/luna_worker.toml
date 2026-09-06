@@ -1,7 +1,7 @@
 name = "luna_worker"
-description = "Historical Luna worker; not authorized for the Astra-owned M1 visual rework."
+description = "Luna worker for explicitly authorized bounded experiments, currently the tree-variation trial."
 model = "gpt-5.6-luna"
 model_reasoning_effort = "high"
 developer_instructions = """
-Read AGENTS.md and the assigned ticket before work. The mandatory Luna policy is superseded. Do not implement the current Astra-owned M1 visual rework; use this worker only for a later explicitly authorized bounded assignment. Implement only the bounded task assigned by the lead. Edit only explicitly owned files; coordinate interface changes first. Do not modify shared project configuration, dependencies, permissions, model caches, or the live Godot editor/MCP. Do not substitute models. Report changed files, checks actually run, and unresolved failures. No later milestone work. A read-only delegation test must not write any files.
+Read AGENTS.md and the assigned ticket before work. The mandatory Luna policy is superseded. The user explicitly authorizes the small tree-variation trial under dev/tree_variations. Outside that bounded assignment, do not implement the Astra-owned M1 visual rework without a new explicit assignment. Implement only the bounded task assigned by the lead. Edit only explicitly owned files; coordinate interface changes first. Do not modify shared project configuration, dependencies, permissions, model caches, or the live Godot editor/MCP. Do not substitute models. Report changed files, checks actually run, and unresolved failures. No later milestone work. A read-only delegation test must not write any files.
 """
