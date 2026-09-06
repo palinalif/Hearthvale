@@ -8,6 +8,9 @@ const BuildingWorldScript = preload("res://scripts/building_world.gd")
 const CottageVisualScript = preload("res://scripts/cottage_visual.gd")
 const BrushPreviewScript = preload("res://scripts/brush_preview.gd")
 const CursorReticleScript = preload("res://scripts/m1_cursor_reticle.gd")
+const LandscapeScript = preload("res://scripts/landscape_state.gd")
+const Grid = preload("res://scripts/visual_grid.gd")
+
 const GardenVisualScript = preload("res://scripts/m1_garden_visual.gd")
 
 @export var checkpoint_root := "user://m1_checkpoints"
@@ -28,8 +31,8 @@ var camera_yaw := -1.1
 var camera_pitch := 0.66
 var camera_distance := 36.0
 var brush_radius := 2.0
-var brush_strength := 1.5
-var brush_falloff := 0.75
+var brush_strength := 6.0
+var brush_falloff := 0.45
 var height_snap_enabled := false
 var reference_mode := "ground"
 var sculpt_tool := "raise"
@@ -56,6 +59,7 @@ var stroke_surface_normal := Vector3.UP
 var stroke_aim_offset := Vector3.ZERO
 var keep_reference := false
 var status_text := "Loading cottage…"
+var last_frame_costs: Dictionary = {}
 var _last_focus := true
 var _shutting_down := false
 var _pause_buttons: Dictionary = {}
@@ -85,11 +89,20 @@ var reference_plane: MeshInstance3D
 var terrain_hit_marker: MeshInstance3D
 var cursor_reticle: Node3D
 var garden_visual: Node3D
+var landscape_state := LandscapeScript.new()
+var landscape_active := false
+var _landscape_before: Dictionary = {}
+var _landscape_history: Array[Dictionary] = []
+var _landscape_redo: Array[Dictionary] = []
+var _plant_elapsed := 0.0
+var _plant_last := Vector3.INF
+var _plant_sequence := 0
+
 var _terrain_target_valid := false
 var _terrain_target_point := Vector3.ZERO
 var _terrain_target_normal := Vector3.UP
-var _terrain_action_labels: Array[String] = ["Raise", "Dig", "Level", "Slope", "Smooth", "Radius +", "Radius -", "Strength +", "Strength -", "Falloff +", "Falloff -", "Height snap: off", "Reference: ground", "Reference: wall", "Reference: ceiling", "Resample reference", "Keep reference"]
-var _cottage_action_labels: Array[String] = ["Move selected window", "Support: next", "Support: previous", "Replace selected", "Suppress / restore", "Reattach selected", "Add flower box", "Delete selected surface", "Material: warm plaster", "Miniature scale", "Duplicate cottage", "Close"]
+var _terrain_action_labels: Array[String] = ["Raise", "Dig", "Level", "Slope", "Smooth", "Foliage brush", "Tree brush", "Clear planting", "Radius +", "Radius -", "Strength +", "Strength -", "Falloff +", "Falloff -", "Height snap: off", "Reference: ground", "Reference: wall", "Reference: ceiling", "Resample reference", "Keep reference"]
+var _cottage_action_labels: Array[String] = ["Move selected window", "Support: next", "Support: previous", "Replace selected", "Suppress / restore", "Reattach selected", "Add flower box", "Add shutter", "Delete selected surface", "Material: warm plaster", "Miniature scale", "Duplicate cottage", "Close"]
 
 func _ready() -> void:
 	get_window().title = "Hearthvale — M1"
@@ -110,17 +123,22 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	if _shutting_down: return
-	if stroke_active and (menu_open or tools_open or detail_open or _restoring):
+	if (stroke_active or landscape_active) and (menu_open or tools_open or detail_open or _restoring):
 		_cancel_current_edit("Sculpting cancelled")
 	if not menu_open and not tools_open and not detail_open:
 		_read_camera_and_cursor(delta)
 	if detail_move_active and not menu_open and not tools_open and not detail_open:
 		_read_detail_move(delta)
+	var phase_started := Time.get_ticks_usec()
 	if stroke_active and backend and backend.has_method("update_stroke"):
 		backend.update_stroke(cursor + stroke_aim_offset, delta)
+	last_frame_costs["sculpt_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	if landscape_active: _update_plant_stroke(delta)
 	_update_camera()
+	phase_started = Time.get_ticks_usec()
 	_update_brush_preview()
 	_update_cursor_reticle()
+	last_frame_costs["preview_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
 	_update_presentation()
 	_update_debug_overlay()
 	var focused := get_window().has_focus()
@@ -186,11 +204,14 @@ func _input(event: InputEvent) -> void:
 			_cancel_current_edit("Stroke cancelled")
 			get_viewport().set_input_as_handled()
 		elif event.is_action_pressed("m1_accept"):
-			if _terrain_target_valid: _begin_stroke()
+			if _terrain_target_valid:
+				if sculpt_tool in ["foliage", "tree", "clear_planting"]: _begin_plant_stroke()
+				else: _begin_stroke()
 			else: _set_status("No terrain target under cursor")
 			get_viewport().set_input_as_handled()
 		elif event.is_action_released("m1_accept"):
-			_end_stroke()
+			if landscape_active: _end_plant_stroke()
+			else: _end_stroke()
 			get_viewport().set_input_as_handled()
 	else:
 		if event.is_action_pressed("m1_accept"):
@@ -273,10 +294,9 @@ func _build_world() -> void:
 	cottage_visual = CottageVisualScript.new(); cottage_visual.name = "CottageVisual"; add_child(cottage_visual); cottage_visuals[BUILDING_ID] = cottage_visual
 	brush_preview = BrushPreviewScript.new()
 	brush_preview.name = "BrushPreview"
-	# BrushPreview geometry is expressed in native cells.  M1's native grid is
-	# twice the authored world resolution, so transform its geometry back to
-	# world units at the scene boundary.
-	brush_preview.scale = Vector3.ONE * 0.5
+	# BrushPreview geometry is expressed in native cells; map it to the same
+	# world-space voxel edge as the terrain and authored visual details.
+	brush_preview.scale = Vector3.ONE * M1PatchGenerator.VOXEL_SCALE
 	brush_preview.visible = false
 	add_child(brush_preview)
 	reference_plane = MeshInstance3D.new()
@@ -302,10 +322,9 @@ func _create_backend() -> void:
 	backend.set("initial_generator", M1PatchGenerator)
 	backend.set("generator_id", M1PatchGenerator.GENERATOR_ID)
 	backend.set("require_building_document", true)
-	# M1 keeps the authored 48x32x48 world in world units while using twice
-	# the native sample density for finer terrain and sculpting.
-	backend.set("patch_size", Vector3i(96, 64, 96))
-	backend.set("voxel_scale", 0.5)
+	# Keep the same world bounds; native grid and asset cells share one edge.
+	backend.set("patch_size", M1PatchGenerator.PATCH_SIZE)
+	backend.set("voxel_scale", M1PatchGenerator.VOXEL_SCALE)
 	add_child(backend)
 	if garden_visual and garden_visual.has_method("attach_backend"):
 		garden_visual.attach_backend(backend)
@@ -331,7 +350,7 @@ func _update_brush_preview() -> void:
 	var snapped_center := Vector3(snappedf(target_center.x, scale_value), snappedf(target_center.y, scale_value), snappedf(target_center.z, scale_value))
 	var remove := sculpt_tool == "dig"
 	var preview_normal := _active_reference_normal()
-	var sample_center := cursor + stroke_aim_offset if stroke_active else target_center
+	var sample_center: Vector3 = backend.get_stroke_preview_center(cursor + stroke_aim_offset) if stroke_active else target_center
 	var sample_normal := stroke_surface_normal if stroke_active else preview_normal
 	var surface_sample: Dictionary = backend.sample_surface_plane(sample_center, sample_normal, brush_radius + 1.0) if backend.has_method("sample_surface_plane") else {}
 	var display_center: Vector3 = target_center
@@ -400,10 +419,19 @@ func _find_local_surface(center: Vector3, normal: Vector3, scale_value: float) -
 	var best_cell := Vector3i.ZERO
 	var best_face := Vector3i.UP
 	var patch: Vector3i = backend.get("patch_size") if backend.get("patch_size") is Vector3i else Vector3i(96, 64, 96)
-	var min_y: int = maxi(0, base.y - 16)
-	var max_y: int = mini(patch.y - 1, base.y + 16)
-	for x in range(maxi(0, base.x - radius), mini(patch.x - 1, base.x + radius) + 1):
-		for z in range(maxi(0, base.z - radius), mini(patch.z - 1, base.z + radius) + 1):
+	# Preserve the previous eight-world-unit recovery reach after refinement.
+	var vertical_reach := ceili(8.0 / scale_value)
+	var min_y: int = maxi(0, base.y - vertical_reach)
+	var max_y: int = mini(patch.y - 1, base.y + vertical_reach)
+	# Recovery when the direct surface probe misses: seven columns per axis,
+	# including the exact centre, rather than a radius-cubed search every frame.
+	var stride := maxi(1, ceili(radius / 3.0))
+	for dx in [0, -stride, stride, -2 * stride, 2 * stride, -radius, radius]:
+		var x: int = base.x + int(dx)
+		if x < 0 or x >= patch.x: continue
+		for dz in [0, -stride, stride, -2 * stride, 2 * stride, -radius, radius]:
+			var z: int = base.z + int(dz)
+			if z < 0 or z >= patch.z: continue
 			for y in range(min_y, max_y + 1):
 				var cell := Vector3i(x, y, z)
 				if backend.voxel_at(cell) == 0:
@@ -459,23 +487,27 @@ func _find_local_surface(center: Vector3, normal: Vector3, scale_value: float) -
 	return result
 
 func _build_influence_cells(center: Vector3, native_radius: float, remove: bool, scale_value: float) -> Array[Vector3i]:
+	# A sparse surface highlight accompanies the full influence outline. Keep
+	# target feedback bounded as native resolution increases; do not scan a cube.
 	var result: Array[Vector3i] = []
 	if not backend or not backend.has_method("voxel_at"): return result
-	var native_center := center / scale_value
-	var extent := ceili(native_radius + 1.0)
-	var base := Vector3i(floori(native_center.x), floori(native_center.y), floori(native_center.z))
-	for x in range(base.x - extent, base.x + extent + 1):
-		for y in range(base.y - extent, base.y + extent + 1):
-			for z in range(base.z - extent, base.z + extent + 1):
-				var cell := Vector3i(x, y, z)
-				if Vector3(cell).distance_to(native_center) > native_radius + 0.9: continue
-				var solid: bool = backend.voxel_at(cell) != 0
-				var exposed := false
-				for neighbor in [Vector3i.LEFT, Vector3i.RIGHT, Vector3i.DOWN, Vector3i.UP, Vector3i.FORWARD, Vector3i.BACK]:
-					if (backend.voxel_at(cell + neighbor) != 0) != solid:
-						exposed = true
-						break
-				if (remove and solid or not remove and not solid) and exposed: result.append(cell)
+	var base := Vector3i(floor(center / scale_value))
+	var normal := _active_reference_normal()
+	var axis := normal.abs().max_axis_index()
+	var tangent_a := (axis + 1) % 3; var tangent_b := (axis + 2) % 3
+	var direction := Vector3i.ZERO; direction[axis] = 1 if normal[axis] >= 0 else -1
+	# Show exact cells at the aim point; the ghost carries the full brush radius.
+	for a in range(-1, 2):
+		for b in range(-1, 2):
+			if Vector2(a, b).length() > native_radius: continue
+			var cell := base; cell[tangent_a] += a; cell[tangent_b] += b
+			var found := false
+			for depth in range(3):
+				for sign_value in [1, -1]:
+					var candidate: Vector3i = cell + direction * depth * sign_value
+					if backend.voxel_at(candidate) != 0 and backend.voxel_at(candidate + direction) == 0:
+						result.append(candidate if remove else candidate + direction); found = true; break
+				if found: break
 	return result
 
 func _update_reference_guides(center: Vector3, sample_override: Dictionary = {}) -> void:
@@ -505,7 +537,7 @@ func _on_backend_ready(ready: bool) -> void:
 	var loaded_ok: bool = backend.load_world() if backend.has_method("load_world") else false
 	if loaded_ok:
 		var loaded_document: Dictionary = backend.get("loaded_building_document")
-		if loaded_document.is_empty() or not BuildingWorldScript.validate_document(loaded_document) or not building_world.load_document(loaded_document):
+		if loaded_document.is_empty() or not BuildingWorldScript.validate_document(loaded_document) or not _load_cottage_document(loaded_document):
 			_restoring = false
 			_set_menu(true)
 			_set_status("Checkpoint cottage design is invalid; reload blocked")
@@ -519,6 +551,7 @@ func _on_backend_ready(ready: bool) -> void:
 			_set_menu(true)
 			_set_status("Checkpoint load failed; reload blocked")
 		else: _set_status("Cottage and riverbank ready")
+	_restore_landscape(backend.get("loaded_building_document") if loaded_ok else {})
 	_player_restored = true
 	_restoring = false
 	if _review_edited:
@@ -548,7 +581,7 @@ func _apply_review_args() -> void:
 			"--review-close":
 				view_context = "building"
 				cursor = cottage_cursor
-				camera_distance = 26.0
+				camera_distance = 16.0
 			"--review-cottage":
 				view_context = "building"
 				cursor = cottage_cursor
@@ -610,7 +643,7 @@ func _read_camera_and_cursor(delta: float) -> void:
 			if not detail_move_active:
 				var speed := lerpf(2.5, 10.0, pow(magnitude, 0.85)); if precision_mode: speed *= 0.35
 				var forward := Vector3(sin(camera_yaw), 0, cos(camera_yaw)); var right := Vector3(forward.z, 0, -forward.x); cursor += (right * move.x + forward * move.y) * delta * speed; cursor.x = clampf(cursor.x, 0.5, 47.5); cursor.z = clampf(cursor.z, 0.5, 47.5)
-	var orbit_x := Input.get_axis("m1_orbit_left", "m1_orbit_right"); var orbit_y := Input.get_axis("m1_orbit_up", "m1_orbit_down"); camera_yaw += orbit_x * delta * 2.2; camera_pitch = clampf(camera_pitch + orbit_y * delta * 1.5, 0.15, 1.25); var zoom := Input.get_axis("m1_zoom_out", "m1_zoom_in"); camera_distance = clampf(camera_distance - zoom * delta * 18.0, 12, 52)
+	var orbit_x := Input.get_axis("m1_orbit_left", "m1_orbit_right"); var orbit_y := Input.get_axis("m1_orbit_up", "m1_orbit_down"); camera_yaw += orbit_x * delta * 2.2; camera_pitch = clampf(camera_pitch + orbit_y * delta * 1.5, 0.15, 1.25); var zoom := Input.get_axis("m1_zoom_out", "m1_zoom_in"); camera_distance = clampf(camera_distance - zoom * delta * 18.0, 8, 52)
 	if not detail_move_active and not resize_active and Input.is_action_just_pressed("m1_height_up"): cursor.y = clampf(cursor.y + 1.0, 0.0, 31.0)
 	if not detail_move_active and not resize_active and Input.is_action_just_pressed("m1_height_down"): cursor.y = clampf(cursor.y - 1.0, 0.0, 31.0)
 	if Input.is_action_just_pressed("m1_focus"):
@@ -731,8 +764,10 @@ func _begin_stroke() -> void:
 		if keep_reference and not stroke_reference.is_empty(): reference = stroke_reference.duplicate(true)
 		else: reference = backend.sample_surface_plane(stroke_center, _reference_normal(), brush_radius + 1.0)
 		reference = _snap_reference(reference)
+		if sculpt_tool == "level" and not reference.is_empty(): reference["normal"] = Vector3.UP
 	var facing := _reference_normal()
-	var settings := {"radius": brush_radius, "strength": brush_strength, "falloff": brush_falloff, "surface_normal": facing}
+	var settings := {"radius": brush_radius, "strength": brush_strength * (0.25 if precision_mode else 1.0), "falloff": brush_falloff, "surface_normal": facing}
+	_landscape_before = landscape_state.document()
 	if backend.begin_stroke(sculpt_tool, stroke_center, settings, reference):
 		stroke_active = true; stroke_reference = reference; stroke_surface_normal = facing; _set_status("Sculpting %s… release A to finish" % sculpt_tool)
 
@@ -751,7 +786,17 @@ func _snap_reference(reference: Dictionary) -> Dictionary:
 
 func _end_stroke() -> void:
 	if not stroke_active: return
-	var ok: bool = backend.end_stroke() if backend and backend.has_method("end_stroke") else false; stroke_active = false; stroke_aim_offset = Vector3.ZERO; if ok: _record_history("terrain"); _set_status("Stroke committed" if ok else "Stroke unchanged")
+	var final_target: Vector3 = backend.get_stroke_preview_center(cursor + stroke_aim_offset)
+	var ok: bool = backend.end_stroke() if backend and backend.has_method("end_stroke") else false
+	if sculpt_tool in ["raise", "dig"]:
+		cursor = final_target; terrain_cursor = cursor
+	stroke_active = false; stroke_aim_offset = Vector3.ZERO
+	if ok:
+		landscape_state.clear_edited_cells(backend.get_last_edit_cells(), float(backend.voxel_scale))
+		garden_visual.apply_records(landscape_state.records)
+		_record_history("terrain")
+	_landscape_before.clear()
+	_set_status("Stroke committed" if ok else "Stroke unchanged")
 
 func _begin_resize() -> void:
 	if detail_move_active: return
@@ -806,7 +851,12 @@ func _cancel_detail_move() -> void:
 	_update_presentation()
 
 func _cancel_current_edit(reason: String) -> void:
-	var accept_was_down: bool = stroke_active or Input.is_action_pressed("m1_accept")
+	var accept_was_down: bool = stroke_active or landscape_active or Input.is_action_pressed("m1_accept")
+	if landscape_active:
+		landscape_state.restore(_landscape_before)
+		garden_visual.reset_records(landscape_state.records)
+		landscape_active = false
+	_landscape_before.clear()
 	if stroke_active and backend and backend.has_method("cancel_stroke"): backend.cancel_stroke()
 	stroke_active = false
 	stroke_aim_offset = Vector3.ZERO
@@ -826,24 +876,36 @@ func _active_reference_normal() -> Vector3:
 	return _reference_normal()
 
 func _undo() -> void:
+	if stroke_active or landscape_active or resize_active or detail_move_active: _set_status("Finish or cancel the current edit first"); return
 	if _history_tags.is_empty(): _set_status("Nothing to undo"); return
 	var tag: String = str(_history_tags.back())
-	var ok: bool = building_world.undo() if tag == "building" else (backend and backend.has_method("undo") and backend.undo())
-	if ok: _history_tags.pop_back(); _redo_tags.append(tag)
+	var ok: bool = true if tag == "landscape" else (building_world.undo() if tag == "building" else (backend and backend.has_method("undo") and backend.undo()))
+	if ok:
+		_history_tags.pop_back(); _redo_tags.append(tag)
+		var entry: Dictionary = _landscape_history.pop_back()
+		_landscape_redo.append(entry); landscape_state.restore(entry["before"])
+		garden_visual.reset_records(landscape_state.records); _building_dirty = true
 	_set_status("Undo complete" if ok else "Nothing to undo")
 
 func _redo() -> void:
+	if stroke_active or landscape_active or resize_active or detail_move_active: _set_status("Finish or cancel the current edit first"); return
 	if _redo_tags.is_empty(): _set_status("Nothing to redo"); return
 	var tag: String = str(_redo_tags.back())
-	var ok: bool = building_world.redo() if tag == "building" else (backend and backend.has_method("redo") and backend.redo())
-	if ok: _redo_tags.pop_back(); _history_tags.append(tag)
+	var ok: bool = true if tag == "landscape" else (building_world.redo() if tag == "building" else (backend and backend.has_method("redo") and backend.redo()))
+	if ok:
+		_redo_tags.pop_back(); _history_tags.append(tag)
+		var entry: Dictionary = _landscape_redo.pop_back()
+		_landscape_history.append(entry); landscape_state.restore(entry["after"])
+		garden_visual.reset_records(landscape_state.records); _building_dirty = true
 	_set_status("Redo complete" if ok else "Nothing to redo")
 
 func _record_history(tag: String) -> void:
 	_history_tags.append(tag)
-	if tag == "building": _building_dirty = true
-	_redo_tags.clear()
-	if _history_tags.size() > 50: _history_tags.pop_front()
+	var after := landscape_state.document()
+	_landscape_history.append({"before": after.duplicate(true) if _landscape_before.is_empty() else _landscape_before.duplicate(true), "after": after})
+	_building_dirty = true
+	_redo_tags.clear(); _landscape_redo.clear()
+	if _history_tags.size() > 50: _history_tags.pop_front(); _landscape_history.pop_front()
 
 func _update_presentation() -> void:
 	if not cottage_visual or not building_world: return
@@ -1056,6 +1118,14 @@ func _pause_choice(choice: String) -> void:
 		"Quit": _quit_cleanly()
 
 func _tool_choice(choice: String) -> void:
+	if choice in ["Foliage brush", "Tree brush", "Clear planting"]:
+		if view_context != "terrain": return
+		_cancel_current_edit("Planting tool selected")
+		sculpt_tool = {"Foliage brush": "foliage", "Tree brush": "tree", "Clear planting": "clear_planting"}[choice]
+		reference_mode = "ground"
+		tools_open = false; detail_open = false; tools_panel.visible = false
+		_set_status(choice + " • A hold and move / release to commit • B cancel")
+		return
 	if choice in ["Raise", "Dig", "Level", "Slope", "Smooth"]:
 		if view_context != "terrain":
 			_set_status("Terrain tool unavailable in Cottage mode")
@@ -1070,8 +1140,8 @@ func _tool_choice(choice: String) -> void:
 		match choice:
 			"Radius +": brush_radius = minf(8.0, brush_radius + (0.25 if precision_mode else 1.0))
 			"Radius -": brush_radius = maxf(0.25, brush_radius - (0.25 if precision_mode else 1.0))
-			"Strength +": brush_strength = minf(2.0, brush_strength + 0.1)
-			"Strength -": brush_strength = maxf(0.1, brush_strength - 0.1)
+			"Strength +": brush_strength = minf(16.0, brush_strength + (0.5 if precision_mode else 2.0))
+			"Strength -": brush_strength = maxf(0.5, brush_strength - (0.5 if precision_mode else 2.0))
 			"Falloff +": brush_falloff = minf(1.0, brush_falloff + 0.1)
 			"Falloff -": brush_falloff = maxf(0.0, brush_falloff - 0.1)
 			"Height snap: off":
@@ -1136,14 +1206,23 @@ func _tool_choice(choice: String) -> void:
 				var old_local = selected_anchor.get("local_position", Vector3(0, 4, -7.02))
 				if selected_detail.get("resolved_position", null) is Vector3: old_local = selected_detail["resolved_position"]
 				if not reattach_surface.is_empty() and old_local is Vector3: operation_ok = building_world.reattach_detail(selected_building_id, selected_detail_id, reattach_surface, old_local)
-		"Add flower box":
+		"Add flower box", "Add shutter":
 			var selected_anchor: Dictionary = selected_detail.get("anchor", {})
 			var surface_id := str(selected_anchor.get("surface_id", ""))
 			if surface_id.is_empty():
 				for surface_value in view.get("surfaces", []):
 					var surface: Dictionary = surface_value
 					if not bool(surface.get("deleted", false)): surface_id = str(surface.get("id", "")); break
-			if not surface_id.is_empty(): operation_ok = not building_world.add_detail(selected_building_id, "flower_box", surface_id, Vector3(3, 2.2, -7.02), "flower_box_wood").is_empty()
+			if not surface_id.is_empty():
+				var p: Vector3 = selected_detail.get("resolved_position", Vector3(0, 3.3, -view["dimensions"].z * 0.5 - 0.02))
+				var kind := "shutter" if choice == "Add shutter" else "flower_box"
+				if kind == "shutter":
+					var horizontal_axis := 0
+					for surface: Dictionary in view.get("surfaces", []):
+						if surface["id"] == surface_id and str(surface.get("orientation", "")) in ["left", "right"]: horizontal_axis = 2
+					p[horizontal_axis] += 2.2
+				else: p.y -= 2.0
+				operation_ok = not building_world.add_detail(selected_building_id, kind, surface_id, p, kind + "_wood").is_empty()
 		"Delete selected surface":
 			var delete_surface_id := str(selected_detail.get("anchor", {}).get("surface_id", ""))
 			if delete_surface_id.is_empty():
@@ -1180,9 +1259,13 @@ func _set_menu(open: bool) -> void:
 		_set_status("Terrain mode" if view_context == "terrain" else "Cottage mode")
 
 func _save_all() -> bool:
+	if landscape_active:
+		_set_status("Finish or cancel planting before saving"); return false
 	var ok := false
 	if backend and backend.has_method("save_world"):
-		ok = backend.save_world(building_world.get_document())
+		var document: Dictionary = building_world.get_document()
+		document["landscape"] = landscape_state.document()
+		ok = backend.save_world(document)
 	_set_status("World saved" if ok else "Save failed (cottage design kept in memory)")
 	if ok: _building_dirty = false
 	return ok
@@ -1197,11 +1280,12 @@ func _reload_all() -> bool:
 	var ok: bool = backend and backend.has_method("load_world") and backend.load_world()
 	if ok:
 		_history_tags.clear()
-		_redo_tags.clear()
+		_redo_tags.clear(); _landscape_history.clear(); _landscape_redo.clear()
 		var loaded_document = backend.get("loaded_building_document")
-		if not loaded_document is Dictionary or not BuildingWorldScript.validate_document(loaded_document) or not building_world.load_document(loaded_document):
+		if not loaded_document is Dictionary or not BuildingWorldScript.validate_document(loaded_document) or not _load_cottage_document(loaded_document):
 			_set_status("Reload failed: cottage design missing or invalid")
 			return false
+		_restore_landscape(loaded_document)
 		_building_dirty = false
 		_set_status("World and cottage reloaded")
 		_update_presentation()
@@ -1222,3 +1306,92 @@ func _quit_cleanly() -> void:
 		_set_menu(true)
 		return
 	_shutting_down = true; set_process(false); set_process_input(false); var tree := get_tree(); var old_backend := backend; backend = null; if old_backend: old_backend.queue_free(); await tree.process_frame; await tree.process_frame; queue_free(); tree.quit()
+
+func _restore_landscape(document: Dictionary) -> void:
+	if document.has("landscape") and landscape_state.restore(document["landscape"]):
+		garden_visual.reset_records(landscape_state.records)
+		return
+	landscape_state = LandscapeScript.new()
+	var rng := RandomNumberGenerator.new(); rng.seed = 1042
+	for point in [Vector3(12, 8, 10), Vector3(30, 8, 12), Vector3(14, 8, 27), Vector3(32, 8, 29), Vector3(10, 8, 35), Vector3(35, 8, 17), Vector3(26, 8, 32), Vector3(7, 8, 19)]:
+		var ground := _plant_ground(point, true)
+		if not ground.is_empty(): landscape_state.add("tree", ground["point"], rng.randi_range(0, 2))
+	for index in 180:
+		var point := Vector3(rng.randf_range(7, 38), 8, rng.randf_range(7, 39))
+		# Leave the cottage entrance and a central sculpting patch invitingly open.
+		if point.x > 18 and point.x < 26 and point.z > 14 and point.z < 22: continue
+		if point.x > 28 and point.x < 35 and point.z > 24 and point.z < 30: continue
+		var ground := _plant_ground(point, true)
+		if ground.is_empty(): continue
+		landscape_state.add("rock" if index % 11 == 0 else "foliage", ground["point"], rng.randi_range(0, 2))
+	garden_visual.reset_records(landscape_state.records)
+
+func _plant_ground(point: Vector3, from_top: bool = false) -> Dictionary:
+	if not backend or not backend.is_ready(): return {}
+	var unit := float(backend.voxel_scale)
+	point.x = snappedf(point.x, Grid.UNIT); point.z = snappedf(point.z, Grid.UNIT)
+	var x := floori(point.x / unit); var z := floori(point.z / unit)
+	if x < 1 or z < 1 or point.x >= 47 or point.z >= 47: return {}
+	var surface := -1
+	var closest := INF
+	var reach := ceili(2.0 / unit)
+	var low := 0 if from_top else maxi(0, floori(point.y / unit) - reach)
+	var high := int(backend.patch_size.y) - 2 if from_top else mini(int(backend.patch_size.y) - 2, floori(point.y / unit) + reach)
+	for y in range(high, low - 1, -1):
+		if backend.voxel_at(Vector3i(x, y, z)) == 0: continue
+		if backend.voxel_at(Vector3i(x, y + 1, z)) != 0: continue
+		var distance := absf((y + 1) * unit - point.y)
+		if not from_top and distance > 2.0: continue
+		if distance < closest: closest = distance; surface = y
+		if from_top: break
+	if surface < 0: return {}
+	var p := Vector3(point.x, (surface + 1) * unit, point.z)
+	if p.y <= 5.05: return {}
+	for building: Dictionary in building_world.get_buildings():
+		var local: Vector3 = (building["transform"] as Transform3D).affine_inverse() * p
+		var dims: Vector3 = building["dimensions"]
+		if absf(local.x) < dims.x * 0.5 + 1.0 and absf(local.z) < dims.z * 0.5 + 1.0: return {}
+	return {"point": p}
+
+func _begin_plant_stroke() -> void:
+	if landscape_active or stroke_active or menu_open or tools_open or detail_open or view_context != "terrain": return
+	_landscape_before = landscape_state.document()
+	landscape_active = true; _plant_elapsed = 0.0; _plant_last = Vector3.INF; _plant_sequence = 0
+	_paint_plant_sample()
+
+func _update_plant_stroke(delta: float) -> void:
+	_plant_elapsed += delta
+	while _plant_elapsed >= 0.15:
+		_plant_elapsed -= 0.15
+		_paint_plant_sample()
+
+func _paint_plant_sample() -> void:
+	var center := _terrain_target_point if _terrain_target_valid else cursor
+	if sculpt_tool == "tree" and center.distance_to(_plant_last) < 2.8: return
+	if sculpt_tool == "clear_planting":
+		landscape_state.erase_brush(center, brush_radius)
+	else:
+		var rng := RandomNumberGenerator.new(); rng.seed = int(_landscape_before.get("next_id", 1)) * 7919 + _plant_sequence * 97
+		for sample_index in (1 if sculpt_tool == "tree" else 5):
+			var angle := rng.randf_range(0, TAU)
+			var radius := sqrt(rng.randf()) * brush_radius if sculpt_tool != "tree" else 0.0
+			var ground := _plant_ground(center + Vector3(cos(angle) * radius, 0, sin(angle) * radius))
+			if not ground.is_empty(): landscape_state.add(sculpt_tool, ground["point"], rng.randi_range(0, 2))
+	_plant_last = center; _plant_sequence += 1
+	garden_visual.apply_records(landscape_state.records)
+
+func _end_plant_stroke() -> void:
+	if not landscape_active: return
+	landscape_active = false
+	if landscape_state.document() != _landscape_before:
+		_record_history("landscape")
+		_set_status("Planting committed • LB undo")
+	else: _set_status("No planting change: move to clear ground or clear existing planting")
+	_landscape_before.clear()
+
+func _load_cottage_document(document: Dictionary) -> bool:
+	# The checkpoint envelope owns landscape; building history owns cottages.
+	# Keep the two authoritative components separate after deserialization.
+	var cottage := document.duplicate(true)
+	cottage.erase("landscape")
+	return building_world.load_document(cottage)

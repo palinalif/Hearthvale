@@ -608,5 +608,8 @@ func _run_read_fixture() -> void:
 	var expectation: Variant = JSON.parse_string(FileAccess.get_file_as_string(expectation_path)) if FileAccess.file_exists(expectation_path) else null
 	_check(expectation is Dictionary, "cold process expectation is present")
 	if expectation is Dictionary:
-		_check(_design_hash(loaded_doc) == str(expectation.get("design_hash", "")), "cold process restores exact design records")
+		var cottage_payload := loaded_doc.duplicate(true)
+		cottage_payload.erase("landscape") # Separately tested checkpoint component.
+		_check(_design_hash(cottage_payload) == str(expectation.get("design_hash", "")), "cold process restores exact design records")
+		_check(_design_hash(scene.building_world.get_document()) == str(expectation.get("design_hash", "")), "cold process applies exact design records to playable world")
 		_check(_terrain_hash() == str(expectation.get("terrain_hash", "")), "cold process restores exact full terrain bytes")

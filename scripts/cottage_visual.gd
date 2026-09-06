@@ -4,6 +4,9 @@ class_name CottageVisual
 ## Small procedural renderer for one authoritative building recipe. Geometry is
 ## disposable; IDs, states, anchors and revisions remain in BuildingWorld.
 
+const Grid = preload("res://scripts/visual_grid.gd")
+var _unit := Vector3.ONE * 0.25
+
 const WALL_COLOR := Color("#e7cfab")
 const TRIM_COLOR := Color("#634d42")
 const ROOF_COLOR := Color("#b85f4b")
@@ -35,8 +38,13 @@ func apply_building(view: Dictionary, source_revision: int) -> bool:
 	# Preserve the authored transform as a whole.  Rotation and scale are part
 	# of the document identity and must affect every generated child equally.
 	transform = building_transform
+	var world_scale := building_transform.basis.get_scale().abs()
+	_unit = Vector3(Grid.UNIT / world_scale.x, Grid.UNIT / world_scale.y, Grid.UNIT / world_scale.z)
 	_build_shell(dimensions, view)
 	_build_details(view, dimensions)
+	for child in get_children():
+		if child is MultiMeshInstance3D or (child is MeshInstance3D and child.mesh is ArrayMesh):
+			child.position = child.position.snapped(_unit)
 	return true
 
 func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
@@ -60,10 +68,6 @@ func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 	var roof_run := dimensions.z * 0.5 + 0.45
 	var roof_angle := atan2(dimensions.y * 0.42, dimensions.z * 0.5)
 	var roof_length := sqrt(roof_run * roof_run + (dimensions.y * 0.42) * (dimensions.y * 0.42))
-	var left := _add_box("RoofLeft", Vector3(dimensions.x + 0.7, 0.35, roof_length), Vector3(0, dimensions.y + dimensions.y * 0.21, -roof_run * 0.5), ROOF_COLOR)
-	left.rotation.x = -roof_angle
-	var right := _add_box("RoofRight", Vector3(dimensions.x + 0.7, 0.35, roof_length), Vector3(0, dimensions.y + dimensions.y * 0.21, roof_run * 0.5), ROOF_COLOR)
-	right.rotation.x = roof_angle
 	_add_box("RidgeTrim", Vector3(dimensions.x + 0.8, 0.22, 0.24), Vector3(0, dimensions.y + dimensions.y * 0.42, 0), TRIM_COLOR)
 	_add_box("RidgeCap", Vector3(dimensions.x + 0.82, 0.16, 0.34), Vector3(0, dimensions.y + dimensions.y * 0.43, 0), CORNICE_COLOR)
 	_build_roof_tile_batches(dimensions, roof_angle)
@@ -75,51 +79,40 @@ func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 	var eave_y := dimensions.y
 	var rise := dimensions.y * 0.42
 	var gable_run := dimensions.z * 0.5 + 0.45
-	var row_height := 0.25
+	var row_height := _unit.y
 	var row_count := maxi(1, ceili(rise / row_height))
 	for step in row_count:
 		var level := eave_y + row_height * (float(step) + 0.5)
 		var row_top := level + row_height * 0.5
 		var ratio := clampf((row_top - eave_y) / rise, 0.0, 1.0)
 		var span := maxf(0.12, gable_run * 2.0 * (1.0 - ratio) - 0.12)
-		_add_box("GableLeft_%d" % step, Vector3(0.22, row_height + 0.015, span), Vector3(-dimensions.x * 0.5, level, 0), wall_color)
-		_add_box("GableRight_%d" % step, Vector3(0.22, row_height + 0.015, span), Vector3(dimensions.x * 0.5, level, 0), wall_color)
+		_add_box("GableLeft_%d" % step, Vector3(0.22, row_height, span), Vector3(-dimensions.x * 0.5, level, 0), wall_color)
+		_add_box("GableRight_%d" % step, Vector3(0.22, row_height, span), Vector3(dimensions.x * 0.5, level, 0), wall_color)
 	_build_corner_quoin_batch(dimensions)
 	_build_crafted_shell(dimensions, wall_color)
 	_build_entrance_canopy(dimensions, deleted)
 
-func _build_roof_tile_batches(dimensions: Vector3, roof_angle: float) -> void:
-	# Each roof half is one ArrayMesh per palette shade. This keeps the repeated
-	# stepped tile treatment cheap while preserving a deterministic silhouette.
-	var roof_run := dimensions.z * 0.5 + 0.45
-	var roof_rise := dimensions.y * 0.42
-	var roof_length := sqrt(roof_run * roof_run + roof_rise * roof_rise)
-	var row_count := mini(40, maxi(1, ceili(roof_length / 0.56)))
-	var span := dimensions.x + 0.58
-	var segment_count := mini(64, maxi(1, ceili(span / 0.5)))
-	var row_step := roof_length / float(row_count)
-	var tile_depth := maxf(0.28, row_step * 0.92)
-	var tile_thickness := 0.13
-	for side in [-1, 1]:
-		var buckets: Array = [[], [], []]
-		var roof_basis := Basis(Vector3.RIGHT, roof_angle * float(side))
-		var roof_origin := Vector3(0, dimensions.y + dimensions.y * 0.21, roof_run * 0.5 * float(side))
-		for row in row_count:
-			# The authored roof box has the same origin, angle and local Z span as
-			# this batch. A positive local Y offset places tile bottoms directly on
-			# its top face, avoiding a second hand-maintained slope equation.
-			var local_z := float(side) * (roof_length * 0.5 - (float(row) + 0.5) * row_step)
-			var tile_width := span / float(segment_count) - 0.035
-			for segment in segment_count:
-				var center_x := -span * 0.5 + (float(segment) + 0.5) * span / float(segment_count)
-				var bucket: Array = buckets[(segment / 7 + row / 5) % 3]
-				var local_center := Vector3(center_x, 0.175 + tile_thickness * 0.5 + 0.02, local_z)
-				bucket.append({"center": roof_origin + roof_basis * local_center, "size": Vector3(tile_width, tile_thickness, tile_depth), "basis": roof_basis})
-				buckets[(segment / 7 + row / 5) % 3] = bucket
-		for shade in 3:
-			var batch: Array = buckets[shade]
-			var shade_color: Color = ROOF_TILE_COLORS[shade]
-			_add_instanced_boxes("RoofTiles_%s_%d" % ["Left" if side < 0 else "Right", shade], batch, shade_color)
+func _build_roof_tile_batches(dimensions: Vector3, _roof_angle: float) -> void:
+	# Axis-aligned, cell-quantized roof courses. Tiles are merged cells, never
+	# rotated or stretched voxels; changing width adds columns at fixed pitch.
+	var buckets: Array = [[], [], []]
+	var run := dimensions.z * 0.5 + 0.5
+	var rise := dimensions.y * 0.42
+	var dx := _unit.x * 2.0
+	var dz := _unit.z
+	var span := dimensions.x + 0.75
+	var nx := ceili(span / dx)
+	var nz := ceili(run / dz)
+	for side in [-1.0, 1.0]:
+		for row in nz:
+			var z := (float(row) + 0.5) * dz
+			var height := snappedf(dimensions.y + rise * (1.0 - z / run), _unit.y)
+			for column in nx:
+				var x := -snappedf(span * 0.5, _unit.x) + (column + 0.5) * dx
+				var shade := (column / 9 + row / 7) % 3
+				buckets[shade].append(_piece(Vector3(x, height, side * z), Vector3(dx, _unit.y * 2.0, dz)))
+	for shade in 3:
+		_add_instanced_boxes("RoofTiles_%d" % shade, buckets[shade], ROOF_TILE_COLORS[shade])
 
 func _build_corner_quoin_batch(dimensions: Vector3) -> void:
 	var boxes: Array = []
@@ -156,6 +149,16 @@ func _build_details(view: Dictionary, dimensions: Vector3) -> void:
 		_build_window(detail, local, basis, window_material)
 	for detail_value in view.get("details", []):
 		var detail: Dictionary = detail_value
+		if str(detail.get("kind", "")) != "shutter" or not bool(detail.get("visible", true)) or bool(detail.get("needs_placement", false)): continue
+		var local = detail.get("resolved_position", null)
+		if not local is Vector3: continue
+		var orientation := str(surface_orientations.get(str(detail.get("anchor", {}).get("surface_id", "")), "front"))
+		var pieces: Array = [_piece(Vector3(0, 0, 0.15), Vector3(0.66, 2.9, 0.16))]
+		for row in 9: pieces.append(_piece(Vector3(0, -1.2 + row * 0.3, 0.3), Vector3(0.55, 0.1, 0.12)))
+		var shutter := _add_instanced_boxes("ManualShutter_%s" % detail["id"], pieces, SHUTTER_COLOR)
+		shutter.transform = Transform3D(_surface_basis(orientation), local)
+	for detail_value in view.get("details", []):
+		var detail: Dictionary = detail_value
 		if str(detail.get("kind", "")) != "flower_box" or not bool(detail.get("visible", true)) or bool(detail.get("needs_placement", false)): continue
 		var local = detail.get("resolved_position", null)
 		if local is Vector3:
@@ -189,12 +192,13 @@ func _add_box(node_name: String, size: Vector3, local_position: Vector3, color: 
 	var node := MeshInstance3D.new()
 	node.name = node_name
 	var mesh := BoxMesh.new()
-	mesh.size = size
+	var q := Grid.quantized_box(local_position, size, _unit)
+	mesh.size = q["size"]
 	node.mesh = mesh
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
 	node.material_override = material
-	node.position = local_position
+	node.position = q["center"]
 	add_child(node)
 	return node
 
@@ -203,15 +207,13 @@ func _build_window(detail: Dictionary, local: Vector3, basis: Basis, window_mate
 	var rounded := str(detail.get("asset_id", "window_wood")).contains("round")
 	var node := MeshInstance3D.new()
 	node.name = "Detail_%s" % id
-	if rounded:
-		var disc := CylinderMesh.new()
-		disc.top_radius = 0.54; disc.bottom_radius = 0.54; disc.height = 0.10; disc.radial_segments = 12
-		node.mesh = disc
-	else:
-		var pane := BoxMesh.new(); pane.size = Vector3(2.0, 2.8, 0.10); node.mesh = pane
+	var pane := BoxMesh.new()
+	var pane_size := Vector3(1.0, 1.0, 0.10) if rounded else Vector3(2.0, 2.8, 0.10)
+	var pane_box := Grid.quantized_box(basis.inverse() * local + Vector3(0, 0, -_unit.z), pane_size, _unit)
+	pane.size = pane_box["size"]
+	node.mesh = pane
 	node.material_override = window_material
-	node.transform = Transform3D(basis, local + basis * Vector3(0, 0, -0.20))
-	if rounded: node.rotate_object_local(Vector3.RIGHT, PI * 0.5)
+	node.transform = Transform3D(basis, basis * pane_box["center"])
 	add_child(node)
 	var pale: Array = []
 	var timber: Array = []
@@ -229,11 +231,11 @@ func _build_window(detail: Dictionary, local: Vector3, basis: Basis, window_mate
 			pale.append(_piece(Vector3(0, side * 1.51, 0.0), Vector3(2.48, 0.24, 0.50)))
 			timber.append(_piece(Vector3(side * 0.96, 0, -0.10), Vector3(0.12, 2.8, 0.16)))
 			# Shutters open against the facade, with recessed slats and end rails.
-			shutters.append(_piece(Vector3(side * 1.58, 0, 0.12), Vector3(0.66, 2.9, 0.16)))
+			if bool(detail.get("show_shutters", true)): shutters.append(_piece(Vector3(side * 1.58, 0, 0.12), Vector3(0.66, 2.9, 0.16)))
 			for row in 9:
-				shutters.append(_piece(Vector3(side * 1.58, -1.22 + row * 0.30, 0.23), Vector3(0.55, 0.10, 0.12)))
+				if bool(detail.get("show_shutters", true)): shutters.append(_piece(Vector3(side * 1.58, -1.22 + row * 0.30, 0.23), Vector3(0.55, 0.10, 0.12)))
 			for y in [-1.27, 1.27]:
-				timber.append(_piece(Vector3(side * 1.58, y, 0.24), Vector3(0.66, 0.10, 0.10)))
+				if bool(detail.get("show_shutters", true)): timber.append(_piece(Vector3(side * 1.58, y, 0.24), Vector3(0.66, 0.10, 0.10)))
 		timber.append(_piece(Vector3(0, 0, -0.06), Vector3(0.11, 2.8, 0.16)))
 		timber.append(_piece(Vector3(0, 0.12, -0.06), Vector3(1.98, 0.10, 0.16)))
 		pale.append(_piece(Vector3(0, -1.72, 0.16), Vector3(2.75, 0.18, 0.85)))
@@ -335,6 +337,8 @@ func _add_batched_boxes(node_name: String, boxes: Array, color: Color) -> Geomet
 		var box: Dictionary = box_value
 		var box_center: Vector3 = box["center"]
 		var box_size: Vector3 = box["size"]
+		var quantized := Grid.quantized_box(box_center, box_size, _unit)
+		box_center = quantized["center"]; box_size = quantized["size"]
 		var box_basis: Basis = box["basis"]
 		_append_box_geometry(vertices, normals, indices, box_center, box_size, box_basis)
 	var arrays := []
@@ -387,7 +391,8 @@ func _build_entrance_canopy(dimensions: Vector3, deleted: Dictionary) -> void:
 	var tiles: Array = []
 	for side in [-1.0, 1.0]:
 		timber.append(_piece(Vector3(x - 0.35, y - 0.40, side * 1.45), Vector3(0.20, 0.9, 0.18)))
-		timber.append(_piece(Vector3(x - 0.70, y - 0.25, side * 1.45), Vector3(1.0, 0.17, 0.18), Basis(Vector3.FORWARD, 0.45)))
+		for step in 4:
+			timber.append(_piece(Vector3(x - 0.25 - step * 0.25, y - 0.7 + step * 0.25, side * 1.45), Vector3(0.25, 0.25, 0.25)))
 	for row in 5:
 		for column in 10:
 			tiles.append(_piece(Vector3(x - 0.13 - row * 0.24, y - row * 0.11, -1.65 + column * 0.36), Vector3(0.29, 0.14, 0.34)))
@@ -411,7 +416,8 @@ func _add_instanced_boxes(node_name: String, boxes: Array, color: Color) -> Mult
 	for i in boxes.size():
 		var piece: Dictionary = boxes[i]
 		var basis: Basis = piece["basis"]
-		multi.set_instance_transform(i, Transform3D(basis.scaled_local(piece["size"]), piece["center"]))
+		var q := Grid.quantized_box(piece["center"], piece["size"], _unit)
+		multi.set_instance_transform(i, Transform3D(basis.scaled_local(q["size"]), q["center"]))
 	var node := MultiMeshInstance3D.new()
 	node.name = node_name; node.multimesh = multi
 	var material := StandardMaterial3D.new(); material.albedo_color = color

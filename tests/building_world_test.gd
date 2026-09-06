@@ -7,13 +7,14 @@ var failures := 0
 const CottageVisualScript = preload("res://scripts/cottage_visual.gd")
 
 func _initialize() -> void:
+	_test_window_reflow()
 	var world := BuildingWorld.new()
 	var building_id := "building-1"
 	var initial: Dictionary = world.get_building(building_id)
 	_check(initial.get("schema_version") == BuildingWorld.SCHEMA_VERSION, "schema version")
 	_check(initial.get("generator_version") == BuildingWorld.GENERATOR_VERSION, "generator version")
 	_check(initial.get("dimensions") == Vector3(18, 7, 14), "default dimensions")
-	_check((initial["transform"] as Transform3D).basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorld.MINIATURE_SCALE), "default cottage is half-scale miniature")
+	_check((initial["transform"] as Transform3D).basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorld.MINIATURE_SCALE), "default cottage is quarter-scale miniature")
 	_check((initial.get("details", []) as Array).size() == 6, "six automatic windows")
 	_check((initial.get("surfaces", []) as Array).size() >= 6, "stable cottage surfaces")
 	for detail_value in initial["details"]:
@@ -88,7 +89,7 @@ func _initialize() -> void:
 	_check(old_loaded.set_miniature_scale(building_id), "explicit miniature conversion")
 	var converted: Dictionary = old_loaded.get_building(building_id)
 	var converted_transform: Transform3D = converted["transform"]
-	_check(converted_transform.basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorld.MINIATURE_SCALE), "conversion sets uniform half scale")
+	_check(converted_transform.basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorld.MINIATURE_SCALE), "conversion sets current uniform miniature scale")
 	_check(converted_transform.origin == old_before_transform.origin and converted_transform.basis.get_euler().is_equal_approx(old_before_transform.basis.get_euler()), "conversion preserves origin and rotation")
 	_check(converted["dimensions"] == old_before_dimensions and converted["details"] == old_before_details, "conversion preserves dimensions and edited details")
 	_check(not old_loaded.set_miniature_scale(building_id), "repeated miniature conversion is a no-op")
@@ -175,7 +176,8 @@ func _initialize() -> void:
 	var has_suppressed := false
 	for child in visual.get_children():
 		var node: Node = child
-		if node.name == "Detail_%s" % visual_second: has_round = node.mesh is CylinderMesh
+		if node.name == "Detail_%s" % visual_second:
+			has_round = node.mesh is BoxMesh and (node.mesh as BoxMesh).size.x < 1.5 and visual.get_node_or_null("Reveal_%s" % visual_second) != null
 		if node.name == "Detail_%s" % visual_third: has_suppressed = true
 	_check(has_round and not has_suppressed, "replacement and suppression render")
 	var front_wall: Node = visual.get_node_or_null("WallFront")
@@ -194,8 +196,11 @@ func _initialize() -> void:
 			var tile_instances: MultiMesh = child.multimesh
 			_check(tile_instances.mesh is BoxMesh, "roof instances use native outward cube faces")
 			roof_tile_vertices += tile_instances.instance_count * 24
+			if tile_instances.mesh is BoxMesh:
+				var world_tile_size: Vector3 = (tile_instances.mesh as BoxMesh).size * visual.transform.basis.get_scale()
+				for axis in 3: _check(is_equal_approx(world_tile_size[axis] / preload("res://scripts/visual_grid.gd").UNIT, roundf(world_tile_size[axis] / preload("res://scripts/visual_grid.gd").UNIT)), "roof cell faces use shared world grid")
 
-	_check(roof_tile_batches == 6 and roof_tile_vertices > 10000 and roof_tile_vertices < 40000, "roof tiles use bounded batched geometry")
+	_check(roof_tile_batches > 0 and roof_tile_batches <= 6 and roof_tile_vertices > 10000 and roof_tile_vertices < 100000, "roof tiles use bounded batched geometry on shared fine grid")
 	_check(visual.get_child_count() < 140, "cottage detail node budget remains bounded")
 	_check(visual_world.delete_surface(building_id, "wall-front"), "visual delete support source")
 	visual.request_revision(visual_world.get_revision())
@@ -217,6 +222,105 @@ func _check(condition: bool, label: String) -> void:
 	if not condition:
 		failures += 1
 		print("FAIL: %s" % label)
+
+func _test_window_reflow() -> void:
+	var world := BuildingWorld.new()
+	var id := "building-1"
+	var initial := world.get_building(id)
+	var initial_ids: Array = []
+	for detail in initial["details"]: initial_ids.append(detail["id"])
+	_check(_visible_window_count(initial) == 6, "layout starts with six windows")
+	var before := world.get_document()
+	var preview := world.preview_resize(id, Vector3(30, 7, 14))
+	_check(world.get_document() == before and _visible_window_count(preview) == 10, "preview reflows without mutating recipe")
+	_check(world.resize(id, Vector3(30, 7, 14)), "layout grows")
+	var grown: Dictionary = world.get_document()["buildings"][0]
+	_check(_visible_window_count(world.get_building(id)) == 10, "long cottage adds automatic windows")
+	_check(world.undo() and world.get_document()["buildings"][0] == before["buildings"][0], "reflow undo restores exact original recipe")
+	_check(world.redo() and world.get_document()["buildings"][0] == grown, "reflow redo restores exact generated identities")
+	var grown_ids: Array = []
+	for detail in grown["details"]: grown_ids.append(detail["id"])
+	for length in [5.0, 6.0, 9.0, 12.0, 18.0, 25.0, 32.0]:
+		_check(world.resize(id, Vector3(length, 7, 14)), "resize length %s" % length)
+		_check_window_clearance(world.get_building(id))
+	_check(world.resize(id, Vector3(6, 7, 14)), "layout shrink")
+	_check(_visible_window_count(world.get_building(id)) == 2, "small cottage removes surplus automatic windows")
+	for detail_id in grown_ids: _check(not _detail_by_id(world.get_building(id), str(detail_id)).is_empty(), "dormant generated ID retained")
+	_check(world.resize(id, Vector3(30, 7, 14)), "layout regrow")
+	for detail_id in grown_ids: _check(not _detail_by_id(world.get_building(id), str(detail_id)).is_empty(), "regrow reuses stable ID")
+	var moved_id := str(initial_ids[0])
+	var replaced_id := str(initial_ids[1])
+	var suppressed_id := str(initial_ids[2])
+	_check(world.move_detail(id, moved_id, "wall-front", Vector3(-7, 4, -7.02)), "layout fixture moved window")
+	_check(world.replace_detail(id, replaced_id, "window_round"), "layout fixture replacement")
+	_check(world.suppress_detail(id, suppressed_id), "layout fixture suppression")
+	var shutter_id := world.add_detail(id, "shutter", "wall-back", Vector3(0, 3.4, 7.02), "shutter_wood")
+	_check(not shutter_id.is_empty(), "manual shutter is an editable attachment")
+	var protected: Dictionary = {}
+	for detail_id in [moved_id, replaced_id, suppressed_id, shutter_id]:
+		var detail := _detail_by_id(world.get_building(id), detail_id)
+		protected[detail_id] = {"anchor": detail["anchor"].duplicate(true), "asset_id": detail["asset_id"], "state": detail["state"]}
+	_check(world.resize(id, Vector3(6, 7, 14)), "shrink edited cottage")
+	_check(bool(_detail_by_id(world.get_building(id), moved_id)["needs_placement"]), "moved window becomes recoverable on shrink")
+	_check(world.resize(id, Vector3(30, 7, 14)), "regrow edited cottage")
+	var edited := world.get_building(id)
+	_check(not bool(_detail_by_id(edited, moved_id)["needs_placement"]), "regrow recovers moved window")
+	for detail_id in protected:
+		var detail := _detail_by_id(edited, str(detail_id))
+		for field in ["anchor", "asset_id", "state"]: _check(detail[field] == protected[detail_id][field], "reflow preserves authored %s" % field)
+	_check(not bool(_detail_by_id(edited, suppressed_id)["visible"]), "suppressed slot never regenerated")
+	_check_window_clearance(edited)
+	var reload := BuildingWorld.new()
+	_check(reload.load_serialized_document(world.serialize_document()), "layout save reload")
+	var reloaded_details: Array = reload.get_building(id)["details"]
+	_check(reloaded_details.size() == (edited["details"] as Array).size(), "reload preserves dormant and protected record count")
+	for detail in edited["details"]:
+		var reloaded_detail := _detail_by_id(reload.get_building(id), str(detail["id"]))
+		for field in ["state", "asset_id", "visible", "needs_placement", "layout_slot", "layout_active", "show_shutters"]:
+			_check(reloaded_detail.get(field) == detail.get(field), "reload preserves window %s" % field)
+		if detail.get("resolved_position") is Vector3:
+			_check(reloaded_detail.get("resolved_position") is Vector3 and (reloaded_detail["resolved_position"] as Vector3).is_equal_approx(detail["resolved_position"]), "reload preserves resolved attachment position")
+	var copy_id := reload.duplicate_building(id)
+	_check(not copy_id.is_empty(), "layout duplicate")
+	var copy := reload.get_building(copy_id)
+	_check(_visible_window_count(copy) == _visible_window_count(edited), "duplicate preserves generated layout")
+	var source_recipe: Dictionary = reload.get_document()["buildings"][0].duplicate(true)
+	_check(reload.resize(copy_id, Vector3(12, 7, 14)), "duplicate layout resize")
+	_check(reload.get_document()["buildings"][0] == source_recipe, "duplicate reflow is independent")
+	# Unknown optional landscape data is part of the same authoritative document
+	# and must survive building operations without being rewritten by this model.
+	var landscape_document := world.get_document()
+	landscape_document["landscape"] = {"version": 1, "decorations": [{"id": "tree-1", "position": [2, 3, 4]}]}
+	_check(reload.load_document(landscape_document), "optional landscape loads")
+	_check(reload.resize(id, Vector3(18, 7, 14)) and reload.undo() and reload.redo(), "landscape fixture building history")
+	_check(reload.get_document()["landscape"] == landscape_document["landscape"], "building history preserves landscape")
+	_check(world.resize(id, Vector3(4, 4, 14)), "minimum size layout")
+	_check(_visible_window_count(world.get_building(id)) == 0, "minimum cottage does not protrude automatic windows")
+
+func _visible_window_count(building: Dictionary) -> int:
+	var count := 0
+	for detail in building["details"]:
+		if str(detail.get("kind", "")) == "window" and bool(detail.get("visible", false)) and not bool(detail.get("needs_placement", false)): count += 1
+	return count
+
+func _detail_by_id(building: Dictionary, id: String) -> Dictionary:
+	for detail in building["details"]:
+		if str(detail["id"]) == id: return detail
+	return {}
+
+func _check_window_clearance(building: Dictionary) -> void:
+	var dimensions: Vector3 = building["dimensions"]
+	var placed: Array[Dictionary] = []
+	for detail in building["details"]:
+		if str(detail.get("kind", "")) != "window" or not bool(detail.get("visible", false)) or bool(detail.get("needs_placement", false)): continue
+		var position: Vector3 = detail["resolved_position"]
+		var half := 1.91 if bool(detail.get("show_shutters", false)) else 0.8 if str(detail.get("asset_id", "")).contains("round") else 1.375
+		_check(absf(position.x) + half <= dimensions.x * 0.5, "window including optional shutters stays within wall")
+		for other in placed:
+			if str(other["anchor"]["surface_id"]) != str(detail["anchor"]["surface_id"]): continue
+			var other_half := 1.91 if bool(other.get("show_shutters", false)) else 0.8 if str(other.get("asset_id", "")).contains("round") else 1.375
+			_check(absf(position.x - (other["resolved_position"] as Vector3).x) >= half + other_half + 0.5, "visible windows have a clear gap")
+		placed.append(detail)
 
 func _print_result() -> void:
 	print(JSON.stringify({"ok": failures == 0, "failures": failures, "buildings": "authoritative", "undo_redo": failures == 0, "serialization": failures == 0, "duplication": failures == 0, "revision_guard": failures == 0}))

@@ -15,7 +15,12 @@ const DOCUMENT_BYTES_LIMIT := 256 * 1024
 const MAX_BUILDINGS := 8
 const MAX_SURFACES := 64
 const MAX_DETAILS := 256
-const MINIATURE_SCALE := 0.5
+const MINIATURE_SCALE := 0.25
+const WINDOW_HALF_WIDTH := 1.375
+const WINDOW_SHUTTER_HALF_WIDTH := 1.91
+const WINDOW_CORNER_CLEARANCE := 0.5
+const WINDOW_GAP := 0.5
+const WINDOW_TARGET_SPACING := 5.0
 const MIN_DIMENSIONS := Vector3(4.0, 4.0, 4.0)
 const MAX_DIMENSIONS := Vector3(32.0, 18.0, 32.0)
 
@@ -84,6 +89,7 @@ func resize(building_id: String, dimensions: Vector3) -> bool:
 	var buildings: Array = _document["buildings"]
 	var building: Dictionary = buildings[index]
 	building["dimensions"] = _vec(dimensions)
+	_reflow_automatic_windows(building)
 	_refresh_buckets(building)
 	buildings[index] = building
 	return _record_change(before)
@@ -114,6 +120,7 @@ func preview_resize(building_id: String, dimensions: Vector3) -> Dictionary:
 	if index < 0: return {}
 	var building: Dictionary = _copy((_document["buildings"] as Array)[index])
 	building["dimensions"] = _vec(dimensions)
+	_reflow_automatic_windows(building)
 	var resolved := _resolved_details(building)
 	var needs: Array[String] = []
 	for detail_value in resolved:
@@ -335,8 +342,51 @@ func _new_cottage(building_id: String, dimensions: Vector3, position: Vector3, s
 	for index in 3:
 		details.append(_window("window-back-%d" % index, "wall-back", 0.18 + float(index) * 0.32, 0.48))
 	var building := {"id": building_id, "name": "Riverside Cottage", "schema_version": SCHEMA_VERSION, "generator_version": GENERATOR_VERSION, "dimensions": _vec(dimensions), "transform": _transform(position, MINIATURE_SCALE), "seed": seed, "style_id": STYLE_ID, "roof_profile": "gabled", "material_id": "stone_plaster", "material_overrides": {}, "surfaces": surfaces, "details": details, "automatic_defaults": [], "overrides": {}, "exclusions": [], "modified_locked": [], "suppressed": [], "manual_attachments": []}
+	_reflow_automatic_windows(building)
 	_refresh_buckets(building)
 	return building
+
+## Slots are persistent recipe metadata, never attachment identities. Dormant
+## slots keep their IDs and exclusions, so shrink/grow cannot resurrect a
+## suppressed window or discard an edit. Older recipes opt in on resize only.
+func _reflow_automatic_windows(building: Dictionary) -> void:
+	var dimensions := _as_vec(building["dimensions"])
+	var details: Array = building.get("details", [])
+	building["automatic_layout"] = {"version": 1}
+	for surface_value in building.get("surfaces", []):
+		var surface: Dictionary = surface_value
+		if str(surface.get("kind", "")) != "wall" or not str(surface.get("orientation", "")) in ["front", "back"]: continue
+		var surface_id := str(surface["id"])
+		var count := maxi(1, floori((dimensions.x - WINDOW_CORNER_CLEARANCE * 2.0) / WINDOW_TARGET_SPACING))
+		if dimensions.x < (WINDOW_HALF_WIDTH + WINDOW_CORNER_CLEARANCE) * 2.0 or dimensions.y < 4.2 or bool(surface.get("deleted", false)) or not _surface_fits(building, surface, dimensions): count = 0
+		var slots := {}
+		for detail_value in details:
+			var detail: Dictionary = detail_value
+			if not bool(detail.get("generated", false)) or str(detail.get("kind", "")) != "window": continue
+			var default_anchor: Dictionary = (detail.get("default", {}) as Dictionary).get("anchor", detail.get("anchor", {}))
+			if str(default_anchor.get("surface_id", "")) != surface_id: continue
+			var slot := int(detail.get("layout_slot", slots.size()))
+			detail["layout_slot"] = slot
+			slots[slot] = detail
+		for slot in count:
+			if slots.has(slot): continue
+			# Namespaced by the independently allocated building/surface identity.
+			var detail_id := "%s-auto-%s-%d" % [building["id"], surface_id, slot]
+			var detail := _window(detail_id, surface_id, 0.5, 0.48)
+			detail["layout_slot"] = slot
+			details.append(detail)
+			slots[slot] = detail
+		for slot_value in slots:
+			var slot := int(slot_value)
+			var detail: Dictionary = slots[slot]
+			detail["layout_active"] = slot < count
+			if str(detail.get("state", "")) != "automatic": continue
+			if slot >= count: continue
+			var u := (float(slot) + 0.5) / float(count)
+			var anchor := {"surface_id": surface_id, "policy": "proportional", "u": u, "v": clampf(0.48, 2.1 / dimensions.y, 1.0 - 1.7 / dimensions.y), "fixed_offset": WINDOW_CORNER_CLEARANCE}
+			detail["anchor"] = anchor
+			detail["default"] = {"id": detail["id"], "asset_id": detail["asset_id"], "u": u, "v": anchor["v"], "anchor": anchor.duplicate(true)}
+	building["details"] = details
 
 func _window(detail_id: String, surface_id: String, u: float, v: float) -> Dictionary:
 	var default_anchor := {"surface_id": surface_id, "policy": "proportional", "u": u, "v": v, "fixed_offset": 1.25}
@@ -357,20 +407,81 @@ func _resolved_details(building: Dictionary) -> Array[Dictionary]:
 		var anchor: Dictionary = detail.get("anchor", {})
 		var surface := _surface(building, str(anchor.get("surface_id", "")))
 		var needs := str(detail.get("state", "")) != "suppressed" and (surface.is_empty() or bool(surface.get("deleted", false)) or not _surface_fits(building, surface, dimensions))
-		if not needs and str(anchor.get("policy", "")) in ["fixed_local", "surface_local"]:
-			var local := _as_vec(anchor.get("local_position", [0, 0, 0]))
+		if not needs and str(detail.get("state", "")) != "suppressed":
+			var local: Vector3 = _resolve_position(surface, anchor, dimensions)
 			var orientation := str(surface.get("orientation", "front"))
 			var tangential := absf(local.x) if orientation in ["front", "back"] else absf(local.z)
 			var extent := dimensions.x if orientation in ["front", "back"] else dimensions.z
 			var footprint := _detail_footprint(detail)
 			needs = tangential + footprint.x > extent * 0.5 or local.y - footprint.y < 0.0 or local.y + footprint.y > dimensions.y
 		var position = null
-		if not needs: position = _resolve_position(surface, anchor, dimensions)
+		# Deleted support keeps its identity and orientation. Retain the intended
+		# position for recovery tools while needs_placement still prevents render;
+		# replacing it with null would make reattachment lose proportional intent.
+		if not surface.is_empty(): position = _resolve_position(surface, anchor, dimensions)
 		detail["resolved_position"] = position
 		detail["needs_placement"] = needs
-		detail["visible"] = str(detail.get("state", "")) != "suppressed"
+		var dormant := str(detail.get("state", "")) == "automatic" and not bool(detail.get("layout_active", true))
+		if dormant: detail["needs_placement"] = false
+		detail["visible"] = str(detail.get("state", "")) != "suppressed" and not dormant
+		detail["show_shutters"] = false
 		result.append(detail)
+	# Preserve all authored choices. Automatic windows yield to their footprints
+	# instead of painting over moved windows, boxes or manually added shutters.
+	for index in result.size():
+		var detail: Dictionary = result[index]
+		if str(detail.get("state", "")) == "automatic" or not _placed_visible(detail): continue
+		for other_index in index:
+			var other: Dictionary = result[other_index]
+			if str(other.get("state", "")) == "automatic": continue
+			if _details_overlap(detail, other, 0.0):
+				detail["needs_placement"] = true
+				detail["placement_reason"] = "attachment_overlap"
+				break
+	for index in result.size():
+		var detail: Dictionary = result[index]
+		if str(detail.get("state", "")) != "automatic" or not _placed_visible(detail): continue
+		for other_index in result.size():
+			if other_index == index: continue
+			var other: Dictionary = result[other_index]
+			if str(other.get("state", "")) == "automatic" and other_index > index: continue
+			# A moved-then-suppressed window excludes its chosen location too.
+			# Otherwise a previously blocked automatic slot can immediately fill
+			# the opening the player just removed.
+			if _details_overlap(detail, other, WINDOW_GAP, true):
+				detail["visible"] = false
+				detail["layout_blocked"] = true
+				break
+	for detail in result:
+		if not _placed_visible(detail) or str(detail.get("kind", "")) != "window" or str(detail.get("asset_id", "")).contains("round"): continue
+		var surface := _surface(building, str(detail["anchor"]["surface_id"]))
+		var local: Vector3 = detail["resolved_position"]
+		var tangent := local.x if str(surface.get("orientation", "")) in ["front", "back"] else local.z
+		var extent := dimensions.x if str(surface.get("orientation", "")) in ["front", "back"] else dimensions.z
+		var fits := absf(tangent) + WINDOW_SHUTTER_HALF_WIDTH + WINDOW_CORNER_CLEARANCE <= extent * 0.5
+		for other in result:
+			if str(other["id"]) == str(detail["id"]) or not _placed_visible(other) or str(other["anchor"]["surface_id"]) != str(detail["anchor"]["surface_id"]): continue
+			var other_local: Vector3 = other["resolved_position"]
+			var other_tangent := other_local.x if str(surface.get("orientation", "")) in ["front", "back"] else other_local.z
+			var other_half := WINDOW_SHUTTER_HALF_WIDTH if str(other.get("kind", "")) == "window" and not str(other.get("asset_id", "")).contains("round") else _detail_footprint(other).x
+			if absf(other_local.y - local.y) < _detail_footprint(detail).y + _detail_footprint(other).y and absf(other_tangent - tangent) < WINDOW_SHUTTER_HALF_WIDTH + other_half + WINDOW_GAP: fits = false
+		detail["show_shutters"] = fits
 	return result
+
+func _placed_visible(detail: Dictionary) -> bool:
+	return bool(detail.get("visible", false)) and not bool(detail.get("needs_placement", false)) and detail.get("resolved_position") is Vector3
+
+func _details_overlap(left: Dictionary, right: Dictionary, gap: float, reserve_suppression: bool = false) -> bool:
+	var excluded_window := reserve_suppression and str(right.get("state", "")) == "suppressed" and str(right.get("kind", "")) == "window" and right.get("resolved_position") is Vector3
+	if not _placed_visible(left) or not (_placed_visible(right) or excluded_window) or str(left["anchor"]["surface_id"]) != str(right["anchor"]["surface_id"]): return false
+	var left_position: Vector3 = left["resolved_position"]
+	var right_position: Vector3 = right["resolved_position"]
+	var delta := left_position - right_position
+	var left_size := _detail_footprint(left)
+	var right_size := _detail_footprint(right)
+	# Surface-normal coordinates match because both positions were resolved on
+	# the same wall; the remaining horizontal delta is its tangent distance.
+	return maxf(absf(delta.x), absf(delta.z)) < left_size.x + right_size.x + gap and absf(delta.y) < left_size.y + right_size.y
 
 func _resolve_position(surface: Dictionary, anchor: Dictionary, dimensions: Vector3):
 	var policy := str(anchor.get("policy", "proportional"))
@@ -407,9 +518,10 @@ func _detail_footprint(detail: Dictionary) -> Vector2:
 	var kind := str(detail.get("kind", "window"))
 	var asset := str(detail.get("asset_id", ""))
 	if kind == "flower_box": return Vector2(0.8, 0.2)
+	if kind == "shutter": return Vector2(0.33, 1.45)
 	if kind == "door": return Vector2(1.5, 3.25)
-	if asset.contains("round"): return Vector2(0.65, 0.65)
-	return Vector2(1.1, 1.5)
+	if asset.contains("round"): return Vector2(0.8, 0.8)
+	return Vector2(WINDOW_HALF_WIDTH, 2.07)
 
 func _set_detail_anchor(building_id: String, detail_id: String, surface_id: String, local_position: Vector3, state: String) -> bool:
 	if not local_position.is_finite() or not _surface_exists(building_id, surface_id): return false

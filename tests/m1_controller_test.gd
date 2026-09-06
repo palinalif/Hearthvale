@@ -20,8 +20,8 @@ func _initialize() -> void:
 	if scene.backend == null or not scene.backend.is_ready():
 		if scene.backend: print("BACKEND: %s" % JSON.stringify(scene.backend.stats()))
 		_finish(); return
-	_check(scene.backend.patch_size == Vector3i(96, 64, 96), "M1 uses doubled native terrain resolution")
-	_check(is_equal_approx(float(scene.backend.voxel_scale), 0.5), "M1 preserves authored world scale")
+	_check(scene.backend.patch_size == Vector3i(384, 256, 384), "M1 uses the fine native terrain grid")
+	_check(Vector3(scene.backend.patch_size) * float(scene.backend.voxel_scale) == Vector3(48, 32, 48), "M1 preserves authored world bounds")
 	_check(scene.view_context == "terrain", "default context is terrain")
 	await process_frame
 	_check(scene._terrain_target_valid, "default terrain cursor has a target")
@@ -130,6 +130,10 @@ func _initialize() -> void:
 	await _press(JOY_BUTTON_B)
 	_check(not scene.menu_open, "B closes pause menu")
 	await _press(JOY_BUTTON_BACK)
+	await process_frame
+	# The faster Dig can exhaust the earlier column. Verify feedback on intact
+	# ground rather than requiring a fabricated surface in an excavated void.
+	scene.cursor = Vector3(28, 8, 22)
 	await process_frame
 	_check(scene.view_context == "terrain" and scene.brush_preview.visible, "terrain aiming shows influence volume")
 	_check(scene.brush_preview.BrushVolume != null and scene.brush_preview.BrushVolume.visible, "influence volume remains visible without exact stamp")
