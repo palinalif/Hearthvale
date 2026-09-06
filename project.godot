@@ -1,9 +1,9 @@
-; Hearthvale M0. Native dependency probes remain in probes/.
+; Hearthvale M1. Keep the internal application name to preserve M0 user data.
 config_version=5
 
 [application]
 config/name="Hearthvale M0"
-run/main_scene="res://scenes/m0.tscn"
+run/main_scene="res://scenes/m1.tscn"
 config/icon="res://assets/icon.svg"
 config/features=PackedStringArray("4.7", "Mobile")
 

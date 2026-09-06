@@ -25,6 +25,12 @@ static func generate() -> Object:
 	for x in range(64, 78):
 		for z in range(38, 52):
 			for y in range(10, 16): voxels.set_voxel(0, x, y, z, CHANNEL_TYPE)
+	# A shallow east channel leaves a readable water surface above its floor.
+	# Keep two native-cell banks at either edge so it remains a small river strip,
+	# not a broad basin or a second terrain system.
+	for x in range(78, 96):
+		for z in range(20, 87):
+			for y in range(8, PATCH_SIZE.y): voxels.set_voxel(0, x, y, z, CHANNEL_TYPE)
 	return voxels
 
 static func build_library() -> Object:
