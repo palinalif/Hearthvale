@@ -7,6 +7,7 @@ const PATCH_SIZE := Vector3i(48, 32, 48)
 const BRUSH_STEPS := [1.5, 2.5, 4.0, 6.0]
 const CURSOR_MIN := Vector3(0.5, 0.0, 0.5)
 const CURSOR_MAX := Vector3(47.5, 31.0, 47.5)
+const BRUSH_PREVIEW_SCRIPT = preload("res://scripts/brush_preview.gd")
 
 @export var checkpoint_root := ""
 @export var benchmark_seconds_override := 60.0
@@ -16,6 +17,14 @@ var cursor := Vector3(3.0, 5.0, 24.0)
 var brush_index := 1
 var remove_mode := true
 var preview_active := false
+var preview_cells: Array[Vector3i] = []
+var _preview_cache_key := ""
+var _preview_locked_center := Vector3.ZERO
+var _preview_locked_radius := 0.0
+var _preview_locked_remove := true
+var _preview_backend_id := 0
+var _preview_revision := -1
+var _committing_preview := false
 var menu_open := false
 var debug_open := false
 var connected := true
@@ -39,18 +48,21 @@ var _world_dirty := false
 var _ever_focused := false
 var _shutting_down := false
 
-var preview_mesh: MeshInstance3D
 var cursor_mesh: MeshInstance3D
 var camera: Camera3D
 var hud: CanvasLayer
 var status: Label
 var cursor_info: Label
+var preview_info: Label
 var debug_label: Label
 var pause_panel: PanelContainer
 var fixture_panel: PanelContainer
 var fixture_label: Label
 var fixture_return_button: Button
 var fixture_quit_button: Button
+var brush_preview: Node3D
+var guide_mesh: MeshInstance3D
+var footpoint_mesh: MeshInstance3D
 var terrain_visual: Node3D
 var _last_focus := true
 
@@ -72,6 +84,8 @@ func _ready() -> void:
 		Input.joy_connection_changed.connect(_on_joy_connection_changed)
 	if backend and backend.has_signal("ready_changed"):
 		backend.ready_changed.connect(_on_backend_ready)
+	if backend and backend.has_signal("changed"):
+		backend.changed.connect(_on_backend_changed)
 	if backend and backend.has_method("is_ready") and backend.is_ready():
 		_on_backend_ready(true)
 	else:
@@ -88,6 +102,7 @@ func _process(delta: float) -> void:
 	if not menu_open and connected and not _fixture_active and not _benchmark_mode and not _restoring_player:
 		_read_controller(delta)
 		_update_camera(delta)
+	_update_preview_cache()
 	_update_cursor_visual()
 	_update_preview()
 	_update_debug()
@@ -145,6 +160,9 @@ func _handle_action(action: String) -> void:
 		elif action == "m0_accept":
 			var focused := get_viewport().gui_get_focus_owner()
 			if focused is Button: (focused as Button).pressed.emit()
+		return
+	if preview_active and action in ["m0_mode", "m0_radius_decrease", "m0_radius_increase", "m0_height_down", "m0_height_up"]:
+		_set_status("Preview locked; B cancels to adjust")
 		return
 	match action:
 		"m0_accept": _commit_or_preview()
@@ -225,6 +243,9 @@ func _build_lighting_and_world() -> void:
 	var sky := Sky.new(); var sky_mat := ProceduralSkyMaterial.new(); sky_mat.sky_top_color = Color("#143947"); sky_mat.sky_horizon_color = Color("#d29b70"); sky_mat.ground_bottom_color = Color("#161e24"); sky_mat.ground_horizon_color = Color("#6f5a51"); sky.sky_material = sky_mat; environment.sky = sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY; environment.ambient_light_energy = 0.65; environment.fog_enabled = true; environment.fog_light_color = Color("#54656b"); environment.fog_density = 0.006; env.environment = environment; add_child(env)
 	terrain_visual = Node3D.new(); terrain_visual.name = "TerrainPresentation"; add_child(terrain_visual); _build_water()
+	brush_preview = BRUSH_PREVIEW_SCRIPT.new()
+	brush_preview.name = "BrushPreview"
+	add_child(brush_preview)
 	camera = Camera3D.new(); camera.name = "OrbitCamera"; camera.current = true; camera.fov = 52.0; add_child(camera)
 
 func _build_terrain_presentation() -> void:
@@ -243,9 +264,10 @@ func _build_ui() -> void:
 	var margin := MarginContainer.new(); margin.name = "SafeMargins"; margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); margin.add_theme_constant_override("margin_left", 28); margin.add_theme_constant_override("margin_top", 24); margin.add_theme_constant_override("margin_right", 28); margin.add_theme_constant_override("margin_bottom", 22); hud.add_child(margin)
 	var column := VBoxContainer.new(); column.add_theme_constant_override("separation", 5); margin.add_child(column)
 	status = Label.new(); status.add_theme_font_size_override("font_size", 26); status.add_theme_color_override("font_color", Color("#ffe2b4")); column.add_child(status)
-	var controls := Label.new(); controls.text = "L cursor  •  R orbit  •  LT/RT zoom  •  A preview/commit  •  B cancel  •  X add/remove\nD-pad brush/height  •  LB/RB undo/redo  •  Start pause  •  Y debug  •  R3 focus"; controls.add_theme_font_size_override("font_size", 24); controls.add_theme_color_override("font_color", Color("#e1eee8")); column.add_child(controls)
+	var controls := Label.new(); controls.text = "L cursor  •  R orbit  •  LT/RT zoom  •  A lock/commit  •  B cancel  •  X add/remove\nD-pad brush/height  •  LB/RB undo/redo  •  Start pause  •  Y debug  •  R3 focus"; controls.add_theme_font_size_override("font_size", 24); controls.add_theme_color_override("font_color", Color("#e1eee8")); column.add_child(controls)
 	cursor_info = Label.new(); cursor_info.add_theme_font_size_override("font_size", 24); cursor_info.add_theme_color_override("font_color", Color("#9ff2de")); column.add_child(cursor_info)
-	debug_label = Label.new(); debug_label.position = Vector2(28, 178); debug_label.custom_minimum_size = Vector2(820, 0); debug_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; debug_label.add_theme_font_size_override("font_size", 22); debug_label.add_theme_color_override("font_color", Color("#bce9e0")); hud.add_child(debug_label); _build_pause_panel()
+	preview_info = Label.new(); preview_info.add_theme_font_size_override("font_size", 22); preview_info.add_theme_color_override("font_color", Color("#ffd39d")); column.add_child(preview_info)
+	debug_label = Label.new(); debug_label.position = Vector2(28, 270); debug_label.custom_minimum_size = Vector2(820, 0); debug_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; debug_label.add_theme_font_size_override("font_size", 22); debug_label.add_theme_color_override("font_color", Color("#bce9e0")); hud.add_child(debug_label); _build_pause_panel()
 
 func _build_pause_panel() -> void:
 	pause_panel = PanelContainer.new(); pause_panel.name = "PauseMenu"; pause_panel.position = Vector2(430, 120); pause_panel.size = Vector2(420, 500); pause_panel.visible = false; hud.add_child(pause_panel)
@@ -272,8 +294,11 @@ func _pause_choice(choice: String) -> void:
 
 func _read_controller(delta: float) -> void:
 	var move := Vector2(Input.get_axis("m0_move_left", "m0_move_right"), Input.get_axis("m0_move_up", "m0_move_down"))
-	if move.length() > 0.05:
-		move = move.limit_length(1.0); var forward := Vector3(sin(camera_yaw), 0.0, cos(camera_yaw)); var right := Vector3(forward.z, 0.0, -forward.x); cursor += (right * move.x + forward * move.y) * delta * 12.0; cursor.x = clampf(cursor.x, CURSOR_MIN.x, CURSOR_MAX.x); cursor.z = clampf(cursor.z, CURSOR_MIN.z, CURSOR_MAX.z)
+	if not preview_active and move.length() > 0.05:
+		var magnitude := minf(move.length(), 1.0)
+		move = move.normalized() * pow(magnitude, 1.45)
+		var speed := lerpf(3.0, 12.0, pow(magnitude, 0.85))
+		var forward := Vector3(sin(camera_yaw), 0.0, cos(camera_yaw)); var right := Vector3(forward.z, 0.0, -forward.x); cursor += (right * move.x + forward * move.y) * delta * speed; cursor.x = clampf(cursor.x, CURSOR_MIN.x, CURSOR_MAX.x); cursor.z = clampf(cursor.z, CURSOR_MIN.z, CURSOR_MAX.z)
 	var orbit_x := Input.get_axis("m0_orbit_left", "m0_orbit_right"); var orbit_y := Input.get_axis("m0_orbit_up", "m0_orbit_down"); camera_yaw += orbit_x * delta * 2.2; camera_pitch = clampf(camera_pitch + orbit_y * delta * 1.5, 0.15, 1.25)
 	var zoom := Input.get_axis("m0_zoom_out", "m0_zoom_in"); camera_distance = clampf(camera_distance - zoom * delta * 18.0, 12.0, 52.0)
 
@@ -282,38 +307,60 @@ func _commit_or_preview() -> bool:
 		_set_status("Terrain is still loading; edit unavailable")
 		return false
 	if preview_active:
-		var ok: bool = backend.apply_sphere(cursor, BRUSH_STEPS[brush_index], remove_mode) if backend.has_method("apply_sphere") else false
+		_committing_preview = true
+		var ok: bool = backend.apply_sphere(_preview_locked_center, _preview_locked_radius, _preview_locked_remove) if backend.has_method("apply_sphere") else false
+		_committing_preview = false
 		preview_active = false
 		if ok: _world_dirty = true
-		_set_status("Committed one %s sphere" % ("remove" if remove_mode else "add") if ok else "Commit failed; no terrain change")
+		_preview_cache_key = ""
+		preview_cells.clear()
+		if brush_preview and brush_preview.has_method("update_geometry"):
+			brush_preview.update_geometry(_snap_preview_target(cursor), BRUSH_STEPS[brush_index], remove_mode, preview_cells)
+		_set_status("Committed one %s sphere" % ("remove" if _preview_locked_remove else "add") if ok else "Commit failed; no terrain change")
 		return ok
+	_preview_locked_center = _snap_preview_target(cursor)
+	_preview_locked_radius = BRUSH_STEPS[brush_index]
+	_preview_locked_remove = remove_mode
 	preview_active = true
-	_set_status("Preview: press A to commit, B to cancel")
+	_update_preview_readout()
+	_set_status("Preview locked: A commit / B cancel")
 	return true
 
 func _cancel_or_menu() -> void:
 	if preview_active:
-		preview_active = false
+		_unlock_preview()
 		_set_status("Preview cancelled; terrain unchanged")
 	else:
 		_set_menu(true)
 
-func _cancel_preview_and_pause(reason: String) -> void: preview_active = false; _set_status(reason); _set_menu(true)
+func _unlock_preview() -> void:
+	preview_active = false
+	_preview_cache_key = ""
+	_preview_backend_id = 0
+	_preview_revision = -1
+	preview_cells.clear()
+	if brush_preview and brush_preview.has_method("update_geometry"):
+		brush_preview.update_geometry(_snap_preview_target(cursor), BRUSH_STEPS[brush_index], remove_mode, preview_cells)
+	_update_preview_readout()
+
+func _cancel_preview_and_pause(reason: String) -> void: _unlock_preview(); _set_status(reason); _set_menu(true)
 
 func _set_menu(open: bool) -> void:
 	menu_open = open; if pause_panel: pause_panel.visible = open
 	if open:
-		preview_active = false
+		_unlock_preview()
 		if _pause_buttons.has("Save"): (_pause_buttons["Save"] as Button).call_deferred("grab_focus")
 	state_changed.emit("menu" if open else "world")
 
 func _undo() -> bool:
+	_unlock_preview()
 	var ok: bool = backend.undo() if backend and backend.has_method("undo") else false
 	if ok: _world_dirty = true
 	_set_status("Undo complete" if ok else "Nothing to undo")
 	return ok
 
 func _redo() -> bool:
+	_unlock_preview()
 	var ok: bool = backend.redo() if backend and backend.has_method("redo") else false
 	if ok: _world_dirty = true
 	_set_status("Redo complete" if ok else "Nothing to redo")
@@ -326,8 +373,8 @@ func _save_world() -> bool:
 	return ok
 
 func _reload_world() -> bool:
+	_unlock_preview()
 	var ok: bool = backend.load_world() if backend and backend.has_method("load_world") else false
-	preview_active = false
 	if ok: _world_dirty = false
 	_set_status("World reloaded" if ok else "Reload failed")
 	return ok
@@ -372,6 +419,14 @@ func _create_backend_at(root_path: String) -> void:
 		backend.name = "TerrainBackend"
 		backend.set("checkpoint_root", root_path)
 		add_child(backend)
+		if backend.has_signal("ready_changed") and not backend.ready_changed.is_connected(_on_backend_ready): backend.ready_changed.connect(_on_backend_ready)
+		if backend.has_signal("changed") and not backend.changed.is_connected(_on_backend_changed): backend.changed.connect(_on_backend_changed)
+
+func _on_backend_changed() -> void:
+	if _committing_preview: return
+	if preview_active or not preview_cells.is_empty():
+		_unlock_preview()
+		_set_status("Terrain changed; preview cancelled")
 
 func _finish_fixture(result: Dictionary) -> void:
 	_fixture_result = result
@@ -460,13 +515,83 @@ func _update_camera(_delta: float) -> void:
 
 func _update_cursor_visual() -> void:
 	if cursor_mesh == null:
-		cursor_mesh = MeshInstance3D.new(); cursor_mesh.name = "WorldCursor"; var ring := TorusMesh.new(); ring.inner_radius = 0.8; ring.outer_radius = 1.0; ring.rings = 24; ring.ring_segments = 8; cursor_mesh.mesh = ring; var mat := StandardMaterial3D.new(); mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; mat.no_depth_test = true; mat.albedo_color = Color("#58e4d0"); mat.emission_enabled = true; mat.emission = Color("#1d8d80"); cursor_mesh.material_override = mat; add_child(cursor_mesh)
-	if preview_mesh == null:
-		preview_mesh = MeshInstance3D.new(); preview_mesh.name = "SpherePreview"; var sphere := SphereMesh.new(); sphere.radius = 1.0; sphere.height = 2.0; sphere.radial_segments = 24; sphere.rings = 12; preview_mesh.mesh = sphere; var preview_mat := StandardMaterial3D.new(); preview_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; preview_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; preview_mat.no_depth_test = true; preview_mat.albedo_color = Color(0.2, 0.85, 0.7, 0.24); preview_mat.emission_enabled = true; preview_mat.emission = Color(0.1, 0.4, 0.3); preview_mesh.material_override = preview_mat; add_child(preview_mesh)
-	cursor_mesh.position = cursor + Vector3(0, 0.04, 0); cursor_mesh.scale = Vector3.ONE * BRUSH_STEPS[brush_index]; var ring_material := cursor_mesh.material_override as StandardMaterial3D; ring_material.albedo_color = Color("#ffb36b") if not remove_mode else Color("#58e4d0"); preview_mesh.position = cursor; preview_mesh.scale = Vector3.ONE * BRUSH_STEPS[brush_index]; preview_mesh.visible = preview_active; cursor_info.text = "Cell %d, %d, %d   radius %.1f   %s" % [roundi(cursor.x), roundi(cursor.y), roundi(cursor.z), BRUSH_STEPS[brush_index], "REMOVE" if remove_mode else "ADD"]
+		cursor_mesh = MeshInstance3D.new(); cursor_mesh.name = "WorldCursor"; var marker := SphereMesh.new(); marker.radius = 0.13; marker.height = 0.26; marker.radial_segments = 12; marker.rings = 6; cursor_mesh.mesh = marker; var mat := StandardMaterial3D.new(); mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; mat.no_depth_test = true; mat.albedo_color = Color("#58e4d0"); mat.emission_enabled = true; mat.emission = Color("#1d8d80"); cursor_mesh.material_override = mat; add_child(cursor_mesh)
+	if guide_mesh == null:
+		guide_mesh = MeshInstance3D.new(); guide_mesh.name = "CursorHeightGuide"; var guide := CylinderMesh.new(); guide.top_radius = 0.025; guide.bottom_radius = 0.025; guide.height = 32.0; guide_mesh.mesh = guide; var guide_material := StandardMaterial3D.new(); guide_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; guide_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; guide_material.albedo_color = Color(1.0, 0.72, 0.42, 0.22); guide_mesh.material_override = guide_material; add_child(guide_mesh)
+		footpoint_mesh = MeshInstance3D.new(); footpoint_mesh.name = "CursorFootpoint"; var foot := BoxMesh.new(); foot.size = Vector3(0.55, 0.035, 0.07); footpoint_mesh.mesh = foot; footpoint_mesh.material_override = guide_material.duplicate(); add_child(footpoint_mesh)
+	var display_center := _preview_locked_center if preview_active else _snap_preview_target(cursor)
+	var display_radius: float = _preview_locked_radius if preview_active else BRUSH_STEPS[brush_index]
+	var display_remove: bool = _preview_locked_remove if preview_active else remove_mode
+	cursor_mesh.position = display_center; cursor_mesh.scale = Vector3.ONE
+	var ring_material := cursor_mesh.material_override as StandardMaterial3D; ring_material.albedo_color = Color("#ffb36b") if not display_remove else Color("#58e4d0")
+	var guide_floor := _nearest_floor(display_center)
+	var guide_height := absf(display_center.y - guide_floor)
+	guide_mesh.visible = guide_height > 0.12
+	if guide_mesh.visible:
+		guide_mesh.position = Vector3(display_center.x, (display_center.y + guide_floor) * 0.5, display_center.z); guide_mesh.scale = Vector3(1.0, guide_height / 32.0, 1.0)
+	footpoint_mesh.position = Vector3(display_center.x, guide_floor + 0.04, display_center.z)
+	cursor_info.text = "Target %.1f, %.1f, %.1f   radius %.1f   %s" % [display_center.x, display_center.y, display_center.z, display_radius, "REMOVE" if display_remove else "ADD"]
+
+func _nearest_floor(center: Vector3) -> float:
+	if not backend or not backend.has_method("voxel_at"): return 0.0
+	var cell_x := clampi(floori(center.x), 0, PATCH_SIZE.x - 1)
+	var cell_z := clampi(floori(center.z), 0, PATCH_SIZE.z - 1)
+	var from_y := clampi(floori(center.y) - 1, 0, PATCH_SIZE.y - 1)
+	for y in range(from_y, -1, -1):
+		if int(backend.voxel_at(Vector3i(cell_x, y, cell_z))) != 0: return float(y + 1)
+	return 0.0
+
+func _snap_preview_target(value: Vector3) -> Vector3:
+	return Vector3(roundf(value.x * 2.0) / 2.0, roundf(value.y * 2.0) / 2.0, roundf(value.z * 2.0) / 2.0)
+
+func _preview_revision_value() -> int:
+	if backend and backend.has_method("stats"):
+		var stats: Dictionary = backend.stats()
+		return int(stats.get("authoritative_revision", stats.get("revision", 0)))
+	return -1
+
+func _update_preview_cache() -> void:
+	if not backend or not backend.has_method("is_ready") or not backend.is_ready() or not backend.has_method("preview_sphere"):
+		preview_cells.clear()
+		_update_preview_readout()
+		return
+	var center := _preview_locked_center if preview_active else _snap_preview_target(cursor)
+	var radius: float = _preview_locked_radius if preview_active else BRUSH_STEPS[brush_index]
+	var remove := _preview_locked_remove if preview_active else remove_mode
+	var revision := _preview_revision_value()
+	var key := "%s|%.2f|%s|%s|%d" % [center, radius, remove, backend.get_instance_id(), revision]
+	if key == _preview_cache_key:
+		_update_preview_readout()
+		return
+	_preview_cache_key = key
+	_preview_backend_id = backend.get_instance_id()
+	_preview_revision = revision
+	var changed: Array = backend.preview_sphere(center, radius, remove)
+	preview_cells.clear()
+	for cell in changed:
+		if cell is Vector3i: preview_cells.append(cell)
+	if brush_preview and brush_preview.has_method("update_geometry"):
+		brush_preview.update_geometry(center, radius, remove, preview_cells)
+	_update_preview_readout()
+
+func _update_preview_readout() -> void:
+	if not preview_info: return
+	var mode := "REMOVE" if (_preview_locked_remove if preview_active else remove_mode) else "ADD"
+	var radius: float = _preview_locked_radius if preview_active else BRUSH_STEPS[brush_index]
+	var count := preview_cells.size()
+	if preview_active:
+		preview_info.text = "LOCKED  %s  radius %.1f  %d cells\nA commit  •  B cancel" % [mode, radius, count] if count > 0 else "LOCKED  %s  radius %.1f  No affected cells\nB cancel" % [mode, radius]
+	else:
+		preview_info.text = "%s  radius %.1f  %d affected cells\nA lock  •  B pause" % [mode, radius, count] if count > 0 else "%s  radius %.1f  No affected cells\nA lock  •  B pause" % [mode, radius]
 
 func _update_preview() -> void:
-	if cursor_mesh: cursor_mesh.visible = true
+	var fixture_result_visible := _fixture_active and _fixture_done
+	var backend_ready: bool = backend != null and backend.has_method("is_ready") and backend.is_ready()
+	var placement_visible: bool = not menu_open and not fixture_result_visible and not _restoring_player and backend_ready
+	if cursor_mesh: cursor_mesh.visible = placement_visible
+	if guide_mesh: guide_mesh.visible = placement_visible and guide_mesh.visible
+	if footpoint_mesh: footpoint_mesh.visible = placement_visible
+	if brush_preview: brush_preview.visible = placement_visible
 
 func _percentile(values: Array[float], q: float) -> float:
 	if values.is_empty(): return 0.0
@@ -514,10 +639,17 @@ func _maybe_benchmark() -> void:
 	elif not _capture_path.is_empty(): _capture_standalone()
 
 func _apply_capture_view() -> void:
+	_preview_cache_key = ""
 	if _capture_view == "water":
-		cursor = Vector3(40, 7, 9); camera_yaw = 0.9; camera_pitch = 0.6; camera_distance = 24.0
+		_unlock_preview(); cursor = Vector3(40, 7, 9); camera_yaw = 0.9; camera_pitch = 0.6; camera_distance = 24.0
 	elif _capture_view == "preview":
-		cursor = Vector3(3, 5, 24); camera_yaw = -1.1; camera_pitch = 0.66; camera_distance = 24.0; preview_active = true; _set_status("Preview: A commit / B cancel")
+		cursor = Vector3(3, 5, 24); camera_yaw = -1.1; camera_pitch = 0.66; camera_distance = 24.0; _preview_locked_center = _snap_preview_target(cursor); _preview_locked_radius = BRUSH_STEPS[brush_index]; _preview_locked_remove = remove_mode; preview_active = true; _set_status("Preview: A commit / B cancel")
+	elif _capture_view in ["aim-remove", "aim-add", "locked"]:
+		cursor = Vector3(24, 12, 24); camera_yaw = -1.1; camera_pitch = 0.66; camera_distance = 24.0; brush_index = 1; remove_mode = _capture_view != "aim-add"; preview_active = false
+		if _capture_view == "locked":
+			_commit_or_preview()
+		else:
+			_set_status("Aim %s: A lock / B pause" % ("REMOVE" if remove_mode else "ADD"))
 	_update_camera(0.0)
 	_update_cursor_visual()
 
