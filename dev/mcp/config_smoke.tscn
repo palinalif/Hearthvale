@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://cvic4dv2tanso"]
+
+[ext_resource type="Script" uid="uid://d1pxrlha24c57" path="res://config_generation.gd" id="1_ecjlo"]
+
+[node name="ConfigSmoke" type="Node3D" unique_id=786149499]
+script = ExtResource("1_ecjlo")

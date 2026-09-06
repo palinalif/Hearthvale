@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://bnk12jye0rlrc"]
+
+[ext_resource type="Script" uid="uid://cterej863w6vy" path="res://smoke.gd" id="1_niign"]
+
+[node name="Smoke" type="Node3D" unique_id=1784023331]
+script = ExtResource("1_niign")
+
+[node name="SmokeCamera" type="Camera3D" parent="." unique_id=165902102]
