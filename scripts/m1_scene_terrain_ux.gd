@@ -117,7 +117,8 @@ func _update_brush_preview() -> void:
 		_layer_key.clear()
 	else:
 		var plan_key: Array = plan.get("_request_key", key)
-		if plan_key != _layer_key:
+		var stale_changed := stale != bool(_layer_plan.get("_stale", false))
+		if plan_key != _layer_key or stale_changed:
 			_layer_plan = plan
 			_layer_key = plan_key.duplicate(true)
 			preview_cells = plan["packed"]["cells"]
