@@ -535,6 +535,23 @@ func _dominant_axis(vector: Vector3) -> int:
 	elif absf(vector.z) > absf(vector.x): axis = 2
 	return axis
 
+static func sculpt_front_influence(distance_ratio: float, falloff: float) -> float:
+	if not is_finite(distance_ratio) or not is_finite(falloff):
+		return 0.0
+	var distance := clampf(distance_ratio, 0.0, 1.0)
+	if distance >= 1.0:
+		return 0.0
+	# Falloff controls the feather width instead of sharpening a power curve.
+	# Low values leave a broad full-strength plateau; high values make a
+	# rounded hill. The default 0.45 stays flat through roughly half-radius.
+	var feather_width := lerpf(0.2, 0.85, clampf(falloff, 0.0, 1.0))
+	var plateau_end := 1.0 - feather_width
+	if distance <= plateau_end:
+		return 1.0
+	var edge := clampf((distance - plateau_end) / feather_width, 0.0, 1.0)
+	var smooth_edge := edge * edge * (3.0 - 2.0 * edge)
+	return 1.0 - smooth_edge
+
 func _consume_stroke_time(duration: float) -> void:
 	var remaining := duration
 	var stationary_duration := 0.0
@@ -601,11 +618,10 @@ func _integrate_front_sample(center: Vector3, duration: float) -> void:
 		_stroke_front_cache_center = center
 		_stroke_front_columns = _stroke_columns(center, radius)
 		_stroke_front_influence.resize(_stroke_front_columns.size())
-		var exponent := lerpf(1.0, 4.0, float(_stroke_settings["falloff"]))
 		for i in _stroke_front_columns.size():
 			var column := _stroke_front_columns[i]
 			_ensure_front(column, center)
-			_stroke_front_influence[i] = pow(maxf(0.0, 1.0 - _column_distance(column, center) / radius), exponent)
+			_stroke_front_influence[i] = sculpt_front_influence(_column_distance(column, center) / radius, float(_stroke_settings["falloff"]))
 	var ready_columns: Array[Vector3i] = []
 	var max_transitions := 0
 	var rate := float(_stroke_settings["strength"]) * duration
