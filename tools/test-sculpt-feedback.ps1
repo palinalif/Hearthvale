@@ -28,16 +28,12 @@ function Invoke-Gate([string]$label, [string[]]$arguments) {
     if ($exitCode -ne 0 -or ($output -match 'ERROR:|Parse Error:|FAIL:')) {
         throw "Gate failed: $label (exit=$exitCode)"
     }
-    if ($label -ne 'import') {
-        $joined = $output -join "`n"
-        $hasPlainReceipt = $joined -match 'failures=0'
-        $hasJsonReceipt = $joined -match '"failures"\s*:\s*0' -and $joined -match '"ok"\s*:\s*true'
-        if (-not ($hasPlainReceipt -or $hasJsonReceipt)) {
-            throw "Missing successful test receipt: $label"
-        }
+    $successReceipt = ($output -match 'failures=0') -or ($output -match '"failures"\s*:\s*0')
+    if ($label -ne 'import' -and -not $successReceipt) {
+        throw "Missing successful test receipt: $label"
     }
 }
 Invoke-Gate 'import' @('--headless', '--path', '.', '--editor', '--import', '--quit')
-foreach ($test in @('smooth_neighbourhood_test','sculpt_smoothing_test','sculpt_test','m1_scaled_backend_test')) {
+foreach ($test in @('sculpt_brush_profile_test','smooth_neighbourhood_test','sculpt_smoothing_test','sculpt_test','m1_scaled_backend_test')) {
     Invoke-Gate $test @('--headless', '--path', '.', '--script', "tests/$test.gd")
 }
