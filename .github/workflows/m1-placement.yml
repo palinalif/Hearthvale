@@ -1,0 +1,35 @@
+name: M1 attachment placement regressions
+on:
+  push:
+    branches: [fix/m1-sculpt-feedback]
+    paths:
+      - scenes/m1.tscn
+      - scripts/m1_scene_placement.gd
+      - scripts/wall_attachment_placement.gd
+      - scripts/detail_placement_ghost.gd
+      - tests/wall_attachment_placement_test.gd
+      - tests/m1_attachment_placement_test.gd
+      - tools/test-m1-placement.ps1
+      - .github/workflows/m1-placement.yml
+  pull_request:
+    paths:
+      - scenes/m1.tscn
+      - scripts/m1_scene_placement.gd
+      - scripts/wall_attachment_placement.gd
+      - scripts/detail_placement_ghost.gd
+      - tests/wall_attachment_placement_test.gd
+      - tests/m1_attachment_placement_test.gd
+      - tools/test-m1-placement.ps1
+      - .github/workflows/m1-placement.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  placement-regressions:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install locked editor and native voxel extension; run placement tests
+        shell: pwsh
+        run: ./tools/test-m1-placement.ps1
