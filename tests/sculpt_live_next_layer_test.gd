@@ -39,9 +39,9 @@ func _run() -> void:
 			# Populate exactly the same active frontier/targets the gameplay backend
 			# exposes before either read-only planner gets edit credit.
 			source._integrate_stroke_sample(center, 0.0)
-			var before := source.voxels.get_channel_as_byte_array(0)
-			var fronts := source._stroke_fronts.duplicate(true)
-			var accum := source._stroke_accumulated.duplicate(true)
+			var before: PackedByteArray = source.voxels.get_channel_as_byte_array(0)
+			var fronts: Dictionary = source._stroke_fronts.duplicate(true)
+			var accum: Dictionary = source._stroke_accumulated.duplicate(true)
 			var reference_plan: Dictionary = reference.plan(source, tool, center, settings, plane)
 			var live_plan: Dictionary = Live.plan(source, center)
 			check(bool(reference_plan.get("valid", false)) and bool(live_plan.get("valid", false)), "both planners valid %s %.2f" % [tool, falloff])
@@ -56,7 +56,7 @@ func _run() -> void:
 	for normal in [Vector3.LEFT, Vector3.RIGHT, Vector3.FORWARD, Vector3.BACK, Vector3.DOWN]:
 		for tool in ["raise", "dig"]:
 			source.voxels.fill(0, 0)
-			var axis := normal.abs().max_axis_index()
+			var axis: int = normal.abs().max_axis_index()
 			var low := Vector3i.ZERO
 			var high := Vector3i(48, 32, 48)
 			var wall_center := Vector3(24, 16, 24)
