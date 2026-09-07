@@ -1,9 +1,8 @@
 extends RefCounted
-## Single-flight terrain preview service. Idle aiming uses one isolated snapshot
-## worker and may keep the last completed exact result at its ORIGINAL world
-## position while a newer request computes. Ordinary active brushes reuse the
-## authoritative live frontier; oversized brushes remain asynchronous so they
-## cannot stall gameplay.
+## Single-flight terrain preview service. Snapshot workers may keep their last
+## completed exact result at its ORIGINAL world position while a newer request
+## computes. Ordinary active brushes reuse the authoritative live frontier;
+## oversized brushes remain asynchronous so they cannot stall gameplay.
 const Snapshot = preload("res://scripts/sculpt_preview_snapshot.gd")
 const Query = preload("res://scripts/sculpt_preview_query.gd")
 const Live = preload("res://scripts/sculpt_live_next_layer.gd")
@@ -70,11 +69,11 @@ func update(source: Node, tool: String, center: Vector3, settings: Dictionary, r
 				push_error("Cannot start terrain preview worker: %s" % error)
 			else:
 				query_count += 1
-	# Idle terrain is unchanged while the cursor moves. Keep the last exact
-	# completed overlay at the coordinates it was actually computed for; the
-	# caller dims it and labels the newer request as pending. Never do this
-	# during an active stroke because terrain beneath an old plan may have moved.
-	if not active and not _latest_plan.is_empty():
+	# Keep the last exact completed overlay at the coordinates it was actually
+	# computed for while the next asynchronous request runs. During an active
+	# oversized brush it can describe an older frontier, so callers MUST keep
+	# it visibly dimmed and labelled as catching up; it is never repositioned.
+	if not _latest_plan.is_empty():
 		var stale := _latest_plan.duplicate(false)
 		stale["_stale"] = true
 		stale["_request_key"] = _latest_key.duplicate(true)
