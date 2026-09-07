@@ -54,7 +54,13 @@ func first(cell: Vector3i, direction: int, reach: int, occupied: bool) -> int:
 	var low := mini(mapped.y, last)
 	var high := maxi(mapped.y, last)
 	var offset := (mapped.z * rotated_size.x + mapped.x) * rotated_size.y
-	var run := data.slice((offset + low) * bytes_per_cell, (offset + high + 1) * bytes_per_cell)
+	var byte_low := (offset + low) * bytes_per_cell
+	var byte_high := (offset + high + 1) * bytes_per_cell - 1
 	var value := 255 if occupied else 0
-	var found := run.find(value) if direction > 0 else run.rfind(value)
-	return low + found / bytes_per_cell + origin[axis] if found >= 0 else -1
+	# Search the shared packed buffer directly. The bounds check below keeps the
+	# result inside this column, without allocating a temporary slice per probe.
+	var found := data.find(value, byte_low) if direction > 0 else data.rfind(value, byte_high)
+	if found < byte_low or found > byte_high:
+		return -1
+	var coordinate := int(found / bytes_per_cell) - offset
+	return coordinate + origin[axis]
