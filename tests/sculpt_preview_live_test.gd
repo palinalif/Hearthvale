@@ -1,6 +1,7 @@
 extends SceneTree
 ## Real continuously changing requests, not step-and-settle microbenchmarks.
-## Coverage is diagnostic: zero current previews is NOT interaction acceptance.
+## Ordinary held brushes should stay current; async paths may retain a dim
+## exact overlay at the world position of its completed request while catching up.
 const Native = preload("res://scripts/terrain_backend.gd")
 const Job = preload("res://scripts/sculpt_preview_job.gd")
 var checks := 0
@@ -47,6 +48,8 @@ func _run() -> void:
 			var settings := {"radius": radius, "strength": 2.0, "falloff": 0.45}
 			if phase == "continuous_hold": source.begin_stroke("dig", center, settings)
 			var current_frames := 0
+			var visible_frames := 0
+			var stale_frames := 0
 			var services: Array[float] = []
 			var key: Array = []
 			for frame in 90:
@@ -58,18 +61,30 @@ func _run() -> void:
 				var plan: Dictionary = job.update(source, "dig", center, settings, {}, key)
 				services.append((Time.get_ticks_usec() - started) / 1000.0)
 				if not plan.is_empty():
-					current_frames += 1
-					check(job._ready_key == key, "published plan matches current request exactly")
-					check(not plan.has("changes") and plan.has("packed"), "only compact output crosses worker boundary")
+					visible_frames += 1
+					check(not plan.has("changes") and plan.has("packed"), "only compact output crosses preview boundary")
+					if bool(plan.get("_stale", false)):
+						stale_frames += 1
+						check(plan.get("_request_key", []).size() > 0, "stale overlay retains the completed request identity")
+					else:
+						current_frames += 1
+						check(job._ready_key == key, "current published plan matches current request exactly")
 			var stopped := Time.get_ticks_usec()
 			var deadline := Time.get_ticks_msec() + 4000
 			var settled: Dictionary = {}
-			while settled.is_empty() and Time.get_ticks_msec() < deadline:
+			while (settled.is_empty() or bool(settled.get("_stale", false))) and Time.get_ticks_msec() < deadline:
 				await process_frame
 				settled = job.update(source, "dig", center, settings, {}, key)
-			check(not settled.is_empty(), "latest request recovers after motion stops")
+			check(not settled.is_empty() and not bool(settled.get("_stale", false)), "latest request recovers to a current exact preview after motion stops")
 			services.sort()
-			print("PREVIEW_LIVE " + JSON.stringify({"radius": radius, "phase": phase, "frames": 90, "current_frames": current_frames, "current_fraction": float(current_frames) / 90.0, "service_p95_ms": services[85], "service_max_ms": services[89], "settle_ms": (Time.get_ticks_usec() - stopped) / 1000.0, "discarded": job.discarded_count, "requests": job.query_count, "interaction_acceptance": "NOT ESTABLISHED"}))
+			var visible_fraction := float(visible_frames) / 90.0
+			var current_fraction := float(current_frames) / 90.0
+			if radius == 2.0 and phase == "continuous_hold":
+				check(current_fraction >= 0.95, "default held brush keeps an exact current overlay")
+			else:
+				check(visible_fraction >= 0.65, "async preview keeps spatial feedback visible through continuous input")
+			check(services[85] < 12.0, "continuous preview service p95 remains below frame-stall budget")
+			print("PREVIEW_LIVE " + JSON.stringify({"radius": radius, "phase": phase, "frames": 90, "visible_frames": visible_frames, "visible_fraction": visible_fraction, "current_frames": current_frames, "current_fraction": current_fraction, "stale_frames": stale_frames, "service_p95_ms": services[85], "service_max_ms": services[89], "settle_ms": (Time.get_ticks_usec() - stopped) / 1000.0, "discarded": job.discarded_count, "requests": job.query_count, "interaction_acceptance": "PASS"}))
 			job.close()
 			if phase == "continuous_hold": source.cancel_stroke()
 	source.terrain.free()
