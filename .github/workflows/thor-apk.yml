@@ -58,8 +58,8 @@ jobs:
           $settings = Get-ChildItem (Join-Path $env:APPDATA 'Godot') -Filter 'editor_settings-*.tres' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
           if (-not $settings) { throw 'Godot editor settings file was not created' }
           $text = Get-Content $settings.FullName -Raw
-          $sdk = ($env:ANDROID_HOME -replace '\\','/')
-          $jdk = ($env:JAVA_HOME -replace '\\','/')
+          $sdk = ($env:ANDROID_HOME -replace '\','/')
+          $jdk = ($env:JAVA_HOME -replace '\','/')
           foreach ($pair in @(@('export/android/android_sdk_path',$sdk), @('export/android/java_sdk_path',$jdk))) {
             $key = $pair[0]; $value = $pair[1]
             $pattern = '(?m)^' + [regex]::Escape($key) + '\s*=.*$'
@@ -93,6 +93,7 @@ jobs:
           $aapt = Join-Path $buildTools.FullName 'aapt.exe'
           $apksigner = Join-Path $buildTools.FullName 'apksigner.bat'
           $badging = (& $aapt dump badging $apk 2>&1 | Out-String)
+          Write-Output ($badging -split "`n" | Select-Object -First 1)
           if ($LASTEXITCODE -ne 0 -or $badging -notmatch "package: name='org\.hearthvale\.game'") { throw 'APK package metadata verification failed' }
           & $apksigner verify --verbose $apk
           if ($LASTEXITCODE -ne 0) { throw 'APK signature verification failed' }
