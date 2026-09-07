@@ -39,8 +39,15 @@ func _init() -> void:
 					if value >= 0.0:
 						total += value
 						count += 1
-			var expected := total / float(count) if count > 0 else -1.0
-			check(is_equal_approx(means[i], expected), "summed-area matches naive %d/%d" % [trial, i])
+			var current := float(surfaces.get(columns[i], -1.0))
+			var expected := -1.0
+			if count > 0:
+				expected = current - 1.0 if radius > 0 and count == 1 and current >= 0.0 else total / float(count)
+			check(is_equal_approx(means[i], expected), "summed-area matches robust reference %d/%d" % [trial, i])
+	var isolated := {Vector3i.ZERO: 11.0}
+	var isolated_columns: Array[Vector3i] = [Vector3i.ZERO]
+	check(Kernel.means(isolated_columns, isolated, 2)[0] == 10.0, "isolated cap erodes one cell")
+	check(Kernel.means(isolated_columns, isolated, 0)[0] == 11.0, "zero radius remains exact")
 	means = Kernel.means(columns, {})
 	for value in means: check(value == -1.0, "missing columns stay invalid")
 	check(Kernel.means(columns, surfaces, -1).is_empty(), "invalid neighbourhood rejected")

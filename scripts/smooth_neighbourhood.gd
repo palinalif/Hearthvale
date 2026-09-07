@@ -45,5 +45,17 @@ static func means(columns: Array[Vector3i], surfaces: Dictionary, radius: int = 
 		var c := z1 * stride + x0
 		var d := z1 * stride + x1
 		var count := counts[d] - counts[b] - counts[c] + counts[a]
-		result[i] = (sums[d] - sums[b] - sums[c] + sums[a]) / float(count) if count > 0 else -1.0
+		if count == 0:
+			result[i] = -1.0
+			continue
+		var current := float(surfaces.get(column, -1.0))
+		# If a non-zero neighbourhood can only see its own exposed surface,
+		# nearby columns are beyond the safe initial vertical probe. Treat that
+		# surface as an isolated cap/spike and erode one cell. This lets smooth
+		# remove a thin disconnected cave roof without ever retargeting the
+		# cave floor after the roof opens. Radius zero remains an exact sample.
+		if radius > 0 and count == 1 and current >= 0.0:
+			result[i] = current - 1.0
+		else:
+			result[i] = (sums[d] - sums[b] - sums[c] + sums[a]) / float(count)
 	return result
