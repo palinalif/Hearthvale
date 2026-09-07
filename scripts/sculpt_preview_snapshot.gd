@@ -19,7 +19,7 @@ var patch_size := Vector3i.ZERO
 var voxel_scale := 1.0
 var voxels: ReadView
 var state: Dictionary = {}
-var reference: Dictionary = {}
+var plane_reference: Dictionary = {}
 var copied_bytes := 0
 var capture_ms := 0.0
 
@@ -65,9 +65,9 @@ static func capture(source: Node, tool: String, world_center: Vector3, settings:
 			var value: Variant = source.get(property)
 			if value is Dictionary or value is Array or value is PackedFloat64Array: value = value.duplicate()
 			snapshot.state[property] = value
-	snapshot.reference = plane.duplicate(true)
-	if not active and effective_tool in ["level", "slope"] and snapshot.reference.is_empty():
+	snapshot.plane_reference = plane.duplicate(true)
+	if not active and effective_tool in ["level", "slope"] and snapshot.plane_reference.is_empty():
 		# Same bounded reference probe as begin_stroke, on the owning thread.
-		snapshot.reference = source.sample_surface_plane(world_center, source._settings_normal(settings), float(settings.get("radius", 2.0)) + 1.0)
+		snapshot.plane_reference = source.sample_surface_plane(world_center, source._settings_normal(settings), float(settings.get("radius", 2.0)) + 1.0)
 	snapshot.capture_ms = (Time.get_ticks_usec() - started) / 1000.0
 	return snapshot

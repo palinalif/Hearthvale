@@ -2,7 +2,7 @@ extends RefCounted
 ## Single-flight, latest-request-only preview. At most one immutable snapshot
 ## and one worker exist. No queued backlog and no waiting on gameplay frames.
 const Snapshot = preload("res://scripts/sculpt_preview_snapshot.gd")
-const Query = preload("res://scripts/sculpt_next_layer.gd")
+const Query = preload("res://scripts/sculpt_preview_query.gd")
 const Buffers = preload("res://scripts/terrain_preview_buffers.gd")
 var _thread: Thread
 var _running_key: Array = []
@@ -34,7 +34,7 @@ func update(source: Node, tool: String, center: Vector3, settings: Dictionary, r
 		_running_epoch = _epoch
 		_started_usec = Time.get_ticks_usec()
 		_thread = Thread.new()
-		var error := _thread.start(_compute.bind(snapshot, tool, center, settings.duplicate(true), snapshot.reference))
+		var error := _thread.start(_compute.bind(snapshot, tool, center, settings.duplicate(true), snapshot.plane_reference))
 		if error != OK:
 			_thread = null
 			push_error("Cannot start terrain preview worker: %s" % error)

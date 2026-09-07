@@ -58,15 +58,19 @@ func _run() -> void:
 			visual.show_plan(actual)
 			var packed: Dictionary = actual["packed"]
 			check(packed.cells.size() == expected.changes.size(), "packed cells complete")
-			for i in expected.changes.size():
-				var change: Dictionary = expected.changes[i]
-				var layer: MultiMesh = visual.removals.multimesh if int(change.after) == 0 else visual.additions.multimesh
-				# Every fixture here has only additions or only removals.
-				if layer.visible_instance_count != expected.changes.size(): break
+			var offsets := [0, 0, 0]
+			for change: Dictionary in expected.changes:
+				var layer := 1 if int(change.after) == 0 else 2
+				var i := int(offsets[layer])
+				offsets[layer] += 1
+				var buffer: PackedFloat32Array = packed.buffers[layer]
 				var point := (Vector3(change.cell) + Vector3.ONE * 0.5) * 0.125
-				if int(change.after) == 0: point += expected.normal * 0.125 * 0.515
-				check(layer.get_instance_transform(i).origin.is_equal_approx(point), "bulk transform layout")
-				check(layer.get_instance_color(i).a > 0.0, "bulk color layout")
+				if layer == 1: point += expected.normal * 0.125 * 0.515
+				var offset := i * 16
+				check(Vector3(buffer[offset + 3], buffer[offset + 7], buffer[offset + 11]).is_equal_approx(point), "bulk transform layout")
+				check(buffer[offset + 15] >= 0.4 and buffer[offset + 15] <= 1.0, "bulk color layout")
+				# GPU readback belongs to the separate rendered gate, not the
+				# headless dummy RenderingServer (which has no GPU transforms).
 	# Freeze an active brush, then mutate/cancel the live terrain. Worker
 	# still sees the original snapshot and owns its own copied metadata.
 	source.voxels.fill(0, 0)
