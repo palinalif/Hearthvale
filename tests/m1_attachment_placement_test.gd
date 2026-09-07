@@ -34,10 +34,10 @@ func _initialize() -> void:
 	var ghost_piece: MeshInstance3D = scene.placement_ghost.get_child(0)
 	var ghost_material := ghost_piece.material_override as StandardMaterial3D
 	check(ghost_material != null and ghost_material.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA and ghost_material.albedo_color.a < 1.0, "ghost is visibly translucent")
-	var start := scene.detail_move_position
+	var start: Vector3 = scene.detail_move_position
 	await _axis(JOY_AXIS_LEFT_X, 1.0)
 	check(scene.detail_move_position != start and scene.detail_move_position.z > 7.0, "left stick moves freely while remaining wall locked")
-	var old_surface := scene.detail_move_surface_id
+	var old_surface: String = scene.detail_move_surface_id
 	await _press(JOY_BUTTON_DPAD_RIGHT)
 	check(scene.detail_move_surface_id != old_surface, "dpad cycles wall during placement")
 	var support := Placement.surface(scene.building_world.get_building(scene.selected_building_id), scene.detail_move_surface_id)
@@ -51,7 +51,7 @@ func _initialize() -> void:
 
 	scene.selected_surface_id = "wall-back"
 	scene._tool_choice("Add flower box")
-	var placed_position := scene.detail_move_position
+	var placed_position: Vector3 = scene.detail_move_position
 	await _press(JOY_BUTTON_A)
 	check(not scene.detail_move_active and scene.placement_kind.is_empty(), "A commits placement")
 	var after: Dictionary = scene.building_world.get_document()
