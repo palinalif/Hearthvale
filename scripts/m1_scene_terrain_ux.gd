@@ -106,22 +106,27 @@ func _update_brush_preview() -> void:
 	last_frame_costs["preview_build_ms"] = 0.0
 	var plan: Dictionary = _layer_query.update(backend, sculpt_tool, query_center, settings, _preview_reference, key)
 	last_frame_costs["preview_query_ms"] = float(_layer_query.last_capture_ms)
-	_layer_pending = plan.is_empty()
-	if _layer_pending:
-		# Never present yesterday's cells as today's prediction. The small
-		# live target marker remains, and the HUD explicitly reports pending.
+	var stale := bool(plan.get("_stale", false))
+	_layer_pending = plan.is_empty() or stale
+	if plan.is_empty():
+		# No completed exact result exists yet for this context. Keep the small
+		# live target marker rather than resurrecting the old flat blue plane.
 		terrain_edit_preview.visible = false
 		preview_cells = []
 		_layer_plan = {}
 		_layer_key.clear()
-	elif key != _layer_key:
-		_layer_plan = plan
-		_layer_key = key.duplicate(true)
-		preview_cells = plan["packed"]["cells"]
-		terrain_edit_preview.show_plan(plan)
-		last_frame_costs["preview_build_ms"] = float(terrain_edit_preview.last_build_ms)
-	terrain_edit_preview.visible = not _layer_pending and bool(_layer_plan.get("valid", false))
-	if stroke_active and _layer_plan.get("center", null) is Vector3:
+	else:
+		var plan_key: Array = plan.get("_request_key", key)
+		if plan_key != _layer_key:
+			_layer_plan = plan
+			_layer_key = plan_key.duplicate(true)
+			preview_cells = plan["packed"]["cells"]
+			terrain_edit_preview.show_plan(plan)
+			last_frame_costs["preview_build_ms"] = float(terrain_edit_preview.last_build_ms)
+		elif terrain_edit_preview.has_method("set_stale"):
+			terrain_edit_preview.set_stale(stale)
+		terrain_edit_preview.visible = bool(_layer_plan.get("valid", false))
+	if stroke_active and not stale and _layer_plan.get("center", null) is Vector3:
 		_terrain_target_point = _layer_plan["center"]
 		preview_center = _terrain_target_point
 	_update_reference_guides(preview_center, sample)
@@ -166,8 +171,11 @@ func _update_presentation() -> void:
 	if sculpt_tool in ["foliage", "tree", "clear_planting"]:
 		target_label.text = target_label.text.replace("str %.1f falloff %.1f" % [brush_strength, brush_falloff], "planting")
 		return
-	var summary := "Preview updating • target marker only" if _layer_pending else "No terrain target"
-	if _terrain_target_valid and bool(_layer_plan.get("valid", false)):
+	var stale := bool(_layer_plan.get("_stale", false))
+	var summary := "Exact preview updating • target marker remains live"
+	if stale:
+		summary = "Exact preview catching up • dim overlay is the last completed aim"
+	elif _terrain_target_valid and bool(_layer_plan.get("valid", false)):
 		var added := int(_layer_plan.get("add_count", 0))
 		var removed := int(_layer_plan.get("remove_count", 0))
 		if added + removed > 0:
@@ -181,5 +189,4 @@ func _update_debug_overlay() -> void:
 	super._update_debug_overlay()
 	if debug_label and debug_label.visible:
 		debug_label.text += "\nPreview snapshot %.2f ms / upload %.2f ms (0 = cached)" % [float(last_frame_costs.get("preview_query_ms", 0.0)), float(last_frame_costs.get("preview_build_ms", 0.0))]
-
 		debug_label.text += "\nWorker query %.2f ms / packing %.2f ms / response %.2f ms%s" % [float(_layer_query.last_query_ms), float(_layer_query.last_pack_ms), float(_layer_query.last_latency_ms), " • pending" if _layer_pending else ""]
