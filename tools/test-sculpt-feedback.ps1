@@ -28,8 +28,13 @@ function Invoke-Gate([string]$label, [string[]]$arguments) {
     if ($exitCode -ne 0 -or ($output -match 'ERROR:|Parse Error:|FAIL:')) {
         throw "Gate failed: $label (exit=$exitCode)"
     }
-    if ($label -ne 'import' -and -not ($output -match 'failures=0')) {
-        throw "Missing successful test receipt: $label"
+    if ($label -ne 'import') {
+        $joined = $output -join "`n"
+        $hasPlainReceipt = $joined -match 'failures=0'
+        $hasJsonReceipt = $joined -match '"failures"\s*:\s*0' -and $joined -match '"ok"\s*:\s*true'
+        if (-not ($hasPlainReceipt -or $hasJsonReceipt)) {
+            throw "Missing successful test receipt: $label"
+        }
     }
 }
 Invoke-Gate 'import' @('--headless', '--path', '.', '--editor', '--import', '--quit')
