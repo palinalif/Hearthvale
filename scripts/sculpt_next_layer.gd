@@ -4,8 +4,6 @@ extends "res://scripts/terrain_backend.gd"
 ## end-of-stroke volume. Falloff still controls how soon that cell changes.
 ## Native voxel data is borrowed for reads only; all writes are intercepted.
 
-const ColumnIndex = preload("res://scripts/sculpt_column_index.gd")
-
 class ReadRegion extends RefCounted:
 	var source: Object
 	var origin: Vector3i
@@ -25,11 +23,6 @@ var query_count := 0
 var _add_count := 0
 var _remove_count := 0
 var last_query_ms := 0.0
-var last_snapshot_bytes := 0
-var _column_index: RefCounted
-var _index_center := Vector3.ZERO
-var _index_radius := 0.0
-var _index_queries_enabled := false
 
 func _ready() -> void:
 	push_error("SculptNextLayer is a read-only query, not a live terrain node")
@@ -39,9 +32,6 @@ func plan(source: Node, tool: String, world_center: Vector3, settings: Dictionar
 		return {"valid": false, "changes": [], "rim": []}
 	var started := Time.get_ticks_usec()
 	query_count += 1
-	_column_index = null
-	_index_queries_enabled = false
-	last_snapshot_bytes = 0
 	_clear_stroke()
 	_planned.clear()
 	_weights.clear()
@@ -65,9 +55,6 @@ func plan(source: Node, tool: String, world_center: Vector3, settings: Dictionar
 		_stroke_front_sign = 1
 	var center := _world_to_cell(world_center)
 	var radius: float = _stroke_settings["radius"]
-	_index_center = center
-	_index_radius = radius
-	_index_queries_enabled = true
 	var idle := not bool(source.get("_stroke_active"))
 	if idle:
 		var cache_key: Array = [voxels.get_instance_id(), source.get("_revision"), _stroke_tool, _stroke_front_axis, _stroke_front_sign, floori(center[_stroke_front_axis]), radius]
@@ -131,52 +118,3 @@ func _record_stroke_change(position: Vector3i, current: int, desired: int) -> vo
 	var column := position
 	column[_stroke_front_axis] = 0
 	_planned.append({"cell": position, "before": current, "after": desired, "weight": float(_weights.get(column, 1.0))})
-
-func _index() -> RefCounted:
-	if _column_index != null: return _column_index
-	var index := ColumnIndex.new()
-	if not index.capture(voxels, patch_size, _index_center, _index_radius, _stroke_front_axis): return null
-	_column_index = index
-	last_snapshot_bytes = index.copied_bytes
-	return index
-
-func _ensure_front(column: Vector3i, center: Vector3) -> void:
-	if _stroke_fronts.has(column): return
-	var index := _index()
-	if index == null:
-		super._ensure_front(column, center)
-		return
-	# Same outward-first search and contiguous-front rule as TerrainBackend;
-	# only replace the per-cell scan with native runs. Parity tests compare
-	# these seeds against the unmodified backend in every direction.
-	var coordinate := floori(center[_stroke_front_axis])
-	var reach := ceili(float(_stroke_settings["radius"])) + 1
-	var found: int = index.first(_column_cell(column, coordinate), _stroke_front_sign, reach, true)
-	if found < 0:
-		found = index.first(_column_cell(column, coordinate - _stroke_front_sign), -_stroke_front_sign, reach - 1, true)
-	if found < 0:
-		_stroke_fronts[column] = clampi(coordinate, 0, patch_size[_stroke_front_axis] - 1)
-		return
-	if _stroke_tool == SCULPT_TOOL_RAISE:
-		var empty: int = index.first(_column_cell(column, found + _stroke_front_sign), _stroke_front_sign, patch_size[_stroke_front_axis], false)
-		_stroke_fronts[column] = empty if empty >= 0 else (patch_size[_stroke_front_axis] if _stroke_front_sign > 0 else -1)
-	else:
-		_stroke_fronts[column] = found
-
-func _surface_y_near(source: Object, x: int, z: int, center_y: float, reach: float) -> float:
-	# Level and Smooth use vertical columns regardless of the reference mode.
-	if not _index_queries_enabled or _stroke_front_axis != 1 or source != voxels:
-		return super._surface_y_near(source, x, z, center_y, reach)
-	if x < 0 or z < 0 or x >= patch_size.x or z >= patch_size.z: return -1.0
-	var index := _index()
-	if index == null: return super._surface_y_near(source, x, z, center_y, reach)
-	var start := clampi(floori(center_y), 0, patch_size.y - 1)
-	var limit := ceili(maxf(reach, 1.0))
-	var solid := start
-	if int(source.get_voxel(x, start, z, 0)) == 0:
-		solid = index.first(Vector3i(x, start - 1, z), -1, limit - 1, true)
-		if solid >= 0: return float(solid + 1)
-		solid = index.first(Vector3i(x, start + 1, z), 1, limit - 1, true)
-		if solid < 0: return -1.0
-	var empty: int = index.first(Vector3i(x, solid + 1, z), 1, patch_size.y, false)
-	return float(empty if empty >= 0 else patch_size.y)
