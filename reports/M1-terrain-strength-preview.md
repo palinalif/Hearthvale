@@ -33,11 +33,13 @@ Headless passes do not validate the visible shader result, actual GPU draw costs
 
 A single CI diagnostic on a fine.125-unit grid measured cold Dig planning at17.553 ms (radius2,793 cells) and571.356 ms (radius8,12,849 cells). This synchronous work is unacceptable for the stated no-lag requirement. These are runner CPU timings, not Thor measurements or stable averages.
 
-Commit67b6104 tried bounded native occupancy snapshots/remapping. Run34162761366 failed because the native extension logged two Invalid input count errors in remap_values_u8 plus fill_area/get_value bounds errors. The wrapper correctly failed the run despite the new test printing3136 checks /0 failures. Later suites were not executed after that gate. It also measured cold538.684 ms, warm217.981 ms and mesh-build43.162 ms at radius8, so accepting only the assertions would not fix the performance issue.
+**Correction, 2026-09-07:** the previous version of this paragraph misreported run34162761366. Its actual log records3136 checks /1107 failures, chiefly occupancy/seeding parity on axes0 and2, not zero assertion failures with the claimed remap/bounds errors. The recorded radius8 timings are cold168.033 ms, warm118.964 ms and mesh-build16.179 ms. The earlier538.684/217.981/43.162 figures do not describe that run and must not be used. Later suites did not execute after the failing gate.
 
 The follow-up commit backs out that experiment to the exact passing a7511ae implementation/test tree. No existing success criteria were weakened; the unsuccessful helper and its test are removed together. The recorded failed run remains part of the history.
 
 ## Remaining before joint playtest
+
+The subsequent worker experiment and its measured continuous-input blocker are documented in [M1-preview-worker-experiment.md](M1-preview-worker-experiment.md). The historical checks below are not a statement of current completion.
 
 1. Bound query and mesh-publication work at both normal and maximum radii; measure repeated cold, moving and held input. A lower update frequency alone does not remove a long synchronous stall.
 2. Any worker must read an immutable bounded snapshot, not the live editable buffer; generation checks must reject stale aim/tool/stroke/revision results. Pending or partial visual feedback must be labelled honestly.

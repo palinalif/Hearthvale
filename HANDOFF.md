@@ -1,34 +1,38 @@
 # Hearthvale — current M1 handoff
 
-Updated 2026-09-07. Read AGENTS.md and the user's latest request first. M1 is not complete. The full preceding handoff is retained at `docs/history/HANDOFF-before-terrain-ux.md`; do not reread it unless its baseline details are needed.
+Updated 2026-09-07. Read AGENTS.md and the user's latest request first. **M1 is not complete. Terrain preview remains experimental, unmerged and not ready for an APK.** Older baseline details are retained in `docs/history/HANDOFF-before-terrain-ux.md`.
 
-## Repository and approved work
+## Repository and authorized scope
 
-The default branch is **master**, not main. At the user's explicit request, the previous `fix/m1-sculpt-feedback` branch was fast-forward merged into master at `2da7b7e926b1ea73cbfa8418948160d52d7646aa`. That retains the smoothing, rounded/plateau brush profiles, wall-relative attachment ghosts, free cottage duplication and APK workflow history. The user playtested that APK on the Thor and liked the sculpting behaviour but found its strength excessive.
+Default branch: `master`, still at the previous Thor-playtested `2da7b7e926b1ea73cbfa8418948160d52d7646aa`. The predecessor merge was completed before this batch. Work remains on `fix/m1-terrain-strength-preview`; the user authorized continued preview performance experiments, not additional M1 priorities or M2.
 
-Current work branch: **fix/m1-terrain-strength-preview**, created from that merged master. Do not merge this new work or ship an APK while its performance acceptance remains unresolved.
+The strength change at `293f873` is retained: displayed 1–10, default 5, raw anchors 1/2/4 world units per second at levels 1/5/10, quarter-speed precision, planting unchanged. The requested preview shows complete next-layer additions/removals and a separate reach cue, with meaningful Level/Slope planes. It must not introduce sculpting lag. Building-centred camera, windows, decorative resolution, river and trees remain outside this workstream.
 
-Only these two priorities are approved for this batch:
-1. Displayed strength 1–10 with 5 as default; raw rates 1, 2 and 4 world units/sec at levels 1, 5 and 10. Retain quarter-speed precision and leave planting alone.
-2. Accurate, inexpensive next-layer terrain feedback: removal hatching, ghost additions, a separate surface-following reach cue, and useful Level/Slope target planes. Do not reintroduce sculpting lag.
+## Latest tested code and evidence
 
-Subsequent priorities remain building-centred editing camera, window geometry consistency, user-reviewed cottage UX, finer decorative resolution prototype, river and trees. None of those is implemented in this workstream.
+Code commit `7b7c19f4adb00913e6a9c1bb3a7299b65a9d5504`; successful Windows CI run `34165865770`; artifact `10034133515`. Documentation after that commit does not alter code/tests. Read `reports/M1-preview-worker-experiment.md` and its compact receipt `reports/performance/M1-preview-worker-7b7c19f.log` for exact samples and limitations.
 
-## Current implementation and evidence
+The original read-only adapter still calls the real backend integrators; only its source type changed from Node to Object. The new `sculpt_preview_snapshot`, `sculpt_preview_query`, `sculpt_occupancy_runs`, `sculpt_preview_job` and `terrain_preview_buffers` scripts provide brush-local owned snapshots, parity-tested accelerated seeding, one worker with no backlog, and bulk MultiMesh buffers. Native gameplay editing remains unchanged. Temporary per-cell records and snapshot metadata are freed on the worker, avoiding main-thread join/replacement spikes. Long stroke history is bounded to the local brush area when copied.
 
-- `293f87397d32fe6bb1acd70241ed4bf5539ee865`: gentler strength and exponential interpolation through the three agreed anchors. New `sculpt_strength.gd` and `m1_scene_terrain_ux.gd`; the exported `scenes/m1.tscn` uses the latter above the existing placement subclass. CI run 34161535202 passed. The new strength test has 37 checks, including actual inherited stroke settings for all five sculpt tools and precision.
-- `a7511ae88f6f40ad98f8a9ca66c360002d09c29e`: functional read-only preview prototype. `sculpt_next_layer.gd` reuses native backend integrators with intercepted writes; `terrain_edit_preview.gd` draws three batched layers. Exact footprint, one-cell credit per eligible column, not an end-of-hold prediction. Idle plans are cached. Menus hide the preview; planting retains its prior preview.
-- CI run 34162179626 passed all eight suites: profile118, neighbourhood410, smoothing23, sculpt188, scaled29, strength37, next-layer635, scene24 (all zero failures). These are native headless checks, NOT actual shader/render, Thor performance or visual approval.
-- Profiling found a blocker: cold fine-grid Dig queries took 17.553 ms at radius2 / 793 cells and 571.356 ms at radius8 / 12,849 cells on that Windows CI runner. These are single diagnostics, not statistically robust benchmarks. Do not ship this synchronous preview as an accepted performance solution.
-- `67b6104e473f2a2175285221cffba44b95fdd6b6` attempted bounded occupancy-run acceleration. Run 34162761366 failed native remap/bounds checks despite zero assertion failures; timings did not establish an improvement. The follow-up restores the exact a7511ae code/test tree and records this failure. It removes the unsuccessful index helper/test, not any established baseline assertions.
+The actual `m1_scene_terrain_ux.gd` now uses that job and rejects stale keys/context generations. Menus/context changes do not block on a running worker. Pending hides the exact cell overlay, preserves the small target marker/useful plane and labels the HUD explicitly. Idle current plans are cached. `terrain_edit_preview.gd` publishes three packed buffers; existing shader and full candidate detail remain.
 
-## Next engineering task / acceptance
+Native headless tests: **18,320 assertions / zero failures across 12 suites**, retaining all eight preceding regression suites. New coverage includes six-direction 8-/16-bit occupancy, snapshot isolation, captured active-state independence, packed transforms, stale-result rejection and local copying of a 147,456-front history. The final rendered test separately passed **4 checks** on actual Mobile/D3D12 using Microsoft Basic Render Driver (software): bulk upload and prior setter rendering were pixel-identical, with no stderr errors. This is a synthetic fixture, not integrated M1 art approval or Thor/GPU performance.
 
-Finish point2's performance before a combined Thor build. Separate cold querying, moving/held querying and mesh publication costs. Avoid synchronous whole-brush rescans and per-instance API loops at maximum radius. Any incremental or worker implementation must use immutable bounded snapshots (not concurrent reads/writes of the live voxel buffer), reject stale results on aim/tool/revision/context changes, and visibly distinguish pending computation from a current edit prediction. Do not merely throttle a half-second synchronous operation or silently show sparse cells as a complete prediction.
+## Measured blocker — do not treat green CI as acceptance
 
-Reuse the real tool decisions and retain parity in all six facing directions, disconnected caves, smoothing at rest, cancel/undo/redo, and the actual exported scene. Add meaningful budgets and repeated cold/moving/held timing receipts. Passing correctness alone is insufficient. Verify shaders and geometry on the actual Mobile renderer before exporting.
+At radius 8, capture/start cost was 2.139–4.769 ms in step-and-settle tests, versus a 686.037 ms single control sample for the original synchronous query. The optimized full result still took about 171–250 ms to arrive. Default radius 2 requests arrived in roughly 12–17 ms. These are preview-service/worker measurements on Windows CI; headless publication cost is not GPU timing or complete gameplay frame cost.
 
-Run `./tools/test-terrain-ux.ps1` on the pinned Windows environment; `.github/workflows/terrain-ux.yml` runs it and retains exact source plus logs. The editing container had no Godot/PowerShell and direct GitHub networking failed; no native tests ran there. Source was acquired through an authenticated GitHub Actions artifact. No external model or network is added to gameplay.
+**Continuous input starves the overlay.** Over 90 continuously changing frames: radius-2 moving aim displayed a current preview in 0 frames and held Dig in 1; radius-8 moving aim and held Dig both displayed it in 0. Preview-side main-thread service remained at most 0.846 ms at radius 2 and 5.062 ms at radius 8, but hiding stale cells means there is mostly no exact overlay until input stops. Radius-8 recovery after stopping took 268–417 ms. This fails the intended interaction at both brush sizes.
+
+The live test's zero assertion failures only establish that anything published was current and that recovery occurred; visibility coverage is explicitly diagnostic and NOT ESTABLISHED. Do not advertise the default preview as working continuously. No assertions or error-budget gates were weakened to claim a pass.
+
+## Next engineering task
+
+Replace whole-brush invalidation with reusable local surface data or independently validated incremental regions, recomputing current-aim influence/changed columns with the exact native rules. This is a proposed direction, not implemented. More workers, blindly accepting stale results, relocating an old ghost or silently showing an incomplete footprint are not acceptable fixes. Preserve disconnected-cave/retired-front behaviour, smooth-neighbour dependencies, reference planes, cancel/undo/redo and all controller/menu safety.
+
+Measure explicit current-preview availability and result age under genuinely continuous movement/held input, plus complete M1 frame costs and real maximum-radius draw/publication work. Horizontal maximum-radius performance, independent asynchronous-architecture review, Android update/signing validation and physical Thor/controller testing have not been run. Desktop synthetic rendering does not close those gates.
+
+Reproduction: `./tools/test-terrain-ux.ps1`, then `./tools/probe-terrain-preview-render.ps1`; workflow `.github/workflows/terrain-ux.yml` retains exact source/logs/captures. No native runtime was available in the editing container; all native executions were on Windows CI. Failed iterations, including the real earlier occupancy parity failures and a correction to the old report, are documented in the worker report. Start from current code, not the reverted `67b6104` helper.
 
 ## Runtime, saves and artifacts
 

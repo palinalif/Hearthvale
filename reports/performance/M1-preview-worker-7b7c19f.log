@@ -1,0 +1,62 @@
+# Native CI evidence: commit 7b7c19f4adb00913e6a9c1bb3a7299b65a9d5504
+# Run 34165865770; artifact 10034133515
+# Archive SHA256 d9513c91752ab247300fcf7abefca2cb224b539cabedbe46954af4783f4fc5a6
+# Extracted receipt lines; full logs and exact source are retained in the artifact.
+# SUCCESS here is correctness/CPU service-budget/synthetic pixel parity, NOT continuous-preview or Thor acceptance.
+
+## m1_scaled_backend_test.log
+{"checks":29,"failures":0,"ok":true}
+
+## m1_terrain_ux_test.log
+m1_terrain_ux_test checks=24 failures=0
+
+## sculpt_brush_profile_test.log
+sculpt_brush_profile_test checks=118 failures=0
+
+## sculpt_next_layer_test.log
+PREVIEW_QUERY radius=2.0 cells=793 cpu_ms=21.641
+PREVIEW_QUERY radius=8.0 cells=12849 cpu_ms=686.037
+sculpt_next_layer_test checks=635 failures=0
+
+## sculpt_occupancy_runs_test.log
+sculpt_occupancy_runs_test checks=15408 failures=0
+
+## sculpt_preview_job_test.log
+sculpt_preview_job_test checks=1386 failures=0
+
+## sculpt_preview_live_test.log
+PREVIEW_LONG_HISTORY {"capture_ms":1.16,"copied_fronts":1681,"live_fronts":147456}
+PREVIEW_LIVE {"current_fraction":0.0,"current_frames":0,"discarded":84,"frames":90,"interaction_acceptance":"NOT ESTABLISHED","phase":"continuous_aim","radius":2.0,"requests":85,"service_max_ms":0.846,"service_p95_ms":0.586,"settle_ms":16.526}
+PREVIEW_LIVE {"current_fraction":0.0111111111111111,"current_frames":1,"discarded":86,"frames":90,"interaction_acceptance":"NOT ESTABLISHED","phase":"continuous_hold","radius":2.0,"requests":88,"service_max_ms":0.843,"service_p95_ms":0.708,"settle_ms":14.343}
+PREVIEW_LIVE {"current_fraction":0.0,"current_frames":0,"discarded":7,"frames":90,"interaction_acceptance":"NOT ESTABLISHED","phase":"continuous_aim","radius":8.0,"requests":8,"service_max_ms":2.701,"service_p95_ms":2.5,"settle_ms":416.682}
+PREVIEW_LIVE {"current_fraction":0.0,"current_frames":0,"discarded":9,"frames":90,"interaction_acceptance":"NOT ESTABLISHED","phase":"continuous_hold","radius":8.0,"requests":10,"service_max_ms":5.062,"service_p95_ms":4.816,"settle_ms":268.257}
+sculpt_preview_live_test checks=8 failures=0
+
+## sculpt_preview_performance_test.log
+PREVIEW_PERF {"capture_ms":[0.453,0.213,0.192,0.204,0.177],"cells":793,"phase":"cold","poll_p95_ms":0.024,"radius":2.0,"response_ms":[17.281,16.616,16.628,16.637,16.641],"samples":5,"snapshot_bytes":860672,"upload_ms":[0.039,0.02,0.018,0.018,0.019],"worker_pack_ms":[1.347,1.369,1.337,1.352,1.349],"worker_query_ms":[12.271,11.357,11.298,11.28,11.207]}
+PREVIEW_PERF {"capture_ms":[0.284,0.172,0.281,0.167,0.224],"cells":793,"phase":"moving","poll_p95_ms":0.053,"radius":2.0,"response_ms":[15.926,16.677,16.615,16.657,16.65],"samples":5,"snapshot_bytes":860672,"upload_ms":[0.018,0.018,0.017,0.025,0.029],"worker_pack_ms":[1.34,1.297,1.29,1.336,1.331],"worker_query_ms":[11.682,11.405,12.266,11.663,11.548]}
+PREVIEW_PERF {"capture_ms":[0.464,0.279,0.379,0.301,0.31],"cells":793,"phase":"held","poll_p95_ms":0.295,"radius":2.0,"response_ms":[16.026,13.401,13.066,12.081,14.748],"samples":5,"snapshot_bytes":860672,"upload_ms":[0.031,0.026,0.028,0.027,0.028],"worker_pack_ms":[1.341,1.309,1.297,1.34,1.297],"worker_query_ms":[7.533,7.022,7.902,7.101,7.688]}
+PREVIEW_PERF {"capture_ms":[2.139,2.586,2.581,2.678,2.646],"cells":12849,"phase":"cold","poll_p95_ms":0.027,"radius":8.0,"response_ms":[230.913,233.126,233.234,249.903,249.941],"samples":5,"snapshot_bytes":9609728,"upload_ms":[0.185,0.071,0.079,0.082,0.105],"worker_pack_ms":[22.069,27.089,21.507,23.778,23.947],"worker_query_ms":[197.13,194.557,195.127,201.705,198.71]}
+PREVIEW_PERF {"capture_ms":[2.351,2.236,2.243,2.165,2.222],"cells":12849,"phase":"moving","poll_p95_ms":0.13,"radius":8.0,"response_ms":[249.209,233.42,233.308,233.007,233.298],"samples":5,"snapshot_bytes":9609728,"upload_ms":[0.082,0.08,0.078,0.08,0.074],"worker_pack_ms":[22.332,21.424,23.202,22.395,22.734],"worker_query_ms":[200.648,192.57,195.946,194.317,197.694]}
+PREVIEW_PERF {"capture_ms":[4.658,4.769,4.178,4.603,4.449],"cells":12849,"phase":"held","poll_p95_ms":0.138,"radius":8.0,"response_ms":[171.411,171.635,171.288,171.718,171.31],"samples":5,"snapshot_bytes":9609728,"upload_ms":[0.08,0.08,0.08,0.104,0.069],"worker_pack_ms":[24.081,21.423,22.587,23.653,23.44],"worker_query_ms":[124.749,125.387,121.348,123.62,124.626]}
+sculpt_preview_performance_test checks=54 failures=0
+
+## sculpt_smoothing_test.log
+sculpt_smoothing_test checks=23 failures=0
+
+## sculpt_strength_test.log
+sculpt_strength_test checks=37 failures=0
+
+## sculpt_test.log
+sculpt_test checks=188 failures=0
+
+## smooth_neighbourhood_test.log
+smooth_neighbourhood_test checks=410 failures=0
+
+## render-d3d12.out.log
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+D3D12 12_0 - Forward Mobile - Using Device #0: Microsoft - Microsoft Basic Render Driver
+
+PREVIEW_RENDER_START {"adapter":"Microsoft Basic Render Driver","driver":"d3d12","method":"mobile"}
+sculpt_preview_render_test checks=4 failures=0
+# render-d3d12.err.log: 0 bytes
