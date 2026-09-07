@@ -2,7 +2,7 @@ name: Thor playtest APK
 
 on:
   push:
-    branches: [fix/m1-sculpt-feedback]
+    branches: [fix/m1-terrain-strength-preview]
     paths:
       - .github/workflows/thor-apk.yml
       - project.godot
