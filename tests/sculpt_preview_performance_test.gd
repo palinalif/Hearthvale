@@ -66,7 +66,7 @@ func _run() -> void:
 				publish_times.append(visual.last_build_ms)
 				worker_times.append(job.last_query_ms)
 				pack_times.append(job.last_pack_ms)
-				cell_count = plan.changes.size()
+				cell_count = plan.packed.cells.size()
 			check(cell_count > 9, "full fine-grid footprint retained")
 			# Fail hard on gameplay stalls. Response latency is reported
 			# separately; these budgets do not declare Thor acceptance.

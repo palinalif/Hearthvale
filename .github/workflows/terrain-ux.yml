@@ -38,6 +38,9 @@ jobs:
           } else {
             Write-Output 'Infrastructure preparation only: no new terrain UX tests exist yet. No gameplay validation claimed.'
           }
+      - name: Probe actual Mobile bulk-render parity
+        shell: pwsh
+        run: ./tools/probe-terrain-preview-render.ps1
       - name: Retain source and diagnostic logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -47,5 +50,6 @@ jobs:
             .tools/terrain-ux/source.zip
             .tools/sculpt-ci/*.log
             .tools/terrain-ux/*.log
+            .tools/terrain-ux/*.png
           if-no-files-found: error
           retention-days: 14

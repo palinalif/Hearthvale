@@ -34,7 +34,7 @@ func update(source: Node, tool: String, center: Vector3, settings: Dictionary, r
 		_running_epoch = _epoch
 		_started_usec = Time.get_ticks_usec()
 		_thread = Thread.new()
-		var error := _thread.start(_compute.bind(snapshot, tool, center, settings.duplicate(true), snapshot.plane_reference))
+		var error := _thread.start(_compute.bind(snapshot, tool, center, settings.duplicate(true), snapshot.plane_reference, false))
 		if error != OK:
 			_thread = null
 			push_error("Cannot start terrain preview worker: %s" % error)
@@ -62,7 +62,7 @@ func _collect() -> void:
 	else:
 		discarded_count += 1
 
-static func _compute(snapshot: RefCounted, tool: String, center: Vector3, settings: Dictionary, reference: Dictionary) -> Dictionary:
+static func _compute(snapshot: RefCounted, tool: String, center: Vector3, settings: Dictionary, reference: Dictionary, retain_changes: bool = true) -> Dictionary:
 	# The adapter node is private to this worker, is never added to the tree,
 	# and reads only its own snapshot. The actual terrain is never accessed.
 	var query := Query.new()
@@ -71,7 +71,17 @@ static func _compute(snapshot: RefCounted, tool: String, center: Vector3, settin
 	if snapshot.voxels.out_of_bounds_reads != 0:
 		push_error("Terrain preview snapshot missed %d reads" % snapshot.voxels.out_of_bounds_reads)
 		return {"valid": false}
-	if bool(result.get("valid", false)): result["packed"] = Buffers.pack(result)
+	if bool(result.get("valid", false)):
+		result["packed"] = Buffers.pack(result)
+		# Gameplay needs counts, cell indices and packed geometry, not thousands
+		# of temporary per-cell dictionaries. Destroy those on THIS worker;
+		# otherwise replacing a completed result adds a main-thread free spike.
+		if not retain_changes: result.erase("changes")
+	if not retain_changes:
+		# Ownership was transferred at Thread.start. Reclaim the copied front
+		# metadata and native volume here rather than when the main thread joins.
+		snapshot.state = {}
+		snapshot.voxels = null
 	return result
 
 func close() -> void:
