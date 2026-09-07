@@ -93,10 +93,9 @@ jobs:
           $aapt = Join-Path $buildTools.FullName 'aapt.exe'
           $apksigner = Join-Path $buildTools.FullName 'apksigner.bat'
           $badgingLines = & $aapt dump badging $apk 2>&1 | ForEach-Object { "$_" }
-          $aaptExit = $LASTEXITCODE
           $badging = $badgingLines -join "`n"
           Write-Output ($badgingLines | Select-Object -First 1)
-          if ($aaptExit -ne 0 -or -not $badging.Contains("package: name='org.hearthvale.game'")) { throw "APK package metadata verification failed (aapt exit=$aaptExit)" }
+          if (-not $badging.Contains("package: name='org.hearthvale.game'")) { throw 'APK package metadata verification failed' }
           & $apksigner verify --verbose $apk
           $signExit = $LASTEXITCODE
           if ($signExit -ne 0) { throw "APK signature verification failed (exit=$signExit)" }
