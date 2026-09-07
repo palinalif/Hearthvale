@@ -6,10 +6,10 @@ $folder = Join-Path (Get-Location) '.tools/terrain-ux'
 New-Item -ItemType Directory -Force $folder | Out-Null
 $editor = Get-ChildItem '.tools/sculpt-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
 if (-not $editor) { throw 'Pinned editor missing; run native gates first' }
-foreach ($driver in @('vulkan', 'd3d12')) {
+foreach ($driver in @('d3d12', 'vulkan')) {
     $out = Join-Path $folder "render-$driver.out.log"
     $err = Join-Path $folder "render-$driver.err.log"
-    $arguments = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', $driver, '--disable-vsync', '--script', 'tests/sculpt_preview_render_test.gd', '--', "--output=.tools/terrain-ux/preview-$driver")
+    $arguments = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', $driver, '--disable-vsync', '--audio-driver', 'Dummy', '--script', 'tests/sculpt_preview_render_test.gd', '--', "--output=.tools/terrain-ux/preview-$driver")
     $process = Start-Process -FilePath $editor -ArgumentList $arguments -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
     if (-not $process.WaitForExit(60000)) {
         $process.Kill()
@@ -21,7 +21,7 @@ foreach ($driver in @('vulkan', 'd3d12')) {
         throw "Started renderer/test failed: inspect $out and $err"
     }
     if ($process.ExitCode -eq 0 -and $log -match 'PREVIEW_RENDER_START' -and $log -match 'failures=0') {
-        Set-Content (Join-Path $folder 'render-status.log') "PASS: synthetic Mobile bulk/setter pixel parity via $driver. Not integrated M1/Thor performance or art acceptance."
+        Set-Content (Join-Path $folder 'render-status.log') "PASS: synthetic Mobile bulk/setter pixel parity (requested $driver; actual adapter/driver recorded in stdout). Not integrated M1/Thor performance or art acceptance."
         Write-Output $log
         exit 0
     }

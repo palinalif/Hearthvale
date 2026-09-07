@@ -22,6 +22,7 @@ var state: Dictionary = {}
 var plane_reference: Dictionary = {}
 var copied_bytes := 0
 var capture_ms := 0.0
+var copied_fronts := 0
 
 func is_ready() -> bool:
 	return voxels != null
@@ -63,7 +64,10 @@ static func capture(source: Node, tool: String, world_center: Vector3, settings:
 	if active:
 		for property in COPIED_STATE:
 			var value: Variant = source.get(property)
-			if value is Dictionary or value is Array or value is PackedFloat64Array: value = value.duplicate()
+			if property == "_stroke_fronts":
+				value = _local_fronts(value, lower, upper, axis)
+				snapshot.copied_fronts = value.size()
+			elif value is Dictionary or value is Array or value is PackedFloat64Array: value = value.duplicate()
 			snapshot.state[property] = value
 	snapshot.plane_reference = plane.duplicate(true)
 	if not active and effective_tool in ["level", "slope"] and snapshot.plane_reference.is_empty():
@@ -71,3 +75,20 @@ static func capture(source: Node, tool: String, world_center: Vector3, settings:
 		snapshot.plane_reference = source.sample_surface_plane(world_center, source._settings_normal(settings), float(settings.get("radius", 2.0)) + 1.0)
 	snapshot.capture_ms = (Time.get_ticks_usec() - started) / 1000.0
 	return snapshot
+
+static func _local_fronts(fronts: Dictionary, lower: Vector3i, upper: Vector3i, axis: int) -> Dictionary:
+	var axes := [0, 2] if axis == 1 else ([1, 2] if axis == 0 else [0, 1])
+	var u := int(axes[0])
+	var v := int(axes[1])
+	var capacity := (upper[u] - lower[u]) * (upper[v] - lower[v])
+	# Short strokes copy cheaply. Long stroke history never makes a small
+	# brush copy the entire world's frontier dictionary on the gameplay thread.
+	if fronts.size() <= capacity: return fronts.duplicate()
+	var result: Dictionary = {}
+	for a in range(lower[u], upper[u]):
+		for b in range(lower[v], upper[v]):
+			var column := Vector3i.ZERO
+			column[u] = a
+			column[v] = b
+			if fronts.has(column): result[column] = fronts[column]
+	return result

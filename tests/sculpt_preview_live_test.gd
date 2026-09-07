@@ -25,6 +25,21 @@ func _run() -> void:
 	source.voxels.fill_area(2, Vector3i.ZERO, Vector3i(384, 80, 384), 0)
 	source._backend_ready = true
 	source.terrain = SinkTerrain.new()
+
+	# A long edited path must not turn a small brush snapshot into a full
+	# world-sized dictionary copy. Retired fronts remain retired locally.
+	source.begin_stroke("dig", Vector3(24, 10, 24), {"radius": 2.0})
+	for x in 384:
+		for z in 384:
+			source._stroke_fronts[Vector3i(x, 0, z)] = -1
+	var history_started := Time.get_ticks_usec()
+	var snapshot: RefCounted = Job.Snapshot.capture(source, "dig", Vector3(24, 10, 24), {"radius": 2.0})
+	var capacity: int = snapshot.voxels.size.x * snapshot.voxels.size.z
+	check(snapshot.copied_fronts <= capacity and snapshot.copied_fronts < source._stroke_fronts.size(), "long stroke snapshot metadata stays brush bounded")
+	check(snapshot.state["_stroke_fronts"][Vector3i(192, 0, 192)] == -1, "retired local front preserved")
+	print("PREVIEW_LONG_HISTORY " + JSON.stringify({"live_fronts": source._stroke_fronts.size(), "copied_fronts": snapshot.copied_fronts, "capture_ms": (Time.get_ticks_usec() - history_started) / 1000.0}))
+	snapshot = null
+	source.cancel_stroke()
 	for radius in [2.0, 8.0]:
 		for phase in ["continuous_aim", "continuous_hold"]:
 			var job := Job.new()
