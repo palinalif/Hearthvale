@@ -92,13 +92,17 @@ jobs:
           if (-not $buildTools) { throw 'Android build-tools unavailable' }
           $aapt = Join-Path $buildTools.FullName 'aapt.exe'
           $apksigner = Join-Path $buildTools.FullName 'apksigner.bat'
-          $badging = (& $aapt dump badging $apk 2>&1 | Out-String)
-          Write-Output ($badging -split "`n" | Select-Object -First 1)
-          if ($LASTEXITCODE -ne 0 -or -not $badging.Contains("package: name='org.hearthvale.game'")) { throw 'APK package metadata verification failed' }
+          $badgingLines = & $aapt dump badging $apk 2>&1 | ForEach-Object { "$_" }
+          $aaptExit = $LASTEXITCODE
+          $badging = $badgingLines -join "`n"
+          Write-Output ($badgingLines | Select-Object -First 1)
+          if ($aaptExit -ne 0 -or -not $badging.Contains("package: name='org.hearthvale.game'")) { throw "APK package metadata verification failed (aapt exit=$aaptExit)" }
           & $apksigner verify --verbose $apk
-          if ($LASTEXITCODE -ne 0) { throw 'APK signature verification failed' }
+          $signExit = $LASTEXITCODE
+          if ($signExit -ne 0) { throw "APK signature verification failed (exit=$signExit)" }
           python -c "import zipfile; p=r'$apk'; z=zipfile.ZipFile(p); n=z.namelist(); arches=sorted({x.split('/')[1] for x in n if x.startswith('lib/')}); assert arches == ['arm64-v8a'], arches; v=[x for x in n if x.startswith('lib/arm64-v8a/') and 'libvoxel' in x]; assert len(v)==1, v; assert not any(x.startswith(('assets/tests/','assets/tools/','assets/docs/','assets/reports/','assets/tasks/','assets/dev/','assets/.codex/')) for x in n); print('apk verified', arches, v[0])"
-          if ($LASTEXITCODE -ne 0) { throw 'APK archive verification failed' }
+          $archiveExit = $LASTEXITCODE
+          if ($archiveExit -ne 0) { throw "APK archive verification failed (exit=$archiveExit)" }
           Get-FileHash $apk -Algorithm SHA256 | Format-List
 
       - name: Upload Thor APK
