@@ -15,7 +15,10 @@ func build(buffer: Object, minimum: Vector3i, facing_axis: int) -> bool:
 	size = buffer.get_size()
 	axis = facing_axis
 	bytes_per_cell = 1 << depth
-	var local: Object = buffer.duplicate(false)
+	var local: Object = ClassDB.instantiate("VoxelBuffer")
+	local.set_channel_depth(0, depth)
+	local.create(size.x, size.y, size.z)
+	local.copy_channel_from_area(buffer, Vector3i.ZERO, size, Vector3i.ZERO, 0)
 	var map := PackedInt32Array()
 	map.resize(256 if depth == 0 else 65536)
 	map.fill(255 if depth == 0 else 65535)
