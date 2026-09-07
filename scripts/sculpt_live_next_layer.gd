@@ -102,10 +102,11 @@ static func plan(source: Object, world_center: Vector3) -> Dictionary:
 				continue
 		if candidate.x < 0 or candidate.y < 0 or candidate.z < 0 or candidate.x >= source.patch_size.x or candidate.y >= source.patch_size.y or candidate.z >= source.patch_size.z:
 			continue
-		var current := int(source.voxel_at(candidate))
-		if (desired == 0 and current == 0) or (desired != 0 and current != 0):
-			continue
-		changes.append({"cell": candidate, "before": current, "after": desired, "weight": weight})
+		# The frontier is authoritative for occupancy here: Raise points at the
+		# next air cell; Dig/removal points at the current connected solid cell.
+		# Level/Slope/Smooth use the same exposed boundary invariant. Avoid one
+		# GDScript->native voxel lookup per displayed cell.
+		changes.append({"cell": candidate, "after": desired, "weight": weight})
 		if desired == 0: remove_count += 1
 		else: add_count += 1
 	return {"valid": true, "changes": changes, "add_count": add_count, "remove_count": remove_count, "rim": rim, "normal": normal, "center": nearest, "cell_size": voxel_scale, "query_ms": (Time.get_ticks_usec() - started) / 1000.0, "live_frontier": true}
