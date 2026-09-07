@@ -1,5 +1,7 @@
 # Project usage defaults
 
+Current compact resumption file: `../HANDOFF.md`. Root AGENTS.md contains the active requirements; the pre-compaction text is archived at `history/AGENTS-before-efficiency.md` and should not be loaded routinely. This document is setup/evidence detail, not additional mandatory startup reading.
+
 Applied 2026-09-07 from the player's [article](https://www.reddit.com/r/codex/comments/1w9smrf/astra_token_burn_limited_to_1hour_pro_x20/), adapted to preserve Astra-owned visuals and existing acceptance gates. The author's 1%/hour result is anecdotal, not a promised saving.
 
 `AGENTS.md` is the workflow authority. Project-local `.codex/config.toml` retains Astra, changes reasoning high→medium, and adds:
@@ -22,3 +24,11 @@ The check runner now executes full M1 acceptance through `--write-fixture` once,
 Validation: TOML parse/value assertions and exact preservation of unrelated configuration passed; PowerShell parser passed. `codex doctor --summary --no-color --ascii` reported configuration loaded and desktop initialization successful. Its overall exit was1 because this noninteractive shell uses TERM=dumb; it also reported existing thread-inventory notes. No terminal, thread inventory or security settings were changed to silence those diagnostics. No new model execution or measured savings are claimed.
 
 Reusable game evidence remains in `reports/M1-playtest-iteration-2.md` at commits9c67551/b1173dc/378e6f9. M1 and Thor/visual approval gates remain open as recorded there. Measure actual future usage at meaningful work boundaries; cached input, uncached input, output and shared account allowance are different quantities.
+
+## Consolidation follow-up
+
+Root instructions were reduced from about13.3k to5.2k characters without discarding core contracts; historical text is archived and specialized details load on demand. `HANDOFF.md` is the one current resumption checkpoint. `tools/iteration.ps1` consolidates selected/full checks, Mobile captures and versioned debug exports with fail-fast logging and compact receipts; command examples are in `build-and-test.md`.
+
+The Luna/low read-only gate passed (actual model metadata unavailable). Its process-runner draft missed lifecycle and gate requirements; lead review corrected the runner. Future multi-stage process orchestration merits medium effort up front to avoid this rework; low remains appropriate for simple mechanical changes. No child agents were used.
+
+Runner verification passed syntax, side-effect-free plan/order, invalid target rejection, a forced1ms import timeout (dependent test remained not_run), then a real import and9-check planting test. Full capture/export/game regressions were deliberately not repeated for unchanged game code. This is bounded workflow evidence, not a new APK or measured allowance reduction.

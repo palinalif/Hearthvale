@@ -2,6 +2,25 @@
 
 Run PowerShell from the repository root (`Hearthvale`). The pinned runtime is project-local; do not use the existing Godot 4.2.2 Mono installation.
 
+## Consolidated iteration command
+
+Use a new descriptive `-Name` each run; the runner refuses existing output names. Inspect its plan without running tools or creating files:
+
+```powershell
+./tools/iteration.ps1 -Stage All -Name m1-next -Plan
+# During development: import and only the affected tests.
+./tools/iteration.ps1 -Stage Targeted -Tests tests/plant_target_test.gd -Name planting-fix-1
+# Stable candidate: full checks once, actual Mobile geometry, three clean
+# captures, versioned Android/Windows debug exports and APK verification.
+./tools/iteration.ps1 -Stage All -Name m1-next
+```
+
+`Check` (default) runs the existing headless suite, including import. `Capture` runs import, actual Mobile visual-grid validation and normal/close/edited captures. `Export` runs import, both Mobile debug exports and APK verification. `Targeted` requires explicit existing test paths. The non-All modes are partial gates, not completed milestone evidence. Review captures manually; a successful export does not establish Android gameplay.
+
+Full logs and a stage receipt are written under `reports/logs/iteration-<Name>/`; debug exports go under `builds/iteration-<Name>/`. Dependent stages stop at the first failed/timeout/error result. Receipt fields distinguish attempted and omitted checks; no mode approves visuals or claims Thor testing. Before a new distributable version, update the version code/name in `export_presets.cfg` deliberately and preserve the signing identity. Drive upload remains a separate connected-tool action without embedded credentials.
+
+The lower-level commands below remain available for individual diagnosis and legacy Compatibility exports. Do not additionally run them after equivalent unchanged gates already pass through the consolidated command.
+
 Prerequisites: Windows x64, PowerShell 7, Java 17, Android SDK, and Python/uv only for the optional MCP sandbox. This host uses Temurin 17.0.19+10 and Android build-tools 36.0.0. Godot's Android SDK/JDK editor settings must point to the installed directories. Do not commit personal paths, keystores, credentials, or `.godot` caches.
 
 ## Engine and project
