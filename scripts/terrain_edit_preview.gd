@@ -53,6 +53,14 @@ void fragment() {
 	add_child(node)
 	return node
 
+func set_stale(stale: bool) -> void:
+	_ensure_nodes()
+	# Geometry stays at the exact world coordinates it was computed for. A
+	# dimmed old result is orientation, not a claim about the new cursor aim.
+	var fade := 0.55 if stale else 0.0
+	for node in [reach, removals, additions]:
+		(node as GeometryInstance3D).transparency = fade
+
 func show_plan(plan: Dictionary) -> void:
 	_ensure_nodes()
 	var started := Time.get_ticks_usec()
@@ -72,4 +80,5 @@ func show_plan(plan: Dictionary) -> void:
 		node.visible = count > 0
 	change_count = packed["cells"].size()
 	visible = bool(plan.get("valid", false))
+	set_stale(bool(plan.get("_stale", false)))
 	last_build_ms = (Time.get_ticks_usec() - started) / 1000.0
