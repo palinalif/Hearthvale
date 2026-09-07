@@ -1,0 +1,51 @@
+name: Terrain UX regressions
+
+on:
+  push:
+    branches: [fix/m1-terrain-strength-preview]
+  pull_request:
+    paths:
+      - scripts/**
+      - scenes/m1.tscn
+      - tests/**
+      - tools/test-terrain-ux.ps1
+      - .github/workflows/terrain-ux.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  terrain-ux:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Archive exact tracked source for reproducible diagnostics
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force .tools/terrain-ux | Out-Null
+          Set-Content .tools/.gdignore ''
+          git archive --format=zip --output=.tools/terrain-ux/source.zip HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Source archive failed' }
+      - name: Run terrain UX gates when implemented
+        shell: pwsh
+        run: |
+          if (Test-Path tools/test-terrain-ux.ps1) {
+            ./tools/test-terrain-ux.ps1
+          } else {
+            Write-Output 'Infrastructure preparation only: no new terrain UX tests exist yet. No gameplay validation claimed.'
+          }
+      - name: Retain source and diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: terrain-ux-diagnostics-${{ github.sha }}
+          path: |
+            .tools/terrain-ux/source.zip
+            .tools/sculpt-ci/*.log
+            .tools/terrain-ux/*.log
+          if-no-files-found: error
+          retention-days: 14
