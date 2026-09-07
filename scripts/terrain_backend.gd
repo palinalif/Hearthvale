@@ -18,6 +18,7 @@ const SCULPT_TOOL_SMOOTH := "smooth"
 const PatchGenerator = preload("res://scripts/patch_generator.gd")
 const CheckpointStore = preload("res://scripts/checkpoint_store.gd")
 const M1Generator = preload("res://scripts/m1_patch_generator.gd")
+const SmoothNeighbourhood = preload("res://scripts/smooth_neighbourhood.gd")
 
 var terrain: Node
 var voxels: Object
@@ -60,6 +61,8 @@ var _stroke_fronts: Dictionary = {}
 var _stroke_front_cache_center := Vector3.INF
 var _stroke_front_columns: Array[Vector3i] = []
 var _stroke_front_influence := PackedFloat64Array()
+var _smooth_targets := PackedFloat64Array()
+var _smooth_targets_dirty := true
 var _stroke_front_axis := 1
 var _stroke_front_sign := 1
 var _stroke_segments: Array[Dictionary] = []
@@ -338,7 +341,8 @@ func cancel_stroke() -> bool:
 		return false
 	var had_changes := _stroke_changed_count() > 0
 	_restore_stroke()
-	var was_dirty := _stroke_before_dirty
+	var was_dirty := _dirty
+	was_dirty = _stroke_before_dirty
 	_clear_stroke()
 	_dirty = was_dirty
 	if had_changes:
@@ -709,68 +713,82 @@ func _integrate_level_sample(center: Vector3, duration: float) -> void:
 
 func _integrate_smooth_sample(center: Vector3, duration: float) -> void:
 	var radius: float = _stroke_settings["radius"]
-	var columns := _vertical_columns(center, radius)
-	var surfaces := {}
-	for column in columns:
-		var surface_y := _surface_y_near(voxels, column.x, column.z, center.y, radius + 2.0)
-		if surface_y >= 0.0:
-			surfaces[_column_key(column)] = surface_y
+	# Cache the connected surface being edited, not a replacement heightmap.
+	# Only cache misses probe native columns. A retired front never retargets
+	# a disconnected cave floor during the same held stroke.
+	if center != _stroke_front_cache_center:
+		_stroke_front_cache_center = center
+		_stroke_front_columns = _vertical_columns(center, radius)
+		_stroke_front_influence.resize(_stroke_front_columns.size())
+		var exponent := lerpf(1.0, 4.0, float(_stroke_settings["falloff"]))
+		for i in _stroke_front_columns.size():
+			var column := _stroke_front_columns[i]
+			var distance := Vector2(float(column.x) - center.x, float(column.z) - center.z).length()
+			_stroke_front_influence[i] = pow(maxf(0.0, 1.0 - distance / radius), exponent)
+		# Three cells cover every corner of a 5x5 neighbourhood. The halo
+		# participates in the mean but is never itself a write footprint.
+		for column in _vertical_columns(center, radius + 3.0):
+			if not _stroke_fronts.has(column):
+				_stroke_fronts[column] = _surface_y_near(voxels, column.x, column.z, center.y, radius + 2.0)
+		_smooth_targets_dirty = true
+	if _smooth_targets_dirty:
+		_smooth_targets = SmoothNeighbourhood.means(_stroke_front_columns, _stroke_fronts)
+		_smooth_targets_dirty = false
 	var candidates: Array[Dictionary] = []
 	var region_min := Vector3i(patch_size.x, patch_size.y, patch_size.z)
 	var region_max := Vector3i.ZERO
-	for column in columns:
-		var key := _column_key(column)
-		if not surfaces.has(key):
+	var rate := float(_stroke_settings["strength"]) * duration
+	# All targets come from one immutable snapshot, before this tick writes.
+	for i in _stroke_front_columns.size():
+		var column := _stroke_front_columns[i]
+		var current_surface := float(_stroke_fronts.get(column, -1.0))
+		if current_surface < 0.0 or _smooth_targets[i] < 0.0 or _stroke_front_influence[i] <= 0.0: continue
+		var difference := _smooth_targets[i] - current_surface
+		# Native cells cannot move by 0.05 cells. Move only when a whole-cell
+		# step improves the approximation; reset residual motion at rest or
+		# reversal so old input cannot cause delayed up/down chatter.
+		if absf(difference) <= 0.500001:
+			_stroke_accumulated[column] = 0.0
 			continue
-		var neighbour_sum := 0.0
-		var neighbour_count := 0
-		for dx in range(-2, 3):
-			for dz in range(-2, 3):
-				var neighbour := Vector3i(column.x + dx, 0, column.z + dz)
-				var neighbour_key := _column_key(neighbour)
-				if surfaces.has(neighbour_key):
-					neighbour_sum += float(surfaces[neighbour_key])
-					neighbour_count += 1
-		if neighbour_count == 0:
-			continue
-		var current_surface: float = surfaces[key]
-		var candidate := Vector3i(column.x, int(current_surface), column.z)
-		var desired := -1
-		var target_surface := neighbour_sum / float(neighbour_count)
-		if target_surface > current_surface + 0.05:
-			desired = int(_stroke_settings["material"])
-		elif target_surface < current_surface - 0.05:
-			candidate.y = int(current_surface) - 1
-			desired = 0
-		else:
-			continue
+		var direction := 1.0 if difference > 0.0 else -1.0
+		var accumulated := float(_stroke_accumulated.get(column, 0.0))
+		if accumulated * direction < 0.0: accumulated = 0.0
+		accumulated += direction * rate * _stroke_front_influence[i]
+		_stroke_accumulated[column] = accumulated
+		if absf(accumulated) + 0.000001 < 1.0: continue
+		_stroke_accumulated[column] = accumulated - direction
+		var candidate := Vector3i(column.x, int(current_surface) - (1 if direction < 0.0 else 0), column.z)
 		if candidate.y < 0 or candidate.y >= patch_size.y:
+			_stroke_accumulated[column] = 0.0
 			continue
-		var distance := Vector2(float(column.x) - center.x, float(column.z) - center.z).length()
-		if distance > radius:
-			continue
-		candidates.append({"position": candidate, "desired": desired, "amount": float(_stroke_settings["strength"]) * duration * pow(maxf(0.0, 1.0 - distance / radius), lerpf(1.0, 4.0, float(_stroke_settings["falloff"])))})
-		region_min.x = mini(region_min.x, candidate.x); region_min.y = mini(region_min.y, candidate.y); region_min.z = mini(region_min.z, candidate.z)
-		region_max.x = maxi(region_max.x, candidate.x + 1); region_max.y = maxi(region_max.y, candidate.y + 1); region_max.z = maxi(region_max.z, candidate.z + 1)
-	if candidates.is_empty():
-		return
+		var desired := 0 if direction < 0.0 else int(_stroke_settings["material"])
+		candidates.append({"column": column, "position": candidate, "desired": desired})
+		region_min = region_min.min(candidate)
+		region_max = region_max.max(candidate + Vector3i.ONE)
+	# Fractional input and settled surfaces allocate no native edit buffers.
+	if candidates.is_empty(): return
 	_current_region_min = region_min
 	var local: Object = _clone_region(voxels, region_min, region_max)
 	var changed := false
 	for item in candidates:
+		var column: Vector3i = item["column"]
 		var position: Vector3i = item["position"]
 		var local_pos := position - region_min
 		var current := int(local.get_voxel(local_pos.x, local_pos.y, local_pos.z, PatchGenerator.CHANNEL_TYPE))
 		var desired: int = item["desired"]
 		if (desired == 0 and current == 0) or (desired != 0 and current != 0):
+			_stroke_fronts[column] = -1.0
+			_stroke_accumulated[column] = 0.0
+			_smooth_targets_dirty = true
 			continue
-		var key := _stroke_key(position)
-		_stroke_accumulated[key] = float(_stroke_accumulated.get(key, 0.0)) + float(item["amount"])
-		if float(_stroke_accumulated[key]) + 0.000001 < 1.0:
-			continue
-		_stroke_accumulated[key] = float(_stroke_accumulated[key]) - 1.0
 		_record_stroke_change(position, current, desired)
 		local.set_voxel(desired, local_pos.x, local_pos.y, local_pos.z, PatchGenerator.CHANNEL_TYPE)
+		if desired != 0:
+			_stroke_fronts[column] = float(position.y + 1)
+		else:
+			var below := position - Vector3i(0, 1, 0)
+			_stroke_fronts[column] = float(position.y) if below.y >= 0 and voxel_at(below) != 0 else -1.0
+		_smooth_targets_dirty = true
 		changed = true
 	if changed:
 		_write_region(local, region_min)
@@ -996,6 +1014,8 @@ func _clear_stroke() -> void:
 	_stroke_front_cache_center = Vector3.INF
 	_stroke_front_columns.clear()
 	_stroke_front_influence.clear()
+	_smooth_targets.clear()
+	_smooth_targets_dirty = true
 	_stroke_before.clear()
 	_stroke_positions.clear()
 	_stroke_changed_cells = 0
