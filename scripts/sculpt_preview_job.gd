@@ -1,8 +1,10 @@
 extends RefCounted
-## Single-flight, latest-request-only preview. At most one immutable snapshot
-## and one worker exist. No queued backlog and no waiting on gameplay frames.
+## Single-flight, latest-request-only preview. Idle aiming uses one isolated
+## snapshot worker; an active stroke reuses the authoritative frontier state
+## already computed by the backend for the current sample.
 const Snapshot = preload("res://scripts/sculpt_preview_snapshot.gd")
 const Query = preload("res://scripts/sculpt_preview_query.gd")
+const Live = preload("res://scripts/sculpt_live_next_layer.gd")
 const Buffers = preload("res://scripts/terrain_preview_buffers.gd")
 var _thread: Thread
 var _running_key: Array = []
@@ -24,6 +26,22 @@ func update(source: Node, tool: String, center: Vector3, settings: Dictionary, r
 	_wanted_key = key.duplicate(true)
 	last_capture_ms = 0.0
 	_collect()
+	if bool(source.get("_stroke_active")):
+		var started := Time.get_ticks_usec()
+		var live := Live.plan(source, center)
+		if bool(live.get("valid", false)):
+			var packed := Buffers.pack(live)
+			live["packed"] = packed
+			# Gameplay consumes packed output only, matching worker ownership.
+			live.erase("changes")
+			_ready_key = key.duplicate(true)
+			_ready_plan = live
+			last_query_ms = float(live.get("query_ms", 0.0))
+			last_pack_ms = float(packed.get("pack_ms", 0.0))
+			last_latency_ms = (Time.get_ticks_usec() - started) / 1000.0
+			query_count += 1
+			return live
+		return {}
 	if _ready_key == key: return _ready_plan
 	if _thread == null:
 		var snapshot: RefCounted = Snapshot.capture(source, tool, center, settings, reference)
