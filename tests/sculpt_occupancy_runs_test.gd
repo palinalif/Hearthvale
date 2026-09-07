@@ -21,7 +21,7 @@ func _init() -> void:
 			buffer.create(dimensions.x, dimensions.y, dimensions.z)
 			for x in dimensions.x:
 				for y in dimensions.y:
-				for z in dimensions.z:
+					for z in dimensions.z:
 						var value := 0
 						if fixture == 1: value = 255 if depth == 0 else 65535
 						elif fixture == 2 and (x + y + z) % 3 == 0: value = rng.randi_range(1, 255 if depth == 0 else 65535)
