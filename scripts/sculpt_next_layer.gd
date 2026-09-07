@@ -27,7 +27,7 @@ var last_query_ms := 0.0
 func _ready() -> void:
 	push_error("SculptNextLayer is a read-only query, not a live terrain node")
 
-func plan(source: Node, tool: String, world_center: Vector3, settings: Dictionary, reference: Dictionary = {}) -> Dictionary:
+func plan(source: Object, tool: String, world_center: Vector3, settings: Dictionary, reference: Dictionary = {}) -> Dictionary:
 	if source == null or not source.is_ready() or not world_center.is_finite():
 		return {"valid": false, "changes": [], "rim": []}
 	var started := Time.get_ticks_usec()

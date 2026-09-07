@@ -56,42 +56,20 @@ void fragment() {
 func show_plan(plan: Dictionary) -> void:
 	_ensure_nodes()
 	var started := Time.get_ticks_usec()
-	var unit: float = plan.get("cell_size", 0.125)
-	var normal: Vector3 = plan.get("normal", Vector3.UP)
-	var face_basis := Basis(Quaternion(Vector3.BACK, normal))
-	var changes: Array = plan.get("changes", [])
-	var plus: Array[Transform3D] = []
-	var minus: Array[Transform3D] = []
-	var plus_weights: Array[float] = []
-	var minus_weights: Array[float] = []
-	for change in changes:
-		var cell: Vector3i = change["cell"]
-		var center := (Vector3(cell) + Vector3.ONE * 0.5) * unit
-		var weight := lerpf(0.4, 1.0, sqrt(clampf(float(change["weight"]), 0.0, 1.0)))
-		if int(change["after"]) == 0:
-			minus.append(Transform3D(face_basis.scaled(Vector3.ONE * unit), center + normal * unit * 0.515))
-			minus_weights.append(weight)
-		else:
-			plus.append(Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * unit * 1.015), center))
-			plus_weights.append(weight)
-	var border: Array[Transform3D] = []
-	for point in plan.get("rim", []):
-		border.append(Transform3D(face_basis.scaled(Vector3.ONE * unit), point + normal * unit * 0.02))
-	_update_batch(reach, border, [])
-	_update_batch(removals, minus, minus_weights)
-	_update_batch(additions, plus, plus_weights)
-	change_count = changes.size()
+	var packed: Dictionary = plan.get("packed", {})
+	# Synchronous compatibility route for direct tests; gameplay supplies
+	# already packed CPU buffers from its isolated preview worker.
+	if packed.is_empty(): packed = preload("res://scripts/terrain_preview_buffers.gd").pack(plan)
+	var nodes := [reach, removals, additions]
+	for i in nodes.size():
+		var node: MultiMeshInstance3D = nodes[i]
+		var count := int(packed["counts"][i])
+		var mesh := node.multimesh
+		if mesh.instance_count != count: mesh.instance_count = count
+		mesh.custom_aabb = packed["bounds"]
+		if count > 0: mesh.buffer = packed["buffers"][i]
+		mesh.visible_instance_count = count
+		node.visible = count > 0
+	change_count = packed["cells"].size()
 	visible = bool(plan.get("valid", false))
 	last_build_ms = (Time.get_ticks_usec() - started) / 1000.0
-
-func _update_batch(node: MultiMeshInstance3D, transforms: Array[Transform3D], weights: Array[float]) -> void:
-	var mesh := node.multimesh
-	# Grow in chunks and reuse storage across edit ticks; no allocation for an
-	# unchanged plan. At most one candidate per native brush column is drawn.
-	if transforms.size() > mesh.instance_count:
-		mesh.instance_count = ceili(float(transforms.size()) / 256.0) * 256
-	mesh.visible_instance_count = transforms.size()
-	for i in transforms.size():
-		mesh.set_instance_transform(i, transforms[i])
-		mesh.set_instance_color(i, Color(1, 1, 1, weights[i] if i < weights.size() else 1.0))
-	node.visible = not transforms.is_empty()

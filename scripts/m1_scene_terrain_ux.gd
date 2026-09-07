@@ -1,11 +1,12 @@
 extends "res://scripts/m1_scene_placement.gd"
 ## M1 terrain UI layer; retain the playtested sculpting and placement paths.
 const StrengthScale = preload("res://scripts/sculpt_strength.gd")
-const LayerQuery = preload("res://scripts/sculpt_next_layer.gd")
+const LayerQuery = preload("res://scripts/sculpt_preview_job.gd")
 const LayerVisual = preload("res://scripts/terrain_edit_preview.gd")
 var brush_strength_level := StrengthScale.DEFAULT_LEVEL
 var terrain_edit_preview: Node3D
-var _layer_query: Node
+var _layer_query: RefCounted
+var _layer_pending := false
 var _layer_key: Array = []
 var _layer_plan: Dictionary = {}
 var _preview_reference: Dictionary = {}
@@ -24,7 +25,7 @@ func _ready() -> void:
 		target_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 func _exit_tree() -> void:
-	if is_instance_valid(_layer_query): _layer_query.free()
+	if _layer_query: _layer_query.close()
 
 func set_brush_strength_level(level: int) -> void:
 	brush_strength_level = clampi(level, StrengthScale.MIN_LEVEL, StrengthScale.MAX_LEVEL)
@@ -57,13 +58,13 @@ func _sculpt_preview_visible() -> bool:
 func _update_brush_preview() -> void:
 	if not terrain_edit_preview or not _layer_query: return
 	if sculpt_tool in ["foliage", "tree", "clear_planting"]:
-		terrain_edit_preview.visible = false
+		_invalidate_layer_preview()
 		super._update_brush_preview()
 		return
 	# Replace the generic sphere and sparse nine-cell highlight for sculpting.
 	if brush_preview: brush_preview.visible = false
 	if not _sculpt_preview_visible():
-		terrain_edit_preview.visible = false
+		_invalidate_layer_preview()
 		if reference_plane: reference_plane.visible = false
 		if terrain_hit_marker: terrain_hit_marker.visible = false
 		_terrain_target_valid = false
@@ -81,8 +82,8 @@ func _update_brush_preview() -> void:
 			sample = _find_local_surface(input_center, facing, float(backend.voxel_scale))
 	_terrain_target_valid = bool(sample.get("valid", false))
 	if not _terrain_target_valid:
-		terrain_edit_preview.visible = false
-		preview_cells.clear()
+		_invalidate_layer_preview()
+		preview_cells = []
 		_layer_plan.clear()
 		_layer_key.clear()
 		if reference_plane: reference_plane.visible = false
@@ -102,21 +103,36 @@ func _update_brush_preview() -> void:
 	var query_center := input_center if stroke_active else preview_center
 	var settings := {"radius": brush_radius, "strength": brush_strength * (0.25 if precision_mode else 1.0), "falloff": brush_falloff, "surface_normal": facing}
 	var key: Array = [backend.get_instance_id(), backend.voxels.get_instance_id(), backend.get("_revision"), backend.get("_stroke_mutations"), stroke_active, query_center, sculpt_tool, settings, _preview_reference]
-	last_frame_costs["preview_query_ms"] = 0.0
 	last_frame_costs["preview_build_ms"] = 0.0
-	if key != _layer_key:
-		_layer_plan = _layer_query.plan(backend, sculpt_tool, query_center, settings, _preview_reference)
+	var plan: Dictionary = _layer_query.update(backend, sculpt_tool, query_center, settings, _preview_reference, key)
+	last_frame_costs["preview_query_ms"] = float(_layer_query.last_capture_ms)
+	_layer_pending = plan.is_empty()
+	if _layer_pending:
+		# Never present yesterday's cells as today's prediction. The small
+		# live target marker remains, and the HUD explicitly reports pending.
+		terrain_edit_preview.visible = false
+		preview_cells = []
+		_layer_plan = {}
+		_layer_key.clear()
+	elif key != _layer_key:
+		_layer_plan = plan
 		_layer_key = key.duplicate(true)
-		preview_cells.clear()
-		for change in _layer_plan.get("changes", []): preview_cells.append(change["cell"])
-		terrain_edit_preview.show_plan(_layer_plan)
-		last_frame_costs["preview_query_ms"] = float(_layer_query.last_query_ms)
+		preview_cells = plan["packed"]["cells"]
+		terrain_edit_preview.show_plan(plan)
 		last_frame_costs["preview_build_ms"] = float(terrain_edit_preview.last_build_ms)
-	terrain_edit_preview.visible = bool(_layer_plan.get("valid", false))
+	terrain_edit_preview.visible = not _layer_pending and bool(_layer_plan.get("valid", false))
 	if stroke_active and _layer_plan.get("center", null) is Vector3:
 		_terrain_target_point = _layer_plan["center"]
 		preview_center = _terrain_target_point
 	_update_reference_guides(preview_center, sample)
+
+func _invalidate_layer_preview() -> void:
+	terrain_edit_preview.visible = false
+	_layer_pending = false
+	_layer_key.clear()
+	_layer_plan = {}
+	preview_cells = []
+	_layer_query.invalidate()
 
 func _update_reference_guides(center: Vector3, sample_override: Dictionary = {}) -> void:
 	if sculpt_tool in ["foliage", "tree", "clear_planting"]:
@@ -150,7 +166,7 @@ func _update_presentation() -> void:
 	if sculpt_tool in ["foliage", "tree", "clear_planting"]:
 		target_label.text = target_label.text.replace("str %.1f falloff %.1f" % [brush_strength, brush_falloff], "planting")
 		return
-	var summary := "No terrain target"
+	var summary := "Preview updating • target marker only" if _layer_pending else "No terrain target"
 	if _terrain_target_valid and bool(_layer_plan.get("valid", false)):
 		var added := int(_layer_plan.get("add_count", 0))
 		var removed := int(_layer_plan.get("remove_count", 0))
@@ -164,4 +180,6 @@ func _update_presentation() -> void:
 func _update_debug_overlay() -> void:
 	super._update_debug_overlay()
 	if debug_label and debug_label.visible:
-		debug_label.text += "\nPreview query %.2f ms / mesh update %.2f ms (0 = cached)" % [float(last_frame_costs.get("preview_query_ms", 0.0)), float(last_frame_costs.get("preview_build_ms", 0.0))]
+		debug_label.text += "\nPreview snapshot %.2f ms / upload %.2f ms (0 = cached)" % [float(last_frame_costs.get("preview_query_ms", 0.0)), float(last_frame_costs.get("preview_build_ms", 0.0))]
+
+		debug_label.text += "\nWorker query %.2f ms / packing %.2f ms / response %.2f ms%s" % [float(_layer_query.last_query_ms), float(_layer_query.last_pack_ms), float(_layer_query.last_latency_ms), " • pending" if _layer_pending else ""]

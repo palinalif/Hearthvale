@@ -25,7 +25,7 @@ func _run() -> void:
 		scene.queue_free()
 		quit(1)
 		return
-	await process_frame
+	await _settle()
 	check(scene.brush_strength_level == 5 and is_equal_approx(scene.brush_strength, 2.0), "exported scene uses gentle default")
 	check(scene.terrain_edit_preview.visible, "new cell preview visible")
 	check(not scene.brush_preview.visible, "old sphere preview hidden for sculpting")
@@ -40,7 +40,7 @@ func _run() -> void:
 	check(not scene.terrain_edit_preview.visible, "pause hides preview")
 	check(not scene.stroke_active, "pause cannot sculpt")
 	scene._set_menu(false)
-	await process_frame
+	await _settle()
 	check(scene.terrain_edit_preview.visible, "resume restores cached preview")
 	scene._open_actions_for_context()
 	await process_frame
@@ -49,14 +49,14 @@ func _run() -> void:
 	await process_frame
 	check(scene.brush_strength_level == 6 and scene.brush_strength > 2.0, "controller strength selection")
 	scene._tool_choice("Smooth")
-	await process_frame
+	await _settle()
 	check(not scene.reference_plane.visible, "smooth has no generic blue plane")
 	check(scene.terrain_edit_preview.visible, "smooth uses candidate preview")
 	scene._tool_choice("Level")
 	await process_frame
 	check(scene.reference_plane.visible, "level retains meaningful target plane")
 	scene._tool_choice("Dig")
-	await process_frame
+	await _settle()
 	check(scene.terrain_edit_preview.removals.multimesh.visible_instance_count > 0, "dig uses hatching layer")
 	check(scene.terrain_edit_preview.additions.multimesh.visible_instance_count == 0, "dig never shows additions")
 	var before_revision: int = scene.backend.stats().revision
@@ -82,3 +82,12 @@ func _run() -> void:
 	scene.queue_free()
 	await process_frame
 	quit(1 if failures else 0)
+
+func _settle() -> void:
+	# Async previews must become current, not necessarily finish in one frame.
+	# The visual/cell/HUD assertions above are unchanged.
+	var deadline := Time.get_ticks_msec() + 3000
+	while Time.get_ticks_msec() < deadline:
+		await process_frame
+		if not scene._layer_pending and scene.terrain_edit_preview.visible: return
+	check(false, "preview becomes current within 3 seconds")
