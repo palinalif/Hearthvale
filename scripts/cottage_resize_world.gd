@@ -62,3 +62,16 @@ static func handle_dimensions(original: Vector3, requested: Vector3, world_scale
 		var cells := clampi(roundi((requested[axis] - original[axis]) / steps[axis]), lower, upper)
 		result[axis] = original[axis] + cells * steps[axis]
 	return result
+
+func move_building(building_id: String, origin: Vector3, expected_revision: int) -> bool:
+	# Only translate the existing record. IDs, local anchors, suppressions,
+	# material choices and all other cottages remain byte-for-byte unchanged.
+	if expected_revision != get_revision() or not origin.is_finite(): return false
+	var index := _building_index(building_id)
+	if index < 0: return false
+	var recipe: Dictionary = _document["buildings"][index]
+	var transform_data: Dictionary = recipe["transform"]
+	if _as_vec(transform_data["position"]).is_equal_approx(origin): return false
+	var before: Dictionary = _copy(_document)
+	transform_data["position"] = _vec(origin)
+	return _record_change(before)
