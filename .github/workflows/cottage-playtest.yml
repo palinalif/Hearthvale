@@ -28,14 +28,24 @@ jobs:
         run: |
           $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           if (-not $editor) { throw 'Pinned editor missing' }
-          $tests = @('m1_cottage_targeting_playtest_test')
-          if (Test-Path 'tests/m1_playtest_repair_test.gd') { $tests += 'm1_playtest_repair_test' }
-          foreach ($test in $tests) {
+          foreach ($test in @('m1_cottage_targeting_playtest_test','m1_playtest_repair_test','m1_terrain_settings_input_test')) {
             $output = & $editor --headless --max-fps 60 --quit-after 7200 --path . --script "tests/$test.gd" 2>&1 | ForEach-Object { "$_" }
             $exitCode = $LASTEXITCODE
             $output | Tee-Object -FilePath ".tools/cottage-repair/$test.log"
             if ($exitCode -ne 0 -or ($output -match 'ERROR:|Parse Error:|FAIL:') -or -not (($output -join "`n") -match 'failures=0')) { throw "Cottage regression failed: $test" }
           }
+      - name: Capture actual Mobile UI and style restoration
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $out = Join-Path (Get-Location) '.tools/cottage-repair/render.out.log'
+          $err = Join-Path (Get-Location) '.tools/cottage-repair/render.err.log'
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m1_playtest_repair_render_test.gd')
+          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+          if (-not $process.WaitForExit(120000)) { $process.Kill(); $process.WaitForExit(); throw 'Mobile render capture timed out' }
+          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
+          Write-Output $log
+          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'COTTAGE_RENDER_START' -or $log -notmatch 'failures=0') { throw 'Mobile rendering or assertions failed; inspect captures and logs' }
       - name: Retain source and diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
