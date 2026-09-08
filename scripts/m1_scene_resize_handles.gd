@@ -35,6 +35,16 @@ func _ready() -> void:
 	hud.add_child(_resize_hint)
 	_update_resize_handles()
 
+func _set_view_context(next_context: String, reason: String = "Context changed") -> bool:
+	var changed := super._set_view_context(next_context, reason)
+	if changed and view_context == "building":
+		_set_status("Point at a handle to resize, or a detail to move")
+	return changed
+
+func _update_direct_edit_hud() -> void:
+	super._update_direct_edit_hud()
+	if resize_active and _pointer_label: _pointer_label.visible = false
+
 func _input(event: InputEvent) -> void:
 	if _shutting_down: return
 	if _blocked_until_accept_release:
@@ -76,6 +86,7 @@ func _begin_handle_resize(handle_id: String) -> void:
 	resize_active = true
 	resize_locked = false
 	_clear_hover()
+	if _pointer_label: _pointer_label.visible = false
 	_refresh_handle_preview()
 	get_viewport().gui_release_focus()
 	_set_status("Drag %s with left stick; A apply / B restore" % handle_id.replace("_", " "))
@@ -174,6 +185,7 @@ func _clear_handle_resize() -> void:
 	_update_presentation()
 	_update_camera()
 	_update_detail_hover()
+	_update_direct_edit_hud()
 	_refresh_controller_hud()
 
 func _update_presentation() -> void:
