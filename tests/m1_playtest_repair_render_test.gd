@@ -22,6 +22,17 @@ func _capture(name: String) -> Image:
 	check(image.save_png(folder.path_join(name + ".png")) == OK, "capture saved: " + name)
 	return image
 
+func _startup_diagnostics(started: int, frames: int, max_gap_ms: int) -> Dictionary:
+	var result := {"elapsed_ms": Time.get_ticks_msec() - started, "frames": frames, "max_frame_gap_ms": max_gap_ms, "player_restored": bool(scene._player_restored), "scene_status": str(scene.status_text), "restoring": bool(scene._restoring), "paused": paused, "window_focused": root.has_focus()}
+	if scene.backend:
+		result["backend"] = scene.backend.stats()
+		var terrain: Node = scene.backend.terrain
+		if terrain:
+			var area := AABB(Vector3.ZERO, Vector3(scene.backend.patch_size))
+			result["editable"] = terrain.get_voxel_tool().is_area_editable(area)
+			result["meshed"] = terrain.is_area_meshed(area)
+	return result
+
 func _run() -> void:
 	if RenderingServer.get_current_rendering_method() != "mobile" or DisplayServer.get_name() == "headless":
 		print("COTTAGE_RENDER_UNAVAILABLE")
@@ -33,10 +44,26 @@ func _run() -> void:
 	scene = preload("res://scenes/m1.tscn").instantiate()
 	scene.test_mode = true
 	scene.checkpoint_root = "user://m1-repair-render-%s" % Time.get_ticks_usec()
+	var started := Time.get_ticks_msec()
 	root.add_child(scene)
 	var deadline := Time.get_ticks_msec() + 65000
-	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
-	check(scene._player_restored, "native world ready for rendering")
+	var next_report := 0
+	var last_frame := Time.get_ticks_msec()
+	var max_gap_ms := 0
+	var frames := 0
+	while not scene._player_restored and Time.get_ticks_msec() < deadline:
+		await process_frame
+		var now := Time.get_ticks_msec()
+		frames += 1
+		max_gap_ms = maxi(max_gap_ms, now - last_frame)
+		last_frame = now
+		if now >= next_report:
+			print("COTTAGE_STARTUP " + JSON.stringify(_startup_diagnostics(started, frames, max_gap_ms)))
+			next_report = now + 5000
+		if scene.backend and not scene.backend.is_ready() and not str(scene.backend.get("_error")).is_empty():
+			break
+	print("COTTAGE_STARTUP_FINAL " + JSON.stringify(_startup_diagnostics(started, frames, max_gap_ms)))
+	check(scene.backend != null and scene.backend.is_ready() and scene._player_restored, "native world ready for rendering")
 	if not scene._player_restored: _finish(); return
 	scene.set_process(false)
 	scene._set_view_context("building")
