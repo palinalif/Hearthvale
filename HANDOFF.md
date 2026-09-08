@@ -1,51 +1,54 @@
 # Hearthvale — current M1 handoff
 
-Updated 2026-09-08 after a successful repair APK export and private Drive upload. Read AGENTS.md and the user's latest request first. **A new repair APK is ready for physical Thor testing. M1 and its UI overhaul are NOT complete or device-approved.**
+Updated 2026-09-08 after the player's physical ca5185dc retest and the camera/D-pad follow-up export. Read AGENTS.md and the latest user message first. **Core cottage interactions passed on the Thor. Two reported exceptions received a new candidate; that candidate still needs physical testing. M1 is not complete.**
 
-## Current candidate and evidence
+## Physical baseline — preserve what passed
 
-Branch: `fix/m1-cottage-playtest-2`. Candidate commit: `ca5185dc90a5f8bc6dbda4d646b2046b1f35cf5d`. Any subsequent documentation-only commit does not change this APK. `master` remains untouched. The exported scene uses `scripts/m1_scene_playtest_repair.gd`, NOT the historical terrain-only layer.
+The user tested `hearthvale-m1-repair-ca5185dc.apk` and passed specific-cottage hover/X entry, visible window targeting, deliberate A-move in both axes with the opening following, move/style cancellation, idle B exit, crosshair/reticle isolation, visible-side-only picking, two-cottage edit/colour isolation, variation/colour pickers and recolouring without the earlier Z-fighting. Attachment placement and recovery, duplication camera, prompt isolation, reload/immediate sculpting, same-app save/relaunch, per-tool strength defaults/memory and brush settings also passed, with the exceptions below.
 
-Successful complete CI: https://github.com/palinalif/Hearthvale/actions/runs/34223484717
+Exceptions: the Needs placement entry required left-stick navigation rather than D-pad; Raise while moving the brush remained jumpy and biased toward the highest point. Do NOT reset the accepted cottage interactions to untested, or claim the remaining camera comfort issue is already device-approved. Detailed source-derived feedback and implementation hypotheses are in `reports/M1-ca5185dc-device-retest.md` (its pending-CI paragraph records the implementation checkpoint; the completed results below supersede that paragraph).
 
-Both jobs completed successfully: gameplay/render `102051889124` and APK `102052636203`. Existing 11 M1 integration suites pass, plus targeting/repair/settings/stability checks (54/60/14/35, total 163). The actual Mobile/D3D12 software-render fixture passes 41 checks, writes eight 1280x720 captures, and requires exact image equality after cancelling colour preview. Physical Thor testing of this candidate has NOT been performed. Desktop headless and software-render evidence is not handheld performance or user visual approval.
+## Current candidate and commits
 
-APK artifact `10054832687`; source/log/capture artifact `10054770603`. APK: `hearthvale-m1-repair-ca5185dc.apk`, 37,756,626 bytes. SHA256: `b618d29f4229918333a036b476b4d487056e3cf68ed9c75490bf7fa771104421`. Archive hash and extracted APK hash/size were verified locally against the CI receipt. APK package/version, signature, Mobile metadata, ARM64-only architecture, compiled repair script and byte-identical pinned native voxel library passed verification. Development resources are excluded.
+New branch: `fix/m1-terrain-camera-retest`, based on `f264d7a80f7304286e634b965abe37b05b0e3e9f`. Existing repair branch and `master` were not changed.
 
-Private Drive APK: https://drive.google.com/file/d/1HklTqWnJ4RGN9mBxbMY1K0xphjlQhbZQ/view
+- `7935f97afb16bad81ff0f941ef7e7376b42dd758`: D-pad focus follows the displayed cottage menu order and skips unavailable controls. Includes complete-scene physical-button regression.
+- `c54d055937d450198ce219027c7a5a6473883a90`: independent terrain-camera elevation and exact-column ground reacquisition during navigation, plus regression and CI integration.
 
-Private Drive checklist: https://drive.google.com/file/d/1ukkFbVmsk89AKkduFQXOfEp6dt159eYU/view
+The exported scene uses `scripts/m1_scene_thor_retest.gd`, extending the accepted `m1_scene_playtest_repair.gd`. It does not replace the inherited native sculpt/preview, cottage, recovery, history or save implementations. Subsequent documentation-only commits do not change the delivered APK.
 
-Both uploads were read back as metadata: exact names/MIME/sizes, shared=false. Drive's normalized metadata response did not return checksums; do not claim a Drive hash readback. The actual extracted APK, not its ZIP, was uploaded.
+The previous camera eased toward cursor height even though stroke commit moves the cursor to the raised/dig frontier. The follow-up holds camera elevation during sculpting and after commit/cancel while retaining X/Z movement, orbit and zoom. Between strokes, deliberate Ground-reference travel samples the current native column rather than a neighbouring peak; camera height eases toward that navigation goal with a 3 world-unit/second cap. Wall/Ceiling and active-stroke targeting remain independent. This is a bounded native column probe, not a heightmap or full-world scan. New-device performance and comfort remain unmeasured.
 
-## Critical installation distinction
+## Completed validation and artifact
 
-This is a SEPARATE TEST APP, labelled `Hearthvale Test ca5185dc`, package `org.hearthvale.game.repair.cca5185dc`, version code 6 / `0.1.3-repair-ca5185dc`. It starts with a fresh valley. Existing saves are not migrated or deleted, and the original app is not overwritten. Never suggest uninstalling the original to bypass signing.
+Complete successful CI: https://github.com/palinalif/Hearthvale/actions/runs/34227414816
 
-The two previously shared APKs used different ephemeral debug certificates. Their private keys were not recovered; update-compatible signing is still open. The reusable repair workflow uses an isolated commit-derived package identity and ephemeral key; it does NOT establish permanent signing continuity. No private key was uploaded. Production export presets/package and save schema are unchanged; candidate identity is changed only in the CI export working copy.
+Gameplay/render job `102064828684` and APK job `102065561917` both succeeded. Existing 11 M1 integration suites and the previous targeting/repair/settings/stability gates passed. New `m1_recovery_dpad_test`: 15 checks, zero failures. New `m1_terrain_navigation_test`: 21 checks, zero failures. The latter actually grows native terrain, tests camera height while held and after release, travels onto lower ground, checks preview column/height, bounded camera movement, history isolation and cottage-exit view preservation. Mobile/D3D12 render gate: 41 checks, zero failures, including exact two-cottage colour-cancel image restoration. These are CI results, not physical Thor acceptance. No local Godot runtime was available.
 
-There were TWO earlier shared builds (`m1-terrain-ux` and `m1-ui-ux`); the earlier three-section checklist did not mean three APKs. This new, explicitly named repair candidate is another actual APK, not a relabelled older artifact.
+Diagnostic/source artifact: `10056379421`, SHA256 `075cbb5054eab265675a621a138ab048491268d320e37d0788aa65fbceb12984` (download verified).
 
-## Repairs included for player retest
+Verified APK artifact: `10056427326`, archive SHA256 `8a46baf147b756cbf16dc0894d244083d3e3952ef14556bfcf7e76cbf7851dc6` (download verified).
 
-The current complete scene contains specific-cottage Terrain hover/X entry, corrected facing/ownership checks, geometric pointer, visible window outline and A Move/X Options prompts, idle B exit with operation-first cancellation, view-preserving exit, free-camera duplication, renderer/style ownership isolation, camera-facing attachment start, unsnapped movement accumulation, controller-reachable Needs Placement, reload/preview reacquisition, per-tool Raise/Dig 3 and Smooth 5 defaults, and faster left/right terrain-settings adjustment with repeat/focus memory. These are implemented and covered by targeted tests, not accepted by the user until tested on the Thor.
+APK `hearthvale-m1-repair-c54d0559.apk`: **37,760,897 bytes**, SHA256 `5e4b040485d4ecec223f1038fd30c42261264738efcb9bf055ec287f828f1b13`. Extracted size/hash matched the CI receipt. Package, version, signature, Mobile metadata, ARM64-only architecture and byte-identical pinned voxel library passed. Locally confirmed both compiled `m1_scene_thor_retest.gdc` and the inherited repair script are in the APK.
 
-This session additionally addressed native startup diagnostics, CI capture staging, colour-cancel image instability and overlapping architectural geometry. Details and unsuccessful iterations are in `reports/M1-repair-ca5185dc-delivery.md`. Original physical feedback remains in `reports/M1-apk2-playtest-followup.md` and `reports/M1-apk2-ui-playtest-followup.md`.
+Private Drive APK: https://drive.google.com/file/d/1Z3FpWEwEWfip9FUOtBviOfWGqRbMh-Fz/view
 
-The separate terrain follow-up branch was NOT blindly merged. Its experimental all-face overhang picker and frozen-stroke camera layer are not used by this candidate; current repair-scene defaults and camera adjustments were integrated deliberately.
+Private Drive short checklist: https://drive.google.com/file/d/1Np_mmOaZJO16cOvpH2fHiw2-PZbtfLvc/view
 
-## Remaining work, in order
+Both uploads were verified by metadata: expected name, MIME, size; shared=false. The connector did not return Drive checksums; do not claim a remote hash comparison. The extracted APK, not the ZIP, was uploaded. Existing artifacts remain untouched.
 
-1. Get the user's focused retest: X enters a particular cottage, highlight identifies a window, A actually moves it, B restores/exits correctly; colour preview/cancel and two-cottage ownership; attachment recovery; reload then immediate sculpting. Preserve successful terrain responsiveness and controller grammar.
-2. Direct selectable side/corner/height resize handles and complete manual-window resize/layout stability remain OPEN. Current resizing has not become the approved handle-driven design.
-3. One-block overhang targeting follow-up, Slope performance and plane-guide clarity remain OPEN. Do not claim those solved by the capture-harness startup change.
-4. Separate graphic HUD/panel/controller-glyph polish; higher-detail cottage prototype, river and tree refinement later. No M2.
-5. Establish stable, securely retained Android signing identity and deliberate save migration before routine in-place updates; the isolated test app is only the safe present delivery path.
+## Installation and retest
 
-## Reproduction and constraints
+Separate test app: **Hearthvale Test c54d0559**, package `org.hearthvale.game.repair.cc54d0559`, version code 6 / `0.1.3-repair-c54d0559`. It starts a fresh valley and does not replace the original or ca5185dc test app or migrate their saves. Never uninstall or clear old apps to bypass signing. The ephemeral CI key and commit-derived package remain a temporary isolated delivery mechanism, not stable signing continuity.
 
-Pinned Godot 4.7.2.stable.official.ed1daf0bf, existing locked templates/Voxel Tools. World dimensions, .125 visible grid, miniature scale and schemas remain unchanged. Preserve native caves/overhangs, IDs/manual overrides, one transaction per commit, undo/redo, cancellation, controller-only single-screen use, player/legacy saves and existing artifacts.
+Ask for focused retesting: hold/move/release Raise; travel off the hill onto lower ground; repeat Dig/cancel; reach Needs placement and choose between two displaced details entirely with D-pad/A/B. Spot-check the accepted cottage camera transitions. Do not ask the user to repeat the entire already-passed cottage checklist.
 
-`.github/workflows/cottage-playtest.yml` runs the full regression and actual Mobile capture gates, then invokes `.github/workflows/thor-repair-apk.yml` ONLY after success. `tools/verify-repair-apk.py` uses the established aapt2 badging/aapt xmltree path, strict return codes and metadata checks. It produces an APK verification JSON receipt. Do not weaken readiness, visual equality, native-library or failure checks to manufacture a green build.
+## Remaining scope
 
-No native Godot runtime in the editing container; tests ran on Windows CI. The staged render test defers 3D drawing ONLY during CI bootstrap, keeps native generation/meshing and the runtime 45-second readiness deadline unchanged, and re-enables real rendering for every capture. This is not evidence that actual Thor startup performance changed.
+1. Physical acceptance of this camera/D-pad follow-up; retain all accepted cottage behaviour.
+2. Direct side/corner/height resize handles and comprehensive manual-window resize/layout stability.
+3. One-block overhang targeting, Slope performance and plane-guide clarity. These were not solved by the idle navigation column probe.
+4. Graphical HUD/panel/controller-glyph polish, then higher-detail cottage prototype; river/tree refinement later. No M2.
+5. Stable securely retained Android signing and deliberate save migration before normal in-place updates.
+
+Pinned Godot 4.7.2.stable.official.ed1daf0bf, native Voxel Tools, .125 visible grid, miniature scale, world size, schemas and permissions remain unchanged. Preserve IDs/manual overrides, unsupported attachments, native caves/overhangs, transactions/cancellation, player saves and previous APKs. The reusable APK workflow remains gated on regression/render success and strict verification. Do not weaken gates to produce a green build.
