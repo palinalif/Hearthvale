@@ -42,7 +42,10 @@ jobs:
             $output = & $editor --headless --max-fps 60 --quit-after 7200 --path . --script "tests/$test.gd" 2>&1 | ForEach-Object { "$_" }
             $exitCode = $LASTEXITCODE
             $output | Tee-Object -FilePath ".tools/cottage-repair/$test.log"
-            if ($exitCode -ne 0 -or ($output -match 'ERROR:|Parse Error:|FAIL:') -or -not (($output -join "`n") -match 'failures=0')) { throw "Cottage regression failed: $test" }
+            $joined = $output -join "`n"
+            $plain = $joined -match 'failures=0'
+            $json = $joined -match '"failures"\s*:\s*0' -and $joined -match '"ok"\s*:\s*true'
+            if ($exitCode -ne 0 -or ($output -match 'ERROR:|Parse Error:|FAIL:') -or -not ($plain -or $json)) { throw "Cottage regression failed: $test" }
           }
       - name: Capture actual Mobile UI and style restoration
         shell: pwsh
