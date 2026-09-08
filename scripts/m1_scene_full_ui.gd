@@ -36,12 +36,11 @@ func _input(event: InputEvent) -> void:
 	super._input(event)
 
 func _build_building_panel() -> void:
-	_building_panel = PanelContainer.new(); _building_panel.name = "CottageShellActions"; _building_panel.position = Vector2(38, 212); _building_panel.custom_minimum_size = Vector2(330, 320); _building_panel.visible = false; hud.add_child(_building_panel)
+	_building_panel = PanelContainer.new(); _building_panel.name = "CottageShellActions"; _building_panel.position = Vector2(38, 212); _building_panel.custom_minimum_size = Vector2(330, 278); _building_panel.visible = false; hud.add_child(_building_panel)
 	var margin := MarginContainer.new(); margin.add_theme_constant_override("margin_left", 18); margin.add_theme_constant_override("margin_right", 18); margin.add_theme_constant_override("margin_top", 16); margin.add_theme_constant_override("margin_bottom", 16); _building_panel.add_child(margin)
 	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 6); margin.add_child(box)
 	var title := Label.new(); title.text = "COTTAGE"; title.add_theme_font_size_override("font_size", 16); box.add_child(title)
-	_add_building_button(box, "New cottage", _begin_new_cottage)
-	_add_building_button(box, "Duplicate cottage", _begin_building_placement)
+	_add_building_button(box, "Duplicate / place cottage", _begin_building_placement)
 	_add_building_button(box, "Add flower box", _begin_new_attachment.bind("flower_box"))
 	_add_building_button(box, "Add shutter", _begin_new_attachment.bind("shutter"))
 	_add_building_button(box, "Material: warm plaster", _cycle_cottage_material)
@@ -61,14 +60,6 @@ func _open_building_panel() -> void:
 
 func _close_building_panel() -> void:
 	tools_open = false; _building_panel.visible = false; get_viewport().gui_release_focus(); _set_status("Cottage editing")
-
-func _begin_new_cottage() -> void:
-	# M1 has one cottage recipe. "New" therefore starts from that authored
-	# recipe and immediately enters free placement, rather than pretending a
-	# second building archetype exists yet.
-	_close_building_panel()
-	_begin_building_placement()
-	if building_placement_active: _set_status("Place new cottage • left stick free place • A place / B cancel • L3 precision")
 
 func _cycle_cottage_material() -> void:
 	var view: Dictionary = building_world.get_building(selected_building_id)
@@ -144,5 +135,21 @@ func _toggle_debug_from_settings() -> void:
 
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
-	if _prompt_bar: _prompt_bar.visible = _show_context_hints and not menu_open
+	if not _prompt_bar or not _tool_name: return
+	_prompt_bar.visible = _show_context_hints and not menu_open
 	if _building_panel: _building_panel.visible = tools_open and view_context == "building" and not _context_actions_open and not menu_open
+	if menu_open or tools_open or detail_open: return
+	var prompts: Array = []
+	if building_placement_active:
+		_tool_name.text = "Place cottage"
+		_tool_meta.text = "Free placement • grounded to terrain%s" % (" • PRECISION" if precision_mode else "")
+		prompts = [["A", "Place"], ["B", "Cancel"], ["LS", "Move"], ["RS", "Orbit"], ["L3", "Precision"]]
+	elif detail_move_active and not placement_kind.is_empty():
+		_tool_name.text = "Place %s" % placement_kind.replace("_", " ").capitalize()
+		_tool_meta.text = "Wall locked • soft alignment"
+		prompts = [["A", "Place"], ["B", "Cancel"], ["LS", "Move"], ["◀▶", "Wall"], ["RS", "Orbit"]]
+	else:
+		return
+	if not _history_tags.is_empty(): prompts.append(["LB", "Undo"])
+	if not _redo_tags.is_empty(): prompts.append(["RB", "Redo"])
+	_set_prompts(prompts)
