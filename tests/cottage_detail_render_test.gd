@@ -31,7 +31,7 @@ func _run() -> void:
 	scene.checkpoint_root = "user://m1-detail-render-%s" % Time.get_ticks_usec()
 	root.add_child(scene)
 	var deadline := Time.get_ticks_msec() + 65000
-	while not scene._player_restored and Time.get_ticks_msec() < deadline:
+	while (not scene._player_restored or not scene.backend or not scene.backend.is_ready()) and Time.get_ticks_msec() < deadline:
 		await process_frame
 		if scene.backend and not scene.backend.is_ready():
 			var backend_error := str(scene.backend.get("_error"))
