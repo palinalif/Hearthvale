@@ -27,7 +27,7 @@ func _initialize() -> void:
 	_check(scene.camera_distance < terrain_distance, "building entry uses cottage-scale framing")
 
 	# Moving the edit cursor must not move the orbit centre.
-	var stable_target := scene._selected_building_camera_target()
+	var stable_target: Vector3 = scene._selected_building_camera_target()
 	Input.action_press("m1_move_right")
 	await process_frame
 	Input.action_release("m1_move_right")
@@ -62,8 +62,8 @@ func _initialize() -> void:
 
 	# The camera should actually look at the selected cottage centre.
 	scene._update_camera()
-	var look_direction := (-scene.camera.global_transform.basis.z).normalized()
-	var expected_direction := (scene._selected_building_camera_target() - scene.camera.global_position).normalized()
+	var look_direction: Vector3 = (-scene.camera.global_transform.basis.z).normalized()
+	var expected_direction: Vector3 = (scene._selected_building_camera_target() - scene.camera.global_position).normalized()
 	_check(look_direction.dot(expected_direction) > 0.999, "building camera looks at selected cottage centre")
 
 	# Leaving building mode restores the terrain view exactly.
