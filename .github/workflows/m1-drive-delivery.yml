@@ -30,8 +30,6 @@ jobs:
 
   cottage-and-apk:
     uses: ./.github/workflows/cottage-playtest.yml
-    with:
-      skip-core-placement: true
 
   drive-delivery:
     name: Upload verified APK to private Google Drive
