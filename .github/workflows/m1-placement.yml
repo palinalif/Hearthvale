@@ -13,6 +13,7 @@ on:
       - scripts/m1_scene_cottage_resize_ux.gd
       - scripts/m1_scene_ui_overhaul.gd
       - scripts/m1_scene_tool_ui.gd
+      - scripts/m1_scene_full_ui.gd
       - scripts/cottage_visual.gd
       - scripts/wall_attachment_placement.gd
       - scripts/detail_placement_ghost.gd
@@ -24,6 +25,7 @@ on:
       - tests/m1_cottage_edit_ux_test.gd
       - tests/m1_ui_overhaul_test.gd
       - tests/m1_tool_ui_test.gd
+      - tests/m1_full_ui_test.gd
       - tools/test-m1-placement.ps1
       - .github/workflows/m1-placement.yml
   pull_request:
@@ -38,6 +40,7 @@ on:
       - scripts/m1_scene_cottage_resize_ux.gd
       - scripts/m1_scene_ui_overhaul.gd
       - scripts/m1_scene_tool_ui.gd
+      - scripts/m1_scene_full_ui.gd
       - scripts/cottage_visual.gd
       - scripts/wall_attachment_placement.gd
       - scripts/detail_placement_ghost.gd
@@ -49,6 +52,7 @@ on:
       - tests/m1_cottage_edit_ux_test.gd
       - tests/m1_ui_overhaul_test.gd
       - tests/m1_tool_ui_test.gd
+      - tests/m1_full_ui_test.gd
       - tools/test-m1-placement.ps1
       - .github/workflows/m1-placement.yml
   workflow_dispatch:
