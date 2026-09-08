@@ -11,7 +11,7 @@ from pathlib import Path
 def run_checked(args):
     result = subprocess.run(args, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
     if result.returncode:
-        raise RuntimeError(f'{Path(args[0]).name} failed with exit {result.returncode}')
+        raise RuntimeError(f'{Path(args[0]).name} failed with exit {result.returncode}: {result.stderr[-2000:]}')
     return result.stdout
 
 
@@ -26,7 +26,9 @@ def main():
     tools = max(versions, key=lambda p: tuple(map(int, p.name.split('.'))))
     java = Path(os.environ['JAVA_HOME']) / 'bin/java.exe'
     aapt = tools / 'aapt.exe'
-    badging = run_checked([str(aapt), 'dump', 'badging', str(apk)])
+    # Match tools/verify-m1-apks.py: aapt2 reads modern resource badging, while
+    # aapt's xmltree command supplies the manifest metadata used below.
+    badging = run_checked([str(tools / 'aapt2.exe'), 'dump', 'badging', str(apk)])
     assert f"name='{package}'" in badging, 'Wrong APK package; original app must remain untouched'
     assert "versionCode='6'" in badging, 'Wrong candidate version'
     assert f"versionName='0.1.3-repair-{short}'" in badging, 'Missing build identity'
