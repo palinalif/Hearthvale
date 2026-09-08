@@ -1,7 +1,7 @@
 name: Cottage playtest regressions
 on:
   push:
-    branches: [fix/m1-cottage-playtest-2, fix/m1-terrain-camera-retest, feat/m1-direct-resize-handles]
+    branches: [fix/m1-cottage-playtest-2, fix/m1-terrain-camera-retest, feat/m1-direct-resize-handles, feat/m1-house-move-resize]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,7 +28,7 @@ jobs:
         run: |
           $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           if (-not $editor) { throw 'Pinned editor missing' }
-          foreach ($test in @('m1_cottage_targeting_playtest_test','m1_playtest_repair_test','m1_terrain_settings_input_test','cottage_render_stability_test','m1_recovery_dpad_test','m1_terrain_navigation_test','cottage_handle_resize_test','m1_resize_handles_test')) {
+          foreach ($test in @('m1_cottage_targeting_playtest_test','m1_playtest_repair_test','m1_terrain_settings_input_test','cottage_render_stability_test','m1_recovery_dpad_test','m1_terrain_navigation_test','cottage_handle_resize_test','m1_resize_handles_test','m1_house_actions_test')) {
             $output = & $editor --headless --max-fps 60 --quit-after 7200 --path . --script "tests/$test.gd" 2>&1 | ForEach-Object { "$_" }
             $exitCode = $LASTEXITCODE
             $output | Tee-Object -FilePath ".tools/cottage-repair/$test.log"
@@ -40,7 +40,7 @@ jobs:
           $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           $out = Join-Path (Get-Location) '.tools/cottage-repair/render.out.log'
           $err = Join-Path (Get-Location) '.tools/cottage-repair/render.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m1_resize_handles_render_test.gd')
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m1_house_actions_render_test.gd')
           $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
           if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'Mobile render capture timed out' }
           $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)

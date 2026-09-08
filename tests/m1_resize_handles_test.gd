@@ -62,8 +62,9 @@ func _run() -> void:
 	check(scene._player_restored, "complete native scene ready")
 	if not scene._player_restored: _finish(); return
 	scene.set_process(false)
-	check(scene.get_script() == preload("res://scripts/m1_scene_resize_handles.gd"), "APK scene uses the direct handle layer")
+	check(scene.get_script() == preload("res://scripts/m1_scene_house_actions.gd"), "APK scene uses the direct handle layer")
 	scene._set_view_context("building")
+	scene._enter_resize_selection()
 	scene.camera_yaw = PI * 0.35
 	scene.camera_pitch = 0.55
 	scene.camera_distance = 10.0
@@ -125,11 +126,14 @@ func _run() -> void:
 	check(scene.menu_open and not scene.resize_active, "Pause safely cancels active handle")
 	await press(JOY_BUTTON_B)
 	check(not scene.menu_open and scene.view_context == "building", "Resume keeps cottage editing")
+	scene._enter_resize_selection()
 	check(aim_handle("right"), "handle ready after menu cancellation")
 	await press(JOY_BUTTON_A)
 	scene.building_world.set_material(id, "rose_lime")
 	scene._read_camera_and_cursor(1.0 / 60.0)
 	check(not scene.resize_active and scene.building_world.get_building(id)["material_id"] == "rose_lime", "stale preview cannot overwrite a newer authoritative edit")
+	await press(JOY_BUTTON_B)
+	check(scene.view_context == "building" and not scene._resize_selecting, "B finishes resize selection before exiting building")
 	await press(JOY_BUTTON_B)
 	scene._update_resize_handles()
 	check(scene.view_context == "terrain" and not scene._resize_overlay.visible, "idle B exits and hides all building handles")

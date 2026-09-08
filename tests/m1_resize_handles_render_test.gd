@@ -5,6 +5,7 @@ func _finish() -> void:
 	if scene and is_instance_valid(scene) and scene._player_restored and failures == 0:
 		scene._close_terrain_settings()
 		scene._set_view_context("building")
+		scene._enter_resize_selection()
 		scene.camera_yaw = PI * 0.35
 		scene.camera_pitch = 0.55
 		scene.camera_distance = 10.0
