@@ -23,12 +23,17 @@ func _initialize() -> void:
 	await process_frame
 	await _press(JOY_BUTTON_BACK)
 	check(scene.view_context == "building", "building context selected")
+	# The revised default is the wall visible to the camera, not a stale support.
+	# Keep all back-face, cancel, commit and explicit wall-switch assertions.
+	scene.camera_yaw = 0.0
+	scene.camera_pitch = 0.35
+	scene._update_camera()
 	var before: Dictionary = scene.building_world.get_document()
 	scene.selected_surface_id = "wall-back"
 	scene._tool_choice("Add flower box")
 	check(scene.detail_move_active and scene.placement_kind == "flower_box", "flower box enters placement mode")
 	check(scene.building_world.get_document() == before, "ghost placement does not mutate recipe")
-	check(scene.detail_move_surface_id == "wall-back", "explicit support selection is honored")
+	check(scene.detail_move_surface_id == "wall-back", "camera-facing back wall selected")
 	check(scene.detail_move_position.z > 7.0, "back-wall ghost stays on back face")
 	check(scene.placement_ghost != null and scene.placement_ghost.visible and scene.placement_ghost.get_child_count() > 0, "flower box ghost is visible")
 	var ghost_piece: MeshInstance3D = scene.placement_ghost.get_child(0)
@@ -36,7 +41,7 @@ func _initialize() -> void:
 	check(ghost_material != null and ghost_material.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA and ghost_material.albedo_color.a < 1.0, "ghost is visibly translucent")
 	var start: Vector3 = scene.detail_move_position
 	await _axis(JOY_AXIS_LEFT_X, 1.0)
-	check(scene.detail_move_position != start and scene.detail_move_position.z > 7.0, "left stick moves freely while remaining wall locked")
+	check(scene.detail_move_position != start and scene.detail_move_position.z > 7.0, "held left stick escapes soft snap while remaining wall locked")
 	var old_surface: String = scene.detail_move_surface_id
 	await _press(JOY_BUTTON_DPAD_RIGHT)
 	check(scene.detail_move_surface_id != old_surface, "dpad cycles wall during placement")
@@ -75,7 +80,9 @@ func _press(button: JoyButton) -> void:
 
 func _axis(axis: JoyAxis, value: float) -> void:
 	var event := InputEventJoypadMotion.new(); event.axis = axis; event.axis_value = value
-	Input.parse_input_event(event); Input.flush_buffered_events(); await process_frame
+	Input.parse_input_event(event); Input.flush_buffered_events()
+	var until := Time.get_ticks_msec() + 300
+	while Time.get_ticks_msec() < until: await process_frame
 	var release := InputEventJoypadMotion.new(); release.axis = axis; release.axis_value = 0.0
 	Input.parse_input_event(release); Input.flush_buffered_events(); await process_frame
 
