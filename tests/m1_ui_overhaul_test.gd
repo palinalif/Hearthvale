@@ -31,6 +31,8 @@ func _initialize() -> void:
 	scene._refresh_controller_hud()
 	_check(scene._mode_label.text.contains("TERRAIN"), "mode pill names current context")
 	_check(scene._tool_meta.text.contains("Strength"), "terrain card exposes strength without opening action list")
+	_check(scene._tool_icon != null and scene._tool_icon.symbol == scene.sculpt_tool, "active terrain tool has matching graphical icon")
+	_check(scene._tool_card.theme == scene._hud_theme, "HUD inherits its presentation theme")
 	var terrain_prompt := _prompt_text()
 	_check(terrain_prompt.contains("Sculpt") and terrain_prompt.contains("Tools") and terrain_prompt.contains("Building"), "terrain prompts show only current primary actions")
 
@@ -39,6 +41,12 @@ func _initialize() -> void:
 	_check(scene._mode_label.text.contains("BUILDING"), "building mode pill updates")
 	var building_prompt := _prompt_text()
 	_check(building_prompt.contains("Orbit") and building_prompt.contains("Terrain"), "building prompts keep camera and mode switch visible")
+	_check(scene._tool_icon.symbol == "cottage", "building context updates graphical icon")
+	# Changing prompts repeatedly in one frame must not leave obsolete actions
+	# occupying the row until deferred deletion runs.
+	scene._set_prompts([["A", "Place"], ["B", "Restore"]])
+	scene._set_prompts([["A", "Apply"]])
+	_check(scene._prompt_row.get_child_count() == 1 and not _prompt_text().contains("Restore"), "prompt transitions immediately retire obsolete actions")
 
 	_finish()
 

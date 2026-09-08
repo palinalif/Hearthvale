@@ -36,7 +36,7 @@ func _input(event: InputEvent) -> void:
 	super._input(event)
 
 func _build_building_panel() -> void:
-	_building_panel = PanelContainer.new(); _building_panel.name = "CottageShellActions"; _building_panel.position = Vector2(38, 212); _building_panel.custom_minimum_size = Vector2(330, 278); _building_panel.visible = false; hud.add_child(_building_panel)
+	_building_panel = PanelContainer.new(); _building_panel.name = "CottageShellActions"; _building_panel.position = Vector2(28, 212); _building_panel.custom_minimum_size = Vector2(330, 278); _building_panel.visible = false; hud.add_child(_building_panel)
 	var margin := MarginContainer.new(); margin.add_theme_constant_override("margin_left", 18); margin.add_theme_constant_override("margin_right", 18); margin.add_theme_constant_override("margin_top", 16); margin.add_theme_constant_override("margin_bottom", 16); _building_panel.add_child(margin)
 	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 6); margin.add_child(box)
 	var title := Label.new(); title.text = "COTTAGE"; title.add_theme_font_size_override("font_size", 16); box.add_child(title)
@@ -47,7 +47,7 @@ func _build_building_panel() -> void:
 	_add_building_button(box, "Close", _close_building_panel)
 
 func _add_building_button(parent: VBoxContainer, label: String, callback: Callable) -> void:
-	var button := Button.new(); button.text = label; button.focus_mode = Control.FOCUS_ALL; button.custom_minimum_size = Vector2(0, 42); button.pressed.connect(callback); parent.add_child(button); _building_buttons.append(button)
+	var button := Button.new(); button.text = label; button.alignment = HORIZONTAL_ALIGNMENT_LEFT; button.focus_mode = Control.FOCUS_ALL; button.custom_minimum_size = Vector2(0, 42); button.pressed.connect(callback); parent.add_child(button); _building_buttons.append(button)
 
 func _open_building_panel() -> void:
 	_cancel_current_edit("Cottage options opened")

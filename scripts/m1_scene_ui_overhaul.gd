@@ -1,6 +1,10 @@
 extends "res://scripts/m1_scene_cottage_resize_ux.gd"
 ## Controller-first presentation layer for M1. The game world stays visible;
 ## controls shown on screen describe only the action available right now.
+const UISkin = preload("res://scripts/ui/m1_ui_skin.gd")
+const UIGlyph = preload("res://scripts/ui/m1_ui_glyph.gd")
+var _hud_theme: Theme
+var _tool_icon: Control
 
 var _mode_pill: PanelContainer
 var _mode_label: Label
@@ -51,6 +55,7 @@ func _input(event: InputEvent) -> void:
 	super._input(event)
 
 func _build_controller_hud() -> void:
+	_hud_theme = UISkin.make_theme()
 	# Hide the prototype's verbose diagnostic labels during ordinary play. They
 	# remain alive for tests/debugging and can still be inspected with F1.
 	if status_label: status_label.visible = false
@@ -74,7 +79,7 @@ func _build_controller_hud() -> void:
 	_tool_card = PanelContainer.new()
 	_tool_card.name = "ActiveToolCard"
 	_tool_card.position = Vector2(28, 92)
-	_tool_card.custom_minimum_size = Vector2(250, 102)
+	_tool_card.custom_minimum_size = Vector2(250, 94)
 	hud.add_child(_tool_card)
 	var tool_margin := MarginContainer.new()
 	for side in ["left", "right"]: tool_margin.add_theme_constant_override("margin_%s" % side, 16)
@@ -84,8 +89,13 @@ func _build_controller_hud() -> void:
 	var tool_box := VBoxContainer.new()
 	tool_box.add_theme_constant_override("separation", 5)
 	tool_margin.add_child(tool_box)
-	_tool_name = Label.new(); _tool_name.add_theme_font_size_override("font_size", 21); tool_box.add_child(_tool_name)
-	_tool_meta = Label.new(); _tool_meta.add_theme_font_size_override("font_size", 15); _tool_meta.modulate = Color(0.82, 0.85, 0.80); tool_box.add_child(_tool_meta)
+	var tool_heading := HBoxContainer.new()
+	tool_heading.add_theme_constant_override("separation", 9)
+	tool_box.add_child(tool_heading)
+	_tool_icon = UIGlyph.new()
+	tool_heading.add_child(_tool_icon)
+	_tool_name = Label.new(); _tool_name.add_theme_font_size_override("font_size", 22); tool_heading.add_child(_tool_name)
+	_tool_meta = Label.new(); _tool_meta.add_theme_font_size_override("font_size", 16); _tool_meta.add_theme_color_override("font_color", UISkin.MUTED); tool_box.add_child(_tool_meta)
 
 	_toast_panel = PanelContainer.new()
 	_toast_panel.name = "ContextToast"
@@ -93,19 +103,25 @@ func _build_controller_hud() -> void:
 	_toast_panel.custom_minimum_size = Vector2(500, 46)
 	hud.add_child(_toast_panel)
 	var toast_margin := MarginContainer.new(); toast_margin.add_theme_constant_override("margin_left", 14); toast_margin.add_theme_constant_override("margin_right", 14); toast_margin.add_theme_constant_override("margin_top", 8); toast_margin.add_theme_constant_override("margin_bottom", 8); _toast_panel.add_child(toast_margin)
-	_toast_label = Label.new(); _toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; _toast_label.add_theme_font_size_override("font_size", 15); toast_margin.add_child(_toast_label)
+	_toast_label = Label.new(); _toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; _toast_label.add_theme_font_size_override("font_size", 16); _toast_label.custom_minimum_size.x = 470; _toast_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; toast_margin.add_child(_toast_label)
 
 	_prompt_bar = PanelContainer.new()
 	_prompt_bar.name = "ContextPromptBar"
-	_prompt_bar.position = Vector2(0, 654)
-	_prompt_bar.custom_minimum_size = Vector2(1280, 66)
+	_prompt_bar.position = Vector2(20, 654)
+	_prompt_bar.custom_minimum_size = Vector2(1240, 54)
 	hud.add_child(_prompt_bar)
-	var prompt_margin := MarginContainer.new(); prompt_margin.add_theme_constant_override("margin_left", 28); prompt_margin.add_theme_constant_override("margin_right", 28); prompt_margin.add_theme_constant_override("margin_top", 14); prompt_margin.add_theme_constant_override("margin_bottom", 12); _prompt_bar.add_child(prompt_margin)
-	_prompt_row = HBoxContainer.new(); _prompt_row.add_theme_constant_override("separation", 24); prompt_margin.add_child(_prompt_row)
+	var prompt_margin := MarginContainer.new(); prompt_margin.add_theme_constant_override("margin_left", 16); prompt_margin.add_theme_constant_override("margin_right", 16); prompt_margin.add_theme_constant_override("margin_top", 12); prompt_margin.add_theme_constant_override("margin_bottom", 12); _prompt_bar.add_child(prompt_margin)
+	_prompt_row = HBoxContainer.new(); _prompt_row.add_theme_constant_override("separation", 18); prompt_margin.add_child(_prompt_row)
 
 func _refresh_controller_hud() -> void:
 	if not _mode_label or not _tool_name or not _prompt_row:
 		return
+	# Later scene layers add their own contextual panels. Inherit the same skin
+	# without changing their controls, callbacks, or focus ownership.
+	for surface in hud.get_children():
+		if surface is Control and surface.theme != _hud_theme:
+			surface.theme = _hud_theme
+	_tool_icon.symbol = sculpt_tool if view_context == "terrain" else "cottage"
 	_mode_pill.visible = not menu_open
 	_tool_card.visible = not menu_open
 	_prompt_bar.visible = not menu_open
@@ -145,10 +161,12 @@ func _set_prompts(prompts: Array) -> void:
 	if _prompt_row.get_meta("signature", "") == signature:
 		return
 	_prompt_row.set_meta("signature", signature)
-	for child in _prompt_row.get_children(): child.queue_free()
+	for child in _prompt_row.get_children():
+		_prompt_row.remove_child(child)
+		child.queue_free()
 	for entry_value in prompts:
 		var entry: Array = entry_value
 		if entry.size() < 2 or str(entry[0]).is_empty(): continue
 		var group := HBoxContainer.new(); group.add_theme_constant_override("separation", 7); _prompt_row.add_child(group)
-		var key := Label.new(); key.text = str(entry[0]); key.add_theme_font_size_override("font_size", 15); key.add_theme_color_override("font_color", Color("#fff0c5")); group.add_child(key)
-		var text := Label.new(); text.text = str(entry[1]); text.add_theme_font_size_override("font_size", 15); text.modulate = Color(0.88, 0.90, 0.84); group.add_child(text)
+		var key := Label.new(); key.text = str(entry[0]); UISkin.badge(key); group.add_child(key)
+		var text := Label.new(); text.text = str(entry[1]); text.add_theme_font_size_override("font_size", 16); text.add_theme_color_override("font_color", UISkin.INK); group.add_child(text)

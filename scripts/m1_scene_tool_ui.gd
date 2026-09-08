@@ -67,7 +67,7 @@ func _input(event: InputEvent) -> void:
 func _build_terrain_panel() -> void:
 	_terrain_panel = PanelContainer.new()
 	_terrain_panel.name = "TerrainToolSettings"
-	_terrain_panel.position = Vector2(38, 212)
+	_terrain_panel.position = Vector2(28, 212)
 	_terrain_panel.custom_minimum_size = Vector2(560, 390)
 	_terrain_panel.visible = false
 	hud.add_child(_terrain_panel)
@@ -91,8 +91,10 @@ func _build_terrain_panel() -> void:
 	title.text = "TOOLS"
 	_terrain_tool_column.add_child(title)
 	for tool in TERRAIN_TOOLS:
-		_add_terrain_button(_terrain_tool_column, tool.capitalize(), _select_terrain_tool.bind(tool))
-	_add_terrain_button(_terrain_tool_column, "Clear planting", _select_terrain_tool.bind("clear_planting"))
+		var button := _add_terrain_button(_terrain_tool_column, tool.capitalize(), _select_terrain_tool.bind(tool))
+		button.set_meta("terrain_tool", tool)
+	var clear_button := _add_terrain_button(_terrain_tool_column, "Clear planting", _select_terrain_tool.bind("clear_planting"))
+	clear_button.set_meta("terrain_tool", "clear_planting")
 	var settings_title := Label.new()
 	settings_title.text = "LEFT / RIGHT TO ADJUST"
 	settings_title.add_theme_font_size_override("font_size", 15)
@@ -107,6 +109,7 @@ func _build_terrain_panel() -> void:
 func _add_terrain_button(parent: VBoxContainer, text: String, callback: Callable) -> Button:
 	var button := Button.new()
 	button.text = text
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.focus_mode = Control.FOCUS_ALL
 	button.custom_minimum_size = Vector2(0, 38)
 	button.pressed.connect(callback)
@@ -139,6 +142,21 @@ func _close_terrain_settings() -> void:
 func _refresh_terrain_panel() -> void:
 	if not _terrain_panel: return
 	_terrain_panel.visible = tools_open and view_context == "terrain" and not menu_open
+	for button in _terrain_ui_buttons:
+		if not button.has_meta("terrain_tool"): continue
+		var active := str(button.get_meta("terrain_tool")) == sculpt_tool
+		if button.has_meta("active_tool") and bool(button.get_meta("active_tool")) == active: continue
+		button.set_meta("active_tool", active)
+		if active:
+			var selected := UISkin.panel(Color("#42583e"), UISkin.AMBER, 7)
+			selected.border_width_left = 4
+			selected.content_margin_left = 12
+			selected.content_margin_right = 12
+			selected.content_margin_top = 6
+			selected.content_margin_bottom = 6
+			button.add_theme_stylebox_override("normal", selected)
+		else:
+			button.remove_theme_stylebox_override("normal")
 	var values := {"radius": "Radius   < %.2f >" % brush_radius, "strength": "Strength   < %d / 10 >" % brush_strength_level, "falloff": "Falloff   < %.1f >" % brush_falloff, "reference": "Reference   < %s >" % reference_mode.capitalize(), "keep": "Keep plane   < %s >" % ("On" if keep_reference else "Off"), "height_snap": "Height snap   < %s >" % ("On" if height_snap_enabled else "Off")}
 	var planting := sculpt_tool in ["foliage", "tree", "clear_planting"]
 	for key in _terrain_setting_buttons:
