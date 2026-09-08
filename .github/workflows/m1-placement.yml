@@ -1,12 +1,13 @@
 name: M1 attachment placement regressions
 on:
   push:
-    branches: [fix/m1-sculpt-feedback, fix/m1-building-edit-camera, fix/m1-window-layout]
+    branches: [fix/m1-sculpt-feedback, fix/m1-building-edit-camera, fix/m1-window-layout, feat/m1-cottage-edit-ux]
     paths:
       - scenes/m1.tscn
       - scripts/m1_scene_placement.gd
       - scripts/m1_scene_terrain_ux.gd
       - scripts/m1_scene_building_camera.gd
+      - scripts/m1_scene_cottage_ux.gd
       - scripts/cottage_visual.gd
       - scripts/wall_attachment_placement.gd
       - scripts/detail_placement_ghost.gd
@@ -15,6 +16,7 @@ on:
       - tests/m1_building_placement_test.gd
       - tests/m1_building_camera_test.gd
       - tests/m1_window_layout_test.gd
+      - tests/m1_cottage_edit_ux_test.gd
       - tools/test-m1-placement.ps1
       - .github/workflows/m1-placement.yml
   pull_request:
@@ -23,6 +25,7 @@ on:
       - scripts/m1_scene_placement.gd
       - scripts/m1_scene_terrain_ux.gd
       - scripts/m1_scene_building_camera.gd
+      - scripts/m1_scene_cottage_ux.gd
       - scripts/cottage_visual.gd
       - scripts/wall_attachment_placement.gd
       - scripts/detail_placement_ghost.gd
@@ -31,6 +34,7 @@ on:
       - tests/m1_building_placement_test.gd
       - tests/m1_building_camera_test.gd
       - tests/m1_window_layout_test.gd
+      - tests/m1_cottage_edit_ux_test.gd
       - tools/test-m1-placement.ps1
       - .github/workflows/m1-placement.yml
   workflow_dispatch:
