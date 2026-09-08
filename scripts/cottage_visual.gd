@@ -97,20 +97,21 @@ func _build_roof_tile_batches(dimensions: Vector3, _roof_angle: float) -> void:
 	var buckets: Array = [[], [], []]
 	var run := dimensions.z * 0.5 + 0.5
 	var rise := dimensions.y * 0.42
-	var dx := _unit.x * 2.0
-	var dz := _unit.z
+	var dx := _detail_unit.x * 2.0
+	var dz := _detail_unit.z
 	var span := dimensions.x + 0.75
 	var nx := ceili(span / dx)
 	var nz := ceili(run / dz)
 	for side in [-1.0, 1.0]:
 		for row in nz:
 			var z := (float(row) + 0.5) * dz
-			var height := snappedf(dimensions.y + rise * (1.0 - z / run), _unit.y)
+			var height := snappedf(dimensions.y + rise * (1.0 - z / run), _detail_unit.y)
 			for column in nx:
-				var x := -snappedf(span * 0.5, _unit.x) + (column + 0.5) * dx
-				var shade := (column / 9 + row / 7) % 3
-				buckets[shade].append(_piece(Vector3(x, height, side * z), Vector3(dx, _unit.y * 2.0, dz)))
-	for shade in 3: _add_instanced_boxes("RoofTiles_%d" % shade, buckets[shade], ROOF_TILE_COLORS[shade])
+				var x := -snappedf(span * 0.5, _detail_unit.x) + (column + 0.5) * dx
+				# Preserve the broad, quiet colour rhythm while doubling geometry resolution.
+				var shade := (column / 18 + row / 14) % 3
+				buckets[shade].append(_piece(Vector3(x, height, side * z), Vector3(dx, _detail_unit.y * 2.0, dz)))
+	for shade in 3: _add_detail_boxes("RoofTiles_%d" % shade, buckets[shade], ROOF_TILE_COLORS[shade])
 
 func _build_corner_quoin_batch(dimensions: Vector3) -> void:
 	# Corner stones straddle both wall planes. Sub-cell widths rounded inward
@@ -226,7 +227,7 @@ func _surface_basis(orientation: String) -> Basis:
 func _window_layout(detail: Dictionary, local: Vector3, orientation: String) -> Dictionary:
 	var basis := _surface_basis(orientation)
 	var rounded := str(detail.get("asset_id", "window_wood")).contains("round")
-	var pane_requested := Vector3(1.0, 1.0, 0.10) if rounded else Vector3(2.0, 2.8, 0.10)
+	var pane_requested := Vector3(1.5, 1.5, 0.10) if rounded else Vector3(2.0, 2.8, 0.10)
 	var pane_quantized := Grid.quantized_box(Vector3.ZERO, pane_requested, _unit)
 	var surface_local := basis.inverse() * local
 	# Authoritative attachment positions retain their small wall-normal offset,

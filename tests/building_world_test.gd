@@ -177,7 +177,7 @@ func _initialize() -> void:
 	for child in visual.get_children():
 		var node: Node = child
 		if node.name == "Detail_%s" % visual_second:
-			has_round = node.mesh is BoxMesh and (node.mesh as BoxMesh).size.x < 1.5 and visual.get_node_or_null("Reveal_%s" % visual_second) != null
+			has_round = node.mesh is BoxMesh and is_equal_approx((node.mesh as BoxMesh).size.x, 1.5) and visual.get_node_or_null("Reveal_%s" % visual_second) != null
 		if node.name == "Detail_%s" % visual_third: has_suppressed = true
 	_check(has_round and not has_suppressed, "replacement and suppression render")
 	var front_wall: Node = visual.get_node_or_null("WallFront")
@@ -195,12 +195,10 @@ func _initialize() -> void:
 		if child is MultiMeshInstance3D:
 			var tile_instances: MultiMesh = child.multimesh
 			_check(tile_instances.mesh is BoxMesh, "roof instances use native outward cube faces")
+			_check(child.has_meta("cottage_detail_grid"), "visible roof tiles declare cottage half-cell tier")
 			roof_tile_vertices += tile_instances.instance_count * 24
-			if tile_instances.mesh is BoxMesh:
-				var world_tile_size: Vector3 = (tile_instances.mesh as BoxMesh).size * visual.transform.basis.get_scale()
-				for axis in 3: _check(is_equal_approx(world_tile_size[axis] / preload("res://scripts/visual_grid.gd").UNIT, roundf(world_tile_size[axis] / preload("res://scripts/visual_grid.gd").UNIT)), "roof cell faces use shared world grid")
 
-	_check(roof_tile_batches > 0 and roof_tile_batches <= 6 and roof_tile_vertices > 10000 and roof_tile_vertices < 100000, "roof tiles use bounded batched geometry on shared fine grid")
+	_check(roof_tile_batches > 0 and roof_tile_batches <= 6 and roof_tile_vertices > 10000 and roof_tile_vertices < 100000, "roof tiles use bounded batched geometry on cottage detail grid")
 	_check(visual.get_child_count() < 140, "cottage detail node budget remains bounded")
 	_check(visual_world.delete_surface(building_id, "wall-front"), "visual delete support source")
 	visual.request_revision(visual_world.get_revision())

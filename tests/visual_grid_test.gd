@@ -13,7 +13,7 @@ var unverified_instances := 0
 var scene: Node3D
 # Deliberately independent of renderer metadata: only these cottage families
 # may use the approved half-cell tier. All other assets retain structural tests.
-const DETAIL_PREFIXES := ["Reveal_", "Joinery_", "Shutters_", "ManualShutter_", "FlowerBox_", "BoxFoliage_", "BoxFlowers_", "BoxFlowerAccents_", "Trim_", "Cornice_"]
+const DETAIL_PREFIXES := ["Reveal_", "Joinery_", "Shutters_", "ManualShutter_", "FlowerBox_", "BoxFoliage_", "BoxFlowers_", "BoxFlowerAccents_", "Trim_", "Cornice_", "RoofTiles_"]
 const DETAIL_NAMES := ["EaveJoinery", "RidgeCourses", "RoofEdgeLip"]
 
 func _initialize() -> void:

@@ -1,14 +1,14 @@
 # M1 cottage half-cell detail candidate
 
-This branch implements the player-approved `0.0625` cottage decorative tier while retaining `VisualGrid.UNIT = 0.125` for terrain, cottage structure, roof mass, resize increments and authoritative attachment anchors.
+This branch implements the player-approved `0.0625` cottage presentation tier, including visible roof tiles and edges, while retaining `VisualGrid.UNIT = 0.125` for terrain, cottage structure, authoritative roof profile, resize increments and attachment anchors.
 
-The derived renderer now gives existing windows finer mullion/transom choices, chamfered round surrounds, slatted or stepped-braced shutters, thinner cornices, regular eave pegs, articulated ridge and roof lips, built timber flower boxes, and small deterministic flower arrangements. Building seed plus stable detail identity selects restrained variations; unchanged recipes render identically and no save schema or gameplay behavior changed.
+The derived renderer now gives existing windows finer mullion/transom choices, enlarged chamfered round surrounds, slatted or stepped-braced shutters, thinner cornices, regular eave pegs, articulated ridge and roof lips, half-cell visible roof courses, built timber flower boxes, and small deterministic flower arrangements. Building seed plus stable detail identity selects restrained variations; unchanged recipes render identically and no save schema or gameplay behavior changed.
 
 Validation on pinned Godot `4.7.2.stable.official.ed1daf0bf`:
 
-- Focused headless detail geometry: 202 checks, 0 failures.
+- Focused headless detail geometry: 227 checks, 0 failures, including the enlarged `0.375 x 0.375` world-unit round pane on a default miniature cottage.
 - Full headless visual-grid contract: 1,173 checks, 0 failures. Native MultiMesh instances are explicitly unverified in headless mode.
-- Actual Vulkan Forward Mobile grid: 92,900 checks, 0 failures; 30,507 rendered instances and 798,848 vertices inspected.
+- Actual D3D12 Forward Mobile grid: 321,029 checks, 0 failures; 106,543 rendered instances and 2,623,712 vertices inspected across the seven-cottage scale/resize/duplication stress fixture.
 - Focused Forward Mobile capture harness: 26 checks, 0 failures, including exact repeated-image stability and unchanged authoritative records.
 - Existing building-world serialization, duplication, undo/redo and revision guards passed.
 - Existing cottage render stability passed 35 checks.
@@ -22,5 +22,6 @@ Review captures:
 - `reports/screenshots/m1-cottage-detail/03-detail-families.png`
 - `reports/screenshots/m1-cottage-detail/05-resized-details.png`
 - Same-view baseline: `reports/screenshots/m1-cottage-detail-baseline/03-detail-families.png`
+- Same-view pre-fine-roof baseline: `reports/screenshots/m1-cottage-detail-roof-baseline/03-detail-families.png`
 
-The large structural roof staircase remains intentionally on the `0.125` tier and still dominates the silhouette. Desktop RTX 3070 evidence is not Thor performance evidence; handheld performance and player visual approval remain open.
+The authoritative roof profile remains structural while its visible courses use the finer tier. Halving both roof tile axes substantially increases generated instances in the multi-cottage diagnostic fixture. Desktop RTX 3070 evidence is not Thor performance evidence; handheld performance and player visual approval remain open.

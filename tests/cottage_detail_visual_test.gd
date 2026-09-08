@@ -42,7 +42,10 @@ func _run() -> void:
 	visual.apply_building(view, 1)
 	_check(visual.uploads != upload_snapshot, "seed changes derived craft")
 	for key in roof_snapshot:
-		_check(visual.uploads[key] == roof_snapshot[key], "seed leaves structural roof mass unchanged: " + key)
+		_check(visual.uploads[key] == roof_snapshot[key], "seed leaves authoritative roof profile presentation unchanged: " + key)
+	var round_layout: Dictionary = visual._window_layout({"asset_id": "window_round"}, Vector3(0, 3.4, -7.02), "front")
+	var round_world_size := Vector2((round_layout["pane_size"] as Vector3).x * 0.25, (round_layout["pane_size"] as Vector3).y * 0.25)
+	_check(round_world_size.is_equal_approx(Vector2(0.375, 0.375)), "round pane retains enlarged miniature size")
 	# Fixed world detail units survive miniature/legacy scales and cardinal
 	# attachment orientation. Nonuniform transforms are tested for detail only;
 	# this test does not relax or redesign existing structural geometry.
