@@ -1,10 +1,16 @@
 # Hearthvale — current M1 handoff
 
-Updated 2026-09-08. Read AGENTS.md and the current user request first. The user reports the f90c8840 resize build feels pretty good and asked for A on the house to offer Move house or Resize house, with handles appearing only after choosing Resize. This refinement is implemented and a verified candidate is uploaded for physical testing. M1 and the graphical polish pass are not complete.
+Updated 2026-09-08 after the user's physical feedback on 44ebca5b: "yep, it all works as expected :) good job". Read AGENTS.md and the current user request first. **The user accepts the delivered house Move/Resize flow on the Thor. 44ebca5b is the accepted integrated interaction baseline; graphical UI polish is next.** M1 and the graphical polish pass are not complete.
 
-## Current branch and candidate
+## Physical acceptance — 2026-09-08
 
-Branch: `feat/m1-house-move-resize`, based on `e5c7f1fe61ffdfdb9920345a4863910206a2bd96` from the resize branch. Candidate: `44ebca5b124a1a3375d94fe5135c07cce07353f9`. Subsequent documentation-only commits do not change the APK. `master`, the previous resize branch and accepted repair branches remain untouched.
+The user previously reported that the f90c8840 resize build felt pretty good, then requested A on the house to offer Move house or Resize house, with handles appearing only after choosing Resize. After receiving 44ebca5b and its focused checklist, the user confirmed that it all works as expected.
+
+Record this as player-reported functional acceptance of the delivered house-action refinement, not a fabricated item-by-item checklist, exhaustive QA or quantitative performance measurement. Preserve bare-house A choice, direct detail A-move/X-options, opt-in resize handles, whole-house relocation and operation-first B behaviour as the accepted interaction baseline alongside the earlier cottage and terrain-camera/D-pad acceptance. Do not ask the user to repeat unchanged checks. This acceptance update changes documentation only: no gameplay changes, new APK, test rerun or merge to master.
+
+## Current branch and accepted build
+
+Branch: `feat/m1-house-move-resize`, based on `e5c7f1fe61ffdfdb9920345a4863910206a2bd96` from the resize branch. Accepted build: `44ebca5b124a1a3375d94fe5135c07cce07353f9`. Subsequent documentation-only commits do not change the APK. `master`, the previous resize branch and accepted repair branches were not changed by this work or acceptance record.
 
 Small commits:
 - `ff87b93cfc9846158e119bd2c393e5dac25c107a`: existing-house translation transaction with stable identity, stale-revision guard and undo.
@@ -32,7 +38,7 @@ The new controller suite uses physical A/B/D-pad/Start/shoulder and stick events
 
 Initial run `34236486907` failed only the new whole in-memory dictionary equality after save/reload (40 checks, one failure); run `34237001071` failed only the JSON-text comparison (49 checks, one failure). The actual saved building records, reloaded transform/dimensions and detail positions passed. Final diagnostics demonstrate live automatic-layout metadata `{"version":1}` versus loaded `{"version":1.0}`. The final test normalizes BOTH complete views through JSON parse before comparison without dropping any fields or adding a geometric tolerance. Exact serialized raw building-record comparison and separate resolved transform/detail checks remain. No saving code was changed to address these assertion errors.
 
-Actual Mobile/D3D12 software rendering passes 91 checks and writes 17 captures. It preserves the accepted exact two-cottage colour-cancel equality and adds exact image restoration after whole-house move cancellation, the two-choice panel and relocation ghost. The actual chooser and move-ghost captures were inspected. No physical Thor test, quantitative handheld performance measurement, local Godot execution or independent review is claimed for this candidate.
+Actual Mobile/D3D12 software rendering passes 91 checks and writes 17 captures. It preserves the accepted exact two-cottage colour-cancel equality and adds exact image restoration after whole-house move cancellation, the two-choice panel and relocation ghost. The actual chooser and move-ghost captures were inspected. These are automated/software-render results, separate from the user's subsequent physical acceptance above. No quantitative handheld performance measurement, local Godot execution or independent review is claimed for this build.
 
 Diagnostic/source artifact `10060652880`: archive SHA256 `a134a5197ce89fe8a0658e968d33d54ec9cc83ff83f322621fa11d195ecb3568`, verified locally. All eight changed source/test/workflow files match the exact published source archive after newline normalization. Runtime native readiness deadlines, strict error receipts and existing pixel equality gates were not relaxed.
 
@@ -52,12 +58,11 @@ Install as **Hearthvale Test 44ebca5b**, package `org.hearthvale.game.repair.c44
 
 ## Preserve accepted work and remaining scope
 
-The user explicitly accepted the ca5185dc cottage repairs and all eight c54d0559 camera/D-pad retest checks on Thor. Their latest f90c8840 feedback is positive qualitative resize usability feedback, not an itemized all-green resize checklist. Preserve accepted selection, visible-window movement, action-first B, colour/variation isolation, attachment recovery, duplication camera, terrain camera/navigation, reload and brush settings.
+The user explicitly accepted the ca5185dc cottage repairs and all eight c54d0559 camera/D-pad retest checks on Thor. Their f90c8840 feedback was positive qualitative resize usability feedback, not an itemized all-green resize checklist. Their subsequent 44ebca5b response accepts the delivered house Move/Resize refinement. Preserve accepted selection, visible-window movement, action-first B, colour/variation isolation, attachment recovery, duplication camera, terrain camera/navigation, reload, brush settings and the new house-action flow.
 
-1. Focused physical retest of A on bare house -> Move/Resize, unchanged A on details, opt-in handles and B depth, actual whole-house translation/restore/undo/save, and explicit Duplicate still making a copy. Do not require repeating all unchanged accepted checklists.
-2. Graphical UI polish next as the user requested: icons, cohesive panels, typography and focus states without scrambling the accepted controller grammar. Maintain discoverability of existing cottage cycling and camera shortcuts during the polish pass.
-3. One-block overhang targeting and Slope performance/plane-guide clarity remain separate open issues.
-4. Higher-detail cottage prototype and later river/tree refinement; no M2.
-5. Stable securely retained Android signing and deliberate save migration before routine in-place updates.
+1. Graphical UI polish next as the user requested: icons, cohesive panels, typography and focus states without scrambling the accepted controller grammar. Maintain discoverability of existing cottage cycling and camera shortcuts during the polish pass.
+2. One-block overhang targeting and Slope performance/plane-guide clarity remain separate open issues; this house-action acceptance does not resolve them.
+3. Higher-detail cottage prototype and later river/tree refinement; no M2.
+4. Stable securely retained Android signing and deliberate save migration before routine in-place updates.
 
 Pinned engine/dependencies, 0.125 visible grid, miniature scale, world size and schemas are unchanged. Preserve native caves/overhangs, authoritative IDs/manual/suppressed/unsupported records, cancellation/history, player saves and prior APKs. Never weaken validation to obtain a green result.
