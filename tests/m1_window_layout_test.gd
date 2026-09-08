@@ -67,11 +67,14 @@ func _check_layout(label: String) -> void:
 		_check(pane_node is MeshInstance3D and reveal_node is MultiMeshInstance3D, "%s generated window pieces exist %s" % [label, detail["id"]])
 		if pane_node is MeshInstance3D and reveal_node is MultiMeshInstance3D:
 			_check((pane_node.mesh as BoxMesh).size.is_equal_approx(pane_size), "%s rendered pane uses shared size %s" % [label, detail["id"]])
-			var anchor_center: Vector3 = layout["anchor_center"]
-			_check(reveal_node.transform.origin.is_equal_approx(anchor_center), "%s reveal uses shared centre %s" % [label, detail["id"]])
 			var basis: Basis = layout["basis"]
-			var expected_pane_origin := anchor_center + basis * Vector3(0, 0, -visual._unit.z)
-			_check(pane_node.transform.origin.is_equal_approx(expected_pane_origin), "%s pane uses shared centre %s" % [label, detail["id"]])
+			var surface_center: Vector2 = layout["surface_center"]
+			# The final renderer snaps MultiMesh depth to the visual grid. Compare
+			# tangent + height, which define the wall opening and must stay exact.
+			var reveal_surface: Vector3 = basis.inverse() * reveal_node.transform.origin
+			_check(Vector2(reveal_surface.x, reveal_surface.y).is_equal_approx(surface_center), "%s reveal uses shared wall-plane centre %s" % [label, detail["id"]])
+			var pane_surface: Vector3 = basis.inverse() * pane_node.transform.origin
+			_check(Vector2(pane_surface.x, pane_surface.y).is_equal_approx(surface_center), "%s pane uses shared wall-plane centre %s" % [label, detail["id"]])
 	_check(visible_count > 0, "%s has visible windows" % label)
 
 func _first_visible_window(view: Dictionary) -> Dictionary:
