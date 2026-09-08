@@ -109,11 +109,13 @@ func _build_roof_tile_batches(dimensions: Vector3, _roof_angle: float) -> void:
 	for shade in 3: _add_instanced_boxes("RoofTiles_%d" % shade, buckets[shade], ROOF_TILE_COLORS[shade])
 
 func _build_corner_quoin_batch(dimensions: Vector3) -> void:
+	# Corner stones straddle both wall planes. Sub-cell widths rounded inward
+	# onto the wall face and produced draw-order-dependent coplanar colours.
 	var boxes: Array = []
 	for corner_x in [-1, 1]:
 		for corner_z in [-1, 1]:
 			for level in 3:
-				boxes.append(_piece(Vector3(dimensions.x * 0.5 * corner_x, 0.9 + float(level) * 1.45, dimensions.z * 0.5 * corner_z), Vector3(0.30, 0.70, 0.30)))
+				boxes.append(_piece(Vector3(dimensions.x * 0.5 * corner_x, 0.9 + float(level) * 1.45, dimensions.z * 0.5 * corner_z), Vector3(_unit.x * 2.0, 0.70, _unit.z * 2.0)))
 	_add_batched_boxes("CornerQuoins", boxes, QUOIN_COLOR)
 
 func _build_details(view: Dictionary, dimensions: Vector3) -> void:
