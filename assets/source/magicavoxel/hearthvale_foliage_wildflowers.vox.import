@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://u2ywj03uddrj"
+path="res://.godot/imported/hearthvale_foliage_wildflowers.vox-6469bfd20d752a09a2c0b1d0d09a6687.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_foliage_wildflowers.vox"
+dest_files=["res://.godot/imported/hearthvale_foliage_wildflowers.vox-6469bfd20d752a09a2c0b1d0d09a6687.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

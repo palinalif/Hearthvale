@@ -4,16 +4,38 @@ class_name VegetationMesh
 const Grid = preload("res://scripts/visual_grid.gd")
 const U := Grid.UNIT
 const COLORS := [Color("#638348"), Color("#486d46"), Color("#87a657"), Color("#765942"), Color("#c7b897"), Color("#df9a8b")]
+const TREE_PATHS := [
+	"res://assets/models/magicavoxel/hearthvale_tree_orchard.res",
+	"res://assets/models/magicavoxel/hearthvale_tree_riverside.res",
+	"res://assets/models/magicavoxel/hearthvale_tree_wind.res",
+]
+const FOLIAGE_PATHS := [
+	"res://assets/models/magicavoxel/hearthvale_foliage_grass.res",
+	"res://assets/models/magicavoxel/hearthvale_foliage_wildflowers.res",
+	"res://assets/models/magicavoxel/hearthvale_foliage_leafy.res",
+]
 static var _cache: Dictionary = {}
 
 static func meshes(kind: String, variant: int) -> Array:
 	var key := "%s:%d" % [kind, posmod(variant, 3)]
 	if _cache.has(key): return _cache[key]
+	if kind in ["tree", "foliage"]:
+		var paths: Array = TREE_PATHS if kind == "tree" else FOLIAGE_PATHS
+		var mesh := load(paths[posmod(variant, 3)]) as Mesh
+		assert(mesh != null, "Missing authored %s mesh variant %d" % [kind, posmod(variant, 3)])
+		# Preserve the existing one-material-per-batch renderer while swapping in
+		# the authored geometry. This keeps opaque/shadow draw ordering stable.
+		var authored: Array = []
+		for surface in mesh.get_surface_count():
+			var part := ArrayMesh.new()
+			part.add_surface_from_arrays(mesh.surface_get_primitive_type(surface), mesh.surface_get_arrays(surface))
+			part.surface_set_material(0, mesh.surface_get_material(surface))
+			authored.append(part)
+		_cache[key] = authored
+		return authored
 	var groups: Array = []
 	for i in COLORS.size(): groups.append([PackedVector3Array(), PackedVector3Array(), PackedInt32Array()])
-	if kind == "tree": _tree(groups, posmod(variant, 3))
-	elif kind == "rock": _rock(groups, posmod(variant, 3))
-	else: _foliage(groups, posmod(variant, 3))
+	_rock(groups, posmod(variant, 3))
 	var result: Array = []
 	for shade in groups.size():
 		if groups[shade][0].is_empty(): continue
