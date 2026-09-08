@@ -28,7 +28,7 @@ jobs:
         run: |
           $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           if (-not $editor) { throw 'Pinned editor missing' }
-          foreach ($test in @('m1_cottage_targeting_playtest_test','m1_playtest_repair_test','m1_terrain_settings_input_test')) {
+          foreach ($test in @('m1_cottage_targeting_playtest_test','m1_playtest_repair_test','m1_terrain_settings_input_test','cottage_render_stability_test')) {
             $output = & $editor --headless --max-fps 60 --quit-after 7200 --path . --script "tests/$test.gd" 2>&1 | ForEach-Object { "$_" }
             $exitCode = $LASTEXITCODE
             $output | Tee-Object -FilePath ".tools/cottage-repair/$test.log"
@@ -54,3 +54,7 @@ jobs:
           path: .tools/cottage-repair/
           if-no-files-found: error
           retention-days: 14
+
+  build-repair-apk:
+    needs: cottage-playtest
+    uses: ./.github/workflows/thor-repair-apk.yml
