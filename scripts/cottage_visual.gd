@@ -62,7 +62,7 @@ func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 	# the very same trim cells. The physical miniature scale is unchanged.
 	var eave := snappedf(dimensions.y, _unit.y)
 	for side in [-1.0, 1.0]:
-		var z := side * (snappedf(dimensions.z * 0.5, _unit.z) + _unit.z * 0.5)
+		var z: float = side * (snappedf(dimensions.z * 0.5, _unit.z) + _unit.z * 0.5)
 		_add_box("Trim_%s" % side, Vector3(dimensions.x, _unit.y, _unit.z), Vector3(0, eave - _unit.y * 2.5, z), TRIM_COLOR)
 		_add_box("Cornice_%s" % side, Vector3(dimensions.x, _unit.y, _unit.z), Vector3(0, eave - _unit.y * 1.5, z), CORNICE_COLOR)
 	var roof_angle := atan2(dimensions.y * 0.42, dimensions.z * 0.5)
@@ -221,7 +221,7 @@ func _build_window(detail: Dictionary, local: Vector3, orientation: String, wind
 			pale.append(_piece(Vector3(side * (half.x + _unit.x * 0.5), 0, _unit.z * 0.5), Vector3(_unit.x, pane_size.y, _unit.z)))
 			pale.append(_piece(Vector3(0, side * (half.y + _unit.y * 0.5), _unit.z * 0.5), Vector3(pane_size.x + 2.0 * _unit.x, _unit.y, _unit.z)))
 			if bool(detail.get("show_shutters", true)):
-				var x := side * (half.x + _unit.x * 1.5)
+				var x: float = side * (half.x + _unit.x * 1.5)
 				shutters.append(_piece(Vector3(x, 0, _unit.z * 0.5), Vector3(_unit.x, pane_size.y - _unit.y * 2.0, _unit.z)))
 				for end in [-1.0, 1.0]:
 					timber.append(_piece(Vector3(x, end * (half.y - _unit.y * 0.5), _unit.z * 0.5), _unit))
@@ -303,9 +303,9 @@ func _build_crafted_shell(dimensions: Vector3, _color: Color) -> void:
 		stone.append(_piece(Vector3(foundation_center.x + side * (foundation_half.x + _unit.x * 0.5), _unit.y * 0.5, foundation_center.z), Vector3(_unit.x, _unit.y, foundation_half.z * 2.0)))
 		for i in ceili(dimensions.x / (_unit.x * 3.0)):
 			var x := -snappedf(dimensions.x * 0.5, _unit.x) + (i * 3.0 + 0.5) * _unit.x
-			var z := side * (snappedf(dimensions.z * 0.5, _unit.z) + _unit.z * 1.5)
+			var z: float = side * (snappedf(dimensions.z * 0.5, _unit.z) + _unit.z * 1.5)
 			timber.append(_piece(Vector3(x, eave - _unit.y * 1.5, z), _unit))
-		var end_x := side * (snappedf((dimensions.x + 0.75) * 0.5, _unit.x) + _unit.x * 0.5)
+		var end_x: float = side * (snappedf((dimensions.x + 0.75) * 0.5, _unit.x) + _unit.x * 0.5)
 		timber.append(_piece(Vector3(end_x, eave + _unit.y * 0.5, 0), Vector3(_unit.x, _unit.y, dimensions.z)))
 		timber.append(_piece(Vector3(end_x, eave + dimensions.y * 0.21, 0), Vector3(_unit.x, dimensions.y * 0.42, _unit.z)))
 	_add_batched_boxes("FoundationCourses", stone, QUOIN_COLOR)
