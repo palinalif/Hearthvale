@@ -35,7 +35,7 @@ func apply_building(view: Dictionary, source_revision: int) -> bool:
 	var dimensions: Vector3 = view.get("dimensions", Vector3(18, 10, 14))
 	var transform_value = view.get("transform", Transform3D.IDENTITY)
 	var building_transform: Transform3D = transform_value if transform_value is Transform3D else Transform3D.IDENTITY
-	# Preserve the authored transform as a whole.  Rotation and scale are part
+	# Preserve the authored transform as a whole. Rotation and scale are part
 	# of the document identity and must affect every generated child equally.
 	transform = building_transform
 	var world_scale := building_transform.basis.get_scale().abs()
@@ -67,7 +67,6 @@ func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 	_add_box("BackCornice", Vector3(dimensions.x + 0.3, 0.16, 0.28), Vector3(0, dimensions.y - 0.68, dimensions.z * 0.5 + 0.18), CORNICE_COLOR)
 	var roof_run := dimensions.z * 0.5 + 0.45
 	var roof_angle := atan2(dimensions.y * 0.42, dimensions.z * 0.5)
-	var roof_length := sqrt(roof_run * roof_run + (dimensions.y * 0.42) * (dimensions.y * 0.42))
 	_add_box("RidgeTrim", Vector3(dimensions.x + 0.8, 0.22, 0.24), Vector3(0, dimensions.y + dimensions.y * 0.42, 0), TRIM_COLOR)
 	_add_box("RidgeCap", Vector3(dimensions.x + 0.82, 0.16, 0.34), Vector3(0, dimensions.y + dimensions.y * 0.43, 0), CORNICE_COLOR)
 	_build_roof_tile_batches(dimensions, roof_angle)
@@ -142,11 +141,7 @@ func _build_details(view: Dictionary, dimensions: Vector3) -> void:
 		var anchor: Dictionary = detail.get("anchor", {})
 		var surface_id := str(anchor.get("surface_id", ""))
 		var orientation := str(surface_orientations.get(surface_id, "front"))
-		var basis := Basis.IDENTITY
-		if orientation == "front": basis = Basis(Vector3.UP, PI)
-		elif orientation == "left": basis = Basis(Vector3.UP, -PI * 0.5)
-		elif orientation == "right": basis = Basis(Vector3.UP, PI * 0.5)
-		_build_window(detail, local, basis, window_material)
+		_build_window(detail, local, orientation, window_material)
 	for detail_value in view.get("details", []):
 		var detail: Dictionary = detail_value
 		if str(detail.get("kind", "")) != "shutter" or not bool(detail.get("visible", true)) or bool(detail.get("needs_placement", false)): continue
@@ -188,6 +183,31 @@ func _surface_basis(orientation: String) -> Basis:
 	if orientation == "right": return Basis(Vector3.UP, PI * 0.5)
 	return Basis.IDENTITY
 
+func _window_layout(detail: Dictionary, local: Vector3, orientation: String) -> Dictionary:
+	# One snapped surface-local layout owns the opening and every generated
+	# window component. This prevents pane/reveal/opening rounding from drifting
+	# apart when the building is resized at miniature scale.
+	var basis := _surface_basis(orientation)
+	var rounded := str(detail.get("asset_id", "window_wood")).contains("round")
+	var pane_requested := Vector3(1.0, 1.0, 0.10) if rounded else Vector3(2.0, 2.8, 0.10)
+	var pane_quantized := Grid.quantized_box(Vector3.ZERO, pane_requested, _unit)
+	var surface_local := basis.inverse() * local
+	var snapped_surface := Vector3(
+		snappedf(surface_local.x, _unit.x),
+		snappedf(surface_local.y, _unit.y),
+		surface_local.z
+	)
+	var anchor_center := basis * snapped_surface
+	var pane_size: Vector3 = pane_quantized["size"]
+	return {
+		"basis": basis,
+		"rounded": rounded,
+		"anchor_center": anchor_center,
+		"surface_center": Vector2(snapped_surface.x, snapped_surface.y),
+		"pane_size": pane_size,
+		"opening_half": Vector2(pane_size.x, pane_size.y) * 0.5,
+	}
+
 func _add_box(node_name: String, size: Vector3, local_position: Vector3, color: Color) -> MeshInstance3D:
 	var node := MeshInstance3D.new()
 	node.name = node_name
@@ -202,18 +222,20 @@ func _add_box(node_name: String, size: Vector3, local_position: Vector3, color: 
 	add_child(node)
 	return node
 
-func _build_window(detail: Dictionary, local: Vector3, basis: Basis, window_material: StandardMaterial3D) -> void:
+func _build_window(detail: Dictionary, local: Vector3, orientation: String, window_material: StandardMaterial3D) -> void:
 	var id := str(detail.get("id", "window"))
-	var rounded := str(detail.get("asset_id", "window_wood")).contains("round")
+	var layout := _window_layout(detail, local, orientation)
+	var rounded: bool = bool(layout["rounded"])
+	var basis: Basis = layout["basis"]
+	var anchor_center: Vector3 = layout["anchor_center"]
+	var pane_size: Vector3 = layout["pane_size"]
 	var node := MeshInstance3D.new()
 	node.name = "Detail_%s" % id
 	var pane := BoxMesh.new()
-	var pane_size := Vector3(1.0, 1.0, 0.10) if rounded else Vector3(2.0, 2.8, 0.10)
-	var pane_box := Grid.quantized_box(basis.inverse() * local + Vector3(0, 0, -_unit.z), pane_size, _unit)
-	pane.size = pane_box["size"]
+	pane.size = pane_size
 	node.mesh = pane
 	node.material_override = window_material
-	node.transform = Transform3D(basis, basis * pane_box["center"])
+	node.transform = Transform3D(basis, anchor_center + basis * Vector3(0, 0, -_unit.z))
 	add_child(node)
 	var pale: Array = []
 	var timber: Array = []
@@ -244,14 +266,14 @@ func _build_window(detail: Dictionary, local: Vector3, basis: Basis, window_mate
 	for entry in [["Reveal", pale, CORNICE_COLOR], ["Joinery", timber, TRIM_COLOR], ["Shutters", shutters, SHUTTER_COLOR]]:
 		if entry[1].is_empty(): continue
 		var batch := _add_batched_boxes("%s_%s" % [entry[0], id], entry[1], entry[2])
-		batch.transform = Transform3D(basis, local)
+		batch.transform = Transform3D(basis, anchor_center)
 
 func _piece(center: Vector3, size: Vector3, basis := Basis.IDENTITY) -> Dictionary:
 	return {"center": center, "size": size, "basis": basis}
 
 func _build_wall(orientation: String, dimensions: Vector3, view: Dictionary, color: Color) -> void:
-	# Cut actual openings from the wall. The cuts follow resolved attachment
-	# positions, so moving/suppressing an editable window also rebuilds its reveal.
+	# Cut actual openings from the same snapped layout used by the pane, reveal,
+	# joinery and shutters. Moving/resizing can no longer produce half-cell drift.
 	var basis := _surface_basis(orientation)
 	var span := dimensions.x if orientation in ["front", "back"] else dimensions.z
 	var normal_distance := dimensions.z * 0.5 if orientation in ["front", "back"] else dimensions.x * 0.5
@@ -265,9 +287,10 @@ func _build_wall(orientation: String, dimensions: Vector3, view: Dictionary, col
 		if not str(detail.get("anchor", {}).get("surface_id", "")) in surface_ids: continue
 		var resolved = detail.get("resolved_position", null)
 		if not resolved is Vector3: continue
-		var position_in_wall: Vector3 = basis.inverse() * (resolved - origin)
-		var half := Vector2(0.54, 0.54) if str(detail.get("asset_id", "")).contains("round") else Vector2(1.02, 1.42)
-		cuts.append(Rect2(Vector2(position_in_wall.x, position_in_wall.y) - half, half * 2.0))
+		var layout := _window_layout(detail, resolved, orientation)
+		var surface_center: Vector2 = layout["surface_center"]
+		var opening_half: Vector2 = layout["opening_half"]
+		cuts.append(Rect2(surface_center - opening_half, opening_half * 2.0))
 	if orientation == "left": cuts.append(Rect2(-0.90, 0.6, 1.80, minf(3.7, dimensions.y - 1.0)))
 	var xs: Array[float] = [-span * 0.5, span * 0.5]
 	var ys: Array[float] = [0.6, dimensions.y]
