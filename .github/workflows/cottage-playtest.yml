@@ -1,0 +1,27 @@
+name: Cottage playtest regressions
+on:
+  push:
+    branches: [fix/m1-cottage-playtest-2]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cottage-playtest:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Run existing M1 integration gates
+        shell: pwsh
+        run: ./tools/test-m1-placement.ps1
+      - name: Test exported scene against Thor targeting failures
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $editor) { throw 'Pinned editor missing' }
+          $output = & $editor --headless --max-fps 60 --quit-after 7200 --path . --script tests/m1_cottage_targeting_playtest_test.gd 2>&1 | ForEach-Object { "$_" }
+          $exitCode = $LASTEXITCODE
+          $output | ForEach-Object { Write-Output $_ }
+          if ($exitCode -ne 0 -or ($output -match 'ERROR:|Parse Error:|FAIL:') -or -not (($output -join "`n") -match 'failures=0')) { throw 'Cottage targeting regression failed' }
