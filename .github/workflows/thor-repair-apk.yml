@@ -1,18 +1,7 @@
-name: Thor playtest APK
+name: Verified isolated Thor repair APK
 
 on:
-  push:
-    branches: [feat/m1-ui-ux-overhaul]
-    paths:
-      - .github/workflows/thor-apk.yml
-      - project.godot
-      - export_presets.cfg
-      - dependencies.lock.json
-      - addons/**
-      - assets/**
-      - scenes/**
-      - scripts/**
-  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -23,6 +12,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
 
       - name: Bootstrap pinned Godot and native dependencies
         shell: pwsh
@@ -69,6 +60,18 @@ jobs:
           }
           [IO.File]::WriteAllText($settings.FullName, $text, (New-Object Text.UTF8Encoding($false)))
 
+      - name: Set isolated candidate identity without changing the original app
+        shell: pwsh
+        run: |
+          $short = $env:GITHUB_SHA.Substring(0, 8)
+          $file = Join-Path (Get-Location) 'export_presets.cfg'
+          $text = Get-Content $file -Raw
+          $text = $text.Replace('package/unique_name="org.hearthvale.game"', ('package/unique_name="org.hearthvale.game.repair.c' + $short + '"'))
+          $text = $text.Replace('package/name="Hearthvale M1"', ('package/name="Hearthvale Test ' + $short + '"'))
+          $text = [regex]::Replace($text, '(?m)^version/code=\d+', 'version/code=6')
+          $text = [regex]::Replace($text, '(?m)^version/name="[^"]+"', ('version/name="0.1.3-repair-' + $short + '"'))
+          [IO.File]::WriteAllText($file, $text, (New-Object Text.UTF8Encoding($false)))
+
       - name: Import and export ARM64 debug APK
         shell: pwsh
         run: |
@@ -76,7 +79,7 @@ jobs:
           & $godot --headless --path . --editor --import --quit
           if ($LASTEXITCODE -ne 0) { throw 'Godot import failed' }
           New-Item -ItemType Directory -Force builds | Out-Null
-          $output = 'builds/hearthvale-m1-thor-feedback.apk'
+          $output = 'builds/hearthvale-m1-repair-' + $env:GITHUB_SHA.Substring(0, 8) + '.apk'
           $log = (& $godot --headless --path . --export-debug 'Android ARM64' $output 2>&1 | ForEach-Object { "$_" })
           $exit = $LASTEXITCODE
           $log | ForEach-Object { Write-Output $_ }
@@ -84,30 +87,18 @@ jobs:
           if ($exit -ne 0 -or $joined -match 'SCRIPT ERROR:|ERROR:') { throw "Android export failed (exit=$exit)" }
           if (-not (Test-Path $output)) { throw 'APK was not created' }
 
-      - name: Verify APK package, signature, architecture and voxel library
+      - name: Verify package, signature, Mobile renderer and pinned native library
         shell: pwsh
         run: |
-          $apk = (Resolve-Path 'builds/hearthvale-m1-thor-feedback.apk').Path
-          $buildTools = Get-ChildItem (Join-Path $env:ANDROID_HOME 'build-tools') -Directory | Sort-Object Name -Descending | Select-Object -First 1
-          if (-not $buildTools) { throw 'Android build-tools unavailable' }
-          $aapt = Join-Path $buildTools.FullName 'aapt.exe'
-          $apksigner = Join-Path $buildTools.FullName 'apksigner.bat'
-          $badgingLines = & $aapt dump badging $apk 2>&1 | ForEach-Object { "$_" }
-          $badging = $badgingLines -join "`n"
-          Write-Output ($badgingLines | Select-Object -First 1)
-          if (-not $badging.Contains("package: name='org.hearthvale.game'")) { throw 'APK package metadata verification failed' }
-          & $apksigner verify --verbose $apk
-          $signExit = $LASTEXITCODE
-          if ($signExit -ne 0) { throw "APK signature verification failed (exit=$signExit)" }
-          python -c "import zipfile; p=r'$apk'; z=zipfile.ZipFile(p); n=z.namelist(); arches=sorted({x.split('/')[1] for x in n if x.startswith('lib/')}); assert arches == ['arm64-v8a'], arches; v=[x for x in n if x.startswith('lib/arm64-v8a/') and 'libvoxel' in x]; assert len(v)==1, v; assert not any(x.startswith(('assets/tests/','assets/tools/','assets/docs/','assets/reports/','assets/tasks/','assets/dev/','assets/.codex/')) for x in n); print('apk verified', arches, v[0])"
-          $archiveExit = $LASTEXITCODE
-          if ($archiveExit -ne 0) { throw "APK archive verification failed (exit=$archiveExit)" }
-          Get-FileHash $apk -Algorithm SHA256 | Format-List
+          python ./tools/verify-repair-apk.py
+          if ($LASTEXITCODE -ne 0) { throw 'Isolated repair APK verification failed' }
 
-      - name: Upload Thor APK
-        uses: actions/upload-artifact@v4
+      - name: Upload verified repair APK and receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: hearthvale-m1-thor-feedback
-          path: builds/hearthvale-m1-thor-feedback.apk
+          name: hearthvale-m1-repair-${{ github.sha }}
+          path: |
+            builds/hearthvale-m1-repair-*.apk
+            builds/hearthvale-m1-repair-*.verification.json
           if-no-files-found: error
           retention-days: 14

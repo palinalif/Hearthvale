@@ -1,0 +1,93 @@
+extends SceneTree
+## Real continuously changing requests, not step-and-settle microbenchmarks.
+## Ordinary held brushes should stay current; async paths may retain a dim
+## exact overlay at the world position of its completed request while catching up.
+const Native = preload("res://scripts/terrain_backend.gd")
+const Job = preload("res://scripts/sculpt_preview_job.gd")
+var checks := 0
+var failures := 0
+class SinkTool extends RefCounted:
+	func paste(_origin: Vector3i, _buffer: Object, _mask: int) -> void: pass
+class SinkTerrain extends Node:
+	func get_voxel_tool() -> RefCounted: return SinkTool.new()
+func check(ok: bool, label: String) -> void:
+	checks += 1
+	if not ok:
+		failures += 1
+		push_error("FAIL: " + label)
+func _init() -> void:
+	call_deferred("_run")
+func _run() -> void:
+	var source := Native.new()
+	source.patch_size = Vector3i(384, 256, 384)
+	source.voxel_scale = 0.125
+	source.voxels = ClassDB.instantiate("VoxelBuffer")
+	source.voxels.create(384, 256, 384)
+	source.voxels.fill_area(2, Vector3i.ZERO, Vector3i(384, 80, 384), 0)
+	source._backend_ready = true
+	source.terrain = SinkTerrain.new()
+
+	# A long edited path must not turn a small brush snapshot into a full
+	# world-sized dictionary copy. Retired fronts remain retired locally.
+	source.begin_stroke("dig", Vector3(24, 10, 24), {"radius": 2.0})
+	for x in 384:
+		for z in 384:
+			source._stroke_fronts[Vector3i(x, 0, z)] = -1
+	var history_started := Time.get_ticks_usec()
+	var snapshot: RefCounted = Job.Snapshot.capture(source, "dig", Vector3(24, 10, 24), {"radius": 2.0})
+	var capacity: int = snapshot.voxels.size.x * snapshot.voxels.size.z
+	check(snapshot.copied_fronts <= capacity and snapshot.copied_fronts < source._stroke_fronts.size(), "long stroke snapshot metadata stays brush bounded")
+	check(snapshot.state["_stroke_fronts"][Vector3i(192, 0, 192)] == -1, "retired local front preserved")
+	print("PREVIEW_LONG_HISTORY " + JSON.stringify({"live_fronts": source._stroke_fronts.size(), "copied_fronts": snapshot.copied_fronts, "capture_ms": (Time.get_ticks_usec() - history_started) / 1000.0}))
+	snapshot = null
+	source.cancel_stroke()
+	for radius in [2.0, 8.0]:
+		for phase in ["continuous_aim", "continuous_hold"]:
+			var job := Job.new()
+			var center := Vector3(24, 10, 24)
+			var settings := {"radius": radius, "strength": 2.0, "falloff": 0.45}
+			if phase == "continuous_hold": source.begin_stroke("dig", center, settings)
+			var current_frames := 0
+			var visible_frames := 0
+			var stale_frames := 0
+			var services: Array[float] = []
+			var key: Array = []
+			for frame in 90:
+				await process_frame
+				if phase == "continuous_aim": center.x += 0.0125
+				else: source.update_stroke(center, 1.0 / 60.0)
+				key = [center, source._revision, source._stroke_mutations, source._stroke_active, settings]
+				var started := Time.get_ticks_usec()
+				var plan: Dictionary = job.update(source, "dig", center, settings, {}, key)
+				services.append((Time.get_ticks_usec() - started) / 1000.0)
+				if not plan.is_empty():
+					visible_frames += 1
+					check(not plan.has("changes") and plan.has("packed"), "only compact output crosses preview boundary")
+					if bool(plan.get("_stale", false)):
+						stale_frames += 1
+						check(plan.get("_request_key", []).size() > 0, "stale overlay retains the completed request identity")
+					else:
+						current_frames += 1
+						check(job._ready_key == key, "current published plan matches current request exactly")
+			var stopped := Time.get_ticks_usec()
+			var deadline := Time.get_ticks_msec() + 4000
+			var settled: Dictionary = {}
+			while (settled.is_empty() or bool(settled.get("_stale", false))) and Time.get_ticks_msec() < deadline:
+				await process_frame
+				settled = job.update(source, "dig", center, settings, {}, key)
+			check(not settled.is_empty() and not bool(settled.get("_stale", false)), "latest request recovers to a current exact preview after motion stops")
+			services.sort()
+			var visible_fraction := float(visible_frames) / 90.0
+			var current_fraction := float(current_frames) / 90.0
+			if radius == 2.0 and phase == "continuous_hold":
+				check(current_fraction >= 0.95, "default held brush keeps an exact current overlay")
+			else:
+				check(visible_fraction >= 0.65, "async preview keeps spatial feedback visible through continuous input")
+			check(services[85] < 12.0, "continuous preview service p95 remains below frame-stall budget")
+			print("PREVIEW_LIVE " + JSON.stringify({"radius": radius, "phase": phase, "frames": 90, "visible_frames": visible_frames, "visible_fraction": visible_fraction, "current_frames": current_frames, "current_fraction": current_fraction, "stale_frames": stale_frames, "service_p95_ms": services[85], "service_max_ms": services[89], "settle_ms": (Time.get_ticks_usec() - stopped) / 1000.0, "discarded": job.discarded_count, "requests": job.query_count, "interaction_acceptance": "PASS"}))
+			job.close()
+			if phase == "continuous_hold": source.cancel_stroke()
+	source.terrain.free()
+	source.free()
+	print("sculpt_preview_live_test checks=%d failures=%d" % [checks, failures])
+	quit(1 if failures else 0)

@@ -1,24 +1,58 @@
 name: M1 attachment placement regressions
 on:
   push:
-    branches: [fix/m1-sculpt-feedback]
+    branches: [fix/m1-sculpt-feedback, fix/m1-building-edit-camera, fix/m1-window-layout, feat/m1-cottage-edit-ux, feat/m1-ui-ux-overhaul]
     paths:
       - scenes/m1.tscn
       - scripts/m1_scene_placement.gd
+      - scripts/m1_scene_terrain_ux.gd
+      - scripts/m1_scene_building_camera.gd
+      - scripts/m1_scene_cottage_ux.gd
+      - scripts/m1_scene_cottage_style.gd
+      - scripts/m1_scene_cottage_alignment.gd
+      - scripts/m1_scene_cottage_resize_ux.gd
+      - scripts/m1_scene_ui_overhaul.gd
+      - scripts/m1_scene_tool_ui.gd
+      - scripts/m1_scene_full_ui.gd
+      - scripts/cottage_visual.gd
       - scripts/wall_attachment_placement.gd
       - scripts/detail_placement_ghost.gd
       - tests/wall_attachment_placement_test.gd
       - tests/m1_attachment_placement_test.gd
+      - tests/m1_building_placement_test.gd
+      - tests/m1_building_camera_test.gd
+      - tests/m1_window_layout_test.gd
+      - tests/m1_cottage_edit_ux_test.gd
+      - tests/m1_ui_overhaul_test.gd
+      - tests/m1_tool_ui_test.gd
+      - tests/m1_full_ui_test.gd
       - tools/test-m1-placement.ps1
       - .github/workflows/m1-placement.yml
   pull_request:
     paths:
       - scenes/m1.tscn
       - scripts/m1_scene_placement.gd
+      - scripts/m1_scene_terrain_ux.gd
+      - scripts/m1_scene_building_camera.gd
+      - scripts/m1_scene_cottage_ux.gd
+      - scripts/m1_scene_cottage_style.gd
+      - scripts/m1_scene_cottage_alignment.gd
+      - scripts/m1_scene_cottage_resize_ux.gd
+      - scripts/m1_scene_ui_overhaul.gd
+      - scripts/m1_scene_tool_ui.gd
+      - scripts/m1_scene_full_ui.gd
+      - scripts/cottage_visual.gd
       - scripts/wall_attachment_placement.gd
       - scripts/detail_placement_ghost.gd
       - tests/wall_attachment_placement_test.gd
       - tests/m1_attachment_placement_test.gd
+      - tests/m1_building_placement_test.gd
+      - tests/m1_building_camera_test.gd
+      - tests/m1_window_layout_test.gd
+      - tests/m1_cottage_edit_ux_test.gd
+      - tests/m1_ui_overhaul_test.gd
+      - tests/m1_tool_ui_test.gd
+      - tests/m1_full_ui_test.gd
       - tools/test-m1-placement.ps1
       - .github/workflows/m1-placement.yml
   workflow_dispatch:
