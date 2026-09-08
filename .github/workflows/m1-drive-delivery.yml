@@ -2,7 +2,7 @@ name: M1 verified Drive delivery
 
 on:
   push:
-    branches: [master]
+    branches: [master, feat/m1-ui-polish]
   workflow_dispatch:
 
 permissions:
