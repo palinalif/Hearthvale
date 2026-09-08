@@ -1,58 +1,63 @@
 # Hearthvale — current M1 handoff
 
-Updated 2026-09-08. Read AGENTS.md and the current user message first. The user approved implementing direct cottage resize handles and manual-window stability, followed by graphical UI polish. M1 is not complete. The Thor-accepted comparison build remains `c54d0559`; the new resize candidate requires its own focused physical retest.
+Updated 2026-09-08. Read AGENTS.md and the current user request first. The user reports the f90c8840 resize build feels pretty good and asked for A on the house to offer Move house or Resize house, with handles appearing only after choosing Resize. This refinement is implemented and a verified candidate is uploaded for physical testing. M1 and the graphical polish pass are not complete.
 
-## Branch and candidate
+## Current branch and candidate
 
-New branch: `feat/m1-direct-resize-handles`, based on acceptance record `0ced5929234a5268d6e0f164e115887ddd501d33`. `master` and the accepted repair branches are untouched. Candidate: `f90c884036cd26b845bad8ae68722cdbebb09788`. Subsequent documentation-only commits do not change its APK.
+Branch: `feat/m1-house-move-resize`, based on `e5c7f1fe61ffdfdb9920345a4863910206a2bd96` from the resize branch. Candidate: `44ebca5b124a1a3375d94fe5135c07cce07353f9`. Subsequent documentation-only commits do not change the APK. `master`, the previous resize branch and accepted repair branches remain untouched.
 
 Small commits:
-- `82f4e98556573d496bf4efd5c386a04f3c487ecc`: one-sided authoritative bounds transaction, anchor compensation and model regressions.
-- `95cf7c9766ce4f8abcadf96e2d46bfa804eccc6b`: controller-picked side/corner/top handles, previews and full-scene/render regression coverage.
-- `f90c884036cd26b845bad8ae68722cdbebb09788`: correct entry hint and hide the idle pointer during a grabbed-handle action; restore it on cancel.
+- `ff87b93cfc9846158e119bd2c393e5dac25c107a`: existing-house translation transaction with stable identity, stale-revision guard and undo.
+- `07d6ef7baf4baaa48f7cef17f705a78e3026bf39`: bare-shell A chooser, opt-in resize handles, whole-house ghost relocation and cancellation.
+- `84a85ff54fad0143a509b6c22444869bce072a1b`: complete-scene controller, save and rendered-cancel regressions; required CI integration.
+- `e23300b860255ad0860dadba4a57ddd427a4bef1` and `44ebca5b124a1a3375d94fe5135c07cce07353f9`: correct the new JSON roundtrip comparison while retaining exact saved records, all resolved fields, positions and identities. No persistence runtime code changed in these two commits.
 
 ## Implemented interaction
 
-`scenes/m1.tscn` now uses `scripts/m1_scene_resize_handles.gd`, extending the accepted `m1_scene_thor_retest.gd`. Visible-facing sides/corners and a handle above the roof are drawn without relying on an icon font. Hover highlights a specific handle and shows A Grab. A grabs, LS drags relative to the camera, A commits, B restores while staying in Building. RS orbit, trigger zoom and R3 reframe remain available; L3 changes precision. Bare-shell A no longer enters the old axis-selector resize action. Detail A-move and X-options remain inherited. Old floating resize cubes are hidden.
+The exported scene now uses `scripts/m1_scene_house_actions.gd`, extending the existing resize-handles scene, which retains the accepted terrain and cottage repair layers. This is a temporary action within Building, not a new top-level mode.
 
-Side drags fix the opposite edge; corner drags fix the opposite corner; height changes keep the base and footprint fixed. The live selected-cottage preview includes changed transform and dimensions. No authority/history mutation occurs before confirmation. Commit creates one building transaction; undo/redo restore bounds and anchors together. Pause cancels the preview and stale-revision changes are rejected. Stationary previews do not rebuild meshes repeatedly.
+In Terrain, X on the hovered cottage still enters editing; A remains the terrain action. In normal cottage editing, resize handles are hidden. A on a bare selected house wall/roof opens a compact two-choice Move house / Resize house panel. D-pad Up/Down chooses and A confirms; B closes just the panel. Ordinary detail A-move and X-options remain direct, and A on empty ground does not open house actions. X cottage options, including Duplicate, remain available separately.
 
-`scripts/cottage_resize_world.gd` subclasses the existing BuildingWorld model using the same document/schema/ID/history/recovery implementation, rather than introducing another model or save format. Local origins shift during one-sided sizing; authored surface/fixed-local anchor positions and matching overrides are compensated so manual windows keep their wall-tangential world position and height. They follow their own supporting wall along its normal when that wall moves. Suppressed/moved exclusion anchors and unsupported attachments are retained; automatic windows still reflow through the original model.
+Move house relocates the EXISTING cottage, not a duplicate. It reuses the accepted free-placement camera/input/ghost path but commits only the existing record's transform position. The ghost starts at the original position rather than the duplicate offset, and temporarily replaces the opaque source renderer. IDs, local anchors, details, colours, dimensions and other cottages stay unchanged. X/Z displacement is snapped relative to the existing origin on the 0.125 grid, with pre-snap stick accumulation and rotated-footprint bounds. A commits one undo transaction; no-op confirmation adds none. B restores the unchanged document and source orbit. Pause/focus-loss cancellation and stale-revision cancellation restore the source renderer; a stale move cannot overwrite newer edits. This task does not add house rotation or a new terrain-grounding policy.
 
-Precision horizontal steps are 0.25 world units (two visible cells), height steps 0.125 (one cell); normal steps are double. Horizontal paired cells deliberately keep the shifted origin in the existing renderer's grid phase, preventing half-cell window drift. Do not claim single-cell horizontal sizing. World cell size remains 0.125, miniature scale and engine/dependency/schema settings remain unchanged.
+Resize house reveals the existing side/corner/height handles without automatically grabbing one. A grabs the pointed handle, LS drags, A applies and B restores the current drag. When choosing a handle, B finishes resizing and hides handles while staying in cottage editing; another B exits to Terrain. Existing opposite-edge/corner anchoring, base-fixed height changes, manual-window compensation and unsupported-attachment recovery remain intact. The resize model shares the existing schema/history, with no save-format replacement.
 
-## Evidence
+## Verification and unsuccessful iterations
 
-Complete run: https://github.com/palinalif/Hearthvale/actions/runs/34233812865
+Complete successful CI: https://github.com/palinalif/Hearthvale/actions/runs/34237601560
 
-Gameplay/render job `102086289710` and APK job `102087134842` both succeeded on f90c8840. The 11 existing M1 integration suites passed, as did targeting (54), prior repairs (60), settings (14), renderer stability (35), D-pad recovery (15) and terrain navigation (21). New model/anchor checks: 70; new complete-scene controller checks: 30; all zero failures. Model tests cover rotated cottages, opposite-edge/corner anchoring, manual window world and rendered position, pane size, overrides/suppression, other-cottage isolation, preview purity, one-step undo/redo, stale revision rejection, shrink/recovery/growback and same-schema reload. Controller tests exercise real A/B/D-pad/Start/L3 and stick events through the exported scene.
+Source commit 44ebca5b. Gameplay/render job `102099259079` and APK job `102100362758` both succeeded. All 11 existing M1 integration suites passed. Additional gates passed: targeting 54, previous repairs 60, settings 14, renderer stability 35, D-pad recovery 15, terrain navigation 21, resize model 70, resize controller 31, and NEW house actions 49 checks, all zero failures.
 
-Actual Mobile/D3D12 software rendering passes 71 checks and writes 13 captures, including the existing exact two-cottage colour-cancel image equality and the new resize previews. Initial candidate 95cf7c97 also passed; its captures exposed a misleading entry toast and an idle crosshair during handle drag. f90c8840 fixes both and adds rendered-path checks. The final active-handle screenshot was visually inspected; there is no physical Thor approval or quantitative handheld frame-time measurement yet.
+The new controller suite uses physical A/B/D-pad/Start/shoulder and stick events through the exported scene. It tests chooser priority/focus, blocked world input, opt-in handles, operation-first cancellation, preserved detail editing, stable house count/identity, preview purity, camera restoration, translation confirmation, other-cottage isolation, one-step undo/redo, save/load, no-op/stale/nonfinite rejection, pause restoration and the distinction from Duplicate.
 
-Final diagnostic/source artifact `10059034388`: downloaded archive SHA256 `63df89a54bb76923a119beaae0a98e555ccfc8506e72a7f1bf0d7e394f00ef05` verified. The two final modified sources match the published source archive after normalizing CRLF/LF. Native runtime readiness and pixel equality gates remain unchanged; the render process wall-clock budget is 180 seconds to accommodate the additional five captures.
+Initial run `34236486907` failed only the new whole in-memory dictionary equality after save/reload (40 checks, one failure); run `34237001071` failed only the JSON-text comparison (49 checks, one failure). The actual saved building records, reloaded transform/dimensions and detail positions passed. Final diagnostics demonstrate live automatic-layout metadata `{"version":1}` versus loaded `{"version":1.0}`. The final test normalizes BOTH complete views through JSON parse before comparison without dropping any fields or adding a geometric tolerance. Exact serialized raw building-record comparison and separate resolved transform/detail checks remain. No saving code was changed to address these assertion errors.
 
-Both the initial implementation and any candidate claims must be grounded in the actual run logs. Tests and software Mobile captures are not physical Thor performance or user visual approval. No native Godot runtime or independent reviewer was available in the editing container; no independent review is claimed. Existing gameplay checks and exact colour-cancel pixel comparison must not be weakened.
+Actual Mobile/D3D12 software rendering passes 91 checks and writes 17 captures. It preserves the accepted exact two-cottage colour-cancel equality and adds exact image restoration after whole-house move cancellation, the two-choice panel and relocation ghost. The actual chooser and move-ghost captures were inspected. No physical Thor test, quantitative handheld performance measurement, local Godot execution or independent review is claimed for this candidate.
 
-## Delivery and installation
+Diagnostic/source artifact `10060652880`: archive SHA256 `a134a5197ce89fe8a0658e968d33d54ec9cc83ff83f322621fa11d195ecb3568`, verified locally. All eight changed source/test/workflow files match the exact published source archive after newline normalization. Runtime native readiness deadlines, strict error receipts and existing pixel equality gates were not relaxed.
 
-APK artifact `10059081903`: downloaded archive SHA256 `b3664981905b0825a12df3d46c4945f9103df42bab889c0d366785d360ddd88d` verified.
+## APK delivery
 
-Extracted APK `hearthvale-m1-repair-f90c8840.apk`: 37,777,816 bytes; SHA256 `bef231fc8118cedc03f39431677d737dcbdbb2ae15a6cb87505e5e2cf82931f6`, locally matched against the CI verification receipt. CI verifies package/version, signature, Mobile metadata, ARM64-only architecture and byte-identical pinned native voxel library; development resources are excluded. Local ZIP inspection additionally confirms compiled resize scene/model/overlay, accepted terrain-retest layer and inherited repair layer are included.
+Verified APK artifact `10060771655`: archive SHA256 `62883849c743cd379dae0f9ff567033d08e7d5a2f1b237e8b91ebdec672e95c9`, verified locally.
 
-Private Drive APK: https://drive.google.com/file/d/1pErUFuKdPhF9L7y79tYdWNfWV1HgPUnW/view
+Extracted file `hearthvale-m1-repair-44ebca5b.apk`: 37,786,187 bytes; SHA256 `8472759dde89381e8c8963c4f07a6dad188608d043af3bb43d1deb34770ccef1`. Its size/hash/commit matched the CI receipt. CI verifies package/version, signature, Mobile renderer metadata, ARM64-only architecture, byte-identical pinned native voxel library and exclusion of development resources. Local archive inspection additionally confirmed compiled house-actions, resize-handles, resize-model, terrain-retest and inherited repair scripts.
 
-Private Drive checklist: https://drive.google.com/file/d/1PuYcjC9ymfhUoKbgVGBDys1PqPfknf0u/view
+Private Drive APK: https://drive.google.com/file/d/1HbQ1Vd5vuMEBM_m_zXOFcT72cpPhVBbm/view
 
-Both uploads were read back as expected name/MIME/size and shared=false (APK 37,777,816 bytes; checklist 3,874 bytes). Drive's normalized metadata did not return requested checksum fields; no remote checksum comparison is claimed. The extracted APK was uploaded, not its archive. Older artifacts and saves remain untouched.
+Private Drive checklist: https://drive.google.com/file/d/1akgcXywA6CEbsUi2sNsqKtO-ojLr_0ju/view
 
-The candidate installs as **Hearthvale Test f90c8840**, package `org.hearthvale.game.repair.cf90c8840`, version code 6 / `0.1.3-repair-f90c8840`. It is a separate fresh test valley. Keep all existing apps and saves; nothing is replaced, migrated, cleared or uninstalled. Permanent signing continuity remains unresolved; commit-specific isolated package identities and ephemeral CI keys are a temporary delivery mechanism. No private keys are uploaded.
+Both uploads were read back with the expected name, MIME, size and shared=false. APK size 37,786,187; checklist size 2,569 bytes. No Drive checksum readback was supplied, so no remote hash verification is claimed. The actual extracted APK, not its ZIP, was uploaded; old artifacts are untouched.
 
-## Accepted baseline and remaining work
+Install as **Hearthvale Test 44ebca5b**, package `org.hearthvale.game.repair.c44ebca5b`, version code 6 / `0.1.3-repair-44ebca5b`. It installs alongside old builds with a fresh valley. Existing apps/saves are not replaced or migrated. Never uninstall or clear them to bypass signing. Commit-specific package identities and ephemeral CI keys remain a temporary safe delivery mechanism, not permanent update-compatible signing. No private keys were uploaded.
 
-Preserve the player's accepted `ca5185dc` cottage repair interactions and all-green `c54d0559` camera/D-pad follow-up: specific-cottage X entry, visible-window A-move/opening alignment, action-first B restore/exit, color/variation isolation across two cottages, no previous Z-fighting, camera-facing attachments, recovery, duplication camera, wrong-context prompt isolation, reload/immediate sculpting, same-app save/relaunch, gentler per-tool strength and faster settings. Terrain camera does not chase sculpted height or cling to a summit; D-pad recovery no longer needs a left-stick workaround. Do not relabel those old accepted checks as untested.
+## Preserve accepted work and remaining scope
 
-1. Focused resize retest: visible/hittable handles on Thor, screen-relative drag direction (including low angles), opposite-edge anchoring, preview/confirm/cancel, resize performance, manual-window/render alignment, recovery and one-step undo. Use the new checklist; do not repeat every unchanged accepted test.
-2. After resize usability acceptance, graphical tool icons, coherent HUD/panels, typography and focus states as the user requested. Preserve the already accepted controller grammar and uncluttered miniature presentation.
-3. One-block overhang targeting and Slope performance/plane-guide clarity remain open. This resize work does not resolve them.
-4. Higher-detail cottage prototype and later tree/river refinement. No M2.
+The user explicitly accepted the ca5185dc cottage repairs and all eight c54d0559 camera/D-pad retest checks on Thor. Their latest f90c8840 feedback is positive qualitative resize usability feedback, not an itemized all-green resize checklist. Preserve accepted selection, visible-window movement, action-first B, colour/variation isolation, attachment recovery, duplication camera, terrain camera/navigation, reload and brush settings.
+
+1. Focused physical retest of A on bare house -> Move/Resize, unchanged A on details, opt-in handles and B depth, actual whole-house translation/restore/undo/save, and explicit Duplicate still making a copy. Do not require repeating all unchanged accepted checklists.
+2. Graphical UI polish next as the user requested: icons, cohesive panels, typography and focus states without scrambling the accepted controller grammar. Maintain discoverability of existing cottage cycling and camera shortcuts during the polish pass.
+3. One-block overhang targeting and Slope performance/plane-guide clarity remain separate open issues.
+4. Higher-detail cottage prototype and later river/tree refinement; no M2.
 5. Stable securely retained Android signing and deliberate save migration before routine in-place updates.
+
+Pinned engine/dependencies, 0.125 visible grid, miniature scale, world size and schemas are unchanged. Preserve native caves/overhangs, authoritative IDs/manual/suppressed/unsupported records, cancellation/history, player saves and prior APKs. Never weaken validation to obtain a green result.
