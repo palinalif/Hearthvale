@@ -1,0 +1,14 @@
+{
+  "package": "Kenney Input Prompts",
+  "version": "1.5A",
+  "creator": "Kenney",
+  "source_page": "https://kenney.nl/assets/input-prompts",
+  "archive_url": "https://kenney.nl/media/pages/assets/input-prompts/8de120163f-1783763952/kenney_input-prompts_1.5.zip",
+  "archive_sha256": "AC2FCF599080B0F3BA2D174C9474DB6DF1A0E96FF0662580E2DA79A122AB78A1",
+  "retrieved_on": "2026-09-08",
+  "license": "CC0-1.0",
+  "license_file": "LICENSE.txt",
+  "upstream_file_count": 4752,
+  "admitted_subset": "Xbox Series vector prompts required by Hearthvale's controller HUD",
+  "integrity_note": "The official archive was hashed before extraction. Only the listed SVG subset and upstream license were admitted; no files were modified during admission."
+}

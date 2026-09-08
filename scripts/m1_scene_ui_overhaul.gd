@@ -3,6 +3,7 @@ extends "res://scripts/m1_scene_cottage_resize_ux.gd"
 ## controls shown on screen describe only the action available right now.
 const UISkin = preload("res://scripts/ui/m1_ui_skin.gd")
 const UIGlyph = preload("res://scripts/ui/m1_ui_glyph.gd")
+const InputGlyph = preload("res://scripts/ui/m1_input_glyph.gd")
 var _hud_theme: Theme
 var _tool_icon: Control
 
@@ -21,6 +22,39 @@ func _ready() -> void:
 	super._ready()
 	_build_controller_hud()
 	_refresh_controller_hud()
+
+func _finish_hud_presentation() -> void:
+	if not is_instance_valid(_tool_meta): return
+	_tool_meta.visible = view_context == "terrain" or resize_active
+	_tool_card.custom_minimum_size.y = 94 if _tool_meta.visible else 64
+	_tool_card.size.y = 0
+	# Status remains available in the debug overlay; ordinary instructions already
+	# have contextual glyphs below. Keep failures visible without repeating help.
+	_toast_panel.visible = not menu_open and ("failed" in status_text.to_lower() or "error" in status_text.to_lower())
+	_present_world_prompt(hud.get_node_or_null("EditThisCottagePrompt") as Label, "X", "Edit")
+	_present_world_prompt(hud.get_node_or_null("CottageDetailActionPrompt") as Label, "A", "Move", true)
+	var handle_hint := hud.get_node_or_null("ResizeHandleHint") as Label
+	if handle_hint:
+		var action := "Edit" if "Move / Resize" in handle_hint.text else handle_hint.text.get_slice("  A ", 0)
+		_present_world_prompt(handle_hint, "A", action)
+
+func _present_world_prompt(source: Label, key: String, action: String, options: bool = false) -> void:
+	if not source: return
+	# Keep the inherited label/visibility/position contract; replace only its ink.
+	source.self_modulate = Color(1, 1, 1, 0)
+	if source.get_meta("glyph_action", "") == action: return
+	source.set_meta("glyph_action", action)
+	for child in source.get_children():
+		source.remove_child(child)
+		child.queue_free()
+	var panel := PanelContainer.new()
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.add_child(InputGlyph.prompt(key, action))
+	if options: row.add_child(InputGlyph.prompt("X", "Options"))
+	panel.add_child(row)
+	source.add_child(panel)
 
 func _process(delta: float) -> void:
 	super._process(delta)
@@ -65,16 +99,20 @@ func _build_controller_hud() -> void:
 	_mode_pill = PanelContainer.new()
 	_mode_pill.name = "ModePill"
 	_mode_pill.position = Vector2(28, 24)
-	_mode_pill.custom_minimum_size = Vector2(210, 52)
+	_mode_pill.custom_minimum_size = Vector2(176, 48)
 	hud.add_child(_mode_pill)
 	var mode_margin := MarginContainer.new()
 	for side in ["left", "right"]: mode_margin.add_theme_constant_override("margin_%s" % side, 16)
 	mode_margin.add_theme_constant_override("margin_top", 10)
 	mode_margin.add_theme_constant_override("margin_bottom", 10)
 	_mode_pill.add_child(mode_margin)
+	var mode_row := HBoxContainer.new()
+	mode_row.add_theme_constant_override("separation", 12)
+	mode_margin.add_child(mode_row)
+	mode_row.add_child(InputGlyph.control("UP"))
 	_mode_label = Label.new()
 	_mode_label.add_theme_font_size_override("font_size", 18)
-	mode_margin.add_child(_mode_label)
+	mode_row.add_child(_mode_label)
 
 	_tool_card = PanelContainer.new()
 	_tool_card.name = "ActiveToolCard"
@@ -116,6 +154,9 @@ func _build_controller_hud() -> void:
 func _refresh_controller_hud() -> void:
 	if not _mode_label or not _tool_name or not _prompt_row:
 		return
+	# Finalize after every inherited layer, also when a render harness refreshes
+	# explicitly with ordinary scene processing disabled.
+	_finish_hud_presentation.call_deferred()
 	# Later scene layers add their own contextual panels. Inherit the same skin
 	# without changing their controls, callbacks, or focus ownership.
 	for surface in hud.get_children():
@@ -126,20 +167,20 @@ func _refresh_controller_hud() -> void:
 	_tool_card.visible = not menu_open
 	_prompt_bar.visible = not menu_open
 	_toast_panel.visible = not menu_open and not status_text.is_empty()
-	_mode_label.text = "▲  %s" % ("TERRAIN" if view_context == "terrain" else "BUILDING")
+	_mode_label.text = "TERRAIN" if view_context == "terrain" else "BUILDING"
 	_mode_label.modulate = Color("#b7e6ae") if view_context == "terrain" else Color("#f2c982")
 	if view_context == "terrain":
 		_tool_name.text = sculpt_tool.capitalize()
 		if sculpt_tool in ["foliage", "tree", "clear_planting"]:
-			_tool_meta.text = "Planting • X tools"
+			_tool_meta.text = "Radius %.2f" % brush_radius
 		else:
 			_tool_meta.text = "Radius %.2f   Strength %d/10%s" % [brush_radius, brush_strength_level, "   PRECISION" if precision_mode else ""]
 	else:
 		_tool_name.text = "Cottage"
-		if detail_move_active: _tool_name.text = "Move %s" % selected_detail_id
+		if detail_move_active: _tool_name.text = "Move detail"
 		elif resize_active: _tool_name.text = "Resize cottage"
 		elif not hovered_detail_kind.is_empty(): _tool_name.text = hovered_detail_kind.replace("_", " ").capitalize()
-		_tool_meta.text = "Orbit with right stick • triggers zoom"
+		_tool_meta.text = ""
 	_toast_label.text = status_text
 	var prompts: Array = []
 	if tools_open or detail_open:
@@ -167,6 +208,4 @@ func _set_prompts(prompts: Array) -> void:
 	for entry_value in prompts:
 		var entry: Array = entry_value
 		if entry.size() < 2 or str(entry[0]).is_empty(): continue
-		var group := HBoxContainer.new(); group.add_theme_constant_override("separation", 7); _prompt_row.add_child(group)
-		var key := Label.new(); key.text = str(entry[0]); UISkin.badge(key); group.add_child(key)
-		var text := Label.new(); text.text = str(entry[1]); text.add_theme_font_size_override("font_size", 16); text.add_theme_color_override("font_color", UISkin.INK); group.add_child(text)
+		_prompt_row.add_child(InputGlyph.prompt(str(entry[0]), str(entry[1])))

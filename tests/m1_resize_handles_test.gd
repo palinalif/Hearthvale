@@ -71,6 +71,14 @@ func _run() -> void:
 	check(aim_handle("right"), "visible right edge can be deliberately targeted")
 	check(scene._resize_overlay.visible and not scene.resize_handles.visible, "real handles shown; legacy floating cubes hidden")
 	check(scene.hovered_detail_id.is_empty() and scene._resize_hint.visible, "handle has its own unambiguous highlight/prompt")
+	var overlay: Control = scene._resize_overlay
+	check(overlay._world_root.visible and overlay._spheres.size() <= 9, "resize selection shows a bounded world-sphere handle set")
+	for candidate in scene._handle_candidates():
+		var sphere: MeshInstance3D = overlay._spheres[str(candidate["id"])]
+		check(sphere.mesh == overlay._sphere_mesh and sphere.mesh is SphereMesh, "handle shares the lightweight sphere mesh")
+		check(scene.camera.unproject_position(sphere.global_position).distance_to(candidate["screen"]) < 0.01, "sphere centre preserves the accepted projected hit target")
+		check(sphere.material_override.no_depth_test, "accepted candidates remain visible over terrain relief without moving their hit targets")
+	check(overlay._spheres["right"].material_override == overlay._materials[1], "hovered sphere has its own cream state")
 	var before: String = scene.building_world.serialize_document()
 	var id: String = scene.selected_building_id
 	var original_view: Dictionary = scene.building_world.get_building(id)
@@ -78,6 +86,8 @@ func _run() -> void:
 	var camera_before: Transform3D = scene.camera.global_transform
 	await press(JOY_BUTTON_A)
 	check(scene.resize_active and scene._grabbed_handle == "right", "A picks precisely the pointed side")
+	scene._update_resize_handles()
+	check(overlay._spheres["right"].material_override == overlay._materials[2], "grabbed sphere has its own amber state")
 	var direction: Vector2 = scene._screen_direction(scene._selected_building_camera_target(), Vector3.RIGHT)
 	drag(direction)
 	check(scene.resize_preview_dimensions.x > scene.resize_dimensions.x, "left stick pulls right edge outward relative to camera")
@@ -124,6 +134,7 @@ func _run() -> void:
 	check(scene.precision_mode != original_precision and scene.resize_active, "L3 changes precision without changing action")
 	await press(JOY_BUTTON_START)
 	check(scene.menu_open and not scene.resize_active, "Pause safely cancels active handle")
+	check(not overlay._world_root.visible, "pause hides world spheres with their inherited overlay")
 	await press(JOY_BUTTON_B)
 	check(not scene.menu_open and scene.view_context == "building", "Resume keeps cottage editing")
 	scene._enter_resize_selection()

@@ -47,6 +47,14 @@ func _initialize() -> void:
 	scene._set_prompts([["A", "Place"], ["B", "Restore"]])
 	scene._set_prompts([["A", "Apply"]])
 	_check(scene._prompt_row.get_child_count() == 1 and not _prompt_text().contains("Restore"), "prompt transitions immediately retire obsolete actions")
+	var glyph_row: Control = scene._prompt_row.get_child(0).get_child(0)
+	_check(glyph_row.get_meta("controller_key", "") == "A" and glyph_row.get_child(0) is TextureRect and glyph_row.get_child(0).texture != null, "action prompt renders the admitted controller texture")
+	for key in ["A", "B", "X", "Y", "D-PAD", "UP/DOWN", "LEFT/RIGHT", "LS", "RS", "L3", "R3", "LB", "RB", "LT/RT"]:
+		var control: Control = scene.InputGlyph.control(key)
+		_check(control.get_child_count() > 0 and control.get_child(0).texture != null, "controller glyph resolves: " + key)
+		control.free()
+	scene._set_prompts([["LS", "Drag handle"], ["B", "Finish resizing"]])
+	_check(_prompt_text() == "Drag Done", "inherited prompts retain action meaning with short labels")
 
 	_finish()
 

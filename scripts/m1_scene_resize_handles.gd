@@ -25,6 +25,7 @@ func _ready() -> void:
 	_resize_overlay = ResizeOverlay.new()
 	_resize_overlay.name = "DirectResizeHandles"
 	hud.add_child(_resize_overlay)
+	_resize_overlay.attach_world(self)
 	_resize_hint = Label.new()
 	_resize_hint.name = "ResizeHandleHint"
 	_resize_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -228,7 +229,7 @@ func _handle_candidates() -> Array[Dictionary]:
 		if not viewport_rect.has_point(screen): continue
 		var shell := _pick_cottage(screen)
 		if not shell.is_empty() and str(shell["id"]) != selected_building_id and float(shell["distance"]) < camera.global_position.distance_to(world_point): continue
-		result.append({"id": id, "screen": screen, "anchor_screen": camera.unproject_position(transform_value * anchor), "arrow": _screen_direction(world_point, (transform_value.basis * sides).normalized())})
+		result.append({"id": id, "world": world_point, "screen": screen, "anchor_screen": camera.unproject_position(transform_value * anchor), "arrow": _screen_direction(world_point, (transform_value.basis * sides).normalized())})
 	return result
 
 func _update_detail_hover() -> void:

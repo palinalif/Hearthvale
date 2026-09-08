@@ -96,7 +96,7 @@ func _build_terrain_panel() -> void:
 	var clear_button := _add_terrain_button(_terrain_tool_column, "Clear planting", _select_terrain_tool.bind("clear_planting"))
 	clear_button.set_meta("terrain_tool", "clear_planting")
 	var settings_title := Label.new()
-	settings_title.text = "LEFT / RIGHT TO ADJUST"
+	settings_title.text = "SETTINGS"
 	settings_title.add_theme_font_size_override("font_size", 15)
 	_terrain_settings_column.add_child(settings_title)
 	for key in ["radius", "strength", "falloff", "reference", "keep", "height_snap"]:
