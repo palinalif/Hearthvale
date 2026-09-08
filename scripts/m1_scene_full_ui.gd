@@ -73,10 +73,10 @@ func _begin_new_cottage() -> void:
 func _cycle_cottage_material() -> void:
 	var view: Dictionary = building_world.get_building(selected_building_id)
 	var current := str(view.get("material_id", "warm_plaster"))
-	var choices := ["warm_plaster", "chalk_white", "moss_stone", "rose_lime"]
-	var next := choices[posmod(choices.find(current) + 1, choices.size())]
-	if building_world.set_material(selected_building_id, next): _record_history("building")
-	_set_status("Cottage material: %s" % next.replace("_", " ").capitalize())
+	var choices: Array[String] = ["warm_plaster", "chalk_white", "moss_stone", "rose_lime"]
+	var next_material: String = choices[posmod(choices.find(current) + 1, choices.size())]
+	if building_world.set_material(selected_building_id, next_material): _record_history("building")
+	_set_status("Cottage material: %s" % next_material.replace("_", " ").capitalize())
 
 func _build_modern_pause() -> void:
 	_modern_pause = PanelContainer.new(); _modern_pause.name = "PauseAndSettings"; _modern_pause.position = Vector2(410, 90); _modern_pause.custom_minimum_size = Vector2(460, 540); _modern_pause.visible = false; hud.add_child(_modern_pause)
