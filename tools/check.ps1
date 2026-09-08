@@ -54,6 +54,7 @@ Invoke-GodotBounded 'm1-checkpoint-read-second' @('--headless','--path','.','--s
 Invoke-GodotBounded 'backend' @('--headless','--path','.','--script','res://tests/backend_test.gd','--max-fps','60')
 Invoke-GodotBounded 'sculpt' @('--headless','--path','.','--script','res://tests/sculpt_test.gd','--max-fps','60')
 Invoke-GodotBounded 'm1-scaled-backend' @('--headless','--path','.','--script','res://tests/m1_scaled_backend_test.gd','--max-fps','60')
+Invoke-GodotBounded 'm1-riverbank-visual' @('--headless','--path','.','--script','res://tests/m1_riverbank_visual_test.gd','--max-fps','60')
 Invoke-GodotBounded 'm1-visual' @('--headless','--path','.','--script','res://tests/m1_visual_test.gd','--max-fps','60')
 Invoke-GodotBounded 'building-world' @('--headless','--path','.','--script','res://tests/building_world_test.gd','--max-fps','60')
 Invoke-GodotBounded 'cottage-detail-visual' @('--headless','--path','.','--script','res://tests/cottage_detail_visual_test.gd','--max-fps','60')

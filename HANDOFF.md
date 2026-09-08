@@ -1,6 +1,12 @@
 # Hearthvale — current M1 handoff
 
-Updated 2026-09-08 after the user explicitly requested merging the accepted work into `master`. Read AGENTS.md and the latest user request first. **The accepted M1 interaction lineage is now merged into master. Start subsequent work on a new branch from current master, not from an older repair branch.** The Thor-accepted gameplay baseline remains `44ebca5b`; graphical UI polish is next. M1 is not complete.
+Updated 2026-09-08 during the M1 visual-finish work on `feat/m1-ui-polish`. Read AGENTS.md and the latest user request first. **The accepted M1 interaction lineage is merged into master; current visual work continues from that lineage on this feature branch.** The Thor-accepted gameplay baseline remains `44ebca5b`. M1 is not complete.
+
+## Current visual-finish branch
+
+The graphical UI, cottage-detail scale/variation, editable window and door, and in-world resize-handle passes are implemented on `feat/m1-ui-polish`. The latest environment pass replaces the straight presentation channel with a native-grid winding river and graded banks, changes the default scatter into deterministic planting drifts with deliberate cottage clearings, and gives the three tree variants broad orchard, tall riverside, and asymmetric wind-shaped silhouettes. It does not add a new catalogue or a water-editing system.
+
+Fresh terrain uses the new river contour. Water is rebuilt from authoritative terrain cells after generation/load, so existing v2 saves keep water aligned to their original straight channel and are not rewritten by the new generator presentation. The focused riverbank gate checks a 2.25-unit centreline span, varying width, dry banks, the unchanged cottage pad, native-grid water geometry, upward winding, and old-save channel reconstruction. `tools/check.ps1` passes with this gate included; the actual Mobile vegetation/grid run passes 322,678 checks. Deterministic before/after captures are in `reports/screenshots/m1-riverbank-before.png` and `reports/screenshots/m1-riverbank-after.png`. Player visual approval and Thor performance remain open.
 
 ## Master integration and evidence
 

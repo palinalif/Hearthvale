@@ -88,6 +88,7 @@ var resize_handles: Node3D
 var reference_plane: MeshInstance3D
 var terrain_hit_marker: MeshInstance3D
 var cursor_reticle: Node3D
+var river_water: MeshInstance3D
 var garden_visual: Node3D
 var landscape_state := LandscapeScript.new()
 var landscape_active := false
@@ -280,7 +281,8 @@ func _key(action: String, key: Key) -> void:
 func _build_world() -> void:
 	var sun := DirectionalLight3D.new(); sun.rotation_degrees = Vector3(-52, -28, 0); sun.light_color = Color("#fff0d5"); sun.light_energy = 1.25; sun.shadow_enabled = true; add_child(sun)
 	var environment_node := WorldEnvironment.new(); var environment := Environment.new(); environment.background_mode = Environment.BG_COLOR; environment.background_color = Color("#c3d2c5"); environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR; environment.ambient_light_color = Color("#c2d5e0"); environment.ambient_light_energy = 0.55; environment.fog_enabled = false; environment.fog_light_color = Color("#9aaeb7"); environment.fog_density = 0.003; environment_node.environment = environment; add_child(environment_node)
-	var water := MeshInstance3D.new(); var water_mesh := PlaneMesh.new(); water_mesh.size = Vector2(8, 33); water.mesh = water_mesh; water.position = Vector3(43, 5.0, 26.5); var water_material := StandardMaterial3D.new(); water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; water_material.albedo_color = Color(0.25, 0.58, 0.58, 0.88); water_material.metallic = 0.12; water.material_override = water_material; add_child(water)
+	river_water = MeshInstance3D.new(); river_water.name = "RiverWater"; river_water.mesh = _build_river_water_mesh(); river_water.position.y = 5.0
+	var water_material := StandardMaterial3D.new(); water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; water_material.albedo_color = Color(0.30, 0.57, 0.56, 0.86); water_material.metallic = 0.05; water_material.roughness = 0.42; river_water.material_override = water_material; add_child(river_water)
 	decor_root = Node3D.new(); decor_root.name = "GardenDecor"; add_child(decor_root)
 	garden_visual = GardenVisualScript.new(); garden_visual.name = "M1GardenVisual"; decor_root.add_child(garden_visual)
 	camera = Camera3D.new(); camera.current = true; camera.fov = 52; add_child(camera)
@@ -310,6 +312,56 @@ func _build_world() -> void:
 	cursor_reticle.name = "M1CursorReticle"
 	cursor_reticle.visible = false
 	add_child(cursor_reticle)
+
+func _build_river_water_mesh() -> ArrayMesh:
+	var vertices := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+	for z_index in M1PatchGenerator.PATCH_SIZE.z + 1:
+		var world_z := float(z_index) * M1PatchGenerator.VOXEL_SCALE
+		var center := M1PatchGenerator.river_center_x(world_z)
+		var half_width := M1PatchGenerator.river_half_width(world_z)
+		vertices.append(Vector3(center - half_width, 0, world_z))
+		vertices.append(Vector3(center + half_width, 0, world_z))
+		normals.append(Vector3.UP); normals.append(Vector3.UP)
+		uvs.append(Vector2(0, world_z * 0.25)); uvs.append(Vector2(1, world_z * 0.25))
+		if z_index < M1PatchGenerator.PATCH_SIZE.z:
+			var base := z_index * 2
+			indices.append_array(PackedInt32Array([base, base + 1, base + 2, base + 1, base + 3, base + 2]))
+	var arrays := []; arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices; arrays[Mesh.ARRAY_NORMAL] = normals; arrays[Mesh.ARRAY_TEX_UV] = uvs; arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new(); mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+func _refresh_river_water_from_terrain() -> void:
+	if not river_water or not backend or not backend.has_method("voxel_at") or not backend.is_ready(): return
+	var vertices := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+	var unit := M1PatchGenerator.VOXEL_SCALE
+	var water_cell_y := floori(5.0 / unit) - 1
+	var support_cell_y := floori(3.0 / unit)
+	for z in M1PatchGenerator.PATCH_SIZE.z:
+		var best_start := -1; var best_end := -1; var run_start := -1
+		for x in range(floori(37.5 / unit), M1PatchGenerator.PATCH_SIZE.x + 1):
+			var qualifies: bool = x < M1PatchGenerator.PATCH_SIZE.x and int(backend.voxel_at(Vector3i(x, water_cell_y, z))) == 0 and int(backend.voxel_at(Vector3i(x, support_cell_y, z))) != 0
+			if qualifies and run_start < 0: run_start = x
+			if not qualifies and run_start >= 0:
+				if x - run_start > best_end - best_start: best_start = run_start; best_end = x
+				run_start = -1
+		if best_start < 0: continue
+		var base := vertices.size()
+		var x0 := float(best_start) * unit; var x1 := float(best_end) * unit
+		var z0 := float(z) * unit; var z1 := float(z + 1) * unit
+		vertices.append_array(PackedVector3Array([Vector3(x0, 0, z0), Vector3(x1, 0, z0), Vector3(x0, 0, z1), Vector3(x1, 0, z1)]))
+		for unused in 4: normals.append(Vector3.UP)
+		indices.append_array(PackedInt32Array([base, base + 1, base + 2, base + 1, base + 3, base + 2]))
+	if vertices.is_empty(): return
+	var arrays := []; arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices; arrays[Mesh.ARRAY_NORMAL] = normals; arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new(); mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	river_water.mesh = mesh
 
 func _create_backend() -> void:
 	var backend_script := load("res://scripts/terrain_backend.gd")
@@ -551,6 +603,7 @@ func _on_backend_ready(ready: bool) -> void:
 			_set_menu(true)
 			_set_status("Checkpoint load failed; reload blocked")
 		else: _set_status("Cottage and riverbank ready")
+	_refresh_river_water_from_terrain()
 	_restore_landscape(backend.get("loaded_building_document") if loaded_ok else {})
 	_player_restored = true
 	_restoring = false
@@ -614,6 +667,7 @@ func _on_joy_connection_changed(_device: int, connected: bool) -> void:
 	_set_status("Controller disconnected; world paused")
 
 func _on_backend_changed() -> void:
+	_refresh_river_water_from_terrain()
 	if garden_visual and garden_visual.has_method("refresh_terrain"):
 		garden_visual.refresh_terrain()
 	_update_presentation()
@@ -1313,17 +1367,23 @@ func _restore_landscape(document: Dictionary) -> void:
 		return
 	landscape_state = LandscapeScript.new()
 	var rng := RandomNumberGenerator.new(); rng.seed = 1042
-	for point in [Vector3(12, 8, 10), Vector3(30, 8, 12), Vector3(14, 8, 27), Vector3(32, 8, 29), Vector3(10, 8, 35), Vector3(35, 8, 17), Vector3(26, 8, 32), Vector3(7, 8, 19)]:
+	for point in [Vector3(10, 8, 9), Vector3(31, 8, 10), Vector3(12, 8, 29), Vector3(34, 8, 31), Vector3(9, 8, 37), Vector3(34, 8, 17), Vector3(27, 8, 35), Vector3(7, 8, 20)]:
 		var ground := _plant_ground(point, true)
 		if not ground.is_empty(): landscape_state.add("tree", ground["point"], rng.randi_range(0, 2))
-	for index in 180:
-		var point := Vector3(rng.randf_range(7, 38), 8, rng.randf_range(7, 39))
-		# Leave the cottage entrance and a central sculpting patch invitingly open.
-		if point.x > 18 and point.x < 26 and point.z > 14 and point.z < 22: continue
-		if point.x > 28 and point.x < 35 and point.z > 24 and point.z < 30: continue
+	# Plant in loose drifts instead of an even procedural dusting. The cottage
+	# frontage and the central sculpting lawn remain calm, readable spaces.
+	var cluster_centers := [Vector2(9, 13), Vector2(11, 33), Vector2(17, 31), Vector2(29, 9), Vector2(33, 14), Vector2(33, 34), Vector2(36, 24)]
+	for cluster: Vector2 in cluster_centers:
+		for sample in 12:
+			var angle := rng.randf_range(0.0, TAU)
+			var radius := sqrt(rng.randf()) * rng.randf_range(1.2, 3.4)
+			var point := Vector3(cluster.x + cos(angle) * radius, 8, cluster.y + sin(angle) * radius)
+			if point.x > 17 and point.x < 28 and point.z > 13 and point.z < 25: continue
+			var ground := _plant_ground(point, true)
+			if not ground.is_empty(): landscape_state.add("foliage", ground["point"], rng.randi_range(0, 2))
+	for point in [Vector3(37, 7, 7), Vector3(37, 7, 12), Vector3(37, 7, 30), Vector3(36, 7, 38), Vector3(32, 8, 37), Vector3(13, 8, 34), Vector3(8, 8, 16)]:
 		var ground := _plant_ground(point, true)
-		if ground.is_empty(): continue
-		landscape_state.add("rock" if index % 11 == 0 else "foliage", ground["point"], rng.randi_range(0, 2))
+		if not ground.is_empty(): landscape_state.add("rock", ground["point"], rng.randi_range(0, 2))
 	garden_visual.reset_records(landscape_state.records)
 
 func _plant_ground(point: Vector3, from_top: bool = false) -> Dictionary:

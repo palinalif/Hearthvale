@@ -27,17 +27,27 @@ static func meshes(kind: String, variant: int) -> Array:
 	return result
 
 static func _tree(groups: Array, variant: int) -> void:
-	var tall: float = [1.0, 1.25, 1.12][variant]
-	var lean := 0.35 if variant == 2 else 0.0
-	var lobes: Array = [
-		[Vector3(-0.55, 2.75 * tall, 0), Vector3(1.2, 1.1 * tall, 1.0)],
-		[Vector3(0.55 + lean, 3.05 * tall, 0.2), Vector3(1.10, 1.25 * tall, 1.05)],
-		[Vector3(lean, 3.8 * tall, -0.18), Vector3(0.98, 0.96 * tall, 0.9)]]
+	var lobes: Array
+	var trunk_height: float
+	if variant == 0: # Broad, low orchard tree.
+		lobes = [[Vector3(-0.85, 3.0, 0), Vector3(1.35, 1.15, 1.15)], [Vector3(0.75, 3.05, 0.15), Vector3(1.3, 1.2, 1.2)], [Vector3(0, 3.75, -0.2), Vector3(1.35, 1.0, 1.05)]]
+		trunk_height = 2.75
+	elif variant == 1: # Narrow, taller riverside silhouette.
+		lobes = [[Vector3(-0.35, 3.0, 0), Vector3(0.9, 1.35, 0.85)], [Vector3(0.3, 4.05, 0.1), Vector3(0.85, 1.45, 0.8)], [Vector3(-0.15, 5.0, -0.1), Vector3(0.72, 1.05, 0.7)]]
+		trunk_height = 3.5
+	else: # Asymmetric wind-shaped crown.
+		lobes = [[Vector3(-0.65, 2.8, 0.15), Vector3(1.05, 1.05, 1.0)], [Vector3(0.55, 3.35, 0), Vector3(1.3, 1.2, 1.05)], [Vector3(1.25, 4.1, -0.2), Vector3(1.05, 0.95, 0.9)]]
+		trunk_height = 3.0
 	# Merge crown intervals before meshing. Only exposed faces are emitted;
 	# straight runs merge integer cells without changing the visible step size.
+	var min_x := 10000.0; var max_x := -10000.0; var min_z := 10000.0; var max_z := -10000.0
+	for lobe in lobes:
+		var center: Vector3 = lobe[0]; var radius: Vector3 = lobe[1]
+		min_x = minf(min_x, center.x - radius.x); max_x = maxf(max_x, center.x + radius.x)
+		min_z = minf(min_z, center.z - radius.z); max_z = maxf(max_z, center.z + radius.z)
 	var columns := {}
-	for x in range(floori(-1.875 / U), ceili(2.4375 / U)):
-		for z in range(floori(-1.5 / U), ceili(1.5625 / U)):
+	for x in range(floori(min_x / U), ceili(max_x / U)):
+		for z in range(floori(min_z / U), ceili(max_z / U)):
 			var low := 10000; var high := -10000
 			for lobe in lobes:
 				var c: Vector3 = lobe[0]; var r: Vector3 = lobe[1]
@@ -48,7 +58,7 @@ static func _tree(groups: Array, variant: int) -> void:
 			if high > low: columns[Vector2i(x, z)] = Vector2i(low, high)
 	for cell: Vector2i in columns:
 		var extent: Vector2i = columns[cell]
-		var shade := 2 if extent.y * U > 4.0 * tall else (0 if cell.x < 2 else 1)
+		var shade := 2 if extent.y * U > 4.25 else (0 if cell.x < 2 else 1)
 		var low := Vector3(cell.x, extent.x, cell.y) * U
 		var high := Vector3(cell.x + 1, extent.y, cell.y + 1) * U
 		_face(groups[shade], Vector3(low.x, high.y, low.z), Vector3(U, 0, 0), Vector3(0, 0, U), Vector3.UP)
@@ -62,9 +72,9 @@ static func _tree(groups: Array, variant: int) -> void:
 				elif direction.x > 0: _face(groups[shade], Vector3(high.x, y, low.z), Vector3(0, 0, U), Vector3(0, height, 0), Vector3.RIGHT)
 				elif direction.y < 0: _face(groups[shade], Vector3(low.x, y, low.z), Vector3(U, 0, 0), Vector3(0, height, 0), Vector3.FORWARD)
 				else: _face(groups[shade], Vector3(low.x, y, high.z), Vector3(0, height, 0), Vector3(U, 0, 0), Vector3.BACK)
-	_box(groups[3], Vector3(-0.1875, 0, -0.1875), Vector3(0.375, snappedf(2.8 * tall, U), 0.375))
+	_box(groups[3], Vector3(-0.1875, 0, -0.1875), Vector3(0.375, snappedf(trunk_height, U), 0.375))
 	for branch in [-1, 1]:
-		for step in 6: _box(groups[3], Vector3(branch * step * U - U, 1.4 * tall + step * U, 0), Vector3(U * 2, U * 2, U * 2))
+		for step in 6: _box(groups[3], Vector3(branch * step * U - U, trunk_height * 0.55 + step * U, 0), Vector3(U * 2, U * 2, U * 2))
 	for side in [-1, 1]: _box(groups[3], Vector3(side * 0.25 - U, 0, -U), Vector3(U * 2, U * 2, U * 2))
 
 static func _foliage(groups: Array, variant: int) -> void:
