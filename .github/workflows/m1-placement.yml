@@ -1,24 +1,32 @@
 name: M1 attachment placement regressions
 on:
   push:
-    branches: [fix/m1-sculpt-feedback]
+    branches: [fix/m1-sculpt-feedback, fix/m1-building-edit-camera]
     paths:
       - scenes/m1.tscn
       - scripts/m1_scene_placement.gd
+      - scripts/m1_scene_terrain_ux.gd
+      - scripts/m1_scene_building_camera.gd
       - scripts/wall_attachment_placement.gd
       - scripts/detail_placement_ghost.gd
       - tests/wall_attachment_placement_test.gd
       - tests/m1_attachment_placement_test.gd
+      - tests/m1_building_placement_test.gd
+      - tests/m1_building_camera_test.gd
       - tools/test-m1-placement.ps1
       - .github/workflows/m1-placement.yml
   pull_request:
     paths:
       - scenes/m1.tscn
       - scripts/m1_scene_placement.gd
+      - scripts/m1_scene_terrain_ux.gd
+      - scripts/m1_scene_building_camera.gd
       - scripts/wall_attachment_placement.gd
       - scripts/detail_placement_ghost.gd
       - tests/wall_attachment_placement_test.gd
       - tests/m1_attachment_placement_test.gd
+      - tests/m1_building_placement_test.gd
+      - tests/m1_building_camera_test.gd
       - tools/test-m1-placement.ps1
       - .github/workflows/m1-placement.yml
   workflow_dispatch:
