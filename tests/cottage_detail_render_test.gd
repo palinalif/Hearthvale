@@ -33,7 +33,9 @@ func _run() -> void:
 	var deadline := Time.get_ticks_msec() + 65000
 	while not scene._player_restored and Time.get_ticks_msec() < deadline:
 		await process_frame
-		if scene.backend and not str(scene.backend.get("_error")).is_empty(): break
+		if scene.backend and not scene.backend.is_ready():
+			var backend_error := str(scene.backend.get("_error"))
+			if not backend_error.is_empty() and backend_error != "no valid checkpoint": break
 	check(scene._player_restored and scene.backend.is_ready(), "native scene ready")
 	if not scene._player_restored:
 		_finish()
