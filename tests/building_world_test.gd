@@ -15,17 +15,46 @@ func _initialize() -> void:
 	_check(initial.get("generator_version") == BuildingWorld.GENERATOR_VERSION, "generator version")
 	_check(initial.get("dimensions") == Vector3(18, 7, 14), "default dimensions")
 	_check((initial["transform"] as Transform3D).basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorld.MINIATURE_SCALE), "default cottage is quarter-scale miniature")
-	_check((initial.get("details", []) as Array).size() == 6, "six automatic windows")
+	_check((initial.get("details", []) as Array).size() == 7, "six automatic windows and one editable door")
 	_check((initial.get("surfaces", []) as Array).size() >= 6, "stable cottage surfaces")
+	var initial_windows := 0
+	var initial_doors := 0
 	for detail_value in initial["details"]:
 		var detail: Dictionary = detail_value
-		_check(str(detail.get("kind", "")) == "window" and bool(detail.get("visible", false)) and not bool(detail.get("needs_placement", true)) and detail.get("resolved_position") is Vector3, "default window remains valid")
+		if str(detail.get("kind", "")) == "window": initial_windows += 1
+		if str(detail.get("kind", "")) == "door": initial_doors += 1
+		_check(bool(detail.get("visible", false)) and not bool(detail.get("needs_placement", true)) and detail.get("resolved_position") is Vector3, "default attachment remains valid")
+	_check(initial_windows == 6 and initial_doors == 1, "default attachment kinds")
 
 	var details: Array = initial["details"]
 	var first_id := str(details[0]["id"])
 	var second_id := str(details[1]["id"])
 	var third_id := str(details[2]["id"])
 	var source_surface := str(details[0]["anchor"]["surface_id"])
+	var detail_size_world := BuildingWorld.new()
+	var size_details: Array = detail_size_world.get_building(building_id)["details"]
+	var door_id := ""
+	for detail in size_details:
+		if str(detail.get("kind", "")) == "door": door_id = str(detail.get("id", ""))
+	_check(detail_size_world.resize_detail(building_id, str(size_details[0]["id"]), Vector2(2.5, 3.0)), "resize window")
+	_check((detail_size_world.get_building(building_id)["details"][0]["override"]["size"] as Array) == [2.5, 3.0], "window size override stored")
+	_check(not door_id.is_empty() and detail_size_world.resize_detail(building_id, door_id, Vector2(2.25, 4.0)), "resize door")
+	_check(not detail_size_world.resize_detail(building_id, door_id, Vector2(8.0, 8.0)), "reject oversized door")
+	_check(detail_size_world.undo(), "undo door resize")
+	var default_door := {}
+	for detail in detail_size_world.get_building(building_id)["details"]:
+		if str(detail.get("id", "")) == door_id: default_door = detail
+	_check(not (default_door.get("override", {}) as Dictionary).has("size"), "undo restores default door size")
+	_check(detail_size_world.redo(), "redo door resize")
+	var sized_serialized := detail_size_world.serialize_document()
+	var sized_reload := BuildingWorld.new()
+	_check(sized_reload.load_serialized_document(sized_serialized), "reload resized openings")
+	var sized_copy_id := sized_reload.duplicate_building(building_id)
+	_check(not sized_copy_id.is_empty(), "duplicate resized openings")
+	var copied_sizes := 0
+	for detail in sized_reload.get_building(sized_copy_id)["details"]:
+		if (detail.get("override", {}) as Dictionary).has("size"): copied_sizes += 1
+	_check(copied_sizes == 2, "window and door sizes survive reload and duplication")
 	_check(world.move_detail(building_id, first_id, source_surface, Vector3(-7.0, 4.0, -7.02)), "move window")
 	_check(world.get_building(building_id)["details"][0]["state"] == "modified_locked", "moved window is locked")
 	_check(world.replace_detail(building_id, second_id, "window_round"), "replace window")
@@ -36,14 +65,17 @@ func _initialize() -> void:
 	_check(edited["details"][2]["state"] == "suppressed" and edited["details"][2]["visible"] == false, "suppression persists")
 	_check(not world.suppress_detail(building_id, third_id), "repeated suppression is a no-op")
 	_check(not world.move_detail(building_id, third_id, source_surface, Vector3(0, 3, -7)), "suppressed detail cannot move")
-	_check((edited["automatic_defaults"] as Array).size() == 6, "generated defaults remain complete")
+	_check((edited["automatic_defaults"] as Array).size() == 7, "generated defaults remain complete")
 	_check((edited["manual_attachments"] as Array).size() == 1, "manual attachment record")
 	_check((edited["modified_locked"] as Array).size() == 2, "modified records")
 	_check((edited["overrides"] as Dictionary).size() == 3, "separate overrides")
 	_check(world.move_detail(building_id, flower_id, source_surface, Vector3(2.0, 2.4, -7.02)), "move manual attachment")
 	_check(world.replace_detail(building_id, flower_id, "flower_box_painted"), "replace manual attachment")
 	_check(world.suppress_detail(building_id, flower_id) and world.suppress_detail(building_id, flower_id, false), "suppress and restore manual attachment")
-	_check(world.get_building(building_id)["details"][6]["state"] == "manual", "manual state survives edits")
+	var flower_record := {}
+	for detail in world.get_building(building_id)["details"]:
+		if str(detail.get("id", "")) == flower_id: flower_record = detail
+	_check(str(flower_record.get("state", "")) == "manual", "manual state survives edits")
 
 	var before_resize := world.get_document()
 	var resize_preview: Dictionary = world.preview_resize(building_id, Vector3(30, 10, 14))
@@ -104,7 +136,7 @@ func _initialize() -> void:
 	var converted_copy_id := converted_reload.duplicate_building(building_id)
 	_check(not converted_copy_id.is_empty(), "duplicate converted miniature")
 	_check((converted_reload.get_building(converted_copy_id)["transform"] as Transform3D).basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorld.MINIATURE_SCALE), "duplicate preserves miniature scale")
-	_check((converted_reload.get_building(converted_copy_id)["details"] as Array).size() == 6, "converted duplicate keeps all six windows")
+	_check((converted_reload.get_building(converted_copy_id)["details"] as Array).size() == 7, "converted duplicate keeps all windows and door")
 
 	var serialized := world.serialize_document()
 	_check(serialized.length() < BuildingWorld.HISTORY_BYTES_LIMIT, "bounded serialized document")
@@ -120,6 +152,17 @@ func _initialize() -> void:
 		same_details = same_details and left.get("id") == right.get("id") and left.get("state") == right.get("state") and left.get("asset_id") == right.get("asset_id") and left.get("needs_placement") == right.get("needs_placement") and left.get("resolved_position") == right.get("resolved_position")
 	_check(same_details, "reload preserves details")
 	_check(not reloaded.load_document({"schema_version": 999}), "reject invalid document")
+	var legacy_document: Dictionary = BuildingWorld.new().get_document()
+	var legacy_details: Array = legacy_document["buildings"][0]["details"]
+	for index in range(legacy_details.size() - 1, -1, -1):
+		if str((legacy_details[index] as Dictionary).get("kind", "")) == "door": legacy_details.remove_at(index)
+	legacy_document["buildings"][0]["details"] = legacy_details
+	var legacy_loaded := BuildingWorld.new()
+	_check(legacy_loaded.load_document(legacy_document), "load legacy cottage without detail door")
+	var migrated_doors := 0
+	for detail in legacy_loaded.get_building(building_id)["details"]:
+		if str(detail.get("kind", "")) == "door": migrated_doors += 1
+	_check(migrated_doors == 1, "legacy cottage gains one editable door")
 	var invalid_reference: Dictionary = world.get_document()
 	invalid_reference["buildings"][0]["details"][0]["anchor"]["surface_id"] = "missing-surface"
 	_check(not BuildingWorld.validate_document(invalid_reference), "reject dangling anchor reference")
@@ -144,7 +187,7 @@ func _initialize() -> void:
 	var added_details := 0
 	for _i in 250:
 		if not budget_world.add_detail("building-1", "flower_box", "wall-front", Vector3(0, 2, -7.02), "flower_box_wood").is_empty(): added_details += 1
-	_check(added_details == 250, "detail budget fixture fills one cottage")
+	_check(added_details == 249, "detail budget fixture fills one cottage")
 	_check(budget_world.duplicate_building("building-1").is_empty(), "duplicate rejects global detail overflow")
 
 	var stale_revision := world.get_revision()
@@ -183,9 +226,13 @@ func _initialize() -> void:
 	var front_wall: Node = visual.get_node_or_null("WallFront")
 	_check(front_wall != null and (front_wall as MeshInstance3D).material_override.albedo_color == Color("#d5a982"), "material reaches shell")
 	_check(visual.transform.basis.get_scale().is_equal_approx(Vector3.ONE * BuildingWorld.MINIATURE_SCALE), "renderer applies authored miniature transform")
-	_check(visual.get_node_or_null("Door") != null and visual.get_node_or_null("Detail_%s" % visual_second) != null, "renderer transforms door and edited detail")
-	var door_mesh := (visual.get_node("Door") as MeshInstance3D).mesh as BoxMesh
-	_check(door_mesh != null and door_mesh.size.y < 5.0 and door_mesh.size.z < 2.2, "door proportions stay small at miniature scale")
+	var visual_door_id := ""
+	for detail in visual_world.get_building(building_id)["details"]:
+		if str(detail.get("kind", "")) == "door": visual_door_id = str(detail.get("id", ""))
+	var door_node := visual.get_node_or_null("Detail_%s" % visual_door_id) as MeshInstance3D
+	_check(door_node != null and visual.get_node_or_null("Detail_%s" % visual_second) != null, "renderer transforms door and edited detail")
+	var door_mesh := door_node.mesh as BoxMesh if door_node else null
+	_check(door_mesh != null and door_mesh.size.y < 5.0 and door_mesh.size.x < 2.2, "door proportions stay small at miniature scale")
 	var roof_tile_batches := 0
 	var roof_tile_vertices := 0
 	for child_value in visual.get_children():

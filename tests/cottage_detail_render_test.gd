@@ -68,6 +68,19 @@ func _run() -> void:
 		check(not scene.building_world.add_detail(id, "flower_box", "wall-front", position, "flower_box_wood").is_empty(), "editable planter fixture %d" % i)
 	if front_windows.size() > 1:
 		check(scene.building_world.replace_detail(id, str(front_windows[1]["id"]), "window_round"), "editable round-window fixture")
+	if not front_windows.is_empty():
+		check(scene.building_world.resize_detail(id, str(front_windows[0]["id"]), Vector2(2.5, 3.0)), "editable resized-window fixture")
+	var door: Dictionary = {}
+	for detail in scene.building_world.get_building(id)["details"]:
+		if str(detail.get("kind", "")) == "door": door = detail
+	check(not door.is_empty(), "editable door fixture exists")
+	if not door.is_empty():
+		var door_position: Vector3 = door["resolved_position"]
+		door_position.z -= 2.0
+		check(scene.building_world.move_detail(id, str(door["id"]), str(door["anchor"]["surface_id"]), door_position), "editable moved-door fixture")
+		check(scene.building_world.resize_detail(id, str(door["id"]), Vector2(2.25, 4.0)), "editable resized-door fixture")
+		scene.selected_detail_id = str(door["id"])
+		check(scene._commit_detail_style(str(door["id"]), str(door["asset_id"]), "berry"), "editable recoloured-door fixture")
 	check(not scene.building_world.add_detail(id, "shutter", "wall-left", Vector3(-view["dimensions"].x * 0.5 - 0.02, 3.4, 3.0), "shutter_wood").is_empty(), "editable manual-shutter fixture")
 	for detail in scene.building_world.get_building(id)["details"]:
 		if detail.get("kind", "") in ["flower_box", "shutter"]:
@@ -75,6 +88,12 @@ func _run() -> void:
 	scene._update_presentation()
 	scene._update_camera()
 	var before := await _capture("03-detail-families")
+	scene.camera_yaw = -PI * 0.5
+	scene.camera_distance = 7.0
+	scene._update_camera()
+	await _capture("06-editable-openings")
+	scene.camera_yaw = PI * 1.20
+	scene._update_camera()
 	var record: Dictionary = scene.building_world.get_document()
 	scene._update_presentation()
 	var repeated := await _capture("04-repeat-stability")

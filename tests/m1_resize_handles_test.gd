@@ -62,7 +62,7 @@ func _run() -> void:
 	check(scene._player_restored, "complete native scene ready")
 	if not scene._player_restored: _finish(); return
 	scene.set_process(false)
-	check(scene.get_script() == preload("res://scripts/m1_scene_house_actions.gd"), "APK scene uses the direct handle layer")
+	check(scene.get_script() == preload("res://scripts/m1_scene_detail_resize.gd"), "APK scene uses house and detail resize layers")
 	scene._set_view_context("building")
 	scene._enter_resize_selection()
 	scene.camera_yaw = PI * 0.35

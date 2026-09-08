@@ -310,6 +310,12 @@ func _apply_detail_colours(detail_id: String, colour_id: String) -> void:
 	if detail_id.is_empty():
 		return
 	var colour: Color = DETAIL_COLOURS.get(colour_id, DETAIL_COLOURS["natural"])
+	var target_kind := ""
+	if building_world and not selected_building_id.is_empty():
+		for detail in building_world.get_building(selected_building_id).get("details", []):
+			if str(detail.get("id", "")) == detail_id:
+				target_kind = str(detail.get("kind", ""))
+				break
 	for root in _selected_visual_roots():
 		for prefix in ["Joinery_", "Shutters_", "FlowerBox_", "ManualShutter_"]:
 			var node := root.get_node_or_null(prefix + detail_id)
@@ -317,3 +323,10 @@ func _apply_detail_colours(detail_id: String, colour_id: String) -> void:
 				var material := StandardMaterial3D.new()
 				material.albedo_color = colour
 				(node as GeometryInstance3D).material_override = material
+		if target_kind == "door":
+			for prefix in ["Detail_", "DoorJoinery_"]:
+				var door_node := root.get_node_or_null(prefix + detail_id)
+				if door_node is GeometryInstance3D:
+					var door_material := StandardMaterial3D.new()
+					door_material.albedo_color = colour
+					(door_node as GeometryInstance3D).material_override = door_material

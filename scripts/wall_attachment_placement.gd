@@ -23,6 +23,21 @@ static func footprint(kind: String, asset_id: String = "") -> Vector2:
 	if asset_id.contains("round"): return Vector2(0.8, 0.8)
 	return Vector2(1.375, 2.07)
 
+static func detail_size(detail: Dictionary) -> Vector2:
+	var value = (detail.get("override", {}) as Dictionary).get("size", null)
+	if value is Array and (value as Array).size() == 2: return Vector2(float(value[0]), float(value[1]))
+	if str(detail.get("kind", "")) == "door": return Vector2(1.75, 3.7)
+	if str(detail.get("asset_id", "")).contains("round"): return Vector2(1.5, 1.5)
+	return Vector2(2.0, 2.8)
+
+static func footprint_for_detail(detail: Dictionary) -> Vector2:
+	var kind := str(detail.get("kind", "window"))
+	if kind not in ["window", "door"]: return footprint(kind, str(detail.get("asset_id", "")))
+	var size := detail_size(detail)
+	if kind == "door": return size * 0.5 + Vector2(0.38, 0.0)
+	if str(detail.get("asset_id", "")).contains("round"): return size * 0.5 + Vector2(0.3, 0.3)
+	return size * 0.5 + Vector2(0.375, 0.67)
+
 static func clamp_to_wall(view: Dictionary, surface_id: String, local_position: Vector3, detail_footprint: Vector2) -> Dictionary:
 	if not local_position.is_finite() or not detail_footprint.is_finite(): return {}
 	var support := surface(view, surface_id)
@@ -88,7 +103,7 @@ static func position_available(view: Dictionary, detail_id: String, surface_id: 
 		if str(other.get("anchor", {}).get("surface_id", "")) != surface_id: continue
 		var other_position = other.get("resolved_position")
 		if not other_position is Vector3: continue
-		var other_half := footprint(str(other.get("kind", "")), str(other.get("asset_id", "")))
+		var other_half := footprint_for_detail(other)
 		if absf(position[axis] - other_position[axis]) < half.x + other_half.x and absf(position.y - other_position.y) < half.y + other_half.y: return false
 	return true
 

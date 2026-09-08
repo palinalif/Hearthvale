@@ -840,7 +840,7 @@ func _commit_detail_move() -> bool:
 	var ok: bool = building_world.move_detail(selected_building_id, selected_detail_id, detail_move_surface_id, detail_move_position)
 	detail_move_active = false
 	if ok: _record_history("building")
-	_set_status("Window moved" if ok else "Move rejected")
+	_set_status("Detail moved" if ok else "Move rejected")
 	_update_presentation()
 	return ok
 

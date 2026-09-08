@@ -2,7 +2,9 @@
 
 This branch implements the player-approved `0.0625` cottage presentation tier, including visible roof tiles and edges, while retaining `VisualGrid.UNIT = 0.125` for terrain, cottage structure, authoritative roof profile, resize increments and attachment anchors.
 
-The derived renderer now gives existing windows finer mullion/transom choices, enlarged chamfered round surrounds, slatted or stepped-braced shutters, thinner cornices, regular eave pegs, articulated ridge and roof lips, half-cell visible roof courses, built timber flower boxes, and small deterministic flower arrangements. Building seed plus stable detail identity selects restrained variations; unchanged recipes render identically and no save schema or gameplay behavior changed.
+The derived renderer gives existing windows finer mullion/transom choices, enlarged chamfered round surrounds, slatted or stepped-braced shutters, thinner cornices, regular eave pegs, articulated ridge and roof lips, half-cell visible roof courses, built timber flower boxes, and small deterministic flower arrangements. Building seed plus stable detail identity selects restrained variations. A subsequent accepted-scope edit makes window sizes authored overrides and migrates the entrance from baked shell geometry to a stable movable, resizable and recolourable door record; its cutout and half-cell porch follow it. The schema number remains compatible and older valid cottages receive one default editable door during load.
+
+The editable-opening pass passed the complete `tools/check.ps1` regression, a 33-check deterministic Forward Mobile capture, and an actual Mobile grid run with 322,678 checks across 107,084 instances and 2,637,056 inspected vertices. The dedicated entrance view is `reports/screenshots/m1-cottage-detail/06-editable-openings.png`. These desktop checks establish recipe/render consistency, not Thor comfort or performance.
 
 Validation on pinned Godot `4.7.2.stable.official.ed1daf0bf`:
 

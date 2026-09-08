@@ -78,7 +78,6 @@ func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 		_add_detail_boxes("Cornice_%s" % side, [_piece(Vector3(0, eave - _unit.y * 1.5, z), Vector3(dimensions.x, _detail_unit.y, _unit.z))], CORNICE_COLOR)
 	var roof_angle := atan2(dimensions.y * 0.42, dimensions.z * 0.5)
 	_build_roof_tile_batches(dimensions, roof_angle)
-	if not bool(deleted.get("left", false)): _build_door(dimensions)
 	var rise := dimensions.y * 0.42
 	var gable_run := dimensions.z * 0.5 + 0.45
 	var row_height := _unit.y
@@ -91,7 +90,7 @@ func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 		_add_box("GableRight_%d" % step, Vector3(0.22, row_height, span), Vector3(dimensions.x * 0.5, level, 0), wall_color)
 	_build_corner_quoin_batch(dimensions)
 	_build_crafted_shell(dimensions, wall_color)
-	_build_entrance_canopy(dimensions, deleted)
+	_build_gable_vent(dimensions, deleted)
 
 func _build_roof_tile_batches(dimensions: Vector3, _roof_angle: float) -> void:
 	var buckets: Array = [[], [], []]
@@ -157,6 +156,13 @@ func _build_details(view: Dictionary, dimensions: Vector3) -> void:
 		if local is Vector3:
 			var orientation := str(surface_orientations.get(str(detail.get("anchor", {}).get("surface_id", "")), "front"))
 			_build_flower_box(detail, local, _surface_basis(orientation))
+	for detail_value in view.get("details", []):
+		var detail: Dictionary = detail_value
+		if str(detail.get("kind", "")) != "door" or not bool(detail.get("visible", true)) or bool(detail.get("needs_placement", false)): continue
+		var local = detail.get("resolved_position", null)
+		if not local is Vector3: continue
+		var orientation := str(surface_orientations.get(str(detail.get("anchor", {}).get("surface_id", "")), "left"))
+		_build_door(detail, local, orientation)
 
 func _craft_variant(detail: Dictionary) -> int:
 	# Only recipe identities select craft; position/revision never reshuffle it.
@@ -215,8 +221,8 @@ func _build_flower_box(detail: Dictionary, local: Vector3, basis: Basis) -> void
 			if column % 3 == 1: accents.append(flower)
 			else: blooms.append(flower)
 	_add_detail_boxes("BoxFoliage_%s" % id, leaves, Color("#597749"), basis, local)
-	_add_detail_boxes("BoxFlowers_%s" % id, blooms, [FLOWER_COLOR, Color("#bd8492"), Color("#d4ac72")][variant], basis, local)
-	_add_detail_boxes("BoxFlowerAccents_%s" % id, accents, Color("#e5cba0"), basis, local)
+	if not blooms.is_empty(): _add_detail_boxes("BoxFlowers_%s" % id, blooms, [FLOWER_COLOR, Color("#bd8492"), Color("#d4ac72")][variant], basis, local)
+	if not accents.is_empty(): _add_detail_boxes("BoxFlowerAccents_%s" % id, accents, Color("#e5cba0"), basis, local)
 
 func _surface_basis(orientation: String) -> Basis:
 	if orientation == "front": return Basis(Vector3.UP, PI)
@@ -227,7 +233,8 @@ func _surface_basis(orientation: String) -> Basis:
 func _window_layout(detail: Dictionary, local: Vector3, orientation: String) -> Dictionary:
 	var basis := _surface_basis(orientation)
 	var rounded := str(detail.get("asset_id", "window_wood")).contains("round")
-	var pane_requested := Vector3(1.5, 1.5, 0.10) if rounded else Vector3(2.0, 2.8, 0.10)
+	var authored_size := _detail_size(detail, Vector2(1.5, 1.5) if rounded else Vector2(2.0, 2.8))
+	var pane_requested := Vector3(authored_size.x, authored_size.y, 0.10)
 	var pane_quantized := Grid.quantized_box(Vector3.ZERO, pane_requested, _unit)
 	var surface_local := basis.inverse() * local
 	# Authoritative attachment positions retain their small wall-normal offset,
@@ -316,15 +323,15 @@ func _build_wall(orientation: String, dimensions: Vector3, view: Dictionary, col
 	for surface in view.get("surfaces", []):
 		if str(surface.get("orientation", "")) == orientation: surface_ids.append(str(surface.get("id", "")))
 	for detail in view.get("details", []):
-		if str(detail.get("kind", "")) != "window" or not bool(detail.get("visible", true)) or bool(detail.get("needs_placement", false)): continue
+		var kind := str(detail.get("kind", ""))
+		if kind not in ["window", "door"] or not bool(detail.get("visible", true)) or bool(detail.get("needs_placement", false)): continue
 		if not str(detail.get("anchor", {}).get("surface_id", "")) in surface_ids: continue
 		var resolved = detail.get("resolved_position", null)
 		if not resolved is Vector3: continue
-		var layout := _window_layout(detail, resolved, orientation)
+		var layout := _window_layout(detail, resolved, orientation) if kind == "window" else _door_layout(detail, resolved, orientation)
 		var surface_center: Vector2 = layout["surface_center"]
 		var opening_half: Vector2 = layout["opening_half"]
 		cuts.append(Rect2(surface_center - opening_half, opening_half * 2.0))
-	if orientation == "left": cuts.append(Rect2(-0.90, 0.6, 1.80, minf(3.7, dimensions.y - 1.0)))
 	var xs: Array[float] = [-span * 0.5, span * 0.5]
 	var ys: Array[float] = [0.6, dimensions.y]
 	for cut in cuts:
@@ -346,20 +353,50 @@ func _build_wall(orientation: String, dimensions: Vector3, view: Dictionary, col
 	var wall := _add_batched_boxes("Wall%s" % orientation.capitalize(), pieces, color)
 	wall.transform = Transform3D(basis, origin)
 
-func _build_door(dimensions: Vector3) -> void:
-	var x := -dimensions.x * 0.5
-	var height := minf(3.7, dimensions.y - 1.0)
-	_add_box("Door", Vector3(0.12, height, 1.74), Vector3(x + 0.10, height * 0.5 + 0.6, 0), SHUTTER_COLOR)
+func _detail_size(detail: Dictionary, fallback: Vector2) -> Vector2:
+	var value = (detail.get("override", {}) as Dictionary).get("size", null)
+	if value is Array and (value as Array).size() == 2: return Vector2(float(value[0]), float(value[1]))
+	return fallback
+
+func _door_layout(detail: Dictionary, local: Vector3, orientation: String) -> Dictionary:
+	var basis := _surface_basis(orientation)
+	var size := _detail_size(detail, Vector2(1.75, 3.7))
+	var quantized := Grid.quantized_box(Vector3.ZERO, Vector3(size.x, size.y, 0.10), _unit)
+	var surface_local := (basis.inverse() * local).snapped(_unit)
+	var leaf_size: Vector3 = quantized["size"]
+	return {"basis": basis, "anchor_center": basis * surface_local, "surface_center": Vector2(surface_local.x, surface_local.y), "leaf_center": quantized["center"], "leaf_size": leaf_size, "opening_half": Vector2(leaf_size.x, leaf_size.y) * 0.5}
+
+func _build_door(detail: Dictionary, local: Vector3, orientation: String) -> void:
+	var id := str(detail.get("id", "door"))
+	var layout := _door_layout(detail, local, orientation)
+	var basis: Basis = layout["basis"]
+	var anchor: Vector3 = layout["anchor_center"]
+	var leaf_center: Vector3 = layout["leaf_center"]
+	var leaf_size: Vector3 = layout["leaf_size"]
+	var width := leaf_size.x
+	var height := leaf_size.y
+	var leaf := MeshInstance3D.new()
+	leaf.name = "Detail_%s" % id
+	var leaf_mesh := BoxMesh.new()
+	leaf_mesh.size = Vector3(width, height, _unit.z)
+	leaf.mesh = leaf_mesh
+	var leaf_material := StandardMaterial3D.new()
+	leaf_material.albedo_color = SHUTTER_COLOR
+	leaf.material_override = leaf_material
+	leaf.transform = Transform3D(basis, anchor + basis * (leaf_center + Vector3(0, 0, -_unit.z)))
+	add_child(leaf)
 	var frame: Array = []
 	var wood: Array = []
-	for side in [-1.0, 1.0]: frame.append(_piece(Vector3(x - 0.07, height * 0.5 + 0.6, side * 1.02), Vector3(0.52, height + 0.34, 0.24)))
-	frame.append(_piece(Vector3(x - 0.07, height + 0.72, 0), Vector3(0.54, 0.28, 2.3)))
-	for plank in 6: wood.append(_piece(Vector3(x - 0.02, height * 0.5 + 0.6, -0.72 + plank * 0.29), Vector3(0.06, height - 0.14, 0.035)))
-	for y in [1.0, height - 0.10]: wood.append(_piece(Vector3(x - 0.10, y, 0), Vector3(0.12, 0.14, 1.62)))
-	wood.append(_piece(Vector3(x - 0.18, 2.05, 0.53), Vector3(0.16, 0.12, 0.12)))
-	for step in 3: frame.append(_piece(Vector3(x - 0.36 - step * 0.28, 0.50 - step * 0.16, 0), Vector3(0.42, 0.18, 2.5 + step * 0.12)))
-	_add_batched_boxes("DoorSurround", frame, CORNICE_COLOR)
-	_add_batched_boxes("DoorJoinery", wood, TRIM_COLOR)
+	var cell := (basis.inverse() * _detail_unit).abs()
+	for side in [-1.0, 1.0]: frame.append(_piece(Vector3(side * (width * 0.5 + cell.x * 1.5), 0, cell.z), Vector3(cell.x * 2.0, height + cell.y * 4.0, cell.z * 2.0)))
+	frame.append(_piece(Vector3(0, height * 0.5 + cell.y, cell.z), Vector3(width + cell.x * 6.0, cell.y, cell.z * 2.0)))
+	var planks := maxi(3, roundi(width / (cell.x * 2.0)))
+	for plank in planks: wood.append(_piece(Vector3(-width * 0.5 + (plank + 0.5) * width / planks, 0, cell.z), Vector3(cell.x, height - cell.y * 2.0, cell.z)))
+	for y in [-height * 0.3, height * 0.3]: wood.append(_piece(Vector3(0, y, cell.z * 2.0), Vector3(width - cell.x * 2.0, cell.y, cell.z)))
+	wood.append(_piece(Vector3(width * 0.3, 0, cell.z * 2.5), cell))
+	_add_detail_boxes("DoorSurround_%s" % id, frame, CORNICE_COLOR, basis, anchor)
+	_add_detail_boxes("DoorJoinery_%s" % id, wood, TRIM_COLOR, basis, anchor)
+	_build_entrance_canopy(id, width, height, basis, anchor)
 
 func _build_crafted_shell(dimensions: Vector3, _color: Color) -> void:
 	var stone: Array = []
@@ -443,19 +480,21 @@ func _append_box_geometry(vertices: PackedVector3Array, normals: PackedVector3Ar
 		for corner_index in 4: vertices.append(center + basis * corners[int(face[corner_index])]); normals.append(normal)
 		indices.append_array(PackedInt32Array([base, base + 2, base + 1, base, base + 3, base + 2]))
 
-func _build_entrance_canopy(dimensions: Vector3, deleted: Dictionary) -> void:
-	if bool(deleted.get("left", false)): return
-	var x := -dimensions.x * 0.5
-	var y := minf(4.8, dimensions.y - 0.25)
+func _build_entrance_canopy(id: String, width: float, height: float, basis: Basis, anchor: Vector3) -> void:
+	var y := height * 0.5 + _unit.y * 2.0
 	var timber: Array = []
 	var tiles: Array = []
 	for side in [-1.0, 1.0]:
-		timber.append(_piece(Vector3(x - 0.35, y - 0.40, side * 1.45), Vector3(0.20, 0.9, 0.18)))
-		for step in 4: timber.append(_piece(Vector3(x - 0.25 - step * 0.25, y - 0.7 + step * 0.25, side * 1.45), Vector3(0.25, 0.25, 0.25)))
+		timber.append(_piece(Vector3(side * (width * 0.5 + _unit.x), y - _unit.y, _unit.z * 2.0), Vector3(_detail_unit.x, _unit.y * 4.0, _unit.z)))
+	var columns := maxi(6, ceili((width + _unit.x * 6.0) / _detail_unit.x))
 	for row in 5:
-		for column in 10: tiles.append(_piece(Vector3(x - 0.13 - row * 0.24, y - row * 0.11, -1.65 + column * 0.36), Vector3(0.29, 0.14, 0.34)))
-	_add_batched_boxes("PorchBrackets", timber, TRIM_COLOR)
-	_add_batched_boxes("PorchTileCourses", tiles, ROOF_TILE_COLORS[1])
+		for column in columns: tiles.append(_piece(Vector3(-(columns - 1) * _detail_unit.x * 0.5 + column * _detail_unit.x, y + _unit.y - row * _detail_unit.y, row * _detail_unit.z), _detail_unit))
+	_add_detail_boxes("PorchBrackets_%s" % id, timber, TRIM_COLOR, basis, anchor)
+	_add_detail_boxes("PorchTileCourses_%s" % id, tiles, ROOF_TILE_COLORS[1], basis, anchor)
+
+func _build_gable_vent(dimensions: Vector3, deleted: Dictionary) -> void:
+	if bool(deleted.get("left", false)): return
+	var x := -dimensions.x * 0.5
 	var vent: Array = []
 	for row in 7:
 		var width := 1.0 - absf(float(row) - 3.0) * 0.13

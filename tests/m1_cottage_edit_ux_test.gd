@@ -4,7 +4,7 @@ var failures := 0
 var scene: Node
 
 func _initialize() -> void:
-	scene = preload("res://scripts/m1_scene_cottage_style.gd").new()
+	scene = preload("res://scripts/m1_scene_detail_resize.gd").new()
 	scene.checkpoint_root = "user://m1-cottage-ux-test-%s" % Time.get_ticks_usec()
 	scene.test_mode = true
 	root.add_child(scene)
@@ -72,6 +72,7 @@ func _initialize() -> void:
 	_check(not "Duplicate cottage" in visible_labels and not "Delete selected surface" in visible_labels, "context menu hides unrelated cottage actions")
 	if str(picked["kind"]) == "window":
 		_check("Replace selected" in visible_labels, "window context exposes variation")
+		_check("Resize detail" in visible_labels, "window context exposes resize")
 
 	scene._context_actions_open = false
 	scene.tools_open = false
@@ -100,6 +101,41 @@ func _initialize() -> void:
 		_check(scene.building_world.get_revision() == revision_after_colour + 1, "variation confirm creates one building revision")
 		styled = scene._selected_detail_record()
 		_check(str(styled.get("asset_id", "")) == "window_round", "confirmed variation persists")
+
+	# Resize previews are non-authoritative and commit as one undoable recipe
+	# edit. The default door uses the same direct picker/actions path.
+	scene.selected_detail_id = str(picked["id"])
+	var resize_before: Dictionary = scene.building_world.get_document()
+	scene._begin_detail_resize()
+	_check(scene.detail_resize_active, "window resize starts from contextual action")
+	scene.detail_resize_size = scene._detail_resize_original + Vector2(0.5, 0.5)
+	scene._update_presentation()
+	_check(scene.building_world.get_document() == resize_before, "window resize preview is read only")
+	_check(scene._commit_detail_resize(), "window resize commits")
+	_check((scene._selected_detail_record().get("override", {}) as Dictionary).has("size"), "window size persists as an authored override")
+	var door: Dictionary = {}
+	for detail in scene.building_world.get_building(scene.selected_building_id).get("details", []):
+		if str(detail.get("kind", "")) == "door": door = detail
+	_check(not door.is_empty() and bool(door.get("visible", false)), "editable door is present and visible")
+	if not door.is_empty():
+		scene.selected_detail_id = str(door["id"])
+		scene.hovered_detail_id = str(door["id"])
+		scene.hovered_detail_kind = "door"
+		scene._context_actions_open = true
+		scene._update_action_buttons()
+		_check(scene._detail_resize_button.visible and scene._detail_colour_button.visible, "door actions expose resize and colour")
+		_check(not (scene._tool_buttons["Replace selected"] as Button).visible, "door does not expose window-only variation")
+		var door_revision: int = scene.building_world.get_revision()
+		_check(scene._commit_detail_style(str(door["id"]), str(door["asset_id"]), "berry"), "door recolour commits")
+		_check(scene.building_world.get_revision() == door_revision + 1, "door recolour creates one revision")
+		door = scene._selected_detail_record()
+		_check(str((door.get("override", {}) as Dictionary).get("color_id", "")) == "berry", "door colour persists")
+		var door_position: Vector3 = door["resolved_position"]
+		_check(scene.building_world.move_detail(scene.selected_building_id, str(door["id"]), str(door["anchor"]["surface_id"]), door_position + Vector3(0, 0, 1.0)), "door can move along its wall")
+		door = scene._selected_detail_record()
+		_check(scene.building_world.resize_detail(scene.selected_building_id, str(door["id"]), Vector2(2.25, 4.0)), "door can resize")
+		var persisted_size = (scene._selected_detail_record().get("override", {}) as Dictionary).get("size", [])
+		_check(persisted_size == [2.25, 4.0], "door size persists")
 
 	_finish()
 

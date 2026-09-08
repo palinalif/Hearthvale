@@ -33,7 +33,10 @@ var _history_bytes := 0
 
 static func validate_document(document: Dictionary) -> bool:
 	var validator := BuildingWorld.new()
-	return validator._validate_document(document)
+	var candidate: Dictionary = validator._copy(document)
+	if not validator._validate_document(candidate): return false
+	validator._upgrade_editable_doors(candidate)
+	return validator._validate_document(candidate)
 
 func _init() -> void:
 	_document = {"schema_version": SCHEMA_VERSION, "generator_version": GENERATOR_VERSION, "revision": 0, "next_id": 1, "buildings": []}
@@ -58,8 +61,11 @@ func load_serialized_document(serialized: String) -> bool:
 	return parsed is Dictionary and load_document(parsed as Dictionary)
 
 func load_document(document: Dictionary) -> bool:
-	if not _validate_document(document): return false
-	_document = _copy(document) as Dictionary
+	var candidate: Dictionary = _copy(document)
+	if not _validate_document(candidate): return false
+	_upgrade_editable_doors(candidate)
+	if not _validate_document(candidate): return false
+	_document = candidate
 	_revision = maxi(_revision + 1, int(_document.get("revision", 0)))
 	_next_id = maxi(_next_id, maxi(int(_document.get("next_id", 1)), 1))
 	_document["revision"] = _revision
@@ -158,6 +164,37 @@ func replace_detail(building_id: String, detail_id: String, asset_id: String) ->
 	details[detail_index] = detail
 	building["details"] = details
 	_refresh_buckets(building)
+	buildings[index] = building
+	return _record_change(before)
+
+func resize_detail(building_id: String, detail_id: String, size: Vector2) -> bool:
+	if not size.is_finite(): return false
+	var index := _building_index(building_id)
+	if index < 0: return false
+	var buildings: Array = _document["buildings"]
+	var building: Dictionary = buildings[index]
+	var detail_index := _detail_index(building, detail_id)
+	if detail_index < 0: return false
+	var details: Array = building["details"]
+	var detail: Dictionary = details[detail_index]
+	if str(detail.get("state", "")) == "suppressed" or str(detail.get("kind", "")) not in ["window", "door"]: return false
+	var minimum := Vector2(1.0, 1.0) if str(detail.get("kind", "")) == "window" else Vector2(1.5, 2.5)
+	var maximum := Vector2(4.0, 5.0) if str(detail.get("kind", "")) == "window" else Vector2(3.5, 5.5)
+	if size.x < minimum.x or size.y < minimum.y or size.x > maximum.x or size.y > maximum.y: return false
+	var before := _copy(_document) as Dictionary
+	var overrides: Dictionary = detail.get("override", {})
+	overrides["size"] = [size.x, size.y]
+	detail["override"] = overrides
+	if bool(detail.get("generated", false)) and str(detail.get("state", "")) == "automatic": detail["state"] = "modified_locked"
+	details[detail_index] = detail
+	building["details"] = details
+	_refresh_buckets(building)
+	# Reject a size that no longer fits its supporting wall. The original
+	# recipe is restored atomically, so a failed preview can never orphan it.
+	var resolved: Array = _resolved_details(building)
+	if detail_index >= resolved.size() or bool((resolved[detail_index] as Dictionary).get("needs_placement", true)):
+		_document = before
+		return false
 	buildings[index] = building
 	return _record_change(before)
 
@@ -341,6 +378,7 @@ func _new_cottage(building_id: String, dimensions: Vector3, position: Vector3, s
 		details.append(_window("window-front-%d" % index, "wall-front", 0.18 + float(index) * 0.32, 0.48))
 	for index in 3:
 		details.append(_window("window-back-%d" % index, "wall-back", 0.18 + float(index) * 0.32, 0.48))
+	details.append(_door("door-left-0", "wall-left", dimensions))
 	var building := {"id": building_id, "name": "Riverside Cottage", "schema_version": SCHEMA_VERSION, "generator_version": GENERATOR_VERSION, "dimensions": _vec(dimensions), "transform": _transform(position, MINIATURE_SCALE), "seed": seed, "style_id": STYLE_ID, "roof_profile": "gabled", "material_id": "stone_plaster", "material_overrides": {}, "surfaces": surfaces, "details": details, "automatic_defaults": [], "overrides": {}, "exclusions": [], "modified_locked": [], "suppressed": [], "manual_attachments": []}
 	_reflow_automatic_windows(building)
 	_refresh_buckets(building)
@@ -391,6 +429,43 @@ func _reflow_automatic_windows(building: Dictionary) -> void:
 func _window(detail_id: String, surface_id: String, u: float, v: float) -> Dictionary:
 	var default_anchor := {"surface_id": surface_id, "policy": "proportional", "u": u, "v": v, "fixed_offset": 1.25}
 	return {"id": detail_id, "kind": "window", "asset_id": "window_wood", "state": "automatic", "generated": true, "anchor": default_anchor.duplicate(true), "default": {"id": detail_id, "asset_id": "window_wood", "u": u, "v": v, "anchor": default_anchor}, "needs_placement": false}
+
+func _door(detail_id: String, surface_id: String, dimensions: Vector3) -> Dictionary:
+	var v := clampf(2.45 / dimensions.y, 0.0, 1.0)
+	var default_anchor := {"surface_id": surface_id, "policy": "proportional", "u": 0.5, "v": v, "fixed_offset": 1.5}
+	return {"id": detail_id, "kind": "door", "asset_id": "door_timber", "state": "automatic", "generated": true, "anchor": default_anchor.duplicate(true), "default": {"id": detail_id, "asset_id": "door_timber", "u": 0.5, "v": v, "anchor": default_anchor}, "needs_placement": false}
+
+func _upgrade_editable_doors(document: Dictionary) -> void:
+	var buildings = document.get("buildings", [])
+	if not buildings is Array: return
+	var total := 0
+	for building_value in buildings:
+		if building_value is Dictionary and (building_value as Dictionary).get("details", null) is Array:
+			total += ((building_value as Dictionary)["details"] as Array).size()
+	for building_value in buildings:
+		if not building_value is Dictionary: continue
+		var building: Dictionary = building_value
+		var details = building.get("details", null)
+		if not details is Array: continue
+		var has_door := false
+		for detail_value in details:
+			if detail_value is Dictionary and str((detail_value as Dictionary).get("kind", "")) == "door": has_door = true
+		if has_door or total >= MAX_DETAILS: continue
+		var dimensions = building.get("dimensions", null)
+		if not _valid_vec_data(dimensions): continue
+		var left_id := ""
+		for surface_value in building.get("surfaces", []):
+			if surface_value is Dictionary and str((surface_value as Dictionary).get("orientation", "")) == "left" and str((surface_value as Dictionary).get("kind", "")) == "wall":
+				left_id = str((surface_value as Dictionary).get("id", "")); break
+		if left_id.is_empty(): continue
+		var door_id := "%s-door-0" % str(building.get("id", "building"))
+		var suffix := 1
+		while _detail_index(building, door_id) >= 0:
+			door_id = "%s-door-%d" % [str(building.get("id", "building")), suffix]; suffix += 1
+		(details as Array).append(_door(door_id, left_id, _as_vec(dimensions)))
+		building["details"] = details
+		_refresh_buckets(building)
+		total += 1
 
 func _resolved_building(building: Dictionary) -> Dictionary:
 	var result: Dictionary = _copy(building)
@@ -517,11 +592,21 @@ func _surface_fits(building: Dictionary, surface: Dictionary, dimensions: Vector
 func _detail_footprint(detail: Dictionary) -> Vector2:
 	var kind := str(detail.get("kind", "window"))
 	var asset := str(detail.get("asset_id", ""))
+	var size := _detail_size(detail)
 	if kind == "flower_box": return Vector2(0.8, 0.2)
 	if kind == "shutter": return Vector2(0.33, 1.45)
-	if kind == "door": return Vector2(1.5, 3.25)
-	if asset.contains("round"): return Vector2(0.8, 0.8)
-	return Vector2(WINDOW_HALF_WIDTH, 2.07)
+	if kind == "door": return size * 0.5 + Vector2(0.38, 0.0)
+	if asset.contains("round"): return size * 0.5 + Vector2(0.3, 0.3)
+	return size * 0.5 + Vector2(0.375, 0.67)
+
+func _detail_size(detail: Dictionary) -> Vector2:
+	var override: Dictionary = detail.get("override", {})
+	var value = override.get("size", null)
+	if value is Array and (value as Array).size() == 2 and _valid_number(value[0]) and _valid_number(value[1]):
+		return Vector2(float(value[0]), float(value[1]))
+	if str(detail.get("kind", "")) == "door": return Vector2(1.75, 3.7)
+	if str(detail.get("asset_id", "")).contains("round"): return Vector2(1.5, 1.5)
+	return Vector2(2.0, 2.8)
 
 func _set_detail_anchor(building_id: String, detail_id: String, surface_id: String, local_position: Vector3, state: String) -> bool:
 	if not local_position.is_finite() or not _surface_exists(building_id, surface_id): return false
@@ -641,6 +726,10 @@ func _validate_document(document: Dictionary) -> bool:
 				var default_anchor: Dictionary = default_record["anchor"]
 				if not surface_ids.has(str(default_anchor.get("surface_id", ""))) or str(default_anchor.get("policy", "")) != "proportional" or not _valid_number(default_anchor.get("u", null)) or not _valid_number(default_anchor.get("v", null)) or not _valid_number(default_anchor.get("fixed_offset", null)): return false
 			if detail.has("override") and not detail.get("override") is Dictionary: return false
+			var override: Dictionary = detail.get("override", {})
+			if override.has("size"):
+				var size = override["size"]
+				if not size is Array or (size as Array).size() != 2 or not _valid_number(size[0]) or not _valid_number(size[1]) or float(size[0]) <= 0.0 or float(size[1]) <= 0.0: return false
 	return true
 
 func _valid_number(value: Variant) -> bool:

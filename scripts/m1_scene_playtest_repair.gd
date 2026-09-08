@@ -420,7 +420,7 @@ func _read_detail_move(delta: float) -> void:
 	var record := _selected_detail_record()
 	var kind := placement_kind if not placement_kind.is_empty() else str(record.get("kind", "window"))
 	var asset := placement_asset_id if not placement_kind.is_empty() else str(record.get("asset_id", "window_wood"))
-	var half := WallPlacement.footprint(kind, asset)
+	var half := WallPlacement.footprint(kind, asset) if not placement_kind.is_empty() else WallPlacement.footprint_for_detail(record)
 	var clamped := WallPlacement.clamp_to_wall(view, detail_move_surface_id, _detail_free_position, half)
 	if clamped.is_empty(): return
 	_detail_free_position = clamped["position"]
@@ -482,7 +482,7 @@ func _recover_needs_detail(detail_id: String) -> void:
 	selected_surface_id = wall
 	var record := _selected_detail_record()
 	var view: Dictionary = building_world.get_building(selected_building_id)
-	var half := WallPlacement.footprint(str(record.get("kind", "window")), str(record.get("asset_id", "window_wood")))
+	var half := WallPlacement.footprint_for_detail(record)
 	var clamped := WallPlacement.nearest_available(view, detail_id, wall, detail_move_position, half)
 	if clamped.is_empty():
 		_cancel_detail_move()
@@ -500,7 +500,8 @@ func _commit_detail_move() -> bool:
 	var kind := placement_kind if not placement_kind.is_empty() else str(record.get("kind", "window"))
 	var asset := placement_asset_id if not placement_kind.is_empty() else str(record.get("asset_id", "window_wood"))
 	var view: Dictionary = building_world.get_building(selected_building_id)
-	if not WallPlacement.position_available(view, selected_detail_id, detail_move_surface_id, detail_move_position, WallPlacement.footprint(kind, asset)):
+	var half := WallPlacement.footprint(kind, asset) if not placement_kind.is_empty() else WallPlacement.footprint_for_detail(record)
+	if not WallPlacement.position_available(view, selected_detail_id, detail_move_surface_id, detail_move_position, half):
 		_set_status("Overlaps another edited detail • move to clear wall • B restores")
 		return false
 	return super._commit_detail_move()

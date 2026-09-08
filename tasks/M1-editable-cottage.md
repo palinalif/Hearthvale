@@ -29,7 +29,7 @@ Meshes are regenerated output. Keep the original record and its overrides availa
 
 ## Controller route
 
-Select the cottage, select/cycle a handle, stretch one constrained axis, commit or cancel, choose a detail, move it in its surface plane, replace it, suppress it, and add a new attachment. Provide visible snap increments and a precision mode. Menus must block world edits.
+Select the cottage, select/cycle a handle, stretch one constrained axis, commit or cancel, choose a detail, move it in its surface plane, resize windows and doors in width/height, recolour them, replace supported variations, suppress them, and add a new attachment. The entrance door is a stable attachment record rather than baked shell geometry; its wall opening and porch follow its authored anchor and size. Provide visible snap increments and a precision mode. Menus must block world edits.
 
 ## Required regression scenario
 
@@ -54,4 +54,4 @@ Capture the target at normal/near/far zoom and behind an occluding cottage, with
 
 ## Visual voxel consistency correction
 
-Normalize structural visual geometry to the `0.125` world-space unit across the cottage shell and authoritative roof profile, vegetation, props and terrain presentation. Use the player-approved cottage-only `0.0625` presentation tier for visible roof tiles/edges, window joinery, shutters, trims, flower boxes and flowers. Preserve `0.125` structural dimensions, roof authority, resize increments and attachment anchors, saved data, and independent native editing resolution. Validate declared cell size, cubic proportions and grid phase after transforms, resizing and duplication. Larger forms use additional cells, not stretched voxels. Include side-by-side visual evidence and meaningful world-space geometry checks before marking this requirement passed.
+Normalize structural visual geometry to the `0.125` world-space unit across the cottage shell and authoritative roof profile, vegetation, props and terrain presentation. Use the player-approved cottage-only `0.0625` presentation tier for visible roof tiles/edges, window and door joinery, entrance canopy, shutters, trims, flower boxes and flowers. Preserve `0.125` structural dimensions, roof authority, attachment anchors and saved data; window/door width and height use their own bounded native detail increments. Validate declared cell size, cubic proportions and grid phase after transforms, resizing and duplication. Larger forms use additional cells, not stretched voxels. Include side-by-side visual evidence and meaningful world-space geometry checks before marking this requirement passed.
