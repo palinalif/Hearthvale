@@ -1,7 +1,7 @@
 name: Cottage playtest regressions
 on:
   push:
-    branches: [fix/m1-cottage-playtest-2]
+    branches: [fix/m1-cottage-playtest-2, fix/m1-terrain-camera-retest]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,7 +28,7 @@ jobs:
         run: |
           $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           if (-not $editor) { throw 'Pinned editor missing' }
-          foreach ($test in @('m1_cottage_targeting_playtest_test','m1_playtest_repair_test','m1_terrain_settings_input_test','cottage_render_stability_test')) {
+          foreach ($test in @('m1_cottage_targeting_playtest_test','m1_playtest_repair_test','m1_terrain_settings_input_test','cottage_render_stability_test','m1_recovery_dpad_test','m1_terrain_navigation_test')) {
             $output = & $editor --headless --max-fps 60 --quit-after 7200 --path . --script "tests/$test.gd" 2>&1 | ForEach-Object { "$_" }
             $exitCode = $LASTEXITCODE
             $output | Tee-Object -FilePath ".tools/cottage-repair/$test.log"
