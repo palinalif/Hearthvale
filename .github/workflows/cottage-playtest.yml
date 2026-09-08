@@ -1,7 +1,9 @@
 name: Cottage playtest regressions
 on:
   push:
-    branches: [fix/m1-cottage-playtest-2, fix/m1-terrain-camera-retest, feat/m1-direct-resize-handles, feat/m1-house-move-resize]
+    branches: [master, fix/m1-cottage-playtest-2, fix/m1-terrain-camera-retest, feat/m1-direct-resize-handles, feat/m1-house-move-resize]
+  pull_request:
+    branches: [master]
   workflow_dispatch:
 permissions:
   contents: read
@@ -56,5 +58,6 @@ jobs:
           retention-days: 14
 
   build-repair-apk:
+    if: github.event_name != 'pull_request'
     needs: cottage-playtest
     uses: ./.github/workflows/thor-repair-apk.yml
