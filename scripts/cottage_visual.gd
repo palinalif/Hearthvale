@@ -18,6 +18,7 @@ const FLOWER_COLOR := Color("#d56d65")
 var applied_revision := -1
 var requested_revision := -1
 var building_id := ""
+var _applied_view: Dictionary = {}
 
 func request_revision(revision: int) -> void:
 	requested_revision = maxi(requested_revision, revision)
@@ -26,6 +27,12 @@ func apply_building(view: Dictionary, source_revision: int) -> bool:
 	if requested_revision < 0: requested_revision = source_revision
 	if source_revision != requested_revision or source_revision < applied_revision: return false
 	if view.is_empty(): return false
+	# Cancelling a preview invalidates the scene's presentation key, not every
+	# cottage's geometry. Keep identical instances (and their draw order) alive.
+	# Compare a private snapshot: preview dictionaries can be edited in place.
+	if source_revision == applied_revision and view == _applied_view:
+		return true
+	_applied_view = view.duplicate(true)
 	for child in get_children(): child.free()
 	building_id = str(view.get("id", ""))
 	applied_revision = source_revision
