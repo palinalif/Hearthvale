@@ -29,11 +29,11 @@ When an idea is promoted to **Candidate**, add:
 Use this block beneath the idea description:
 
 ```md
-**Implementation estimate:** 4–7 active hours  
-**Estimate assumptions:** Existing save schema and interaction patterns are reused; physical device review is separate.  
-**Estimate confidence:** Medium  
-**Recommended model:** Sol / medium  
-**Model rationale:** The feature touches coupled runtime and persistence code.  
+**Implementation estimate:** 4–7 active hours
+**Estimate assumptions:** Existing save schema and interaction patterns are reused; physical device review is separate.
+**Estimate confidence:** Medium
+**Recommended model:** Sol / medium
+**Model rationale:** The feature touches coupled runtime and persistence code.
 **Acceptance outline:** The feature works through the controller route, survives save/undo, and passes its targeted render and regression gates.
 ```
 
