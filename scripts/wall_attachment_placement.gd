@@ -1,24 +1,19 @@
 extends RefCounted
 
-## Pure wall-placement math for controller previews. BuildingWorld remains the
-## authoritative recipe; this helper only clamps and remaps temporary local
-## positions before A commits them.
-
+## Pure wall-placement math. BuildingWorld owns authoritative records.
 static func wall_ids(view: Dictionary) -> Array[String]:
 	var result: Array[String] = []
 	for surface_value in view.get("surfaces", []):
-		var surface: Dictionary = surface_value
-		if str(surface.get("kind", "")) != "wall" or bool(surface.get("deleted", false)):
-			continue
-		var id := str(surface.get("id", ""))
+		var candidate: Dictionary = surface_value
+		if str(candidate.get("kind", "")) != "wall" or bool(candidate.get("deleted", false)): continue
+		var id := str(candidate.get("id", ""))
 		if not id.is_empty(): result.append(id)
 	return result
 
 static func surface(view: Dictionary, surface_id: String) -> Dictionary:
 	for surface_value in view.get("surfaces", []):
 		var candidate: Dictionary = surface_value
-		if str(candidate.get("id", "")) == surface_id:
-			return candidate
+		if str(candidate.get("id", "")) == surface_id: return candidate
 	return {}
 
 static func footprint(kind: String, asset_id: String = "") -> Vector2:
@@ -79,3 +74,45 @@ static func remap_between_walls(view: Dictionary, from_surface_id: String, to_su
 	if to_orientation in ["front", "back"]: remapped.x = ratio * new_limit
 	else: remapped.z = ratio * new_limit
 	return clamp_to_wall(view, to_surface_id, remapped, detail_footprint)
+
+## Manual details never silently displace one another. Automatic windows yield
+## to manual placements in BuildingWorld, so they do not block the candidate.
+static func position_available(view: Dictionary, detail_id: String, surface_id: String, position: Vector3, half: Vector2) -> bool:
+	var clamped := clamp_to_wall(view, surface_id, position, half)
+	if clamped.is_empty() or not (clamped["position"] as Vector3).is_equal_approx(position): return false
+	var support := surface(view, surface_id)
+	var axis := 0 if str(support.get("orientation", "")) in ["front", "back"] else 2
+	for other in view.get("details", []):
+		if str(other.get("id", "")) == detail_id or str(other.get("state", "")) in ["automatic", "suppressed"]: continue
+		if not bool(other.get("visible", true)) or bool(other.get("needs_placement", false)): continue
+		if str(other.get("anchor", {}).get("surface_id", "")) != surface_id: continue
+		var other_position = other.get("resolved_position")
+		if not other_position is Vector3: continue
+		var other_half := footprint(str(other.get("kind", "")), str(other.get("asset_id", "")))
+		if absf(position[axis] - other_position[axis]) < half.x + other_half.x and absf(position.y - other_position.y) < half.y + other_half.y: return false
+	return true
+
+static func nearest_available(view: Dictionary, detail_id: String, surface_id: String, intended: Vector3, half: Vector2) -> Dictionary:
+	var initial := clamp_to_wall(view, surface_id, intended, half)
+	if initial.is_empty(): return {}
+	var position: Vector3 = initial["position"]
+	if position_available(view, detail_id, surface_id, position, half): return initial
+	var support := surface(view, surface_id)
+	var axis := 0 if str(support.get("orientation", "")) in ["front", "back"] else 2
+	var best: Dictionary = {}
+	var best_distance := INF
+	# Only used when recovering a displaced detail, never as a per-frame scan.
+	for offset in range(1, 65):
+		for sign_value in [-1.0, 1.0]:
+			var candidate := position
+			candidate[axis] += float(offset) * 0.5 * sign_value
+			var clamped := clamp_to_wall(view, surface_id, candidate, half)
+			if clamped.is_empty(): continue
+			candidate = clamped["position"]
+			if not position_available(view, detail_id, surface_id, candidate, half): continue
+			var distance := candidate.distance_squared_to(intended)
+			if distance < best_distance:
+				best_distance = distance
+				best = clamped
+		if not best.is_empty(): return best
+	return {}

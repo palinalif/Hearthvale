@@ -221,8 +221,7 @@ func _read_camera_and_cursor(delta: float) -> void:
 	var old_cursor_y := cursor.y
 	super._read_camera_and_cursor(delta)
 	if free_view:
-		# Entering Terrain from a close building view must not hit the old
-		# terrain-only minimum zoom/pitch and jump on the following frame.
+		# Avoid a follow-up jump caused by the old terrain minimum zoom/pitch.
 		camera_distance = clampf(old_distance - Input.get_axis("m1_zoom_out", "m1_zoom_in") * delta * 18.0, 3.5, 52.0)
 		camera_pitch = clampf(old_pitch + Input.get_axis("m1_orbit_up", "m1_orbit_down") * delta * 1.5, 0.08, 1.40)
 		if view_context == "terrain" and Input.is_action_just_pressed("m1_mode_switch"):
@@ -238,8 +237,7 @@ func _update_camera() -> void:
 	if not _free_camera_valid:
 		_free_camera_y = target.y
 		_free_camera_valid = true
-	# The cursor follows committed terrain on release. Ease that vertical
-	# change instead of freezing all camera movement during a dragged stroke.
+	# Ease committed terrain-height changes, without freezing horizontal input.
 	_free_camera_y = lerpf(_free_camera_y, target.y, 1.0 - exp(-8.0 * _frame_delta))
 	target.y = _free_camera_y
 	var offset := Vector3(sin(camera_yaw) * cos(camera_pitch), sin(camera_pitch), cos(camera_yaw) * cos(camera_pitch)) * camera_distance
@@ -485,16 +483,27 @@ func _recover_needs_detail(detail_id: String) -> void:
 	var record := _selected_detail_record()
 	var view: Dictionary = building_world.get_building(selected_building_id)
 	var half := WallPlacement.footprint(str(record.get("kind", "window")), str(record.get("asset_id", "window_wood")))
-	var clamped := WallPlacement.clamp_to_wall(view, wall, detail_move_position, half)
+	var clamped := WallPlacement.nearest_available(view, detail_id, wall, detail_move_position, half)
 	if clamped.is_empty():
 		_cancel_detail_move()
-		_set_status("This detail needs a larger wall before it can be placed")
+		_set_status("This detail needs more clear wall before it can be placed")
 		return
 	detail_move_position = clamped["position"]
 	_detail_free_position = detail_move_position
 	_presentation_key = ""
 	_update_presentation()
 	_set_status("Recover detail • A place • B restore • left stick moves along wall")
+
+func _commit_detail_move() -> bool:
+	if not detail_move_active: return false
+	var record := _selected_detail_record()
+	var kind := placement_kind if not placement_kind.is_empty() else str(record.get("kind", "window"))
+	var asset := placement_asset_id if not placement_kind.is_empty() else str(record.get("asset_id", "window_wood"))
+	var view: Dictionary = building_world.get_building(selected_building_id)
+	if not WallPlacement.position_available(view, selected_detail_id, detail_move_surface_id, detail_move_position, WallPlacement.footprint(kind, asset)):
+		_set_status("Overlaps another edited detail • move to clear wall • B restores")
+		return false
+	return super._commit_detail_move()
 
 func _set_menu(open: bool) -> void:
 	if open:
@@ -536,7 +545,7 @@ func _reload_all() -> bool:
 func _reacquire_saved_terrain() -> void:
 	if not backend or not backend.is_ready(): return
 	# One bounded column scan at reload, not a radius-cubed per-frame fallback.
-	# A brush left at the bottom of an excavation may now be INSIDE saved land.
+	# A brush left at the bottom of an excavation may now be inside saved land.
 	var hint := cursor if view_context == "terrain" else terrain_cursor
 	var unit := float(backend.voxel_scale)
 	var patch: Vector3i = backend.patch_size
@@ -572,8 +581,7 @@ func _set_sculpt_tool(tool: String) -> bool:
 
 func _set_prompts(prompts: Array) -> void:
 	if not _prompt_row or _prompt_row.get_meta("signature", "") == JSON.stringify(prompts): return
-	# Detach old controls immediately: queued deletion alone left two sets of
-	# prompts in the same frame when successive presentation layers refreshed.
+	# Immediate detachment prevents two prompt sets coexisting for one frame.
 	for child in _prompt_row.get_children():
 		_prompt_row.remove_child(child)
 		child.queue_free()
