@@ -151,9 +151,9 @@ func _pick_detail_at_screen_position(screen_position: Vector2) -> Dictionary:
 			continue
 		var surface_id := str(detail.get("anchor", {}).get("surface_id", ""))
 		var orientation := str(orientations.get(surface_id, "front"))
-		var outward_local := _surface_basis(orientation) * Vector3.FORWARD
-		var outward_world := (building_transform.basis * outward_local).normalized()
-		var toward_camera := (camera.global_position - world_position).normalized()
+		var outward_local: Vector3 = _orientation_basis(orientation) * Vector3.FORWARD
+		var outward_world: Vector3 = (building_transform.basis * outward_local).normalized()
+		var toward_camera: Vector3 = (camera.global_position - world_position).normalized()
 		# Never select details through the cottage from the opposite wall.
 		if outward_world.dot(toward_camera) <= 0.04:
 			continue
@@ -163,6 +163,12 @@ func _pick_detail_at_screen_position(screen_position: Vector2) -> Dictionary:
 			best_distance = distance
 			best = {"id": str(detail.get("id", "")), "kind": str(detail.get("kind", "detail")), "surface_id": surface_id, "world_position": world_position, "screen_position": projected, "distance_sq": distance}
 	return best
+
+func _orientation_basis(orientation: String) -> Basis:
+	if orientation == "front": return Basis(Vector3.UP, PI)
+	if orientation == "left": return Basis(Vector3.UP, -PI * 0.5)
+	if orientation == "right": return Basis(Vector3.UP, PI * 0.5)
+	return Basis.IDENTITY
 
 func _hover_marker_size(kind: String) -> Vector3:
 	match kind:
