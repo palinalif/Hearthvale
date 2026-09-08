@@ -1,6 +1,7 @@
 name: Terrain UX regressions
 
 on:
+  workflow_call:
   push:
     branches: [fix/m1-terrain-strength-preview]
   pull_request:

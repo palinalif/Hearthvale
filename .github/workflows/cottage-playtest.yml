@@ -1,7 +1,14 @@
 name: Cottage playtest regressions
 on:
+  workflow_call:
+    inputs:
+      skip-core-placement:
+        description: Placement is already an independent prerequisite in the caller.
+        required: false
+        type: boolean
+        default: false
   push:
-    branches: [master, fix/m1-cottage-playtest-2, fix/m1-terrain-camera-retest, feat/m1-direct-resize-handles, feat/m1-house-move-resize]
+    branches: [fix/m1-cottage-playtest-2, fix/m1-terrain-camera-retest, feat/m1-direct-resize-handles, feat/m1-house-move-resize]
   pull_request:
     branches: [master]
   workflow_dispatch:
@@ -23,6 +30,7 @@ jobs:
           git archive --format=zip --output=.tools/cottage-repair/source.zip HEAD
           if ($LASTEXITCODE -ne 0) { throw 'Source archive failed' }
       - name: Run existing M1 integration gates
+        if: inputs.skip-core-placement != true
         shell: pwsh
         run: ./tools/test-m1-placement.ps1
       - name: Test exported scene against Thor failures
@@ -42,7 +50,7 @@ jobs:
           $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           $out = Join-Path (Get-Location) '.tools/cottage-repair/render.out.log'
           $err = Join-Path (Get-Location) '.tools/cottage-repair/render.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m1_house_actions_render_test.gd')
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m1_ui_glyph_render_test.gd')
           $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
           if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'Mobile render capture timed out' }
           $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)

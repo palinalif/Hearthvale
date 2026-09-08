@@ -1,5 +1,6 @@
 name: Sculpt feedback regressions
 on:
+  workflow_call:
   push:
     branches: [fix/m1-sculpt-feedback]
   pull_request:

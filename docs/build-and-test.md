@@ -84,6 +84,22 @@ The default Android debug identity is for personal sideload testing, not product
 
 Install only on an authorised attached device: `adb install -r builds/hearthvale-m1-iteration2-debug.apk`. This command was not run while no Thor was connected. Do not uninstall an existing app or erase its saves to work around signing errors. Iteration 2 uses Android version code 5, version name `0.1.2-m1-garden`, with the same package ID and signing identity as M0. The preceding v4 APK is retained separately.
 
+## Verified Google Drive delivery
+
+`.github/workflows/m1-drive-delivery.yml` is the single post-merge delivery gate. It calls the sculpt-feedback, Terrain UX, placement and cottage/Mobile workflows, downloads the isolated APK only after all four succeed, revalidates its verification receipt, and then uploads the APK and receipt privately. A rerun reuses an identical same-name Drive file; conflicting bytes, ambiguous duplicate names, a different parent, or a shared readback fail delivery.
+
+GitHub Actions cannot reuse the Codex desktop Google Drive connection. Configure a dedicated Google OAuth client and refresh token as encrypted repository secrets, then enable delivery only after all four values exist:
+
+```powershell
+gh secret set GOOGLE_DRIVE_CLIENT_ID
+gh secret set GOOGLE_DRIVE_CLIENT_SECRET
+gh secret set GOOGLE_DRIVE_REFRESH_TOKEN
+gh variable set GOOGLE_DRIVE_FOLDER_ID
+gh variable set GOOGLE_DRIVE_UPLOAD_ENABLED --body true
+```
+
+The refresh token must be authorized for Google Drive access to the selected My Drive folder. Keep it out of Git, logs and artifacts. `GOOGLE_DRIVE_FOLDER_ID` and the enable switch are non-secret repository variables. Until the switch is exactly `true`, the final Drive job is visibly skipped while all test/build jobs still run. The workflow runs automatically for `master` pushes and can also be dispatched manually for an explicitly selected ref.
+
 For a versioned iteration-2 debug export, preserving the previous playtest file:
 
 ```powershell

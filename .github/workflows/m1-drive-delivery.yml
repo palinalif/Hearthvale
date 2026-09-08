@@ -1,0 +1,83 @@
+name: M1 verified Drive delivery
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  delivery-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - run: python -m unittest tests/upload_google_drive_test.py
+
+  sculpt-feedback:
+    uses: ./.github/workflows/sculpt-feedback.yml
+
+  terrain-ux:
+    uses: ./.github/workflows/terrain-ux.yml
+
+  placement:
+    uses: ./.github/workflows/m1-placement.yml
+
+  cottage-and-apk:
+    uses: ./.github/workflows/cottage-playtest.yml
+    with:
+      skip-core-placement: true
+
+  drive-delivery:
+    name: Upload verified APK to private Google Drive
+    needs: [delivery-contract, sculpt-feedback, terrain-ux, placement, cottage-and-apk]
+    if: vars.GOOGLE_DRIVE_UPLOAD_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Download the verified APK and receipt
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: hearthvale-m1-repair-${{ github.sha }}
+          path: delivery
+          merge-multiple: true
+
+      - name: Revalidate artifact receipt
+        shell: pwsh
+        run: |
+          $short = $env:GITHUB_SHA.Substring(0, 8)
+          $apk = Get-Item "delivery/hearthvale-m1-repair-$short.apk"
+          $receipt = Get-Item "delivery/hearthvale-m1-repair-$short.verification.json"
+          $record = Get-Content $receipt.FullName -Raw | ConvertFrom-Json
+          $actual = (Get-FileHash $apk.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (-not $record.ok -or $record.commit -ne $env:GITHUB_SHA -or $record.sha256 -ne $actual -or [int64]$record.bytes -ne $apk.Length) {
+            throw 'Downloaded APK does not match its successful verification receipt'
+          }
+
+      - name: Upload immutable candidate and receipt
+        env:
+          GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
+          GOOGLE_DRIVE_CLIENT_SECRET: ${{ secrets.GOOGLE_DRIVE_CLIENT_SECRET }}
+          GOOGLE_DRIVE_REFRESH_TOKEN: ${{ secrets.GOOGLE_DRIVE_REFRESH_TOKEN }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ vars.GOOGLE_DRIVE_FOLDER_ID }}
+        run: |
+          python tools/upload-google-drive.py delivery/hearthvale-m1-repair-${GITHUB_SHA::8}.apk --mime-type application/vnd.android.package-archive --output delivery/apk-drive.json
+          python tools/upload-google-drive.py delivery/hearthvale-m1-repair-${GITHUB_SHA::8}.verification.json --mime-type application/json --output delivery/receipt-drive.json
+
+      - name: Record private Drive links
+        shell: pwsh
+        run: |
+          $apk = Get-Content delivery/apk-drive.json -Raw | ConvertFrom-Json
+          $receipt = Get-Content delivery/receipt-drive.json -Raw | ConvertFrom-Json
+          "### Private Google Drive delivery" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+          "- APK: [$($apk.name)]($($apk.webViewLink))" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+          "- Verification: [$($receipt.name)]($($receipt.webViewLink))" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+          "- Commit: ``$env:GITHUB_SHA``" | Out-File $env:GITHUB_STEP_SUMMARY -Append
