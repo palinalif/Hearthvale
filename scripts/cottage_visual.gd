@@ -181,9 +181,11 @@ func _window_layout(detail: Dictionary, local: Vector3, orientation: String) -> 
 	var pane_requested := Vector3(1.0, 1.0, 0.10) if rounded else Vector3(2.0, 2.8, 0.10)
 	var pane_quantized := Grid.quantized_box(Vector3.ZERO, pane_requested, _unit)
 	var surface_local := basis.inverse() * local
-	var snapped_surface := Vector3(snappedf(surface_local.x, _unit.x), snappedf(surface_local.y, _unit.y), surface_local.z)
+	# Authoritative attachment positions retain their small wall-normal offset,
+	# but visible cell geometry must use the shared world-grid phase on every axis.
+	var snapped_surface := surface_local.snapped(_unit)
 	var pane_size: Vector3 = pane_quantized["size"]
-	return {"basis": basis, "rounded": rounded, "anchor_center": basis * snapped_surface, "surface_center": Vector2(snapped_surface.x, snapped_surface.y), "pane_size": pane_size, "opening_half": Vector2(pane_size.x, pane_size.y) * 0.5}
+	return {"basis": basis, "rounded": rounded, "anchor_center": basis * snapped_surface, "surface_center": Vector2(snapped_surface.x, snapped_surface.y), "pane_center": pane_quantized["center"], "pane_size": pane_size, "opening_half": Vector2(pane_size.x, pane_size.y) * 0.5}
 
 func _add_box(node_name: String, size: Vector3, local_position: Vector3, color: Color) -> MeshInstance3D:
 	var node := MeshInstance3D.new()
@@ -205,6 +207,7 @@ func _build_window(detail: Dictionary, local: Vector3, orientation: String, wind
 	var rounded: bool = bool(layout["rounded"])
 	var basis: Basis = layout["basis"]
 	var anchor_center: Vector3 = layout["anchor_center"]
+	var pane_center: Vector3 = layout["pane_center"]
 	var pane_size: Vector3 = layout["pane_size"]
 	var node := MeshInstance3D.new()
 	node.name = "Detail_%s" % id
@@ -212,7 +215,7 @@ func _build_window(detail: Dictionary, local: Vector3, orientation: String, wind
 	pane.size = pane_size
 	node.mesh = pane
 	node.material_override = window_material
-	node.transform = Transform3D(basis, anchor_center + basis * Vector3(0, 0, -_unit.z))
+	node.transform = Transform3D(basis, anchor_center + basis * (pane_center + Vector3(0, 0, -_unit.z)))
 	add_child(node)
 	var pale: Array = []
 	var timber: Array = []
