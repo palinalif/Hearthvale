@@ -4,7 +4,7 @@ var failures := 0
 var scene: Node
 
 func _initialize() -> void:
-	scene = preload("res://scripts/m1_scene_cottage_ux.gd").new()
+	scene = preload("res://scripts/m1_scene_cottage_style.gd").new()
 	scene.checkpoint_root = "user://m1-cottage-ux-test-%s" % Time.get_ticks_usec()
 	scene.test_mode = true
 	root.add_child(scene)
@@ -68,9 +68,39 @@ func _initialize() -> void:
 		if button.visible:
 			visible_labels.append(str(key))
 	_check("Move selected window" in visible_labels and "Suppress / restore" in visible_labels and "Close" in visible_labels, "context menu exposes move remove and close")
+	_check("Detail colour" in visible_labels, "context menu exposes colour")
 	_check(not "Duplicate cottage" in visible_labels and not "Delete selected surface" in visible_labels, "context menu hides unrelated cottage actions")
 	if str(picked["kind"]) == "window":
 		_check("Replace selected" in visible_labels, "window context exposes variation")
+
+	# Browsing is visual only. It must not create document revisions until A.
+	scene._context_actions_open = false
+	scene.tools_open = false
+	if scene.tools_panel: scene.tools_panel.visible = false
+	scene.selected_detail_id = str(picked["id"])
+	var style_before: Dictionary = scene.building_world.get_document()
+	var revision_before: int = scene.building_world.get_revision()
+	scene._begin_style_picker("colour")
+	scene._preview_style_choice("colour", "sage")
+	_check(scene.building_world.get_document() == style_before, "colour browse does not mutate building document")
+	_check(scene.building_world.get_revision() == revision_before, "colour browse does not create history revision")
+	scene._cancel_style_picker()
+	_check(scene.building_world.get_document() == style_before, "colour cancel restores without mutation")
+
+	scene._begin_style_picker("colour")
+	scene._commit_style_choice("colour", "sage")
+	_check(scene.building_world.get_revision() == revision_before + 1, "colour confirm creates one building revision")
+	var styled: Dictionary = scene._selected_detail_record()
+	_check(str((styled.get("override", {}) as Dictionary).get("color_id", "")) == "sage", "confirmed colour persists on detail override")
+	var revision_after_colour := scene.building_world.get_revision()
+	if str(picked["kind"]) == "window":
+		scene._begin_style_picker("variation")
+		scene._preview_style_choice("variation", "window_round")
+		_check(scene.building_world.get_revision() == revision_after_colour, "variation browse does not create history revision")
+		scene._commit_style_choice("variation", "window_round")
+		_check(scene.building_world.get_revision() == revision_after_colour + 1, "variation confirm creates one building revision")
+		styled = scene._selected_detail_record()
+		_check(str(styled.get("asset_id", "")) == "window_round", "confirmed variation persists")
 
 	_finish()
 
