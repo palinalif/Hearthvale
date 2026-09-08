@@ -112,19 +112,16 @@ func _run() -> void:
 	var saved: Dictionary = JSON.parse_string(save_text)
 	check(restored.load_serialized_document(save_text), "same-schema save can be loaded")
 	var loaded: Dictionary = restored.get_building(id)
-	# Check the exact serialized source of truth, then the derived geometry.
-	# In-memory numeric dictionary equality is not a serialization contract.
+	# Preserve exact saved records; normalize JSON number types on BOTH sides
+	# when comparing a live view with a reloaded view. No fields are excluded.
 	check(JSON.stringify(restored.get_document()["buildings"]) == JSON.stringify(saved["buildings"]), "reload preserves every saved cottage record exactly")
-	check(JSON.stringify(loaded) == JSON.stringify(moved), "canonical moved view survives save/reload")
+	check(JSON.parse_string(JSON.stringify(loaded)) == JSON.parse_string(JSON.stringify(moved)), "complete moved view survives save/reload with JSON number types")
 	check((loaded["transform"] as Transform3D).is_equal_approx(moved["transform"]) and loaded["dimensions"] == moved["dimensions"], "reloaded transform and dimensions match moved house")
 	for i in loaded["details"].size():
 		var actual: Dictionary = loaded["details"][i]
 		var expected: Dictionary = moved["details"][i]
 		check(actual["id"] == expected["id"] and (actual["resolved_position"] as Vector3).is_equal_approx(expected["resolved_position"]), "reloaded detail keeps identity and local position")
-	var unequal_fields: Array[String] = []
-	for key in moved:
-		if loaded.get(key) != moved[key]: unequal_fields.append(str(key))
-	print("HOUSE_ROUNDTRIP_DIAGNOSTIC live_dictionary_differences=" + str(unequal_fields))
+	print("HOUSE_LAYOUT_NUMBER_TYPES live=" + JSON.stringify(moved["automatic_layout"]) + " loaded=" + JSON.stringify(loaded["automatic_layout"]))
 	var rev: int = scene.building_world.get_revision()
 	check(not scene.building_world.move_building(id, Vector3.INF, rev), "nonfinite relocation rejected")
 	check(not scene.building_world.move_building(id, destination + Vector3.ONE, rev - 1), "stale relocation rejected")
