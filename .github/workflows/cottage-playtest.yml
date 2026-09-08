@@ -40,7 +40,7 @@ jobs:
           $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           $out = Join-Path (Get-Location) '.tools/cottage-repair/render.out.log'
           $err = Join-Path (Get-Location) '.tools/cottage-repair/render.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m1_playtest_repair_render_test.gd')
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m1_playtest_staged_render_test.gd')
           $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
           if (-not $process.WaitForExit(120000)) { $process.Kill(); $process.WaitForExit(); throw 'Mobile render capture timed out' }
           $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
