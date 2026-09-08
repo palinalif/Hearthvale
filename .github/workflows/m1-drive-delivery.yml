@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -62,22 +63,19 @@ jobs:
             throw 'Downloaded APK does not match its successful verification receipt'
           }
 
-      - name: Upload immutable candidate and receipt
+      - name: Ask Apps Script to copy the verified artifact to Drive
         env:
-          GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
-          GOOGLE_DRIVE_CLIENT_SECRET: ${{ secrets.GOOGLE_DRIVE_CLIENT_SECRET }}
-          GOOGLE_DRIVE_REFRESH_TOKEN: ${{ secrets.GOOGLE_DRIVE_REFRESH_TOKEN }}
-          GOOGLE_DRIVE_FOLDER_ID: ${{ vars.GOOGLE_DRIVE_FOLDER_ID }}
-        run: |
-          python tools/upload-google-drive.py delivery/hearthvale-m1-repair-${GITHUB_SHA::8}.apk --mime-type application/vnd.android.package-archive --output delivery/apk-drive.json
-          python tools/upload-google-drive.py delivery/hearthvale-m1-repair-${GITHUB_SHA::8}.verification.json --mime-type application/json --output delivery/receipt-drive.json
+          APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
+          APPS_SCRIPT_WEBHOOK_SECRET: ${{ secrets.APPS_SCRIPT_WEBHOOK_SECRET }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/upload-google-drive.py --output delivery/drive-delivery.json
 
       - name: Record private Drive links
         shell: pwsh
         run: |
-          $apk = Get-Content delivery/apk-drive.json -Raw | ConvertFrom-Json
-          $receipt = Get-Content delivery/receipt-drive.json -Raw | ConvertFrom-Json
+          $result = Get-Content delivery/drive-delivery.json -Raw | ConvertFrom-Json
           "### Private Google Drive delivery" | Out-File $env:GITHUB_STEP_SUMMARY -Append
-          "- APK: [$($apk.name)]($($apk.webViewLink))" | Out-File $env:GITHUB_STEP_SUMMARY -Append
-          "- Verification: [$($receipt.name)]($($receipt.webViewLink))" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+          foreach ($file in $result.files) {
+            "- [$($file.name)]($($file.url))" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+          }
           "- Commit: ``$env:GITHUB_SHA``" | Out-File $env:GITHUB_STEP_SUMMARY -Append

@@ -12,6 +12,8 @@ MagicaVoxel MCP is now available as a pinned, staging-only asset-authoring path.
 
 The first protocol-level pilot called the real server, discovered 40 tools, generated six snapshots, and produced the project-authored `hearthvale_tree_pilot_broad.vox`. The reviewed source is copied to `assets/source/magicavoxel`; `vox_to_obj.py` removes internal faces and emits provenance, then `bake_mesh.gd` restores the exact 0.125 grid after Godot import. The candidate preserves four authored palette groups, contains 7,611 voxels / 6,968 triangles, and passes 25 headless asset checks plus 27 checks on the actual Mobile renderer. It is intentionally not wired into gameplay yet. The comparison capture is `reports/screenshots/magicavoxel-tree-pilot.png` (current tree left, MCP candidate right); player preference should decide whether to iterate, optimize, and integrate it.
 
+The Drive delivery workflow now matches the deployed Apps Script contract: repository secrets `APPS_SCRIPT_WEBHOOK_URL` and `APPS_SCRIPT_WEBHOOK_SECRET`, plus the `GOOGLE_DRIVE_UPLOAD_ENABLED` switch. After every prerequisite gate and APK verification succeeds, CI resolves the authenticated GitHub artifact endpoint to a short-lived signed URL and sends only that URL and the webhook secret to Apps Script. The receiver downloads the ZIP and admits its APK/JSON receipt privately. Automatic delivery remains tied to `master` pushes; use `workflow_dispatch` on an explicit feature ref for a requested playtest APK. The 50 MiB artifact-archive ceiling is checked before notification.
+
 ## Master integration and evidence
 
 PR #1: https://github.com/palinalif/Hearthvale/pull/1

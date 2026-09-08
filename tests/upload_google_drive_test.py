@@ -1,5 +1,4 @@
 import importlib.util
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,51 +11,59 @@ SPEC.loader.exec_module(drive_upload)
 
 
 class DriveUploadContractTest(unittest.TestCase):
-    def test_query_escaping(self):
-        self.assertEqual(drive_upload.escape_query("it's\\ready"), "it\\'s\\\\ready")
-
-    def test_verified_private_readback(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "candidate.apk"
-            path.write_bytes(b"verified candidate")
-            md5 = drive_upload.hashlib.md5(path.read_bytes(), usedforsecurity=False).hexdigest()
-            result = drive_upload.verified_result(
-                {
-                    "id": "file-id",
-                    "name": path.name,
-                    "size": str(path.stat().st_size),
-                    "md5Checksum": md5,
-                    "parents": ["folder-id"],
-                    "shared": False,
-                    "webViewLink": "https://drive.google.com/file/d/file-id/view",
-                },
-                path,
-                "folder-id",
-                md5,
-            )
-            self.assertTrue(result["ok"])
-            self.assertFalse(result["shared"])
-
-    def test_shared_readback_is_rejected(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "candidate.apk"
-            path.write_bytes(b"verified candidate")
-            md5 = drive_upload.hashlib.md5(path.read_bytes(), usedforsecurity=False).hexdigest()
-            with self.assertRaisesRegex(RuntimeError, "shared"):
-                drive_upload.verified_result(
+    def test_selects_exact_unexpired_artifact(self):
+        artifact = drive_upload.select_artifact(
+            {
+                "artifacts": [
                     {
-                        "id": "file-id",
-                        "name": path.name,
-                        "size": str(path.stat().st_size),
-                        "md5Checksum": md5,
-                        "parents": ["folder-id"],
-                        "shared": True,
-                        "webViewLink": "https://drive.google.com/file/d/file-id/view",
-                    },
-                    path,
-                    "folder-id",
-                    md5,
-                )
+                        "name": "hearthvale-m1-repair-fullsha",
+                        "expired": False,
+                        "size_in_bytes": 32000000,
+                        "archive_download_url": "https://api.github.com/repos/example/project/actions/artifacts/1/zip",
+                    }
+                ]
+            },
+            "hearthvale-m1-repair-fullsha",
+        )
+        self.assertEqual(artifact["size_in_bytes"], 32000000)
+
+    def test_rejects_archive_above_apps_script_limit(self):
+        with self.assertRaisesRegex(RuntimeError, "Apps Script accepts at most"):
+            drive_upload.select_artifact(
+                {
+                    "artifacts": [
+                        {
+                            "name": "candidate",
+                            "expired": False,
+                            "size_in_bytes": drive_upload.MAX_ARCHIVE_BYTES + 1,
+                            "archive_download_url": "https://api.github.com/repos/example/project/actions/artifacts/1/zip",
+                        }
+                    ]
+                },
+                "candidate",
+            )
+
+    def test_validates_private_drive_delivery_shape(self):
+        expected = {"candidate.apk", "candidate.verification.json"}
+        result = drive_upload.validate_webhook_response(
+            {
+                "ok": True,
+                "files": [
+                    {"name": "candidate.apk", "size": 12, "url": "https://drive.google.com/file/d/apk/view", "reused": False},
+                    {"name": "candidate.verification.json", "size": 4, "url": "https://drive.google.com/file/d/json/view", "reused": True},
+                ],
+            },
+            expected,
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual({item["name"] for item in result["files"]}, expected)
+
+    def test_rejects_missing_receipt(self):
+        with self.assertRaisesRegex(RuntimeError, "did not confirm expected files"):
+            drive_upload.validate_webhook_response(
+                {"ok": True, "files": [{"name": "candidate.apk", "size": 12, "url": "https://drive.google.com/file/d/apk/view"}]},
+                {"candidate.apk", "candidate.verification.json"},
+            )
 
 
 if __name__ == "__main__":

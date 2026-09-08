@@ -86,19 +86,17 @@ Install only on an authorised attached device: `adb install -r builds/hearthvale
 
 ## Verified Google Drive delivery
 
-`.github/workflows/m1-drive-delivery.yml` is the single post-merge delivery gate. It calls the sculpt-feedback, Terrain UX, placement and cottage/Mobile workflows, downloads the isolated APK only after all four succeed, revalidates its verification receipt, and then uploads the APK and receipt privately. A rerun reuses an identical same-name Drive file; conflicting bytes, ambiguous duplicate names, a different parent, or a shared readback fail delivery.
+`.github/workflows/m1-drive-delivery.yml` is the single delivery gate. It calls the sculpt-feedback, Terrain UX, placement and cottage/Mobile workflows, downloads the isolated APK only after all four succeed, revalidates its verification receipt, and then asks the private Apps Script webhook to copy the same immutable GitHub artifact to Drive. The workflow resolves GitHub's authenticated artifact endpoint to a short-lived signed URL immediately before notifying Apps Script; GitHub credentials are not sent to Google. The Apps Script contract reuses an identical same-name Drive file and rejects conflicting bytes or non-private output.
 
-GitHub Actions cannot reuse the Codex desktop Google Drive connection. Configure a dedicated Google OAuth client and refresh token as encrypted repository secrets, then enable delivery only after all four values exist:
+GitHub Actions cannot reuse the Codex desktop Google Drive connection. Deploy the repository-specific Apps Script `doPost(e)` receiver with `WEBHOOK_SECRET` and `DRIVE_FOLDER_ID` script properties. Add its deployment URL and matching secret as encrypted repository secrets, then enable delivery:
 
 ```powershell
-gh secret set GOOGLE_DRIVE_CLIENT_ID
-gh secret set GOOGLE_DRIVE_CLIENT_SECRET
-gh secret set GOOGLE_DRIVE_REFRESH_TOKEN
-gh variable set GOOGLE_DRIVE_FOLDER_ID
+gh secret set APPS_SCRIPT_WEBHOOK_URL
+gh secret set APPS_SCRIPT_WEBHOOK_SECRET
 gh variable set GOOGLE_DRIVE_UPLOAD_ENABLED --body true
 ```
 
-The refresh token must be authorized for Google Drive access to the selected My Drive folder. Keep it out of Git, logs and artifacts. `GOOGLE_DRIVE_FOLDER_ID` and the enable switch are non-secret repository variables. Until the switch is exactly `true`, the final Drive job is visibly skipped while all test/build jobs still run. The workflow runs automatically for `master` pushes and can also be dispatched manually for an explicitly selected ref.
+The webhook accepts only a JSON `secret` and HTTPS `download_url`, downloads the artifact ZIP, and admits only its APK and JSON receipt. Keep the URL, shared secret and script properties out of Git, logs and artifacts. Until the switch is exactly `true`, the final Drive job is visibly skipped while all test/build jobs still run. The workflow runs automatically for `master` pushes and can also be dispatched manually for an explicitly selected ref. Its current Apps Script download ceiling is 50 MiB; the workflow rejects a larger artifact before notifying it.
 
 For a versioned iteration-2 debug export, preserving the previous playtest file:
 
