@@ -59,6 +59,7 @@ Invoke-GodotBounded 'm1-visual' @('--headless','--path','.','--script','res://te
 Invoke-GodotBounded 'building-world' @('--headless','--path','.','--script','res://tests/building_world_test.gd','--max-fps','60')
 Invoke-GodotBounded 'cottage-detail-visual' @('--headless','--path','.','--script','res://tests/cottage_detail_visual_test.gd','--max-fps','60')
 Invoke-GodotBounded 'visual-grid' @('--headless','--path','.','--script','res://tests/visual_grid_test.gd','--max-fps','60')
+Invoke-GodotBounded 'magicavoxel-asset' @('--headless','--path','.','--script','res://tests/magicavoxel_asset_test.gd','--max-fps','60')
 Invoke-GodotBounded 'plant-target' @('--headless','--path','.','--script','res://tests/plant_target_test.gd','--max-fps','60')
 $fixtureTag = [DateTime]::UtcNow.Ticks.ToString()
 Invoke-GodotBounded 'terrain-resolution' @('--headless','--path','.','--script','res://tests/terrain_resolution_test.gd','--max-fps','60','--',("--fixture-root=user://resolution-check-"+$fixtureTag))
