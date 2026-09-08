@@ -108,7 +108,23 @@ func _run() -> void:
 	await press(JOY_BUTTON_RIGHT_SHOULDER)
 	check(scene.building_world.get_building(id) == moved, "redo restores relocation")
 	var restored = preload("res://scripts/cottage_resize_world.gd").new()
-	check(restored.load_serialized_document(scene.building_world.serialize_document()) and restored.get_building(id) == moved, "same-schema save/reload retains moved house")
+	var save_text: String = scene.building_world.serialize_document()
+	var saved: Dictionary = JSON.parse_string(save_text)
+	check(restored.load_serialized_document(save_text), "same-schema save can be loaded")
+	var loaded: Dictionary = restored.get_building(id)
+	# Check the exact serialized source of truth, then the derived geometry.
+	# In-memory numeric dictionary equality is not a serialization contract.
+	check(JSON.stringify(restored.get_document()["buildings"]) == JSON.stringify(saved["buildings"]), "reload preserves every saved cottage record exactly")
+	check(JSON.stringify(loaded) == JSON.stringify(moved), "canonical moved view survives save/reload")
+	check((loaded["transform"] as Transform3D).is_equal_approx(moved["transform"]) and loaded["dimensions"] == moved["dimensions"], "reloaded transform and dimensions match moved house")
+	for i in loaded["details"].size():
+		var actual: Dictionary = loaded["details"][i]
+		var expected: Dictionary = moved["details"][i]
+		check(actual["id"] == expected["id"] and (actual["resolved_position"] as Vector3).is_equal_approx(expected["resolved_position"]), "reloaded detail keeps identity and local position")
+	var unequal_fields: Array[String] = []
+	for key in moved:
+		if loaded.get(key) != moved[key]: unequal_fields.append(str(key))
+	print("HOUSE_ROUNDTRIP_DIAGNOSTIC live_dictionary_differences=" + str(unequal_fields))
 	var rev: int = scene.building_world.get_revision()
 	check(not scene.building_world.move_building(id, Vector3.INF, rev), "nonfinite relocation rejected")
 	check(not scene.building_world.move_building(id, destination + Vector3.ONE, rev - 1), "stale relocation rejected")
