@@ -5,6 +5,8 @@ class_name CottageVisual
 ## disposable; IDs, states, anchors and revisions remain in BuildingWorld.
 const Grid = preload("res://scripts/visual_grid.gd")
 var _unit := Vector3.ONE * 0.25
+var _detail_unit := Vector3.ONE * 0.125
+var _craft_seed := 0
 const WALL_COLOR := Color("#e7cfab")
 const TRIM_COLOR := Color("#634d42")
 const ROOF_COLOR := Color("#b85f4b")
@@ -42,11 +44,13 @@ func apply_building(view: Dictionary, source_revision: int) -> bool:
 	transform = building_transform
 	var world_scale := building_transform.basis.get_scale().abs()
 	_unit = Vector3(Grid.UNIT / world_scale.x, Grid.UNIT / world_scale.y, Grid.UNIT / world_scale.z)
+	_detail_unit = _unit * (Grid.COTTAGE_DETAIL_UNIT / Grid.UNIT)
+	_craft_seed = int(view.get("seed", 0))
 	_build_shell(dimensions, view)
 	_build_details(view, dimensions)
 	for child in get_children():
 		if child is MultiMeshInstance3D or (child is MeshInstance3D and child.mesh is ArrayMesh):
-			child.position = child.position.snapped(_unit)
+			child.position = child.position.snapped(_detail_unit if child.has_meta("cottage_detail_grid") else _unit)
 	return true
 
 func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
@@ -70,8 +74,8 @@ func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 	var eave := snappedf(dimensions.y, _unit.y)
 	for side in [-1.0, 1.0]:
 		var z: float = side * (snappedf(dimensions.z * 0.5, _unit.z) + _unit.z * 0.5)
-		_add_box("Trim_%s" % side, Vector3(dimensions.x, _unit.y, _unit.z), Vector3(0, eave - _unit.y * 2.5, z), TRIM_COLOR)
-		_add_box("Cornice_%s" % side, Vector3(dimensions.x, _unit.y, _unit.z), Vector3(0, eave - _unit.y * 1.5, z), CORNICE_COLOR)
+		_add_detail_boxes("Trim_%s" % side, [_piece(Vector3(0, eave - _unit.y * 2.5, z), Vector3(dimensions.x, _detail_unit.y, _unit.z))], TRIM_COLOR)
+		_add_detail_boxes("Cornice_%s" % side, [_piece(Vector3(0, eave - _unit.y * 1.5, z), Vector3(dimensions.x, _detail_unit.y, _unit.z))], CORNICE_COLOR)
 	var roof_angle := atan2(dimensions.y * 0.42, dimensions.z * 0.5)
 	_build_roof_tile_batches(dimensions, roof_angle)
 	if not bool(deleted.get("left", false)): _build_door(dimensions)
@@ -141,33 +145,77 @@ func _build_details(view: Dictionary, dimensions: Vector3) -> void:
 		var local = detail.get("resolved_position", null)
 		if not local is Vector3: continue
 		var orientation := str(surface_orientations.get(str(detail.get("anchor", {}).get("surface_id", "")), "front"))
-		var pieces: Array = [_piece(Vector3(0, 0, 0.15), Vector3(0.66, 2.9, 0.16))]
-		for row in 9: pieces.append(_piece(Vector3(0, -1.2 + row * 0.3, 0.3), Vector3(0.55, 0.1, 0.12)))
-		var shutter := _add_instanced_boxes("ManualShutter_%s" % detail["id"], pieces, SHUTTER_COLOR)
-		shutter.transform = Transform3D(_surface_basis(orientation), local)
+		var basis := _surface_basis(orientation)
+		var cell := (basis.inverse() * _detail_unit).abs()
+		var pieces := _shutter_pieces(0.0, 0.66, 2.9, cell, _craft_variant(detail))
+		_add_detail_boxes("ManualShutter_%s" % detail["id"], pieces, SHUTTER_COLOR, basis, local)
 	for detail_value in view.get("details", []):
 		var detail: Dictionary = detail_value
 		if str(detail.get("kind", "")) != "flower_box" or not bool(detail.get("visible", true)) or bool(detail.get("needs_placement", false)): continue
 		var local = detail.get("resolved_position", null)
 		if local is Vector3:
 			var orientation := str(surface_orientations.get(str(detail.get("anchor", {}).get("surface_id", "")), "front"))
-			var basis := _surface_basis(orientation)
-			var id := str(detail.get("id", ""))
-			var trough := _add_batched_boxes("FlowerBox_%s" % id, [
-				_piece(Vector3(0, -0.12, 0.32), Vector3(1.6, 0.12, 0.64)),
-				_piece(Vector3(0, 0.03, 0.60), Vector3(1.6, 0.30, 0.12)),
-				_piece(Vector3(-0.74, 0.03, 0.32), Vector3(0.12, 0.30, 0.64)),
-				_piece(Vector3(0.74, 0.03, 0.32), Vector3(0.12, 0.30, 0.64))], SHUTTER_COLOR)
-			trough.transform = Transform3D(basis, local)
-			var blooms: Array = []
-			var leaves: Array = []
-			for i in 7:
-				leaves.append(_piece(Vector3(-0.6 + i * 0.2, 0.18, 0.32), Vector3(0.24, 0.25, 0.34)))
-				blooms.append(_piece(Vector3(-0.6 + i * 0.2, 0.33 + float(i % 2) * 0.08, 0.32), Vector3(0.15, 0.12, 0.18)))
-			var foliage := _add_batched_boxes("BoxFoliage_%s" % id, leaves, Color("#597d48"))
-			foliage.transform = Transform3D(basis, local)
-			var flowers := _add_batched_boxes("BoxFlowers_%s" % id, blooms, FLOWER_COLOR)
-			flowers.transform = Transform3D(basis, local)
+			_build_flower_box(detail, local, _surface_basis(orientation))
+
+func _craft_variant(detail: Dictionary) -> int:
+	# Only recipe identities select craft; position/revision never reshuffle it.
+	return posmod(("%s:%s:%s" % [_craft_seed, detail.get("id", ""), detail.get("asset_id", "")]).hash(), 3)
+
+func _shutter_pieces(x: float, width: float, height: float, cell: Vector3, variant: int) -> Array:
+	var pieces: Array = []
+	var columns := maxi(1, floori(width / cell.x))
+	var rows := maxi(4, roundi(height / cell.y))
+	var left := snappedf(x - columns * cell.x * 0.5, cell.x)
+	var bottom := -floorf(rows * 0.5) * cell.y
+	# Back boards and shallow alternating slats retain a connected silhouette.
+	pieces.append(_piece(Vector3(left + columns * cell.x * 0.5, bottom + rows * cell.y * 0.5, cell.z * 0.5), Vector3(columns * cell.x, rows * cell.y, cell.z)))
+	for row in rows:
+		if row % 2 == variant % 2:
+			pieces.append(_piece(Vector3(left + columns * cell.x * 0.5, bottom + (row + 0.5) * cell.y, cell.z * 1.5), Vector3(columns * cell.x, cell.y, cell.z)))
+	# Two straps or a stepped diagonal, made of cubes rather than a rotated bar.
+	for row in rows:
+		if variant == 2 or row in [1, rows - 2]:
+			var column := mini(columns - 1, row * columns / rows) if variant == 2 else 0
+			pieces.append(_piece(Vector3(left + (column + 0.5) * cell.x, bottom + (row + 0.5) * cell.y, cell.z * 2.5), Vector3(cell.x if variant == 2 else columns * cell.x, cell.y, cell.z)))
+	return pieces
+
+func _build_flower_box(detail: Dictionary, local: Vector3, basis: Basis) -> void:
+	var id := str(detail.get("id", ""))
+	var variant := _craft_variant(detail)
+	var cell := (basis.inverse() * _detail_unit).abs()
+	var count := maxi(6, roundi(1.6 / cell.x))
+	var left := -floorf(count * 0.5) * cell.x
+	var width := count * cell.x
+	var middle := left + width * 0.5
+	var depth := maxi(3, roundi(0.75 / cell.z)) * cell.z
+	var trough: Array = [
+		_piece(Vector3(middle, -cell.y * 0.5, depth * 0.5), Vector3(width, cell.y, depth)),
+		_piece(Vector3(middle, cell.y * 0.5, depth - cell.z * 0.5), Vector3(width, cell.y, cell.z)),
+		_piece(Vector3(left + cell.x * 0.5, cell.y * 0.5, depth * 0.5), Vector3(cell.x, cell.y, depth)),
+		_piece(Vector3(left + width - cell.x * 0.5, cell.y * 0.5, depth * 0.5), Vector3(cell.x, cell.y, depth))]
+	# A narrow lip and paired feet make the trough read as built timber.
+	trough.append(_piece(Vector3(middle, cell.y * 1.5, depth - cell.z * 0.5), Vector3(width, cell.y, cell.z)))
+	for column in [1, count - 2]:
+		trough.append(_piece(Vector3(left + (column + 0.5) * cell.x, -cell.y * 1.5, depth * 0.5), Vector3(cell.x, cell.y, depth)))
+		if variant == 1:
+			trough.append(_piece(Vector3(left + (column + 0.5) * cell.x, cell.y * 0.5, depth + cell.z * 0.5), cell))
+	_add_detail_boxes("FlowerBox_%s" % id, trough, SHUTTER_COLOR, basis, local)
+	var leaves: Array = []
+	var blooms: Array = []
+	var accents: Array = []
+	for column in range(1, count - 1):
+		var x := left + (column + 0.5) * cell.x
+		var z := cell.z * (1.5 + float((column + variant) % 2))
+		leaves.append(_piece(Vector3(x, cell.y * 1.5, z), cell))
+		if (column + variant) % 3 != 0:
+			var height := 2.5 + float((column + variant) % 2)
+			leaves.append(_piece(Vector3(x, cell.y * 2.5, z), cell))
+			var flower := _piece(Vector3(x, cell.y * height, z + cell.z), cell)
+			if column % 3 == 1: accents.append(flower)
+			else: blooms.append(flower)
+	_add_detail_boxes("BoxFoliage_%s" % id, leaves, Color("#597749"), basis, local)
+	_add_detail_boxes("BoxFlowers_%s" % id, blooms, [FLOWER_COLOR, Color("#bd8492"), Color("#d4ac72")][variant], basis, local)
+	_add_detail_boxes("BoxFlowerAccents_%s" % id, accents, Color("#e5cba0"), basis, local)
 
 func _surface_basis(orientation: String) -> Basis:
 	if orientation == "front": return Basis(Vector3.UP, PI)
@@ -221,29 +269,38 @@ func _build_window(detail: Dictionary, local: Vector3, orientation: String, wind
 	var timber: Array = []
 	var shutters: Array = []
 	var half := Vector2(pane_size.x, pane_size.y) * 0.5
+	var cell := (basis.inverse() * _detail_unit).abs()
+	var variant := _craft_variant(detail)
 	# Distinct coloured pieces occupy distinct grid cells, not competing faces.
 	if rounded:
-		for x in range(-2, 2):
-			for y in range(-2, 2):
-				if x in [-1, 0] and y in [-1, 0]: continue
-				if x in [-2, 1] and y in [-2, 1]: continue
-				pale.append(_piece(Vector3((x + 0.5) * _unit.x, (y + 0.5) * _unit.y, _unit.z * 0.5), _unit))
+		var nx := maxi(2, roundi(pane_size.x / cell.x))
+		var ny := maxi(2, roundi(pane_size.y / cell.y))
+		# Chamfered small surround retains the original square wall opening.
+		for x in range(-1, nx + 1):
+			for y in range(-1, ny + 1):
+				var corner := (x in [-1, nx]) and (y in [-1, ny])
+				var edge := x in [-1, nx] or y in [-1, ny]
+				if edge and not corner:
+					pale.append(_piece(Vector3(-half.x + (x + 0.5) * cell.x, -half.y + (y + 0.5) * cell.y, cell.z * 0.5), cell))
 	else:
 		for side in [-1.0, 1.0]:
-			pale.append(_piece(Vector3(side * (half.x + _unit.x * 0.5), 0, _unit.z * 0.5), Vector3(_unit.x, pane_size.y, _unit.z)))
-			pale.append(_piece(Vector3(0, side * (half.y + _unit.y * 0.5), _unit.z * 0.5), Vector3(pane_size.x + 2.0 * _unit.x, _unit.y, _unit.z)))
+			pale.append(_piece(Vector3(side * (half.x + cell.x * 0.5), 0, cell.z * 0.5), Vector3(cell.x, pane_size.y, cell.z)))
+			pale.append(_piece(Vector3(0, side * (half.y + cell.y * 0.5), cell.z * 0.5), Vector3(pane_size.x + 2.0 * cell.x, cell.y, cell.z)))
 			if bool(detail.get("show_shutters", true)):
-				var x: float = side * (half.x + _unit.x * 1.5)
-				shutters.append(_piece(Vector3(x, 0, _unit.z * 0.5), Vector3(_unit.x, pane_size.y - _unit.y * 2.0, _unit.z)))
-				for end in [-1.0, 1.0]:
-					timber.append(_piece(Vector3(x, end * (half.y - _unit.y * 0.5), _unit.z * 0.5), _unit))
-		pale.append(_piece(Vector3(0, -half.y - _unit.y * 0.5, _unit.z * 1.5), Vector3(pane_size.x + _unit.x * 2.0, _unit.y, _unit.z)))
-	timber.append(_piece(Vector3(0, 0, _unit.z * 0.5), Vector3(_unit.x, pane_size.y, _unit.z)))
-	timber.append(_piece(Vector3(0, 0, _unit.z * 0.5), Vector3(pane_size.x, _unit.y, _unit.z)))
+				var width := cell.x * 2.0
+				var x: float = side * (half.x + cell.x + width * 0.5)
+				shutters.append_array(_shutter_pieces(x, width, pane_size.y, cell, variant))
+		pale.append(_piece(Vector3(0, -half.y - cell.y * 0.5, cell.z * 1.5), Vector3(pane_size.x + cell.x * 4.0, cell.y, cell.z)))
+	# One fine mullion and either a central or raised transom. A single shared
+	# timber material keeps the tiny cell divisions calm at gameplay zoom.
+	timber.append(_piece(Vector3(cell.x * 0.5, 0, cell.z * 0.5), Vector3(cell.x, pane_size.y, cell.z)))
+	var transom_y := cell.y * 0.5 if rounded or variant == 0 else snappedf(half.y * 0.5, cell.y) + cell.y * 0.5
+	timber.append(_piece(Vector3(0, transom_y, cell.z * 0.5), Vector3(pane_size.x, cell.y, cell.z)))
+	if not rounded and variant == 2:
+		timber.append(_piece(Vector3(0, -transom_y, cell.z * 0.5), Vector3(pane_size.x, cell.y, cell.z)))
 	for entry in [["Reveal", pale, CORNICE_COLOR], ["Joinery", timber, TRIM_COLOR], ["Shutters", shutters, SHUTTER_COLOR]]:
 		if entry[1].is_empty(): continue
-		var batch := _add_batched_boxes("%s_%s" % [entry[0], id], entry[1], entry[2])
-		batch.transform = Transform3D(basis, anchor_center)
+		_add_detail_boxes("%s_%s" % [entry[0], id], entry[1], entry[2], basis, anchor_center)
 
 func _piece(center: Vector3, size: Vector3, basis := Basis.IDENTITY) -> Dictionary:
 	return {"center": center, "size": size, "basis": basis}
@@ -313,20 +370,42 @@ func _build_crafted_shell(dimensions: Vector3, _color: Color) -> void:
 	for side in [-1.0, 1.0]:
 		stone.append(_piece(Vector3(foundation_center.x, _unit.y * 0.5, foundation_center.z + side * (foundation_half.z + _unit.z * 0.5)), Vector3(foundation_half.x * 2.0, _unit.y, _unit.z)))
 		stone.append(_piece(Vector3(foundation_center.x + side * (foundation_half.x + _unit.x * 0.5), _unit.y * 0.5, foundation_center.z), Vector3(_unit.x, _unit.y, foundation_half.z * 2.0)))
-		for i in ceili(dimensions.x / (_unit.x * 3.0)):
-			var x := -snappedf(dimensions.x * 0.5, _unit.x) + (i * 3.0 + 0.5) * _unit.x
+		var rhythm := 5 + posmod(_craft_seed, 2)
+		for i in ceili(dimensions.x / (_detail_unit.x * rhythm)):
+			var x := -snappedf(dimensions.x * 0.5, _unit.x) + (i * rhythm + 0.5) * _detail_unit.x
 			var z: float = side * (snappedf(dimensions.z * 0.5, _unit.z) + _unit.z * 1.5)
-			timber.append(_piece(Vector3(x, eave - _unit.y * 1.5, z), _unit))
+			timber.append(_piece(Vector3(x, eave - _unit.y * 1.5, z), Vector3(_detail_unit.x, _detail_unit.y, _unit.z)))
 		var end_x: float = side * (snappedf((dimensions.x + 0.75) * 0.5, _unit.x) + _unit.x * 0.5)
 		timber.append(_piece(Vector3(end_x, eave + _unit.y * 0.5, 0), Vector3(_unit.x, _unit.y, dimensions.z)))
 		timber.append(_piece(Vector3(end_x, eave + dimensions.y * 0.21, 0), Vector3(_unit.x, dimensions.y * 0.42, _unit.z)))
 	_add_batched_boxes("FoundationCourses", stone, QUOIN_COLOR)
-	_add_batched_boxes("EaveJoinery", timber, TRIM_COLOR)
+	_add_detail_boxes("EaveJoinery", timber, TRIM_COLOR)
 	# A single crest begins above the actual highest roof top, replacing three
 	# separately rounded ridge layers with conflicting colours at identical depth.
 	var run := dimensions.z * 0.5 + 0.5
 	var top := snappedf(dimensions.y + dimensions.y * 0.42 * (1.0 - _unit.z * 0.5 / run), _unit.y) + _unit.y
-	_add_box("RidgeCourses", Vector3(dimensions.x + 0.75, _unit.y, _unit.z * 2.0), Vector3(0, top + _unit.y * 0.5, 0), ROOF_TILE_COLORS[2])
+	var crest: Array = [_piece(Vector3(0, top + _detail_unit.y * 0.5, 0), Vector3(dimensions.x + 0.75, _detail_unit.y, _unit.z * 2.0))]
+	var ridge_half := snappedf((dimensions.x + 0.75) * 0.5, _unit.x)
+	for i in ceili(ridge_half * 2.0 / (_detail_unit.x * 4.0)):
+		crest.append(_piece(Vector3(-ridge_half + (i * 4.0 + 1.5) * _detail_unit.x, top + _detail_unit.y * 1.5, 0), Vector3(_detail_unit.x * 3.0, _detail_unit.y, _unit.z)))
+	_add_detail_boxes("RidgeCourses", crest, ROOF_TILE_COLORS[2])
+	_build_roof_edges(dimensions)
+
+func _build_roof_edges(dimensions: Vector3) -> void:
+	var edges: Array = []
+	var run := dimensions.z * 0.5 + 0.5
+	# The outer face follows the unchanged structural tile staircase, with a
+	# half-cell lip below it. It does not replace any roof mass or roof anchors.
+	var span := dimensions.x + 0.75
+	var roof_left := -snappedf(span * 0.5, _unit.x)
+	var roof_right := roof_left + ceili(span / (_unit.x * 2.0)) * _unit.x * 2.0
+	for end in [roof_left - _detail_unit.x * 0.5, roof_right + _detail_unit.x * 0.5]:
+		for side in [-1.0, 1.0]:
+			for row in ceili(run / _unit.z):
+				var z := (row + 0.5) * _unit.z
+				var height := snappedf(dimensions.y + dimensions.y * 0.42 * (1.0 - z / run), _unit.y)
+				edges.append(_piece(Vector3(end, height - _detail_unit.y * 0.5, side * z), Vector3(_detail_unit.x, _detail_unit.y, _unit.z)))
+	_add_detail_boxes("RoofEdgeLip", edges, ROOF_COLOR.darkened(0.12))
 
 func _add_batched_boxes(node_name: String, boxes: Array, color: Color) -> GeometryInstance3D:
 	if not node_name.begins_with("Wall"): return _add_instanced_boxes(node_name, boxes, color)
@@ -383,6 +462,18 @@ func _build_entrance_canopy(dimensions: Vector3, deleted: Dictionary) -> void:
 	_add_batched_boxes("GableVent", vent, SHUTTER_COLOR)
 
 func _add_instanced_boxes(node_name: String, boxes: Array, color: Color) -> MultiMeshInstance3D:
+	return _make_instanced_boxes(node_name, boxes, color, _unit)
+
+func _add_detail_boxes(node_name: String, boxes: Array, color: Color, basis := Basis.IDENTITY, anchor := Vector3.ZERO) -> MultiMeshInstance3D:
+	# Invert the attachment's cardinal orientation before quantizing: even a
+	# nonuniform cottage transform must leave world-space cells cubic.
+	var unit := (basis.inverse() * _detail_unit).abs()
+	var node := _make_instanced_boxes(node_name, boxes, color, unit)
+	node.set_meta("cottage_detail_grid", Grid.COTTAGE_DETAIL_UNIT)
+	node.transform = Transform3D(basis, anchor.snapped(_detail_unit))
+	return node
+
+func _make_instanced_boxes(node_name: String, boxes: Array, color: Color, unit: Vector3) -> MultiMeshInstance3D:
 	var cube := BoxMesh.new()
 	cube.size = Vector3.ONE
 	var multi := MultiMesh.new()
@@ -392,7 +483,7 @@ func _add_instanced_boxes(node_name: String, boxes: Array, color: Color) -> Mult
 	for i in boxes.size():
 		var piece: Dictionary = boxes[i]
 		var basis: Basis = piece["basis"]
-		var q := Grid.quantized_box(piece["center"], piece["size"], _unit)
+		var q := Grid.quantized_box(piece["center"], piece["size"], unit)
 		multi.set_instance_transform(i, Transform3D(basis.scaled_local(q["size"]), q["center"]))
 	var node := MultiMeshInstance3D.new()
 	node.name = node_name
