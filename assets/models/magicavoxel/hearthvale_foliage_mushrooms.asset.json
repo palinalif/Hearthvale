@@ -29,7 +29,7 @@
     14
   ],
   "source": "hearthvale_foliage_mushrooms.vox",
-  "source_sha256": "9e5e6f32dd6eea22e3157569aec67be438d448ad36d6124afb4692d23adca256",
+  "source_sha256": "ee7e2e0af1c55554573a5e07c9c936c708ebe3123cfd7462b667d9680618424b",
   "tool": "https://github.com/Mahinika/magicavoxel-mcp",
   "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
   "triangles": 182,

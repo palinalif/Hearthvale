@@ -4,12 +4,19 @@ Updated 2026-09-08 during the M1 visual-finish work on `feat/m1-ui-polish`. Read
 
 ## Current visual-finish branch
 
+On 2026-09-09 the player approved the half-size foliage and requested the earlier
+mushroom coloring plus placement variety. Mushroom sources restore the exact
+7131d22 pale-stem/warm-cap palette. Foliage and rocks receive subtle deterministic
+per-instance hue/value modulation without extra draw batches. Trees and foliage
+use deterministic 0/90/180/270-degree Y turns derived from existing planting
+records; this covers the starter scene and both brushes without changing saves,
+anchors, voxel cells, undo/redo, or rock orientation.
+
 On 2026-09-09 the player approved the 0.0625 detail cells but clarified that all
 eleven ground-foliage variants should also be physically smaller. Their authored
 sources are now half the 7131d22 linear dimensions, with trees and rocks unchanged.
-The player also clarified that cream is the mushroom cap color: all three mushroom
-variants retain broad cap geometry above narrow stems, with cream cap palettes over
-brown stems and every cluster grounded. Placement anchors, brush indices, and saves
+All three mushroom variants retain broad cap geometry above narrow stems, with
+every cluster grounded. Placement anchors, brush indices, and saves
 are unchanged. See `foliage-halfsize.authoring.json`.
 
 On 2026-09-09 the player clarified that the authored trees were correctly sized

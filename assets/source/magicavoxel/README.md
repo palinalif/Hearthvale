@@ -121,6 +121,8 @@ MCP operation pattern, per-asset cut counts, snapshot names, and connectivity re
 All eleven gameplay foliage variants are now half the linear size of the 7131d22
 revision while retaining cubic 0.0625 cells and their existing brush indices and
 placement anchors. Trees and rocks are unchanged. The three mushroom sources keep
-broad cap geometry above narrow stems and now use light cream cap palettes over
-brown stems; every independent cluster remains grounded. See
+broad cap geometry above narrow stems; every independent cluster remains grounded.
+The later player-approved palette restoration returns the exact 7131d22
+pale-stem/warm-cap colors. Runtime foliage and rock tint variation is deterministic
+presentation and does not alter canonical source colors. See
 `foliage-halfsize.authoring.json` for the MCP operation record.

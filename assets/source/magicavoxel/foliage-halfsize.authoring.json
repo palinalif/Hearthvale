@@ -3,7 +3,7 @@
   "tool": "Mahinika/magicavoxel-mcp",
   "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
   "pipeline_baseline": "7131d22a6f027eb7c867247c231929ac90139484",
-  "intent": "Reduce all eleven gameplay foliage variants to half their previous linear dimensions while retaining 0.0625 cubic cells; orient light mushroom caps above brown stems.",
+  "intent": "Reduce all eleven gameplay foliage variants to half their previous linear dimensions while retaining 0.0625 cubic cells; keep broad mushroom caps above narrow stems and restore their player-preferred 7131d22 colors.",
   "assets": [
     "hearthvale_foliage_grass",
     "hearthvale_foliage_wildflowers",
@@ -35,6 +35,11 @@
       "set_palette_color index 6 to brown stem #765942",
       "set_palette_color indices 12/13/14 to restrained cream cap shades #c7b897/#dbd4b2/#e6d7bb",
       "take_snapshot *_halfsize_blockout_cap_semantics_review"
+    ],
+    "mushroom_palette_restoration": [
+      "set_palette_color index 6 to pale stem #c7b897",
+      "set_palette_color indices 12/13/14 to the 7131d22 warm cap shades #765942/#a17359/#ba906f",
+      "take_snapshot *_halfsize_warm_caps_review from six angles"
     ],
     "mushroom_place_voxel_calls_total": 528
   },

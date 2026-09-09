@@ -3,6 +3,7 @@ extends SceneTree
 const SceneScript = preload("res://scripts/m1_scene.gd")
 const State = preload("res://scripts/landscape_state.gd")
 const Flora = preload("res://scripts/vegetation_mesh.gd")
+const GardenVisual = preload("res://scripts/m1_garden_visual.gd")
 var checks := 0
 var failures := 0
 var scene: Node
@@ -50,9 +51,39 @@ func _run_controller_checks() -> void:
 	var initial: Dictionary = scene.landscape_state.document()
 	_check(State.validate(initial) and initial.records.size() > 20, "deterministic native-ground scatter starts populated")
 	var starting_foliage_variants := {}
+	var starting_tree_turns := {}
+	var starting_foliage_turns := {}
 	for record: Dictionary in initial.records:
-		if record.kind == "foliage": starting_foliage_variants[posmod(int(record.seed), Flora.variant_count("foliage"))] = true
+		if record.kind == "tree": starting_tree_turns[GardenVisual.planting_turn(record)] = true
+		if record.kind == "foliage":
+			starting_foliage_variants[posmod(int(record.seed), Flora.variant_count("foliage"))] = true
+			starting_foliage_turns[GardenVisual.planting_turn(record)] = true
 	_check(starting_foliage_variants.size() == Flora.variant_count("foliage"), "starting scene includes every authored foliage variant")
+	_check(starting_tree_turns.size() >= 3 and starting_foliage_turns.size() == 4, "starting trees and foliage use varied deterministic quarter turns")
+	var tint_slots := {}
+	for index in 20:
+		var tint_record := {"id": index + 1, "kind": "foliage", "position": [24.0, 8.0, 24.0], "seed": index % Flora.variant_count("foliage")}
+		tint_slots[GardenVisual.prop_tint_slot(tint_record)] = true
+		var basis := GardenVisual.planting_rotation(tint_record)
+		_check(is_equal_approx(basis.determinant(), 1.0) and basis.get_scale().is_equal_approx(Vector3.ONE), "planting quarter turn preserves scale and handedness")
+	_check(tint_slots.size() == GardenVisual.PROP_TINTS.size(), "foliage records span restrained deterministic tint slots")
+	var distinct_tints := {}
+	for slot in GardenVisual.PROP_TINTS.size():
+		var tinted: Color = GardenVisual.PROP_TINTS[slot]
+		distinct_tints[tinted.to_html()] = true
+		_check(tinted.r >= 0.87 and tinted.g >= 0.87 and tinted.b >= 0.87 and tinted.r <= 1.0 and tinted.g <= 1.0 and tinted.b <= 1.0, "foliage tint stays within the approved subtle hue/value range")
+	_check(distinct_tints.size() == GardenVisual.PROP_TINTS.size(), "foliage tint slots are visibly distinct")
+	var rock_tint_record := {"id": 701, "kind": "rock", "position": [12.0, 8.0, 12.0], "seed": 2}
+	_check(GardenVisual.prop_instance_color(rock_tint_record) != Color.WHITE, "rocks receive stable presentation tint variation")
+	var tinted_instances := {"foliage": false, "rock": false}
+	for key: String in scene.garden_visual._groups:
+		var node: MultiMeshInstance3D = scene.garden_visual._groups[key]
+		if key.begins_with("foliage_") or key.begins_with("rock_"):
+			var kind := "foliage" if key.begins_with("foliage_") else "rock"
+			_check(node.multimesh.use_colors and node.material_override is ShaderMaterial and (node.material_override as ShaderMaterial).get_shader_parameter("base_color") is Color, kind + " batch enables palette-preserving per-instance modulation")
+			for instance in node.multimesh.instance_count:
+				if node.multimesh.get_instance_color(instance) != Color.WHITE: tinted_instances[kind] = true
+	_check(tinted_instances.foliage and tinted_instances.rock, "starting foliage and rocks include visible deterministic tint variation")
 	scene._restore_landscape({})
 	_check(scene.landscape_state.document() == initial, "seeded scatter repeats every position kind id and seed")
 	var terrain_before := _terrain_hash()
