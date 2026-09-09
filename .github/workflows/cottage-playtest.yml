@@ -71,6 +71,18 @@ jobs:
           $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
           Write-Output $log
           if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch '"ok"\s*:\s*true' -or $log -notmatch '"unverified_headless_instances"\s*:\s*0') { throw 'Mobile detail-grid validation failed' }
+      - name: Capture actual Mobile fine prop grid
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $out = Join-Path (Get-Location) '.tools/cottage-repair/fine-prop.out.log'
+          $err = Join-Path (Get-Location) '.tools/cottage-repair/fine-prop.err.log'
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/fine_prop_render_test.gd')
+          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+          if (-not $process.WaitForExit(120000)) { $process.Kill(); $process.WaitForExit(); throw 'Fine prop Mobile render timed out' }
+          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
+          Write-Output $log
+          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch '"ok"\s*:\s*true') { throw 'Fine prop Mobile rendering failed' }
       - name: Capture actual Mobile cottage details
         shell: pwsh
         run: |
@@ -91,6 +103,7 @@ jobs:
           path: |
             .tools/cottage-repair/
             reports/screenshots/m1-cottage-detail/
+            reports/screenshots/fine-prop-grid.png
           if-no-files-found: error
           retention-days: 14
 

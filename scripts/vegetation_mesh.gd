@@ -3,6 +3,7 @@ class_name VegetationMesh
 
 const Grid = preload("res://scripts/visual_grid.gd")
 const U := Grid.UNIT
+const PROP_UNIT := 0.0625
 const COLORS := [Color("#638348"), Color("#486d46"), Color("#87a657"), Color("#765942"), Color("#c7b897"), Color("#df9a8b")]
 const TREE_PATHS := [
 	"res://assets/models/magicavoxel/hearthvale_tree_orchard.res",
@@ -25,19 +26,25 @@ const FOLIAGE_PATHS := [
 	"res://assets/models/magicavoxel/hearthvale_foliage_mushrooms_flat.res",
 	"res://assets/models/magicavoxel/hearthvale_foliage_mushrooms_flat_scatter.res",
 ]
+const ROCK_PATHS := [
+	"res://assets/models/magicavoxel/hearthvale_rock_slab.res",
+	"res://assets/models/magicavoxel/hearthvale_rock_split.res",
+	"res://assets/models/magicavoxel/hearthvale_rock_moss.res",
+]
 static var _cache: Dictionary = {}
 
 static func variant_count(kind: String) -> int:
 	if kind == "tree": return TREE_PATHS.size()
 	if kind == "foliage": return FOLIAGE_PATHS.size()
-	return 3
+	if kind == "rock": return ROCK_PATHS.size()
+	return 0
 
 static func meshes(kind: String, variant: int) -> Array:
 	var normalized := posmod(variant, variant_count(kind))
 	var key := "%s:%d" % [kind, normalized]
 	if _cache.has(key): return _cache[key]
-	if kind in ["tree", "foliage"]:
-		var paths: Array = TREE_PATHS if kind == "tree" else FOLIAGE_PATHS
+	if kind in ["tree", "foliage", "rock"]:
+		var paths: Array = TREE_PATHS if kind == "tree" else (FOLIAGE_PATHS if kind == "foliage" else ROCK_PATHS)
 		var mesh := load(paths[normalized]) as Mesh
 		assert(mesh != null, "Missing authored %s mesh variant %d" % [kind, normalized])
 		# Preserve the existing one-material-per-batch renderer while swapping in
@@ -50,20 +57,8 @@ static func meshes(kind: String, variant: int) -> Array:
 			authored.append(part)
 		_cache[key] = authored
 		return authored
-	var groups: Array = []
-	for i in COLORS.size(): groups.append([PackedVector3Array(), PackedVector3Array(), PackedInt32Array()])
-	_rock(groups, posmod(variant, 3))
-	var result: Array = []
-	for shade in groups.size():
-		if groups[shade][0].is_empty(): continue
-		var arrays := []; arrays.resize(Mesh.ARRAY_MAX)
-		arrays[Mesh.ARRAY_VERTEX] = groups[shade][0]; arrays[Mesh.ARRAY_NORMAL] = groups[shade][1]; arrays[Mesh.ARRAY_INDEX] = groups[shade][2]
-		var mesh := ArrayMesh.new(); mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		var material := StandardMaterial3D.new(); material.albedo_color = COLORS[shade]; material.roughness = 1.0
-		mesh.surface_set_material(0, material)
-		result.append(mesh)
-	_cache[key] = result
-	return result
+	assert(false, "Unsupported vegetation kind: " + kind)
+	return []
 
 static func _tree(groups: Array, variant: int) -> void:
 	var lobes: Array

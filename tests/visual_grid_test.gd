@@ -11,8 +11,8 @@ var vertices_checked := 0
 var instances_checked := 0
 var unverified_instances := 0
 var scene: Node3D
-# Deliberately independent of renderer metadata: only these cottage families
-# may use the approved half-cell tier. All other assets retain structural tests.
+# Deliberately independent of renderer metadata: cottage presentation and
+# garden props share the half-cell tier, while their placement stays structural.
 const DETAIL_PREFIXES := ["Reveal_", "Joinery_", "Shutters_", "ManualShutter_", "FlowerBox_", "BoxFoliage_", "BoxFlowers_", "BoxFlowerAccents_", "DoorSurround_", "DoorJoinery_", "PorchBrackets_", "PorchTileCourses_", "Trim_", "Cornice_", "RoofTiles_"]
 const DETAIL_NAMES := ["EaveJoinery", "RidgeCourses", "RoofEdgeLip"]
 
@@ -55,7 +55,7 @@ func _initialize() -> void:
 			_check(not meshes.is_empty(), "%s variant %d exists" % [kind, variant])
 			var context := HashingContext.new(); context.start(HashingContext.HASH_SHA256)
 			for mesh: ArrayMesh in meshes:
-				_inspect_mesh(mesh, Transform3D.IDENTITY, Vector3.ZERO, "%s variant %d" % [kind, variant])
+				_inspect_mesh(mesh, Transform3D.IDENTITY, Vector3.ZERO, "%s variant %d" % [kind, variant], Flora.PROP_UNIT)
 				context.update((mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).to_byte_array())
 			var signature := context.finish().hex_encode()
 			signatures.append(signature)
@@ -79,12 +79,17 @@ func _initialize() -> void:
 
 func _inspect_node(node: Node, origin: Vector3, label: String, rendered: bool) -> void:
 	var unit := Grid.UNIT
+	var cottage_detail := false
+	if node.get_parent() is Garden:
+		unit = Flora.PROP_UNIT
 	if node.get_parent() is Visual:
 		var decorative := str(node.name) in DETAIL_NAMES
 		for prefix in DETAIL_PREFIXES:
 			decorative = decorative or str(node.name).begins_with(prefix)
 		_check(node.has_meta("cottage_detail_grid") == decorative, label + "/" + str(node.name) + " declares only permitted detail tier")
-		if decorative: unit = Grid.COTTAGE_DETAIL_UNIT
+		if decorative:
+			unit = Grid.COTTAGE_DETAIL_UNIT
+			cottage_detail = true
 	if node is MultiMeshInstance3D:
 		var multi: MultiMesh = node.multimesh
 		if not rendered:
@@ -98,7 +103,7 @@ func _inspect_node(node: Node, origin: Vector3, label: String, rendered: bool) -
 				_check(instance.basis.determinant() > 0.000000001, label + "/" + str(node.name) + " nonzero native instance")
 				_inspect_mesh(multi.mesh, instance, origin, label + "/" + str(node.name), unit)
 				instances_checked += 1
-			if unit == Grid.COTTAGE_DETAIL_UNIT:
+			if cottage_detail:
 				_check(has_fine_step, label + "/" + str(node.name) + " actually contains half-cell detail")
 	elif node is MeshInstance3D and node.mesh:
 		_inspect_mesh(node.mesh, node.global_transform, origin, label + "/" + str(node.name), unit)

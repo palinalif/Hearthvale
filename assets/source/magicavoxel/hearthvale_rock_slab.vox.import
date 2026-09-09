@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://q3av7urgss8l"
+path="res://.godot/imported/hearthvale_rock_slab.vox-cbbd78efe9c90914328c6f61a0327472.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_rock_slab.vox"
+dest_files=["res://.godot/imported/hearthvale_rock_slab.vox-cbbd78efe9c90914328c6f61a0327472.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

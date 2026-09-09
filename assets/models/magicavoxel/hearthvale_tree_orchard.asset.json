@@ -1,24 +1,24 @@
 {
   "asset": "hearthvale_tree_orchard",
   "declared_dimensions": [
-    40,
-    40,
-    24
+    80,
+    80,
+    48
   ],
-  "emitted_quads": 1137,
-  "exposed_quads": 4132,
+  "emitted_quads": 2809,
+  "exposed_quads": 16416,
   "license": "Project-authored; MCP development tool is MIT",
   "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
   "occupied_bounds": {
     "max": [
-      37,
-      40,
-      23
+      74,
+      80,
+      46
     ],
     "min": [
-      1,
+      2,
       0,
-      2
+      4
     ]
   },
   "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
@@ -29,10 +29,11 @@
     4
   ],
   "source": "hearthvale_tree_orchard.vox",
-  "source_sha256": "c0467481e11f13f1e1681fa66b625afc5ce775ac16422b76ef6d11de38103d39",
+  "source_sha256": "412375e7cd775aaafad042a5ecd43f54f4de90db64b3fe394db74ddaa0924a6a",
   "tool": "https://github.com/Mahinika/magicavoxel-mcp",
   "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
-  "triangles": 2274,
-  "voxel_count": 4933,
-  "voxel_unit": 0.125
+  "triangles": 5618,
+  "voxel_count": 39082,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
 }

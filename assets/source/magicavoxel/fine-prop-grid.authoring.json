@@ -1,0 +1,53 @@
+{
+  "server": "hearthvale-magicavoxel",
+  "tool": "Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "intent": "Move all general vegetation and rocks from 0.125 to 0.0625 presentation cells without changing their established world dimensions; add restrained half-cell silhouette cuts and make mushroom caps read clearly above their stems.",
+  "pipeline_baseline": "2abf00f2a4b6f4972a61c5fd6fe128062ea077fc",
+  "operations": {
+    "per_asset": [
+      "copy_model canonical -> canonical_fine_blockout",
+      "scale_model factor=2",
+      "union_models self offset=(1,0,0)",
+      "union_models self offset=(0,1,0)",
+      "union_models self offset=(0,0,1)",
+      "remove_voxel for each grounded-safe trihedral silhouette corner selected from the approved source",
+      "place_voxel for 18 prior-boundary extrema removed by the generic corner pass",
+      "rebuild the three compact-tree sources in corrected even horizontal declared volumes without offsetting their occupied cells",
+      "find_connected_components",
+      "take_snapshot canonical_fine_00625_review",
+      "copy_model canonical_fine_blockout -> canonical"
+    ],
+    "corner_selection": "For each approved source cell, inspect the eight signed corners. When all three axis-neighbour cells facing a corner are empty, remove that corner's corresponding subcell after 2x solid replication. Do not remove downward-facing corners from Y=0 roots.",
+    "total_remove_voxel_calls": 2487,
+    "total_extent_restore_place_voxel_calls": 18,
+    "extent_preservation": "All 17 pre-existing tree and foliage assets retain their exact prior world-space AABBs. The compact-tree declared-volume corrections are 64x64x40, 40x80x32, and 64x66x40."
+  },
+  "assets": [
+    {"stem":"hearthvale_tree_orchard","corner_cuts":382},
+    {"stem":"hearthvale_tree_riverside","corner_cuts":278},
+    {"stem":"hearthvale_tree_wind","corner_cuts":361},
+    {"stem":"hearthvale_tree_orchard_compact","corner_cuts":273},
+    {"stem":"hearthvale_tree_riverside_young","corner_cuts":202},
+    {"stem":"hearthvale_tree_wind_low","corner_cuts":261},
+    {"stem":"hearthvale_foliage_grass","corner_cuts":60},
+    {"stem":"hearthvale_foliage_wildflowers","corner_cuts":60},
+    {"stem":"hearthvale_foliage_leafy","corner_cuts":72},
+    {"stem":"hearthvale_foliage_seedgrass","corner_cuts":42},
+    {"stem":"hearthvale_foliage_cream","corner_cuts":59},
+    {"stem":"hearthvale_foliage_mauve","corner_cuts":50},
+    {"stem":"hearthvale_foliage_reeds","corner_cuts":60},
+    {"stem":"hearthvale_foliage_fern","corner_cuts":89},
+    {"stem":"hearthvale_foliage_mushrooms","corner_cuts":46},
+    {"stem":"hearthvale_foliage_mushrooms_flat","corner_cuts":50},
+    {"stem":"hearthvale_foliage_mushrooms_flat_scatter","corner_cuts":62},
+    {"stem":"hearthvale_rock_slab","corner_cuts":22},
+    {"stem":"hearthvale_rock_split","corner_cuts":31},
+    {"stem":"hearthvale_rock_moss","corner_cuts":27}
+  ],
+  "review": {
+    "snapshots": "Six MCP angles saved per asset under ignored .tools/magicavoxel/previews using the *_fine_00625_review stem; corrected compact-tree volume reviews use *_fine_even2_review.",
+    "connectivity": "Every component remains grounded at Y=0; each tree and rock remains one connected component.",
+    "voxel_unit": 0.0625
+  }
+}

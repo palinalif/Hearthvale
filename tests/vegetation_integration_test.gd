@@ -4,13 +4,14 @@ const Flora = preload("res://scripts/vegetation_mesh.gd")
 const Garden = preload("res://scripts/m1_garden_visual.gd")
 const TREE_NAMES := ["orchard", "riverside", "wind", "orchard_compact", "riverside_young", "wind_low"]
 const FOLIAGE_NAMES := ["grass", "wildflowers", "leafy", "seedgrass", "cream", "mauve", "reeds", "fern", "mushrooms", "mushrooms_flat", "mushrooms_flat_scatter"]
+const ROCK_NAMES := ["slab", "split", "moss"]
 
 var checks := 0
 var failures := 0
 
 func _initialize() -> void:
-	for kind in ["tree", "foliage"]:
-		var names: Array = TREE_NAMES if kind == "tree" else FOLIAGE_NAMES
+	for kind in ["tree", "foliage", "rock"]:
+		var names: Array = TREE_NAMES if kind == "tree" else (FOLIAGE_NAMES if kind == "foliage" else ROCK_NAMES)
 		_check(Flora.variant_count(kind) == names.size(), "%s exposes every authored variant" % kind)
 		for variant in names.size():
 			var expected := load("res://assets/models/magicavoxel/hearthvale_%s_%s.res" % [kind, names[variant]]) as Mesh
@@ -28,10 +29,12 @@ func _initialize() -> void:
 		records.append({"id": variant + 1, "kind": "tree", "seed": variant, "position": [4.0 + variant * 6.0, 8.0, 8.0]})
 	for variant in FOLIAGE_NAMES.size():
 		records.append({"id": variant + 4, "kind": "foliage", "seed": variant, "position": [4.0 + variant * 2.0, 8.0, 14.0]})
+	for variant in ROCK_NAMES.size():
+		records.append({"id": variant + 32, "kind": "rock", "seed": variant, "position": [8.0 + variant * 3.0, 8.0, 18.0]})
 	garden.apply_records(records)
 	await process_frame
 	var expected_groups := 0
-	for kind in ["tree", "foliage"]:
+	for kind in ["tree", "foliage", "rock"]:
 		for variant in Flora.variant_count(kind): expected_groups += Flora.meshes(kind, variant).size()
 	_check(garden._groups.size() == expected_groups, "world batches every authored tree and foliage palette surface")
 	for key in garden._groups:

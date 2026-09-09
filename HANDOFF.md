@@ -4,6 +4,17 @@ Updated 2026-09-08 during the M1 visual-finish work on `feat/m1-ui-polish`. Read
 
 ## Current visual-finish branch
 
+On 2026-09-09 the player clarified that the authored trees were correctly sized
+overall but their 0.125 cells made vegetation feel too blocky, then explicitly
+included rocks in the finer tier. All six gameplay trees, eleven foliage assets,
+and three authored rocks were MCP-resampled to solid 2x2x2 sources at 0.0625 and
+given 2,487 grounded-safe half-cell silhouette cuts. World-space bounds and saved
+placement remain unchanged. The rock batches now use the authored slab/split/moss
+resources instead of procedural geometry. Mushroom tests require the warm cap
+surfaces to remain above the cream stems. See `fine-prop-grid.authoring.json` and
+`reports/screenshots/fine-prop-grid.png`. Desktop Mobile review passes; CI/APK and
+physical Thor approval must be recorded before calling this delivered.
+
 The graphical UI, cottage-detail scale/variation, editable window and door, and in-world resize-handle passes are implemented on `feat/m1-ui-polish`. The latest environment pass replaces the straight presentation channel with a native-grid winding river and graded banks, changes the default scatter into deterministic planting drifts with deliberate cottage clearings, and gives the three tree variants broad orchard, tall riverside, and asymmetric wind-shaped silhouettes. It does not add a new catalogue or a water-editing system.
 
 Fresh terrain uses the new river contour. Water is rebuilt from authoritative terrain cells after generation/load, so existing v2 saves keep water aligned to their original straight channel and are not rewritten by the new generator presentation. The focused riverbank gate checks a 2.25-unit centreline span, varying width, dry banks, the unchanged cottage pad, native-grid water geometry, upward winding, and old-save channel reconstruction. `tools/check.ps1` passes with this gate included; the actual Mobile vegetation/grid run passes 322,678 checks. Deterministic before/after captures are in `reports/screenshots/m1-riverbank-before.png` and `reports/screenshots/m1-riverbank-after.png`. Player visual approval and Thor performance remain open.

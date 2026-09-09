@@ -1,19 +1,19 @@
 {
   "asset": "hearthvale_foliage_mushrooms_flat_scatter",
   "declared_dimensions": [
-    16,
-    6,
-    12
+    32,
+    12,
+    24
   ],
-  "emitted_quads": 111,
-  "exposed_quads": 354,
+  "emitted_quads": 244,
+  "exposed_quads": 1366,
   "license": "Project-authored; MCP development tool is MIT",
   "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
   "occupied_bounds": {
     "max": [
-      16,
-      4,
-      11
+      32,
+      8,
+      22
     ],
     "min": [
       0,
@@ -29,10 +29,11 @@
     14
   ],
   "source": "hearthvale_foliage_mushrooms_flat_scatter.vox",
-  "source_sha256": "804ea490c4ef8a6f11117eed7bb48dabbd5af301dc9102c42a3af67763becc25",
+  "source_sha256": "a1c7c8cb558c8b36a3e0da4d5e99f2241a6e9b0e55d5a448b3171ecdbc7b94c6",
   "tool": "https://github.com/Mahinika/magicavoxel-mcp",
   "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
-  "triangles": 222,
-  "voxel_count": 140,
-  "voxel_unit": 0.125
+  "triangles": 488,
+  "voxel_count": 1058,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
 }

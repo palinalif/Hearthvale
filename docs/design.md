@@ -609,7 +609,13 @@ This is an M1 review candidate, not accepted final art. The pad/channel remain g
 
 ## Coherent two-tier visible voxel scale
 
-The structural world-space visual unit is `VisualGrid.UNIT = 0.125` across native terrain, cottage shells and authoritative roof profiles, general vegetation, props and rocks. The player approved one deliberately finer, cottage-only presentation tier with a fixed `0.0625` cell edge for visible roof tiles and edges, window/door joinery, the entrance canopy, shutters, trims, flower boxes and flowers. This exception supplies readable architectural craft at miniature scale; it does not authorize finer terrain, finer structural building cells, or a second scale for unrelated asset families.
+Animation exception, approved by the player on 2026-09-08: gentle tree and ground-foliage wind may
+temporarily deform the rendered voxel mesh off-grid. Authored rest geometry,
+structural dimensions, placement/collision and saved data retain their existing
+grid contracts. The first standalone wind study uses small affine sway with
+fixed ground-contact vertices; this does not authorize a new voxel scale.
+
+The structural world-space visual unit is `VisualGrid.UNIT = 0.125` across native terrain, cottage shells and authoritative roof profiles. The player approved a deliberately finer `0.0625` presentation tier for all non-terrain visual assets: trees, foliage, mushrooms, flowers, rocks, visible roof tiles and edges, window/door joinery, the entrance canopy, shutters, trims, and flower boxes. This supplies readable miniature detail without changing overall object dimensions or authorizing finer terrain and structural building cells.
 
 Structural dimensions, resize increments and attachment anchors remain on the `0.125` grid. Decorative meshes are derived presentation around those authoritative anchors and may regenerate without rewriting saves. At both tiers, asset-local units and object transforms do not excuse a mismatch: measure after the complete transform, keep cells cubic, and change the number and arrangement of cells instead of stretching them into rectangular voxels.
 
@@ -620,7 +626,7 @@ Historical audit of the preceding M1 review build: tree crowns used a 0.24-world
 
 ## M1 physical-feedback iteration 2
 
-The next build uses `VisualGrid.UNIT = 0.125` for actual native terrain cells and structural asset steps. Visible cottage roof tiles/edges and the approved cottage decorative families use the `0.0625` half-cell presentation tier described above, while the roof profile remains structurally authoritative at `0.125`. Native dimensions increase to 384 x 256 x 384 while retaining the 48 x 32 x 48 world. The player explicitly rejected keeping visibly coarse terrain while calling it merged fine cells. Legacy .5-grid checkpoints migrate by exact material-run expansion, retaining caves, edits and original files. Existing stepped landforms retain their shape; freshly generated terrain uses finer contour increments. This increases raw terrain payload to 72 MiB per generation and requires separate Thor performance review.
+The next build uses `VisualGrid.UNIT = 0.125` for actual native terrain cells and structural asset steps. Non-terrain presentation uses the `0.0625` half-cell tier described above, while cottage structure and the roof profile remain authoritative at `0.125`. Native dimensions increase to 384 x 256 x 384 while retaining the 48 x 32 x 48 world. The player explicitly rejected keeping visibly coarse terrain while calling it merged fine cells. Legacy .5-grid checkpoints migrate by exact material-run expansion, retaining caves, edits and original files. Existing stepped landforms retain their shape; freshly generated terrain uses finer contour increments. This increases raw terrain payload to 72 MiB per generation and requires separate Thor performance review.
 
 Fresh cottages now use uniform .25 scale (4.5 x 1.75 x 3.5 before the roof); existing saved cottage transforms use the explicit undoable Miniature scale action. Trees have rebuilt overlapping crowns about 4.8–6 world units tall. Automatic window counts and spacing respond to wall length, yield to manual choices, and reserve suppressed footprints; optional shutters hide if crowded. Windows have bounded width/height overrides. The entrance is a migrated stable detail record that can move between wall surfaces, resize and recolour while its cutout and porch follow it. Manual shutters and flower boxes remain editable/recoverable attachments.
 

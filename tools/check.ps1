@@ -60,6 +60,36 @@ Invoke-GodotBounded 'building-world' @('--headless','--path','.','--script','res
 Invoke-GodotBounded 'cottage-detail-visual' @('--headless','--path','.','--script','res://tests/cottage_detail_visual_test.gd','--max-fps','60')
 Invoke-GodotBounded 'visual-grid' @('--headless','--path','.','--script','res://tests/visual_grid_test.gd','--max-fps','60')
 Invoke-GodotBounded 'magicavoxel-asset' @('--headless','--path','.','--script','res://tests/magicavoxel_asset_test.gd','--max-fps','60')
+Invoke-GodotBounded 'tree-wind' @('--headless','--path','.','--script','res://tests/tree_wind_test.gd','--max-fps','60')
+Invoke-GodotBounded 'foliage-asset' @('--headless','--path','.','--script','res://tests/foliage_asset_test.gd','--max-fps','60')
+Invoke-GodotBounded 'foliage-wind' @('--headless','--path','.','--script','res://tests/tree_wind_test.gd','--max-fps','60','--','--foliage')
+Invoke-GodotBounded 'vegetation-integration' @('--headless','--path','.','--script','res://tests/vegetation_integration_test.gd','--max-fps','60')
+$meshingInfo = New-Object Diagnostics.ProcessStartInfo
+$meshingInfo.FileName = (Get-Command python -ErrorAction Stop).Source
+$meshingInfo.Arguments = 'tests/magicavoxel_converter_test.py'
+$meshingInfo.WorkingDirectory = $ProjectRoot
+$meshingInfo.UseShellExecute = $false
+$meshingInfo.CreateNoWindow = $true
+$meshingInfo.RedirectStandardOutput = $true
+$meshingInfo.RedirectStandardError = $true
+$meshingProcess = New-Object Diagnostics.Process
+$meshingProcess.StartInfo = $meshingInfo
+if (-not $meshingProcess.Start()) { throw 'Could not start candidate meshing checks' }
+$meshingOut = $meshingProcess.StandardOutput.ReadToEndAsync()
+$meshingErr = $meshingProcess.StandardError.ReadToEndAsync()
+$meshingFinished = $meshingProcess.WaitForExit($TimeoutMs)
+if (-not $meshingFinished) { $meshingProcess.Kill(); $meshingProcess.WaitForExit() }
+$meshingText = $meshingOut.Result + [Environment]::NewLine + $meshingErr.Result
+[IO.File]::WriteAllText((Join-Path $Logs 'check-candidate-meshing.log'), $meshingText)
+Write-Output $meshingText
+if (-not $meshingFinished -or $meshingProcess.ExitCode -ne 0) { throw 'Candidate meshing checks failed or timed out' }
+$meshingProcess.Dispose()
+Invoke-GodotBounded 'meadow-expansion-asset' @('--headless','--path','.','--script','res://tests/meadow_expansion_asset_test.gd','--max-fps','60')
+Invoke-GodotBounded 'meadow-expansion-wind' @('--headless','--path','.','--script','res://tests/tree_wind_test.gd','--max-fps','60','--','--expansion')
+Invoke-GodotBounded 'woodland-asset' @('--headless','--path','.','--script','res://tests/woodland_asset_test.gd','--max-fps','60')
+Invoke-GodotBounded 'woodland-wind' @('--headless','--path','.','--script','res://tests/tree_wind_test.gd','--max-fps','60','--','--woodland')
+Invoke-GodotBounded 'size-variation-asset' @('--headless','--path','.','--script','res://tests/size_variation_asset_test.gd','--max-fps','60')
+Invoke-GodotBounded 'size-variation-wind' @('--headless','--path','.','--script','res://tests/tree_wind_test.gd','--max-fps','60','--','--size-variations')
 Invoke-GodotBounded 'plant-target' @('--headless','--path','.','--script','res://tests/plant_target_test.gd','--max-fps','60')
 $fixtureTag = [DateTime]::UtcNow.Ticks.ToString()
 Invoke-GodotBounded 'terrain-resolution' @('--headless','--path','.','--script','res://tests/terrain_resolution_test.gd','--max-fps','60','--',("--fixture-root=user://resolution-check-"+$fixtureTag))
