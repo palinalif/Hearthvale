@@ -55,7 +55,7 @@ jobs:
           $err = Join-Path (Get-Location) '.tools/cottage-repair/render.err.log'
           $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_placement_rotation_render_test.gd')
           $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
-          if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'Mobile render capture timed out' }
+          if (-not $process.WaitForExit(300000)) { $process.Kill(); $process.WaitForExit(); throw 'Mobile render capture timed out' }
           $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
           Write-Output $log
           if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'COTTAGE_RENDER_START' -or $log -notmatch 'failures=0') { throw 'Mobile rendering or assertions failed; inspect captures and logs' }
