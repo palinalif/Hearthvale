@@ -21,10 +21,13 @@ ground-foliage families.
   preserved.
 - Animation is GPU-only and keeps the existing per-variant/per-palette batching;
   it does not add one node or draw batch per planted instance.
+- Full-scene test mode freezes wind so undo/cancel captures remain deterministic;
+  the D3D12 comparison permits at most four boundary pixels of raster variance.
+  The dedicated gameplay-wind render keeps animation on.
 
 ## Evidence
 
-- Gameplay vegetation integration: 686 checks passed, including authored palette
+- Gameplay vegetation integration: 688 checks passed, including authored palette
   preservation and seam-synchronized phases across every palette surface.
 - Existing headless tree wind: 21 checks passed.
 - Existing headless foliage wind: 21 checks passed.
@@ -34,6 +37,8 @@ ground-foliage families.
 - Actual Forward Mobile render: 5 checks passed, including retained independent
   phases, palette-surface synchronization and a frame-difference assertion
   proving that gameplay-batched vegetation moves over time.
+- Cottage/UI Forward Mobile render: 327 checks passed, including cancel
+  restoration within the four-pixel raster tolerance.
 - Normal `tools/check.ps1`: passed.
 
 Actual Mobile review capture:

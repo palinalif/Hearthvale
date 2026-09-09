@@ -66,6 +66,20 @@ func _initialize() -> void:
 	var phase_a := Garden.wind_phase({"id": 1, "kind": "tree", "seed": 0, "position": [4.0, 8.0, 8.0]})
 	var phase_b := Garden.wind_phase({"id": 2, "kind": "tree", "seed": 0, "position": [10.0, 8.0, 8.0]})
 	_check(not is_equal_approx(phase_a, phase_b), "separate plantings receive independent deterministic wind phases")
+	garden.set_wind_enabled(false)
+	var all_paused := true
+	for key: String in garden._groups:
+		var node: MultiMeshInstance3D = garden._groups[key]
+		if node.multimesh.use_custom_data: all_paused = all_paused and is_zero_approx(float((node.material_override as ShaderMaterial).get_shader_parameter("wind_strength")))
+	_check(all_paused, "wind can be frozen for deterministic full-scene captures")
+	garden.set_wind_enabled(true)
+	var all_resumed := true
+	for key: String in garden._groups:
+		var node: MultiMeshInstance3D = garden._groups[key]
+		if node.multimesh.use_custom_data:
+			var kind := key.get_slice("_", 0); var variant := int(key.get_slice("_", 1))
+			all_resumed = all_resumed and is_equal_approx(float((node.material_override as ShaderMaterial).get_shader_parameter("wind_strength")), Garden.wind_strength(kind, variant))
+	_check(all_resumed, "wind resumes at each family's approved strength")
 	garden.queue_free()
 	await process_frame
 	print(JSON.stringify({"ok": failures == 0, "checks": checks, "failures": failures}))

@@ -28,12 +28,22 @@ void fragment() {
 """
 static var _prop_tint_shader: Shader
 var _groups: Dictionary = {}
+var wind_enabled := true
 
 func attach_backend(_backend: Node) -> void:
 	pass
 
 func refresh_terrain() -> void:
 	pass # Saved roots do not relocate or resurrect automatically after edits.
+
+func set_wind_enabled(enabled: bool) -> void:
+	wind_enabled = enabled
+	for key: String in _groups:
+		var material := (_groups[key] as MultiMeshInstance3D).material_override as ShaderMaterial
+		if material == null or material.shader != VEGETATION_WIND_SHADER: continue
+		var kind := key.get_slice("_", 0)
+		var variant := int(key.get_slice("_", 1))
+		material.set_shader_parameter("wind_strength", wind_strength(kind, variant) if wind_enabled else 0.0)
 
 func apply_records(records: Array) -> void:
 	# Quarter turns keep authored cells on-grid while breaking up repeated
@@ -57,7 +67,7 @@ func apply_records(records: Array) -> void:
 			var multi := MultiMesh.new(); multi.transform_format = MultiMesh.TRANSFORM_3D; multi.use_colors = bool(batch["tinted"]) or bool(batch["animated"]); multi.use_custom_data = bool(batch["animated"]); multi.mesh = batch["mesh"]
 			node.multimesh = multi
 			if bool(batch["animated"]):
-				node.material_override = _wind_material(batch["mesh"], float(batch["strength"]), float(batch["height"]))
+				node.material_override = _wind_material(batch["mesh"], float(batch["strength"]) if wind_enabled else 0.0, float(batch["height"]))
 				node.extra_cull_margin = MAX_WIND_STRENGTH
 			elif bool(batch["tinted"]): node.material_override = _prop_color_material(batch["mesh"])
 			add_child(node); _groups[key] = node

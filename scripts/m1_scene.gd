@@ -285,7 +285,7 @@ func _build_world() -> void:
 	river_water = MeshInstance3D.new(); river_water.name = "RiverWater"; river_water.mesh = _build_river_water_mesh(); river_water.position.y = 5.0
 	var water_material := StandardMaterial3D.new(); water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; water_material.albedo_color = Color(0.30, 0.57, 0.56, 0.86); water_material.metallic = 0.05; water_material.roughness = 0.42; river_water.material_override = water_material; add_child(river_water)
 	decor_root = Node3D.new(); decor_root.name = "GardenDecor"; add_child(decor_root)
-	garden_visual = GardenVisualScript.new(); garden_visual.name = "M1GardenVisual"; decor_root.add_child(garden_visual)
+	garden_visual = GardenVisualScript.new(); garden_visual.name = "M1GardenVisual"; garden_visual.set_wind_enabled(not test_mode); decor_root.add_child(garden_visual)
 	camera = Camera3D.new(); camera.current = true; camera.fov = 52; add_child(camera)
 	resize_handles = Node3D.new(); resize_handles.name = "ResizeHandles"; resize_handles.visible = false; add_child(resize_handles)
 	for axis_name in ["width", "depth", "height"]:
