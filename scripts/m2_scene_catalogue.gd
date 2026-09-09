@@ -30,11 +30,12 @@ func _install_place_home_action() -> void:
 	for button in _building_buttons:
 		if button.text.begins_with("Material:"): button.text = "Wall material: next"
 	_add_building_button(box, "Roof material: next", _cycle_selected_roof)
-	var roof_button := box.get_child(box.get_child_count() - 1) as Button
-	box.move_child(roof_button, box.get_child_count() - 2)
-	_building_buttons.clear()
-	for child in box.get_children():
-		if child is Button: _building_buttons.append(child)
+	var ordered: Array[Button] = [_place_home_button]
+	for prefix in ["Duplicate", "Add flower box", "Add shutter", "Wall material", "Roof material", "Needs placement", "Close"]:
+		for child in box.get_children():
+			if child is Button and (child as Button).text.begins_with(prefix) and child not in ordered: ordered.append(child)
+	for index in ordered.size(): box.move_child(ordered[index], index + 1)
+	_building_buttons = ordered
 
 func _build_home_catalogue() -> void:
 	_home_catalogue_panel = PanelContainer.new()
