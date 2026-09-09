@@ -7,6 +7,13 @@ const ROOF_MATERIALS: Array[String] = ["terracotta", "moss_tile", "slate", "that
 var _home_catalogue_open := false
 var _home_catalogue_panel: PanelContainer
 var _home_catalogue_buttons: Array[Button] = []
+var _home_catalogue_returns_to_build := false
+var _build_catalogue_open := false
+var _build_catalogue_panel: PanelContainer
+var _build_catalogue_buttons: Array[Button] = []
+var _outdoor_catalogue_open := false
+var _outdoor_catalogue_panel: PanelContainer
+var _outdoor_catalogue_buttons: Array[Button] = []
 var _place_home_button: Button
 var _catalogue_designs: Dictionary = {}
 var _catalogue_buttons_by_id: Dictionary = {}
@@ -16,6 +23,7 @@ var _catalogue_roof_choices: Dictionary = {}
 func _ready() -> void:
 	super._ready()
 	_install_place_home_action()
+	_build_global_catalogue()
 	_build_home_catalogue()
 
 func _install_place_home_action() -> void:
@@ -82,6 +90,59 @@ func _build_home_catalogue() -> void:
 		_catalogue_buttons_by_id[design_id] = button
 		_refresh_catalogue_button(design_id)
 
+func _build_global_catalogue() -> void:
+	_build_catalogue_panel = _make_catalogue_panel("BuildCatalogue", Vector2(520, 360))
+	var box := _catalogue_box(_build_catalogue_panel)
+	_add_catalogue_heading(box, "BUILD CATALOGUE", "Choose what you want to add to the hamlet")
+	_add_catalogue_button(box, _build_catalogue_buttons, "Buildings\nHomes and structural details", _open_home_catalogue)
+	_add_catalogue_button(box, _build_catalogue_buttons, "Roads & paths\nCatalogue slot ready • placement tools coming next", _show_roads_catalogue)
+	_add_catalogue_button(box, _build_catalogue_buttons, "Outdoor decorations\nFoliage, trees, and clearing tools", _open_outdoor_catalogue)
+
+	_outdoor_catalogue_panel = _make_catalogue_panel("OutdoorCatalogue", Vector2(520, 390))
+	var outdoor_box := _catalogue_box(_outdoor_catalogue_panel)
+	_add_catalogue_heading(outdoor_box, "OUTDOOR DECORATIONS", "Choose a brush, then paint directly in the world")
+	_add_catalogue_button(outdoor_box, _outdoor_catalogue_buttons, "Foliage brush\nGrass, flowers, ferns, reeds, and mushrooms", _choose_outdoor_tool.bind("foliage"))
+	_add_catalogue_button(outdoor_box, _outdoor_catalogue_buttons, "Tree brush\nPlace varied orchard and riverside trees", _choose_outdoor_tool.bind("tree"))
+	_add_catalogue_button(outdoor_box, _outdoor_catalogue_buttons, "Clear decorations\nRemove planting without changing terrain", _choose_outdoor_tool.bind("clear_planting"))
+
+func _make_catalogue_panel(node_name: String, minimum: Vector2) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.name = node_name
+	panel.position = Vector2(28, 150)
+	panel.custom_minimum_size = minimum
+	panel.visible = false
+	hud.add_child(panel)
+	var margin := MarginContainer.new()
+	for side in ["left", "right", "top", "bottom"]: margin.add_theme_constant_override("margin_" + side, 20)
+	panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	margin.add_child(box)
+	return panel
+
+func _catalogue_box(panel: PanelContainer) -> VBoxContainer:
+	return panel.get_child(0).get_child(0) as VBoxContainer
+
+func _add_catalogue_heading(box: VBoxContainer, title_text: String, subtitle_text: String) -> void:
+	var title := Label.new()
+	title.text = title_text
+	title.add_theme_font_size_override("font_size", 22)
+	box.add_child(title)
+	var subtitle := Label.new()
+	subtitle.text = subtitle_text
+	subtitle.modulate = Color("#aab9a8")
+	box.add_child(subtitle)
+
+func _add_catalogue_button(box: VBoxContainer, buttons: Array[Button], label: String, callback: Callable) -> void:
+	var button := Button.new()
+	button.text = label
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.custom_minimum_size = Vector2(470, 72)
+	button.focus_mode = Control.FOCUS_ALL
+	button.pressed.connect(callback)
+	box.add_child(button)
+	buttons.append(button)
+
 func _input(event: InputEvent) -> void:
 	if _home_catalogue_open and not menu_open:
 		if event.is_action_pressed("m1_cancel") or event.is_action_pressed("m1_tools"):
@@ -102,9 +163,102 @@ func _input(event: InputEvent) -> void:
 			_cycle_catalogue_material("roof", -1 if event.is_action_pressed("m1_undo") else 1)
 		get_viewport().set_input_as_handled()
 		return
+	if _outdoor_catalogue_open and not menu_open:
+		if event.is_action_pressed("m1_cancel") or event.is_action_pressed("m1_tools"):
+			_return_to_build_catalogue()
+		elif event.is_action_pressed("m1_pause"):
+			_close_all_catalogues()
+			super._input(event)
+		elif event.is_action_pressed("m1_accept"):
+			var focus := get_viewport().gui_get_focus_owner()
+			if focus in _outdoor_catalogue_buttons: (focus as Button).pressed.emit()
+		elif event.is_action_pressed("m1_height_up") or event.is_action_pressed("ui_up"):
+			_move_focus(_outdoor_catalogue_buttons, -1)
+		elif event.is_action_pressed("m1_height_down") or event.is_action_pressed("ui_down"):
+			_move_focus(_outdoor_catalogue_buttons, 1)
+		get_viewport().set_input_as_handled()
+		return
+	if _build_catalogue_open and not menu_open:
+		if event.is_action_pressed("m1_cancel") or event.is_action_pressed("m1_tools"):
+			_close_all_catalogues()
+		elif event.is_action_pressed("m1_pause"):
+			_close_all_catalogues()
+			super._input(event)
+		elif event.is_action_pressed("m1_accept"):
+			var focus := get_viewport().gui_get_focus_owner()
+			if focus in _build_catalogue_buttons: (focus as Button).pressed.emit()
+		elif event.is_action_pressed("m1_height_up") or event.is_action_pressed("ui_up"):
+			_move_focus(_build_catalogue_buttons, -1)
+		elif event.is_action_pressed("m1_height_down") or event.is_action_pressed("ui_down"):
+			_move_focus(_build_catalogue_buttons, 1)
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("m1_mode_switch") and not menu_open and not tools_open and not detail_open and not detail_move_active and not resize_active and not building_placement_active and not stroke_active and not landscape_active:
+		_open_build_catalogue()
+		get_viewport().set_input_as_handled()
+		return
 	super._input(event)
 
+func _top_level_up_action() -> String:
+	return "Build"
+
+func _open_build_catalogue() -> void:
+	_cancel_current_edit("Build catalogue opened")
+	_close_all_catalogues(false)
+	_build_catalogue_open = true
+	tools_open = true
+	_build_catalogue_panel.visible = true
+	if not _build_catalogue_buttons.is_empty(): _build_catalogue_buttons[0].grab_focus()
+	_set_status("Build catalogue • D-pad choose • A open • B close")
+	_refresh_controller_hud()
+
+func _return_to_build_catalogue() -> void:
+	_close_all_catalogues(false)
+	_build_catalogue_open = true
+	tools_open = true
+	_build_catalogue_panel.visible = true
+	if not _build_catalogue_buttons.is_empty(): _build_catalogue_buttons[0].grab_focus()
+	_set_status("Build catalogue")
+	_refresh_controller_hud()
+
+func _close_all_catalogues(clear_tools: bool = true) -> void:
+	_build_catalogue_open = false
+	_outdoor_catalogue_open = false
+	_home_catalogue_open = false
+	_home_catalogue_returns_to_build = false
+	if _build_catalogue_panel: _build_catalogue_panel.visible = false
+	if _outdoor_catalogue_panel: _outdoor_catalogue_panel.visible = false
+	if _home_catalogue_panel: _home_catalogue_panel.visible = false
+	if clear_tools: tools_open = false
+	if clear_tools:
+		get_viewport().gui_release_focus()
+		_set_status("Terrain editing" if view_context == "terrain" else "Home editing")
+	_refresh_controller_hud()
+
+func _show_roads_catalogue() -> void:
+	_set_status("Roads & paths are the next M2 composition tool • no placement action yet")
+
+func _open_outdoor_catalogue() -> void:
+	_build_catalogue_open = false
+	_build_catalogue_panel.visible = false
+	_outdoor_catalogue_open = true
+	_outdoor_catalogue_panel.visible = true
+	if not _outdoor_catalogue_buttons.is_empty(): _outdoor_catalogue_buttons[0].grab_focus()
+	_set_status("Outdoor decorations • choose a world brush • B back")
+	_refresh_controller_hud()
+
+func _choose_outdoor_tool(tool: String) -> void:
+	_close_all_catalogues(false)
+	tools_open = false
+	get_viewport().gui_release_focus()
+	_set_view_context("terrain", "Outdoor decoration selected")
+	_select_terrain_tool(tool)
+	_refresh_controller_hud()
+
 func _open_home_catalogue() -> void:
+	_home_catalogue_returns_to_build = _build_catalogue_open
+	_build_catalogue_open = false
+	if _build_catalogue_panel: _build_catalogue_panel.visible = false
 	_home_catalogue_open = true
 	tools_open = true
 	if _building_panel: _building_panel.visible = false
@@ -114,7 +268,11 @@ func _open_home_catalogue() -> void:
 	_refresh_controller_hud()
 
 func _close_home_catalogue(return_to_options: bool) -> void:
+	if return_to_options and _home_catalogue_returns_to_build:
+		_return_to_build_catalogue()
+		return
 	_home_catalogue_open = false
+	_home_catalogue_returns_to_build = false
 	_home_catalogue_panel.visible = false
 	tools_open = return_to_options
 	if _building_panel: _building_panel.visible = return_to_options
@@ -125,6 +283,7 @@ func _close_home_catalogue(return_to_options: bool) -> void:
 
 func _choose_home_design(design_id: String) -> void:
 	_home_catalogue_open = false
+	_home_catalogue_returns_to_build = false
 	_home_catalogue_panel.visible = false
 	tools_open = false
 	if _building_panel: _building_panel.visible = false
@@ -164,9 +323,28 @@ func _cycle_selected_roof() -> void:
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
 	if not _home_catalogue_panel: return
+	if _mode_label and not menu_open:
+		_mode_label.text = "BUILD"
+		_mode_label.modulate = Color("#f2c982")
+	var catalogue_active := _build_catalogue_open or _outdoor_catalogue_open or _home_catalogue_open
+	if catalogue_active:
+		if _terrain_panel: _terrain_panel.visible = false
+		if _building_panel: _building_panel.visible = false
+		if _tool_card: _tool_card.visible = false
+		if _world_prompt: _world_prompt.visible = false
+	if _build_catalogue_panel: _build_catalogue_panel.visible = _build_catalogue_open and not menu_open
+	if _outdoor_catalogue_panel: _outdoor_catalogue_panel.visible = _outdoor_catalogue_open and not menu_open
 	_home_catalogue_panel.visible = _home_catalogue_open and not menu_open
-	if _home_catalogue_open:
+	if _build_catalogue_open:
+		_tool_name.text = "Build catalogue"
+		_tool_meta.text = "Buildings • roads • outdoor decorations"
+		_set_prompts([["UP/DOWN", "Choose"], ["A", "Open"], ["B", "Close"]])
+	elif _outdoor_catalogue_open:
+		_tool_name.text = "Outdoor decorations"
+		_tool_meta.text = "Choose a terrain-safe planting brush"
+		_set_prompts([["UP/DOWN", "Choose"], ["A", "Use brush"], ["B", "Categories"]])
+	elif _home_catalogue_open:
 		if _building_panel: _building_panel.visible = false
 		_tool_name.text = "Place new home"
 		_tool_meta.text = "Independent saved design"
-		_set_prompts([["▲▼", "Choose"], ["◀▶", "Walls"], ["LB", "Roof -"], ["RB", "Roof +"], ["A", "Preview"], ["B", "Back"]])
+		_set_prompts([["UP/DOWN", "Choose"], ["◀▶", "Walls"], ["LB", "Roof -"], ["RB", "Roof +"], ["A", "Preview"], ["B", "Back"]])

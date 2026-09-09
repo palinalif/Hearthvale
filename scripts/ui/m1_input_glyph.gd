@@ -29,7 +29,7 @@ static func set_keyboard_mouse_mode(enabled: bool) -> void:
 	keyboard_mouse_mode = enabled
 
 static func _pc_key(key: String, action: String) -> String:
-	if action in ["Terrain", "Building"]: return "Tab"
+	if action in ["Terrain", "Building", "Build"]: return "Tab"
 	if action == "Roof -": return "Z"
 	if action == "Roof +": return "C"
 	return str(PC_KEYS.get(key, key))

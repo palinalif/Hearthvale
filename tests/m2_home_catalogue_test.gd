@@ -35,6 +35,27 @@ func _initialize() -> void:
 	check(scene._player_restored, "native catalogue scene ready")
 	if not scene._player_restored: await _finish(); return
 	scene.set_process(false)
+	var open_build := InputEventAction.new()
+	open_build.action = "m1_mode_switch"
+	open_build.pressed = true
+	var starting_context: String = scene.view_context
+	scene._input(open_build)
+	check(scene._build_catalogue_open and scene._build_catalogue_panel.visible and scene.tools_open, "D-pad Up opens the global build catalogue from ordinary play")
+	check(scene.view_context == starting_context, "opening the build catalogue does not require entering an existing home")
+	check(scene._build_catalogue_buttons.size() == 3 and scene._build_catalogue_buttons[0].text.begins_with("Buildings") and scene._build_catalogue_buttons[1].text.begins_with("Roads & paths") and scene._build_catalogue_buttons[2].text.begins_with("Outdoor decorations"), "build catalogue exposes clear top-level categories")
+	scene._show_roads_catalogue()
+	check(scene._build_catalogue_open and scene.status_text.contains("next M2 composition tool"), "roads category is honest about its not-yet-active placement tool")
+	scene._open_outdoor_catalogue()
+	check(scene._outdoor_catalogue_open and scene._outdoor_catalogue_panel.visible and scene._outdoor_catalogue_buttons.size() == 3, "outdoor category exposes the current planting tools")
+	scene._choose_outdoor_tool("foliage")
+	check(not scene.tools_open and not scene._outdoor_catalogue_open and scene.view_context == "terrain" and scene.sculpt_tool == "foliage", "outdoor choice returns directly to the world with its brush active")
+	scene._input(open_build)
+	scene._open_home_catalogue()
+	check(scene._home_catalogue_open and scene._home_catalogue_returns_to_build, "Buildings opens the home catalogue from the global category hub")
+	scene._close_home_catalogue(true)
+	check(scene._build_catalogue_open and not scene._home_catalogue_open, "B from homes returns to build categories")
+	scene._close_all_catalogues()
+	check(not scene.tools_open and not scene._build_catalogue_open, "B closes the global build catalogue cleanly")
 	scene._set_view_context("building")
 	scene._open_building_panel()
 	await process_frame

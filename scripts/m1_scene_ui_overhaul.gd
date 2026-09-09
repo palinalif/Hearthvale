@@ -88,6 +88,9 @@ func _input(event: InputEvent) -> void:
 		return
 	super._input(event)
 
+func _top_level_up_action() -> String:
+	return "Building" if view_context == "terrain" else "Terrain"
+
 func _build_controller_hud() -> void:
 	_hud_theme = UISkin.make_theme()
 	# Hide the prototype's verbose diagnostic labels during ordinary play. They
@@ -190,11 +193,11 @@ func _refresh_controller_hud() -> void:
 	elif resize_active:
 		prompts = [["A", "Apply"], ["B", "Cancel"], ["LS", "Resize"], ["Y", "Taller"], ["▼", "Shorter"], ["◀▶", "Axis"]]
 	elif view_context == "building":
-		if not hovered_detail_id.is_empty(): prompts = [["A", "Move"], ["X", "Options"], ["RS", "Orbit"], ["RT/LT", "Zoom"], ["▲", "Terrain"]]
-		elif _shell_hovered: prompts = [["A", "Resize"], ["X", "Options"], ["RS", "Orbit"], ["R3", "Reframe"], ["▲", "Terrain"]]
-		else: prompts = [["LS", "Point"], ["RS", "Orbit"], ["RT/LT", "Zoom"], ["R3", "Reframe"], ["▲", "Terrain"]]
+		if not hovered_detail_id.is_empty(): prompts = [["A", "Move"], ["X", "Options"], ["RS", "Orbit"], ["RT/LT", "Zoom"], ["▲", _top_level_up_action()]]
+		elif _shell_hovered: prompts = [["A", "Resize"], ["X", "Options"], ["RS", "Orbit"], ["R3", "Reframe"], ["▲", _top_level_up_action()]]
+		else: prompts = [["LS", "Point"], ["RS", "Orbit"], ["RT/LT", "Zoom"], ["R3", "Reframe"], ["▲", _top_level_up_action()]]
 	else:
-		prompts = [["A", "Sculpt"], ["B", "Cancel"], ["X", "Tools"], ["L3", "Precision"], ["▲", "Building"]]
+		prompts = [["A", "Sculpt"], ["B", "Cancel"], ["X", "Tools"], ["L3", "Precision"], ["▲", _top_level_up_action()]]
 	_set_prompts(prompts)
 
 func _set_prompts(prompts: Array) -> void:

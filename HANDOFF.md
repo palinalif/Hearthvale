@@ -4,6 +4,8 @@ Updated 2026-09-09 during M2-02 on `feat/m2-hamlet-building`. Read AGENTS.md, `t
 
 M2-03 expands that catalogue into distinct cottage/lodge/Tudor window and door families, opening-aware log and Tudor wall treatments, and manual placement of additional structural openings. Window and door variations are categorized. Colour/variation pickers dock away from their target and use live preview; amber highlighting now follows actual detail geometry and whole-house geometry in terrain targeting instead of projected rectangles. See `tasks/M2-03-home-details-ui.md` and `reports/M2-03-home-details-ui.md`.
 
+M2-04 promotes placement into a global Build Catalogue opened by D-pad Up (Tab on PC), without selecting an existing home or changing edit context first. Its category hub routes Buildings to the residential catalogue and Outdoor Decorations to the existing foliage/tree/clear brushes; Roads & Paths is visibly reserved for the next composition slice and does not pretend placement exists. See `reports/M2-04-global-build-catalogue.md`.
+
 ## Current visual-finish branch
 
 On 2026-09-09 the player approved the half-size foliage and requested the earlier

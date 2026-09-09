@@ -229,4 +229,4 @@ func _refresh_controller_hud() -> void:
 		if tools_open and _terrain_panel and _terrain_panel.visible:
 			_set_prompts([["A", "Done / choose tool"], ["B", "Back"], ["UP/DOWN", "Row"], ["LEFT/RIGHT", "Adjust (hold repeats)"]])
 		elif not tools_open:
-			_set_prompts([["A", "Sculpt"], ["B", "Cancel"], ["LEFT/RIGHT", "Tool"], ["X", "Settings"], ["L3", "Precision"], ["UP", "Building"]])
+			_set_prompts([["A", "Sculpt"], ["B", "Cancel"], ["LEFT/RIGHT", "Tool"], ["X", "Settings"], ["L3", "Precision"], ["UP", _top_level_up_action()]])
