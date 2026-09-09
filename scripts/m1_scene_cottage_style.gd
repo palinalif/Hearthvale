@@ -20,11 +20,25 @@ const DETAIL_COLOUR_LABELS := {
 const DETAIL_VARIATIONS := [
 	["variant-window-classic", "Cottage casement", "window", "window_wood"],
 	["variant-window-round", "Round window", "window", "window_round"],
+	["variant-window-diamond", "Cottage diamond", "window", "window_cottage_diamond"],
 	["variant-window-lodge", "Lodge lattice", "window", "window_lodge"],
+	["variant-window-lodge-cross", "Lodge cross-braced", "window", "window_lodge_cross"],
 	["variant-window-tudor", "Tudor leaded", "window", "window_tudor"],
+	["variant-window-tudor-tall", "Tudor tall diamond", "window", "window_tudor_tall"],
 	["variant-door-cottage", "Cottage plank", "door", "door_timber"],
+	["variant-door-stable", "Cottage stable", "door", "door_cottage_stable"],
 	["variant-door-lodge", "Lodge braced", "door", "door_lodge"],
+	["variant-door-lodge-split", "Lodge split plank", "door", "door_lodge_split"],
 	["variant-door-tudor", "Tudor panelled", "door", "door_tudor"],
+	["variant-door-tudor-arch", "Tudor arched panel", "door", "door_tudor_arch"],
+	["variant-shutter-mixed", "Hand-built mix", "shutter", "shutter_wood"],
+	["variant-shutter-boarded", "Boarded shutters", "shutter", "shutter_boarded"],
+	["variant-shutter-louvered", "Louvered shutters", "shutter", "shutter_louvered"],
+	["variant-shutter-braced", "Diagonal-braced shutters", "shutter", "shutter_braced"],
+	["variant-flower-box-mixed", "Garden mix", "flower_box", "flower_box_wood"],
+	["variant-flower-box-timber", "Timber trough", "flower_box", "flower_box_timber"],
+	["variant-flower-box-bracketed", "Bracketed planter", "flower_box", "flower_box_bracketed"],
+	["variant-flower-box-woven", "Woven planter", "flower_box", "flower_box_woven"],
 ]
 
 var _style_picker_mode := ""
@@ -106,11 +120,11 @@ func _update_action_buttons() -> void:
 		_detail_colour_button.visible = _context_actions_open
 		_detail_colour_button.disabled = not _context_actions_open
 	if _context_actions_open:
-		# Windows and doors share one categorized variations browser; colour also
-		# applies to shutters and flower boxes.
+		# Every placeable building detail shares the categorized variations and
+		# colour browsers.
 		if _tool_buttons.has("Replace selected"):
 			var variation := _tool_buttons["Replace selected"] as Button
-			variation.visible = hovered_detail_kind in ["window", "door"]
+			variation.visible = hovered_detail_kind in ["window", "door", "shutter", "flower_box"]
 			variation.disabled = not variation.visible
 
 func _tool_choice(choice: String) -> void:

@@ -230,6 +230,16 @@ func _build_details(view: Dictionary, dimensions: Vector3) -> void:
 		_build_door(detail, local, orientation)
 
 func _craft_variant(detail: Dictionary) -> int:
+	var explicit := {
+		"shutter_boarded": 0,
+		"shutter_louvered": 1,
+		"shutter_braced": 2,
+		"flower_box_timber": 0,
+		"flower_box_bracketed": 1,
+		"flower_box_woven": 2,
+	}
+	var asset_id := str(detail.get("asset_id", ""))
+	if explicit.has(asset_id): return int(explicit[asset_id])
 	# Only recipe identities select craft; position/revision never reshuffle it.
 	return posmod(("%s:%s:%s" % [_craft_seed, detail.get("id", ""), detail.get("asset_id", "")]).hash(), 3)
 
@@ -242,13 +252,16 @@ func _shutter_pieces(x: float, width: float, height: float, cell: Vector3, varia
 	# Back boards and shallow alternating slats retain a connected silhouette.
 	pieces.append(_piece(Vector3(left + columns * cell.x * 0.5, bottom + rows * cell.y * 0.5, cell.z * 0.5), Vector3(columns * cell.x, rows * cell.y, cell.z)))
 	for row in rows:
-		if row % 2 == variant % 2:
+		if variant == 1 or row % 2 == 0:
 			pieces.append(_piece(Vector3(left + columns * cell.x * 0.5, bottom + (row + 0.5) * cell.y, cell.z * 1.5), Vector3(columns * cell.x, cell.y, cell.z)))
 	# Two straps or a stepped diagonal, made of cubes rather than a rotated bar.
 	for row in rows:
 		if variant == 2 or row in [1, rows - 2]:
 			var column := mini(columns - 1, row * columns / rows) if variant == 2 else 0
 			pieces.append(_piece(Vector3(left + (column + 0.5) * cell.x, bottom + (row + 0.5) * cell.y, cell.z * 2.5), Vector3(cell.x if variant == 2 else columns * cell.x, cell.y, cell.z)))
+	if variant == 1:
+		for column in [0, columns - 1]:
+			pieces.append(_piece(Vector3(left + (column + 0.5) * cell.x, bottom + rows * cell.y * 0.5, cell.z * 2.5), Vector3(cell.x, rows * cell.y, cell.z)))
 	return pieces
 
 func _build_flower_box(detail: Dictionary, local: Vector3, basis: Basis) -> void:
@@ -270,6 +283,9 @@ func _build_flower_box(detail: Dictionary, local: Vector3, basis: Basis) -> void
 	for column in [1, count - 2]:
 		trough.append(_piece(Vector3(left + (column + 0.5) * cell.x, -cell.y * 1.5, depth * 0.5), Vector3(cell.x, cell.y, depth)))
 		if variant == 1:
+			trough.append(_piece(Vector3(left + (column + 0.5) * cell.x, cell.y * 0.5, depth + cell.z * 0.5), cell))
+	if variant == 2:
+		for column in range(1, count - 1, 2):
 			trough.append(_piece(Vector3(left + (column + 0.5) * cell.x, cell.y * 0.5, depth + cell.z * 0.5), cell))
 	_add_detail_boxes("FlowerBox_%s" % id, trough, SHUTTER_COLOR, basis, local)
 	var leaves: Array = []
@@ -325,8 +341,11 @@ func _add_box(node_name: String, size: Vector3, local_position: Vector3, color: 
 func _build_window(detail: Dictionary, local: Vector3, orientation: String, window_material: StandardMaterial3D) -> void:
 	var id := str(detail.get("id", "window"))
 	var asset_id := str(detail.get("asset_id", "window_wood"))
-	var lodge := asset_id == "window_lodge"
-	var tudor := asset_id == "window_tudor"
+	var lodge := asset_id.begins_with("window_lodge")
+	var tudor := asset_id.begins_with("window_tudor")
+	var cottage_diamond := asset_id == "window_cottage_diamond"
+	var lodge_cross := asset_id == "window_lodge_cross"
+	var tudor_tall := asset_id == "window_tudor_tall"
 	var layout := _window_layout(detail, local, orientation)
 	var rounded: bool = bool(layout["rounded"])
 	var basis: Basis = layout["basis"]
@@ -370,18 +389,27 @@ func _build_window(detail: Dictionary, local: Vector3, orientation: String, wind
 	# Each named asset owns a readable joinery grammar; recipe identity remains
 	# stable while the disposable presentation can become more detailed.
 	if lodge:
-		for x in [-pane_size.x * 0.25, pane_size.x * 0.25]: timber.append(_piece(Vector3(x, 0, cell.z * 0.5), Vector3(cell.x, pane_size.y, cell.z)))
-		timber.append(_piece(Vector3(0, 0, cell.z * 0.5), Vector3(pane_size.x, cell.y * 2.0, cell.z)))
+		if lodge_cross:
+			timber.append(_piece(Vector3(0, 0, cell.z * 0.5), Vector3(cell.x, pane_size.y, cell.z)))
+			for direction in [-1.0, 1.0]:
+				for step in 5: timber.append(_piece(Vector3(direction * (-half.x * 0.72 + step * cell.x), -half.y * 0.68 + step * cell.y, cell.z * 1.5), cell))
+		else:
+			for x in [-pane_size.x * 0.25, pane_size.x * 0.25]: timber.append(_piece(Vector3(x, 0, cell.z * 0.5), Vector3(cell.x, pane_size.y, cell.z)))
+			timber.append(_piece(Vector3(0, 0, cell.z * 0.5), Vector3(pane_size.x, cell.y * 2.0, cell.z)))
 	elif tudor:
 		timber.append(_piece(Vector3(0, 0, cell.z * 0.5), Vector3(cell.x, pane_size.y, cell.z)))
 		for y in [-pane_size.y * 0.25, pane_size.y * 0.25]: timber.append(_piece(Vector3(0, y, cell.z * 0.5), Vector3(pane_size.x, cell.y, cell.z)))
+		var steps := 6 if tudor_tall else 4
 		for direction in [-1.0, 1.0]:
-			for step in 4: timber.append(_piece(Vector3(direction * (-half.x * 0.55 + step * cell.x), -half.y * 0.55 + step * cell.y, cell.z * 1.5), cell))
+			for step in steps: timber.append(_piece(Vector3(direction * (-half.x * 0.55 + step * cell.x), -half.y * 0.62 + step * cell.y, cell.z * 1.5), cell))
 	else:
 		timber.append(_piece(Vector3(cell.x * 0.5, 0, cell.z * 0.5), Vector3(cell.x, pane_size.y, cell.z)))
 		var transom_y := cell.y * 0.5 if rounded or variant == 0 else snappedf(half.y * 0.5, cell.y) + cell.y * 0.5
 		timber.append(_piece(Vector3(0, transom_y, cell.z * 0.5), Vector3(pane_size.x, cell.y, cell.z)))
 		if not rounded and variant == 2: timber.append(_piece(Vector3(0, -transom_y, cell.z * 0.5), Vector3(pane_size.x, cell.y, cell.z)))
+		if cottage_diamond:
+			for direction in [-1.0, 1.0]:
+				for step in 5: timber.append(_piece(Vector3(direction * (-half.x * 0.65 + step * cell.x), -half.y * 0.5 + step * cell.y, cell.z * 1.5), cell))
 	var reveal_colour := TRIM_COLOR if lodge or tudor else CORNICE_COLOR
 	for entry in [["Reveal", pale, reveal_colour], ["Joinery", timber, TRIM_COLOR], ["Shutters", shutters, SHUTTER_COLOR]]:
 		if entry[1].is_empty(): continue
@@ -462,8 +490,11 @@ func _door_layout(detail: Dictionary, local: Vector3, orientation: String) -> Di
 func _build_door(detail: Dictionary, local: Vector3, orientation: String) -> void:
 	var id := str(detail.get("id", "door"))
 	var asset_id := str(detail.get("asset_id", "door_timber"))
-	var lodge := asset_id == "door_lodge"
-	var tudor := asset_id == "door_tudor"
+	var lodge := asset_id.begins_with("door_lodge")
+	var tudor := asset_id.begins_with("door_tudor")
+	var stable := asset_id == "door_cottage_stable"
+	var lodge_split := asset_id == "door_lodge_split"
+	var tudor_arch := asset_id == "door_tudor_arch"
 	var layout := _door_layout(detail, local, orientation)
 	var basis: Basis = layout["basis"]
 	var anchor: Vector3 = layout["anchor_center"]
@@ -490,12 +521,20 @@ func _build_door(detail: Dictionary, local: Vector3, orientation: String) -> voi
 	for plank in planks: wood.append(_piece(Vector3(-width * 0.5 + (plank + 0.5) * width / planks, 0, cell.z), Vector3(cell.x, height - cell.y * 2.0, cell.z)))
 	if lodge:
 		for y in [-height * 0.34, height * 0.34]: wood.append(_piece(Vector3(0, y, cell.z * 2.0), Vector3(width - cell.x * 2.0, cell.y * 2.0, cell.z)))
-		for step in 10: wood.append(_piece(Vector3(-width * 0.35 + step * width * 0.07, -height * 0.32 + step * height * 0.065, cell.z * 2.5), cell * Vector3(2, 2, 1)))
+		if lodge_split: wood.append(_piece(Vector3(0, 0, cell.z * 2.5), Vector3(cell.x, height - cell.y * 2.0, cell.z)))
+		for direction in ([-1.0, 1.0] if lodge_split else [1.0]):
+			for step in 10: wood.append(_piece(Vector3(direction * (-width * 0.35 + step * width * 0.07), -height * 0.32 + step * height * 0.065, cell.z * 2.5), cell * Vector3(2, 2, 1)))
 	elif tudor:
 		for x in [-width * 0.25, width * 0.25]: wood.append(_piece(Vector3(x, 0, cell.z * 2.0), Vector3(cell.x, height - cell.y * 3.0, cell.z)))
 		for y in [-height * 0.28, 0.0, height * 0.28]: wood.append(_piece(Vector3(0, y, cell.z * 2.0), Vector3(width - cell.x * 2.0, cell.y, cell.z)))
+		if tudor_arch:
+			for side in [-1.0, 1.0]:
+				for step in 3: wood.append(_piece(Vector3(side * (width * 0.42 - step * cell.x), height * 0.38 + step * cell.y, cell.z * 2.5), cell))
 	else:
 		for y in [-height * 0.3, height * 0.3]: wood.append(_piece(Vector3(0, y, cell.z * 2.0), Vector3(width - cell.x * 2.0, cell.y, cell.z)))
+		if stable:
+			wood.append(_piece(Vector3(0, height * 0.08, cell.z * 2.5), Vector3(width - cell.x * 2.0, cell.y * 2.0, cell.z)))
+			for step in 6: wood.append(_piece(Vector3(-width * 0.3 + step * width * 0.12, -height * 0.3 + step * cell.y, cell.z * 2.5), cell))
 	wood.append(_piece(Vector3(width * 0.3, 0, cell.z * 2.5), cell))
 	_add_detail_boxes("DoorSurround_%s" % id, frame, CORNICE_COLOR, basis, anchor)
 	_add_detail_boxes("DoorJoinery_%s" % id, wood, TRIM_COLOR, basis, anchor)

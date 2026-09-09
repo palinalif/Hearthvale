@@ -300,7 +300,7 @@ func _update_action_buttons() -> void:
 	super._update_action_buttons()
 	if _context_actions_open and _style_picker_mode.is_empty() and _tool_buttons.has("Replace selected"):
 		var variation := _tool_buttons["Replace selected"] as Button
-		variation.visible = str(_selected_detail_record().get("kind", "")) in ["window", "door"]
+		variation.visible = str(_selected_detail_record().get("kind", "")) in ["window", "door", "shutter", "flower_box"]
 		variation.disabled = not variation.visible
 
 func _selected_visual_roots() -> Array[Node3D]:

@@ -134,7 +134,7 @@ func _initialize() -> void:
 		scene._context_actions_open = false
 		var door_variation_revision: int = scene.building_world.get_revision()
 		scene._begin_style_picker("variation")
-		_check(scene._style_candidates("variation").size() == 3, "door variation category contains three door families")
+		_check(scene._style_candidates("variation").size() == 6, "door variation category contains two choices for every home family")
 		scene._preview_style_choice("variation", "door_tudor")
 		_check(scene.building_world.get_revision() == door_variation_revision, "door variation browse remains read only")
 		scene._cancel_style_picker()
@@ -149,6 +149,47 @@ func _initialize() -> void:
 		_check(scene.building_world.resize_detail(scene.selected_building_id, str(door["id"]), Vector2(2.25, 4.0)), "door can resize")
 		var persisted_size = (scene._selected_detail_record().get("override", {}) as Dictionary).get("size", [])
 		_check(persisted_size == [2.25, 4.0], "door size persists")
+
+	# Shutters and flower boxes now use the same intentional variation browser
+	# instead of receiving an unchangeable derived craft choice.
+	var attachment_specs := [
+		["flower_box", Vector3(0, 1.5, 7.02), "flower_box_wood", "flower_box_woven"],
+		["shutter", Vector3(0, 4.0, 7.02), "shutter_wood", "shutter_braced"],
+	]
+	var attachment_ids: Dictionary = {}
+	var expected_attachment_assets: Dictionary = {}
+	for spec in attachment_specs:
+		var detail_id: String = scene.building_world.add_detail(scene.selected_building_id, str(spec[0]), "wall-back", spec[1], str(spec[2]))
+		_check(not detail_id.is_empty(), "%s fixture can be placed" % spec[0])
+		if detail_id.is_empty(): continue
+		attachment_ids[str(spec[0])] = detail_id
+		scene.selected_detail_id = detail_id
+		scene.hovered_detail_id = detail_id
+		scene.hovered_detail_kind = str(spec[0])
+		scene._context_actions_open = true
+		scene._update_action_buttons()
+		_check((scene._tool_buttons["Replace selected"] as Button).visible, "%s exposes variations" % spec[0])
+		scene._context_actions_open = false
+		var before_attachment_preview: Dictionary = scene.building_world.get_document()
+		scene._begin_style_picker("variation")
+		_check(scene._style_candidates("variation").size() == 4, "%s category contains mixed plus three intentional crafts" % spec[0])
+		scene._preview_style_choice("variation", str(spec[3]))
+		_check(scene.building_world.get_document() == before_attachment_preview, "%s preview remains read only" % spec[0])
+		scene._commit_style_choice("variation", str(spec[3]))
+		_check(str(scene._selected_detail_record().get("asset_id", "")) == str(spec[3]), "%s variation commits" % spec[0])
+		_check(scene.building_world.undo(), "%s variation is undoable" % spec[0])
+		_check(str(scene._selected_detail_record().get("asset_id", "")) == str(spec[2]), "%s undo restores its prior craft" % spec[0])
+		_check(scene.building_world.redo(), "%s variation is redoable" % spec[0])
+		_check(str(scene._selected_detail_record().get("asset_id", "")) == str(spec[3]), "%s redo restores its selected craft" % spec[0])
+		expected_attachment_assets[str(spec[0])] = str(spec[3])
+	var decoration_document: String = scene.building_world.serialize_document()
+	var restored := preload("res://scripts/building_world.gd").new()
+	_check(restored.load_serialized_document(decoration_document), "expanded decoration assets reload")
+	for kind in attachment_ids:
+		var restored_asset := ""
+		for detail in restored.get_building(scene.selected_building_id).get("details", []):
+			if str(detail.get("id", "")) == str(attachment_ids[kind]): restored_asset = str(detail.get("asset_id", ""))
+		_check(restored_asset == str(expected_attachment_assets[kind]), "%s variation survives save reload" % kind)
 
 	_finish()
 
