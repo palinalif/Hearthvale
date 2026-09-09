@@ -19,5 +19,7 @@ This slice deliberately reuses the existing cottage. It does not yet add the res
 - Actual Forward Mobile / D3D12 render: 389 checks, 0 failures on NVIDIA RTX 3070. This is desktop Mobile-render evidence, not Thor performance or player approval.
 - `reports/screenshots/m2-placement-rotation/rotated-home-preview.png`: valid rotated ghost with visible controller grammar.
 - `reports/screenshots/m2-placement-rotation/invalid-overlap.png`: invalid overlap with visible reason text.
+- GitHub placement run `34359798260`: passed against exact source commit `c9f83ec059536c16abd2e22d051b361b33e3e5d3`.
+- GitHub cottage/Mobile/APK run `34359798478`: passed. Artifact `10107660813` (`hearthvale-m1-repair-c9f83ec059536c16abd2e22d051b361b33e3e5d3`) contains the CI-verified isolated ARM64 APK and receipt; the legacy `m1-repair` artifact label has not yet been renamed for M2.
 
-An ARM64 APK and physical Thor review remain separate delivery evidence.
+Physical Thor review remains separate and has not been claimed.

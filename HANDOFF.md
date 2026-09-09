@@ -1,6 +1,6 @@
 # Hearthvale — current M2 handoff
 
-Updated 2026-09-09 at the start of `feat/m2-hamlet-building`. Read AGENTS.md, `tasks/M2-hamlet-building.md`, and the latest user request first. **M1 is complete and M2 is active.** The first bounded M2 slice adds controller-first translation/rotation, explicit bounds/overlap validity, atomic confirmation, cancellation, undo/redo and save compatibility using the existing cottage before new residential recipes are authored. The Thor-accepted M1 interaction baseline remains `44ebca5b`; the final M1 visual/performance/device receipt is `reports/M1-e3ef8e0d-thor-acceptance.md`.
+Updated 2026-09-09 after M2-01 on `feat/m2-hamlet-building`. Read AGENTS.md, `tasks/M2-hamlet-building.md`, and the latest user request first. **M1 is complete and M2 is active.** M2-01 is implemented at `c9f83ec`: controller-first translation/rotation, explicit bounds/overlap validity, atomic confirmation, cancellation, undo/redo and save compatibility use the existing cottage before new residential recipes are authored. The focused placement run `34359798260` and full cottage/Mobile/verified-ARM64-APK run `34359798478` passed. See `reports/M2-01-placement-rotation-foundation.md`. Physical Thor feel remains player review. The Thor-accepted M1 interaction baseline remains `44ebca5b`; the final M1 visual/performance/device receipt is `reports/M1-e3ef8e0d-thor-acceptance.md`.
 
 ## Current visual-finish branch
 

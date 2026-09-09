@@ -1,6 +1,6 @@
 # M2-01 — Placement and rotation foundation
 
-**Status:** Active
+**Status:** Implemented and CI/APK verified at `c9f83ec`; physical Thor feel remains player review.
 
 Prove the M2 transform and safety path using the existing cottage before adding more home recipes or catalogue art.
 
