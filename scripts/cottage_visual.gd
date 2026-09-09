@@ -22,6 +22,32 @@ var applied_revision := -1
 var requested_revision := -1
 var building_id := ""
 var _applied_view: Dictionary = {}
+var _outline_material: StandardMaterial3D
+
+func set_detail_highlight(detail_id: String, enabled: bool) -> void:
+	var overlay: Material = _detail_outline_material() if enabled else null
+	for child in get_children():
+		if not child is GeometryInstance3D: continue
+		var node_name := str(child.name)
+		if node_name == "Detail_" + detail_id or node_name.ends_with("_" + detail_id):
+			(child as GeometryInstance3D).material_overlay = overlay
+
+func set_building_highlight(enabled: bool) -> void:
+	var overlay: Material = _detail_outline_material() if enabled else null
+	for child in get_children():
+		if child is GeometryInstance3D: (child as GeometryInstance3D).material_overlay = overlay
+
+func _detail_outline_material() -> StandardMaterial3D:
+	if not _outline_material:
+		_outline_material = StandardMaterial3D.new()
+		_outline_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_outline_material.albedo_color = Color("#ffbf3f")
+		_outline_material.emission_enabled = true
+		_outline_material.emission = Color("#ffbf3f")
+		_outline_material.cull_mode = BaseMaterial3D.CULL_FRONT
+		_outline_material.grow = true
+		_outline_material.grow_amount = 0.12
+	return _outline_material
 
 func request_revision(revision: int) -> void:
 	requested_revision = maxi(requested_revision, revision)
@@ -139,13 +165,22 @@ func _apply_roof_material(material_id: String) -> void:
 
 func _build_style_accents(dimensions: Vector3, style_id: String) -> void:
 	if style_id == "woodland_lodge":
-		var beams: Array = []
-		for side in [-1.0, 1.0]:
-			var z: float = side * (dimensions.z * 0.5 + _detail_unit.z * 0.5)
-			beams.append(_piece(Vector3(0, dimensions.y * 0.58, z), Vector3(dimensions.x, _detail_unit.y * 2.0, _detail_unit.z)))
-			for x_value in [-dimensions.x * 0.34, 0.0, dimensions.x * 0.34]: beams.append(_piece(Vector3(x_value, dimensions.y * 0.50, z), Vector3(_detail_unit.x * 2.0, dimensions.y * 0.72, _detail_unit.z)))
-		_add_detail_boxes("LodgeTimberFrame", beams, TRIM_COLOR)
+		var ends: Array = []
+		for x_value in [-dimensions.x * 0.5, dimensions.x * 0.5]:
+			for z_value in [-dimensions.z * 0.5, dimensions.z * 0.5]:
+				for y in range(1, floori(dimensions.y / (_unit.y * 2.0))):
+					ends.append(_piece(Vector3(x_value, y * _unit.y * 2.0, z_value), Vector3(_unit.x * 1.5, _unit.y, _unit.z * 1.5)))
+		_add_detail_boxes("LodgeLogEnds", ends, TRIM_COLOR.lightened(0.08))
 	elif style_id == "village_gable":
+		var frame: Array = []
+		for side in [-1.0, 1.0]:
+			var z: float = side * (dimensions.z * 0.5 + _detail_unit.z)
+			for x_value in [-dimensions.x * 0.5, 0.0, dimensions.x * 0.5]: frame.append(_piece(Vector3(x_value, dimensions.y * 0.5, z), Vector3(_detail_unit.x * 2.0, dimensions.y - _unit.y, _detail_unit.z * 2.0)))
+			for y_value in [1.0, dimensions.y - _unit.y]: frame.append(_piece(Vector3(0, y_value, z), Vector3(dimensions.x, _detail_unit.y * 2.0, _detail_unit.z * 2.0)))
+			for direction in [-1.0, 1.0]:
+				for step in 11:
+					frame.append(_piece(Vector3(direction * (0.5 + step * 0.45), 1.35 + step * 0.22, z + side * _detail_unit.z), _detail_unit * Vector3(2, 2, 1)))
+		_add_detail_boxes("TudorWallFrame", frame, TRIM_COLOR)
 		var finials: Array = []
 		var top := snappedf(dimensions.y + dimensions.y * _roof_rise_ratio, _detail_unit.y)
 		for x_value in [-dimensions.x * 0.5, dimensions.x * 0.5]:
@@ -289,6 +324,9 @@ func _add_box(node_name: String, size: Vector3, local_position: Vector3, color: 
 
 func _build_window(detail: Dictionary, local: Vector3, orientation: String, window_material: StandardMaterial3D) -> void:
 	var id := str(detail.get("id", "window"))
+	var asset_id := str(detail.get("asset_id", "window_wood"))
+	var lodge := asset_id == "window_lodge"
+	var tudor := asset_id == "window_tudor"
 	var layout := _window_layout(detail, local, orientation)
 	var rounded: bool = bool(layout["rounded"])
 	var basis: Basis = layout["basis"]
@@ -324,19 +362,28 @@ func _build_window(detail: Dictionary, local: Vector3, orientation: String, wind
 		for side in [-1.0, 1.0]:
 			pale.append(_piece(Vector3(side * (half.x + cell.x * 0.5), 0, cell.z * 0.5), Vector3(cell.x, pane_size.y, cell.z)))
 			pale.append(_piece(Vector3(0, side * (half.y + cell.y * 0.5), cell.z * 0.5), Vector3(pane_size.x + 2.0 * cell.x, cell.y, cell.z)))
-			if bool(detail.get("show_shutters", true)):
+			if bool(detail.get("show_shutters", true)) and not lodge and not tudor:
 				var width := cell.x * 2.0
 				var x: float = side * (half.x + cell.x + width * 0.5)
 				shutters.append_array(_shutter_pieces(x, width, pane_size.y, cell, variant))
 		pale.append(_piece(Vector3(0, -half.y - cell.y * 0.5, cell.z * 1.5), Vector3(pane_size.x + cell.x * 4.0, cell.y, cell.z)))
-	# One fine mullion and either a central or raised transom. A single shared
-	# timber material keeps the tiny cell divisions calm at gameplay zoom.
-	timber.append(_piece(Vector3(cell.x * 0.5, 0, cell.z * 0.5), Vector3(cell.x, pane_size.y, cell.z)))
-	var transom_y := cell.y * 0.5 if rounded or variant == 0 else snappedf(half.y * 0.5, cell.y) + cell.y * 0.5
-	timber.append(_piece(Vector3(0, transom_y, cell.z * 0.5), Vector3(pane_size.x, cell.y, cell.z)))
-	if not rounded and variant == 2:
-		timber.append(_piece(Vector3(0, -transom_y, cell.z * 0.5), Vector3(pane_size.x, cell.y, cell.z)))
-	for entry in [["Reveal", pale, CORNICE_COLOR], ["Joinery", timber, TRIM_COLOR], ["Shutters", shutters, SHUTTER_COLOR]]:
+	# Each named asset owns a readable joinery grammar; recipe identity remains
+	# stable while the disposable presentation can become more detailed.
+	if lodge:
+		for x in [-pane_size.x * 0.25, pane_size.x * 0.25]: timber.append(_piece(Vector3(x, 0, cell.z * 0.5), Vector3(cell.x, pane_size.y, cell.z)))
+		timber.append(_piece(Vector3(0, 0, cell.z * 0.5), Vector3(pane_size.x, cell.y * 2.0, cell.z)))
+	elif tudor:
+		timber.append(_piece(Vector3(0, 0, cell.z * 0.5), Vector3(cell.x, pane_size.y, cell.z)))
+		for y in [-pane_size.y * 0.25, pane_size.y * 0.25]: timber.append(_piece(Vector3(0, y, cell.z * 0.5), Vector3(pane_size.x, cell.y, cell.z)))
+		for direction in [-1.0, 1.0]:
+			for step in 4: timber.append(_piece(Vector3(direction * (-half.x * 0.55 + step * cell.x), -half.y * 0.55 + step * cell.y, cell.z * 1.5), cell))
+	else:
+		timber.append(_piece(Vector3(cell.x * 0.5, 0, cell.z * 0.5), Vector3(cell.x, pane_size.y, cell.z)))
+		var transom_y := cell.y * 0.5 if rounded or variant == 0 else snappedf(half.y * 0.5, cell.y) + cell.y * 0.5
+		timber.append(_piece(Vector3(0, transom_y, cell.z * 0.5), Vector3(pane_size.x, cell.y, cell.z)))
+		if not rounded and variant == 2: timber.append(_piece(Vector3(0, -transom_y, cell.z * 0.5), Vector3(pane_size.x, cell.y, cell.z)))
+	var reveal_colour := TRIM_COLOR if lodge or tudor else CORNICE_COLOR
+	for entry in [["Reveal", pale, reveal_colour], ["Joinery", timber, TRIM_COLOR], ["Shutters", shutters, SHUTTER_COLOR]]:
 		if entry[1].is_empty(): continue
 		_add_detail_boxes("%s_%s" % [entry[0], id], entry[1], entry[2], basis, anchor_center)
 
@@ -382,6 +429,22 @@ func _build_wall(orientation: String, dimensions: Vector3, view: Dictionary, col
 			pieces.append(_piece(Vector3(middle.x, middle.y, -0.22), Vector3(xs[x+1]-xs[x], ys[y+1]-ys[y], 0.44)))
 	var wall := _add_batched_boxes("Wall%s" % orientation.capitalize(), pieces, color)
 	wall.transform = Transform3D(basis, origin)
+	if str(view.get("style_id", "")) == "woodland_lodge":
+		var courses: Array = [[], []]
+		for piece_value in pieces:
+			var piece: Dictionary = piece_value
+			var size: Vector3 = piece["size"]
+			var center: Vector3 = piece["center"]
+			var course_height := _unit.y * 2.0
+			var count := maxi(1, ceili(size.y / course_height))
+			for course in count:
+				var bottom := center.y - size.y * 0.5
+				var height := minf(course_height, bottom + size.y - (bottom + course * course_height))
+				if height <= 0.001: continue
+				courses[course % 2].append(_piece(Vector3(center.x, bottom + course * course_height + height * 0.5, -0.47), Vector3(size.x, height * 0.78, _detail_unit.z)))
+		for shade in 2:
+			var log_face := _add_detail_boxes("LogCourses%s%d" % [orientation.capitalize(), shade], courses[shade], color.lightened(0.04 + shade * 0.07))
+			log_face.transform = Transform3D(basis, origin)
 
 func _detail_size(detail: Dictionary, fallback: Vector2) -> Vector2:
 	var value = (detail.get("override", {}) as Dictionary).get("size", null)
@@ -398,6 +461,9 @@ func _door_layout(detail: Dictionary, local: Vector3, orientation: String) -> Di
 
 func _build_door(detail: Dictionary, local: Vector3, orientation: String) -> void:
 	var id := str(detail.get("id", "door"))
+	var asset_id := str(detail.get("asset_id", "door_timber"))
+	var lodge := asset_id == "door_lodge"
+	var tudor := asset_id == "door_tudor"
 	var layout := _door_layout(detail, local, orientation)
 	var basis: Basis = layout["basis"]
 	var anchor: Vector3 = layout["anchor_center"]
@@ -422,11 +488,18 @@ func _build_door(detail: Dictionary, local: Vector3, orientation: String) -> voi
 	frame.append(_piece(Vector3(0, height * 0.5 + cell.y, cell.z), Vector3(width + cell.x * 6.0, cell.y, cell.z * 2.0)))
 	var planks := maxi(3, roundi(width / (cell.x * 2.0)))
 	for plank in planks: wood.append(_piece(Vector3(-width * 0.5 + (plank + 0.5) * width / planks, 0, cell.z), Vector3(cell.x, height - cell.y * 2.0, cell.z)))
-	for y in [-height * 0.3, height * 0.3]: wood.append(_piece(Vector3(0, y, cell.z * 2.0), Vector3(width - cell.x * 2.0, cell.y, cell.z)))
+	if lodge:
+		for y in [-height * 0.34, height * 0.34]: wood.append(_piece(Vector3(0, y, cell.z * 2.0), Vector3(width - cell.x * 2.0, cell.y * 2.0, cell.z)))
+		for step in 10: wood.append(_piece(Vector3(-width * 0.35 + step * width * 0.07, -height * 0.32 + step * height * 0.065, cell.z * 2.5), cell * Vector3(2, 2, 1)))
+	elif tudor:
+		for x in [-width * 0.25, width * 0.25]: wood.append(_piece(Vector3(x, 0, cell.z * 2.0), Vector3(cell.x, height - cell.y * 3.0, cell.z)))
+		for y in [-height * 0.28, 0.0, height * 0.28]: wood.append(_piece(Vector3(0, y, cell.z * 2.0), Vector3(width - cell.x * 2.0, cell.y, cell.z)))
+	else:
+		for y in [-height * 0.3, height * 0.3]: wood.append(_piece(Vector3(0, y, cell.z * 2.0), Vector3(width - cell.x * 2.0, cell.y, cell.z)))
 	wood.append(_piece(Vector3(width * 0.3, 0, cell.z * 2.5), cell))
 	_add_detail_boxes("DoorSurround_%s" % id, frame, CORNICE_COLOR, basis, anchor)
 	_add_detail_boxes("DoorJoinery_%s" % id, wood, TRIM_COLOR, basis, anchor)
-	_build_entrance_canopy(id, width, height, basis, anchor)
+	if not lodge and not tudor: _build_entrance_canopy(id, width, height, basis, anchor)
 
 func _build_crafted_shell(dimensions: Vector3, _color: Color) -> void:
 	var stone: Array = []

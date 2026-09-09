@@ -81,6 +81,12 @@ func _initialize() -> void:
 	var style_before: Dictionary = scene.building_world.get_document()
 	var revision_before: int = scene.building_world.get_revision()
 	scene._begin_style_picker("colour")
+	await process_frame
+	var selected_local: Vector3 = scene._selected_detail_record()["resolved_position"]
+	var selected_transform: Transform3D = scene.building_world.get_building(scene.selected_building_id)["transform"]
+	var selected_screen: Vector2 = scene.camera.unproject_position(selected_transform * selected_local)
+	_check(not scene.tools_panel.get_global_rect().grow(20).has_point(selected_screen), "live picker docks away from the selected detail")
+	_check(scene._highlighted_detail_geometry_count() > 0, "live picker outlines the edited detail's actual mesh")
 	scene._preview_style_choice("colour", "sage")
 	_check(scene.building_world.get_document() == style_before, "colour browse does not mutate building document")
 	_check(scene.building_world.get_revision() == revision_before, "colour browse does not create history revision")
@@ -124,7 +130,14 @@ func _initialize() -> void:
 		scene._context_actions_open = true
 		scene._update_action_buttons()
 		_check(scene._detail_resize_button.visible and scene._detail_colour_button.visible, "door actions expose resize and colour")
-		_check(not (scene._tool_buttons["Replace selected"] as Button).visible, "door does not expose window-only variation")
+		_check((scene._tool_buttons["Replace selected"] as Button).visible, "door exposes categorized variations")
+		scene._context_actions_open = false
+		var door_variation_revision: int = scene.building_world.get_revision()
+		scene._begin_style_picker("variation")
+		_check(scene._style_candidates("variation").size() == 3, "door variation category contains three door families")
+		scene._preview_style_choice("variation", "door_tudor")
+		_check(scene.building_world.get_revision() == door_variation_revision, "door variation browse remains read only")
+		scene._cancel_style_picker()
 		var door_revision: int = scene.building_world.get_revision()
 		_check(scene._commit_detail_style(str(door["id"]), str(door["asset_id"]), "berry"), "door recolour commits")
 		_check(scene.building_world.get_revision() == door_revision + 1, "door recolour creates one revision")

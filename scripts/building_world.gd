@@ -11,9 +11,9 @@ const GENERATOR_VERSION := "m1-cottage-v1"
 const STYLE_ID := "riverside_cottage"
 const HOME_DESIGN_ORDER: Array[String] = ["riverside_cottage", "woodland_lodge", "village_gable"]
 const HOME_DESIGNS := {
-	"riverside_cottage": {"name": "Riverside Cottage", "shape_id": "classic_gable", "style_id": "riverside_cottage", "summary": "Balanced gable • stone and plaster", "dimensions": Vector3(18.0, 7.0, 14.0), "roof_profile": "gentle_gable", "wall_material_id": "stone_plaster", "roof_material_id": "terracotta"},
-	"woodland_lodge": {"name": "Woodland Lodge", "shape_id": "longhouse", "style_id": "woodland_lodge", "summary": "Broad low lodge • timber frame", "dimensions": Vector3(22.0, 6.0, 11.0), "roof_profile": "swept_gable", "wall_material_id": "timber", "roof_material_id": "moss_tile"},
-	"village_gable": {"name": "Village Gable", "shape_id": "tall_gable", "style_id": "village_gable", "summary": "Narrow tall home • steep slate roof", "dimensions": Vector3(12.0, 9.0, 16.0), "roof_profile": "steep_gable", "wall_material_id": "chalk_white", "roof_material_id": "slate"},
+	"riverside_cottage": {"name": "Riverside Cottage", "shape_id": "classic_gable", "style_id": "riverside_cottage", "summary": "Balanced gable • stone and plaster", "dimensions": Vector3(18.0, 7.0, 14.0), "roof_profile": "gentle_gable", "wall_material_id": "stone_plaster", "roof_material_id": "terracotta", "window_asset_id": "window_wood", "door_asset_id": "door_timber"},
+	"woodland_lodge": {"name": "Woodland Lodge", "shape_id": "longhouse", "style_id": "woodland_lodge", "summary": "Broad low lodge • stacked log walls", "dimensions": Vector3(22.0, 6.0, 11.0), "roof_profile": "swept_gable", "wall_material_id": "timber", "roof_material_id": "moss_tile", "window_asset_id": "window_lodge", "door_asset_id": "door_lodge"},
+	"village_gable": {"name": "Village Gable", "shape_id": "tall_gable", "style_id": "village_gable", "summary": "Tall Tudor home • steep slate roof", "dimensions": Vector3(12.0, 9.0, 16.0), "roof_profile": "steep_gable", "wall_material_id": "chalk_white", "roof_material_id": "slate", "window_asset_id": "window_tudor", "door_asset_id": "door_tudor"},
 }
 const HISTORY_LIMIT := 50
 const HISTORY_BYTES_LIMIT := 8 * 1024 * 1024
@@ -461,6 +461,19 @@ func _apply_home_design(building: Dictionary, design: Dictionary) -> void:
 	building["wall_material_id"] = str(design["wall_material_id"])
 	building["roof_material_id"] = str(design["roof_material_id"])
 	building["material_overrides"] = {"shell": building["wall_material_id"], "roof": building["roof_material_id"]}
+	var window_asset := str(design.get("window_asset_id", "window_wood"))
+	var door_asset := str(design.get("door_asset_id", "door_timber"))
+	for detail_index in (building["details"] as Array).size():
+		var detail: Dictionary = (building["details"] as Array)[detail_index]
+		if not bool(detail.get("generated", false)) or str(detail.get("state", "")) != "automatic": continue
+		var asset := window_asset if str(detail.get("kind", "")) == "window" else door_asset if str(detail.get("kind", "")) == "door" else ""
+		if asset.is_empty(): continue
+		detail["asset_id"] = asset
+		var default_record = detail.get("default", null)
+		if default_record is Dictionary:
+			(default_record as Dictionary)["asset_id"] = asset
+			detail["default"] = default_record
+		(building["details"] as Array)[detail_index] = detail
 	_reflow_automatic_windows(building)
 	_refresh_buckets(building)
 

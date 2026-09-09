@@ -94,8 +94,9 @@ func _tool_choice(choice: String) -> void:
 	if view_context == "building" and choice == "Duplicate cottage":
 		_begin_building_placement()
 		return
-	if view_context == "building" and choice in ["Add flower box", "Add shutter"]:
-		_begin_new_attachment("flower_box" if choice == "Add flower box" else "shutter")
+	if view_context == "building" and choice in ["Add window", "Add door", "Add flower box", "Add shutter"]:
+		var kinds := {"Add window": "window", "Add door": "door", "Add flower box": "flower_box", "Add shutter": "shutter"}
+		_begin_new_attachment(str(kinds[choice]))
 		return
 	super._tool_choice(choice)
 
@@ -332,7 +333,7 @@ func _begin_detail_move() -> void:
 	if detail_move_active: detail_move_original_surface_id = detail_move_surface_id
 
 func _begin_new_attachment(kind: String) -> void:
-	if detail_move_active or resize_active or kind not in ["flower_box", "shutter"]: return
+	if detail_move_active or resize_active or kind not in ["window", "door", "flower_box", "shutter"]: return
 	var view: Dictionary = building_world.get_building(selected_building_id)
 	if view.is_empty(): return
 	var walls := WallPlacement.wall_ids(view)
@@ -357,17 +358,21 @@ func _begin_new_attachment(kind: String) -> void:
 	var dims: Vector3 = view.get("dimensions", Vector3(18, 7, 14))
 	var start := Vector3(0, clampf(dims.y * 0.45, 1.5, dims.y - 1.0), 0)
 	if selected_position is Vector3: start = selected_position
-	if kind == "flower_box" and selected_position is Vector3: start.y -= 1.8
+	if kind == "door": start.y = 2.0
+	elif kind == "flower_box" and selected_position is Vector3: start.y -= 1.8
 	elif kind == "shutter" and selected_position is Vector3:
 		var support := WallPlacement.surface(view, surface_id)
 		if str(support.get("orientation", "front")) in ["front", "back"]: start.x += 2.2
 		else: start.z += 2.2
-	var snapped := WallPlacement.clamp_to_wall(view, surface_id, start, WallPlacement.footprint(kind, kind + "_wood"))
+	var asset_id := _default_attachment_asset(kind, view)
+	var half := WallPlacement.footprint(kind, asset_id)
+	var snapped := WallPlacement.clamp_to_wall(view, surface_id, start, half)
+	if kind in ["window", "door"]: snapped = WallPlacement.nearest_available(view, "", surface_id, start, half)
 	if snapped.is_empty():
 		_set_status("Attachment does not fit this wall")
 		return
 	placement_kind = kind
-	placement_asset_id = kind + "_wood"
+	placement_asset_id = asset_id
 	selected_detail_id = ""
 	selected_surface_id = surface_id
 	detail_move_surface_id = surface_id
@@ -380,6 +385,14 @@ func _begin_new_attachment(kind: String) -> void:
 	if tools_panel: tools_panel.visible = false
 	_set_status("Place %s • left stick free on wall • D-pad ←/→ wall • A place / B cancel" % kind.replace("_", " "))
 	_update_presentation()
+
+func _default_attachment_asset(kind: String, view: Dictionary) -> String:
+	var style_id := str(view.get("style_id", "riverside_cottage"))
+	if kind == "window":
+		return {"woodland_lodge": "window_lodge", "village_gable": "window_tudor"}.get(style_id, "window_wood")
+	if kind == "door":
+		return {"woodland_lodge": "door_lodge", "village_gable": "door_tudor"}.get(style_id, "door_timber")
+	return kind + "_wood"
 
 func _read_detail_move(delta: float) -> void:
 	if placement_kind.is_empty():

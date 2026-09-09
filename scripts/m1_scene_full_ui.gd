@@ -41,6 +41,8 @@ func _build_building_panel() -> void:
 	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 6); margin.add_child(box)
 	var title := Label.new(); title.text = "COTTAGE"; title.add_theme_font_size_override("font_size", 16); box.add_child(title)
 	_add_building_button(box, "Duplicate", _begin_building_placement)
+	_add_building_button(box, "Add window", _begin_new_attachment.bind("window"))
+	_add_building_button(box, "Add door", _begin_new_attachment.bind("door"))
 	_add_building_button(box, "Add flower box", _begin_new_attachment.bind("flower_box"))
 	_add_building_button(box, "Add shutter", _begin_new_attachment.bind("shutter"))
 	_add_building_button(box, "Material: warm plaster", _cycle_cottage_material)

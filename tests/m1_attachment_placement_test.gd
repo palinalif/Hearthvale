@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Placement = preload("res://scripts/wall_attachment_placement.gd")
+const World = preload("res://scripts/building_world.gd")
 var failures := 0
 var checks := 0
 var scene: Node
@@ -70,6 +71,43 @@ func _initialize() -> void:
 	check(str(placed.get("anchor", {}).get("surface_id", "")) == "wall-back", "committed flower box keeps chosen support")
 	check(placed.get("resolved_position", null) is Vector3 and (placed["resolved_position"] as Vector3).is_equal_approx(placed_position), "commit matches ghost position")
 	check((placed["resolved_position"] as Vector3).z > 7.0, "committed box remains on correct wall side")
+
+	# Structural attachments use the same preview-only wall placement, then
+	# become independent manual recipe records with real shell openings.
+	scene.selected_detail_id = ""
+	scene.selected_surface_id = ""
+	var structural_before: Dictionary = scene.building_world.get_document()
+	scene._begin_new_attachment("window")
+	check(scene.detail_move_active and scene.placement_kind == "window" and scene.placement_asset_id == "window_wood", "Add window enters wall-locked placement with the home default family")
+	check(scene.building_world.get_document() == structural_before, "window ghost does not mutate authority")
+	await _press(JOY_BUTTON_A)
+	var manual_window_id: String = scene.selected_detail_id
+	var manual_window: Dictionary = scene._selected_detail_record()
+	check(not manual_window_id.is_empty() and manual_window["kind"] == "window" and manual_window["state"] == "manual", "placed window persists as an independent manual opening")
+
+	scene._begin_new_attachment("door")
+	check(scene.detail_move_active and scene.placement_kind == "door" and scene.placement_asset_id == "door_timber", "Add door enters wall-locked placement with the home default family")
+	var door_support := Placement.surface(scene.building_world.get_building(scene.selected_building_id), scene.detail_move_surface_id)
+	var door_orientation := str(door_support.get("orientation", "front"))
+	var door_candidate: Vector3 = scene.detail_move_position
+	if door_orientation in ["front", "back"]: door_candidate.x += 4.5
+	else: door_candidate.z += 4.5
+	var door_clamped := Placement.clamp_to_wall(scene.building_world.get_building(scene.selected_building_id), scene.detail_move_surface_id, door_candidate, Placement.footprint("door", "door_timber"))
+	check(not door_clamped.is_empty(), "additional door has a valid clear wall candidate")
+	if not door_clamped.is_empty():
+		scene.detail_move_position = door_clamped["position"]
+		scene._detail_free_position = scene.detail_move_position
+	await _press(JOY_BUTTON_A)
+	var manual_door: Dictionary = scene._selected_detail_record()
+	check(not manual_door.is_empty() and manual_door["kind"] == "door" and manual_door["state"] == "manual", "placed door persists as an independent manual opening")
+	check(scene.building_world.get_document() != structural_before, "structural placements commit authoritative recipe changes")
+	var manual_door_id := str(manual_door.get("id", ""))
+	check(scene.building_world.undo() and scene.building_world.get_building(scene.selected_building_id)["details"].all(func(detail): return str(detail["id"]) != manual_door_id), "one undo removes only the newly placed door")
+	check(scene.building_world.redo() and scene.building_world.get_building(scene.selected_building_id)["details"].any(func(detail): return str(detail["id"]) == manual_door_id), "redo restores the placed door")
+	var restored := World.new()
+	check(restored.load_serialized_document(scene.building_world.serialize_document()), "world with extra structural openings reloads")
+	var restored_details: Array = restored.get_building(scene.selected_building_id)["details"]
+	check(restored_details.any(func(detail): return str(detail["id"]) == manual_window_id) and restored_details.any(func(detail): return str(detail["id"]) == manual_door_id), "added window and door identities survive reload")
 	await _finish()
 
 func _press(button: JoyButton) -> void:

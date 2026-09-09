@@ -20,6 +20,9 @@ func _ready() -> void:
 
 func _install_place_home_action() -> void:
 	if not _building_panel: return
+	# The M2 menu has two additional structural attachment actions. Lift the
+	# compact panel so every row remains above the persistent prompt bar.
+	_building_panel.position = Vector2(28, 160)
 	var margin := _building_panel.get_child(0) as MarginContainer
 	var box := margin.get_child(0) as VBoxContainer
 	var title := box.get_child(0) as Label
@@ -31,11 +34,13 @@ func _install_place_home_action() -> void:
 		if button.text.begins_with("Material:"): button.text = "Wall material: next"
 	_add_building_button(box, "Roof material: next", _cycle_selected_roof)
 	var ordered: Array[Button] = [_place_home_button]
-	for prefix in ["Duplicate", "Add flower box", "Add shutter", "Wall material", "Roof material", "Needs placement", "Close"]:
+	for prefix in ["Duplicate", "Add window", "Add door", "Add flower box", "Add shutter", "Wall material", "Roof material", "Needs placement", "Close"]:
 		for child in box.get_children():
 			if child is Button and (child as Button).text.begins_with(prefix) and child not in ordered: ordered.append(child)
 	for index in ordered.size(): box.move_child(ordered[index], index + 1)
 	_building_buttons = ordered
+	box.add_theme_constant_override("separation", 4)
+	for button in _building_buttons: button.custom_minimum_size.y = 38
 
 func _build_home_catalogue() -> void:
 	_home_catalogue_panel = PanelContainer.new()

@@ -14,14 +14,17 @@ func check(condition: bool, label: String) -> void:
 func _initialize() -> void:
 	var catalogue := World.home_catalogue()
 	check(catalogue.size() == 3, "catalogue exposes three residential configurations")
-	var shapes := {}; var styles := {}; var footprints := {}; var roof_materials := {}
+	var shapes := {}; var styles := {}; var footprints := {}; var roof_materials := {}; var windows := {}; var doors := {}
 	for design in catalogue:
 		shapes[design["shape_id"]] = true
 		styles[design["style_id"]] = true
 		footprints[str(Vector2(design["dimensions"].x, design["dimensions"].z))] = true
 		roof_materials[design["roof_material_id"]] = true
+		windows[design["window_asset_id"]] = true
+		doors[design["door_asset_id"]] = true
 	check(shapes.size() == 3 and styles.size() == 3 and footprints.size() == 3, "homes differ by saved shape, style and footprint")
 	check(roof_materials.size() == 3, "catalogue presents independent roof material defaults")
+	check(windows.size() == 3 and doors.size() == 3, "each home design owns a distinct default window and door family")
 
 	scene = preload("res://scenes/m1.tscn").instantiate()
 	scene.test_mode = true
@@ -33,6 +36,13 @@ func _initialize() -> void:
 	if not scene._player_restored: await _finish(); return
 	scene.set_process(false)
 	scene._set_view_context("building")
+	scene._open_building_panel()
+	await process_frame
+	var home_action_labels: Array[String] = []
+	for button in scene._building_buttons: home_action_labels.append(button.text)
+	check("Add window" in home_action_labels and "Add door" in home_action_labels, "home options expose additional structural openings")
+	check(scene._building_panel.get_global_rect().end.y <= scene._prompt_bar.get_global_rect().position.y + 1.0, "expanded home options stay above the controller prompt bar")
+	scene._close_building_panel()
 
 	scene._open_home_catalogue()
 	check(scene._home_catalogue_open and scene._home_catalogue_panel.visible, "Place new home opens the controller catalogue")
@@ -52,6 +62,7 @@ func _initialize() -> void:
 	var lodge_id: String = scene.selected_building_id
 	var lodge: Dictionary = scene.building_world.get_building(lodge_id)
 	check(lodge_id != previous_selection and lodge["shape_id"] == "longhouse" and lodge["style_id"] == "woodland_lodge", "placed lodge receives an independent identity and saved design")
+	check(lodge["details"].any(func(detail): return detail["kind"] == "window" and detail["asset_id"] == "window_lodge") and lodge["details"].any(func(detail): return detail["kind"] == "door" and detail["asset_id"] == "door_lodge"), "lodge recipe receives lodge windows and door")
 	check(lodge["wall_material_id"] == "chalk_white" and lodge["roof_material_id"] == "slate", "placed lodge saves chosen wall and roof materials independently")
 	var first_surface := str(lodge["surfaces"][0]["id"])
 	var original_surface := str(scene.building_world.get_building(previous_selection)["surfaces"][0]["id"])
@@ -67,6 +78,8 @@ func _initialize() -> void:
 	var gable_target := Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * World.MINIATURE_SCALE), Vector3(8, 8, 8))
 	var gable_id: String = scene.building_world.create_home_at("village_gable", gable_target, scene.building_world.get_revision())
 	check(not gable_id.is_empty() and scene.building_world.get_building(gable_id)["roof_profile"] == "steep_gable", "tall village gable creates from its own saved recipe")
+	var gable: Dictionary = scene.building_world.get_building(gable_id)
+	check(gable["details"].any(func(detail): return detail["kind"] == "window" and detail["asset_id"] == "window_tudor") and gable["details"].any(func(detail): return detail["kind"] == "door" and detail["asset_id"] == "door_tudor"), "tall home recipe receives Tudor windows and door")
 	var serialized: String = scene.building_world.serialize_document()
 	var restored := World.new()
 	check(restored.load_serialized_document(serialized), "multi-design document reloads")

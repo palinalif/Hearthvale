@@ -50,6 +50,7 @@ func _run() -> void:
 	print("COTTAGE_RENDER_START " + JSON.stringify({"method": RenderingServer.get_current_rendering_method(), "driver": RenderingServer.get_current_rendering_driver_name(), "adapter": RenderingServer.get_video_adapter_name()}))
 	root.size = Vector2i(1280, 720)
 	DirAccess.make_dir_recursive_absolute(folder)
+	DirAccess.make_dir_recursive_absolute("reports/screenshots/m2-home-details")
 	scene = preload("res://scenes/m1.tscn").instantiate()
 	scene.test_mode = true
 	scene.checkpoint_root = "user://m1-repair-render-%s" % Time.get_ticks_usec()
@@ -116,7 +117,12 @@ func _run() -> void:
 	scene._preview_style_choice("colour", "berry")
 	scene._refresh_controller_hud()
 	check(not scene._building_panel.visible, "colour menu has no competing shell panel")
-	await _capture("04-colour-picker")
+	scene._dock_style_picker_away_from_target()
+	var window_screen: Vector2 = scene.camera.unproject_position(tb * (detail["resolved_position"] as Vector3))
+	check(not scene.tools_panel.get_global_rect().grow(20).has_point(window_screen), "colour picker docks away from the edited window")
+	check(scene._highlighted_detail_geometry_count() > 0, "edited window mesh receives the amber silhouette outline")
+	var picker_image := await _capture("04-colour-picker")
+	check(picker_image.save_png("reports/screenshots/m2-home-details/window-colour-picker.png") == OK, "window picker review capture saved")
 	scene.hud.visible = false
 	var preview := await _capture("05-colour-preview-clean")
 	check(preview.get_data() != baseline.get_data(), "colour preview changes actual rendered pixels")
@@ -126,20 +132,53 @@ func _run() -> void:
 	# D3D12 may vary one or two boundary pixels between otherwise identical frames.
 	check(_changed_pixel_count(restored, baseline) <= 4, "cancel restores the two-cottage image within raster tolerance")
 	scene.hud.visible = true
+	var door: Dictionary = {}
+	for candidate in scene.building_world.get_building(copy_id)["details"]:
+		if str(candidate.get("kind", "")) == "door" and bool(candidate.get("visible", false)): door = candidate; break
+	check(not door.is_empty(), "visible door fixture exists")
+	if not door.is_empty():
+		scene.selected_detail_id = str(door["id"])
+		scene.hovered_detail_id = str(door["id"])
+		scene.hovered_detail_kind = "door"
+		var door_world: Vector3 = tb * (door["resolved_position"] as Vector3)
+		var door_outward: Vector3 = (tb.basis * Vector3.LEFT).normalized()
+		scene.camera.global_position = door_world + door_outward * 10.0 + Vector3(0, 1.0, 0)
+		scene.camera.look_at(door_world)
+		scene._update_direct_edit_hud()
+		scene._begin_style_picker("variation")
+		scene._refresh_controller_hud()
+		scene._dock_style_picker_away_from_target()
+		var door_screen: Vector2 = scene.camera.unproject_position(door_world)
+		check(scene._style_candidates("variation").size() == 3, "door variation category is available")
+		check(not scene.tools_panel.get_global_rect().grow(20).has_point(door_screen), "variation picker docks away from the edited door")
+		var door_picker_image := await _capture("07-door-variations")
+		check(door_picker_image.save_png("reports/screenshots/m2-home-details/door-variations.png") == OK, "door variation review capture saved")
+		scene._cancel_style_picker()
 	var dims: Vector3 = b["dimensions"]
 	var shutter_id: String = scene.building_world.add_detail(copy_id, "shutter", front, Vector3(0, dims.y + 2, -dims.z * 0.5 - 0.02), "shutter_wood")
 	check(not shutter_id.is_empty(), "recovery fixture exists")
 	scene._open_needs_placement()
 	scene._refresh_controller_hud()
-	await _capture("07-needs-placement")
+	await _capture("08-needs-placement")
 	scene._close_needs_placement()
 	scene._set_view_context("terrain")
-	scene.cursor = Vector3(32, 8, 28)
+	scene.cursor = ta.origin
+	scene.terrain_cursor = scene.cursor
+	scene.camera_yaw = 0.65
+	scene.camera_pitch = 0.42
+	scene.camera_distance = 18.0
 	scene._update_camera()
 	scene._update_world_hover()
+	check(str(scene._world_hover.get("id", "")) == first_id, "terrain cursor targets the cottage")
+	var house_outline_count := 0
+	for child in (scene.cottage_visuals[first_id] as Node3D).get_children():
+		if child is GeometryInstance3D and (child as GeometryInstance3D).material_overlay != null: house_outline_count += 1
+	check(house_outline_count > 0, "terrain hover outlines actual house geometry")
+	var house_hover_image := await _capture("09-house-mesh-hover")
+	check(house_hover_image.save_png("reports/screenshots/m2-home-details/house-mesh-hover.png") == OK, "house mesh-hover review capture saved")
 	scene._open_terrain_settings()
 	scene._refresh_controller_hud()
-	await _capture("08-terrain-settings")
+	await _capture("10-terrain-settings")
 	_finish()
 
 func _finish() -> void:
