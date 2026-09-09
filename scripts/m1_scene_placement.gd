@@ -22,6 +22,10 @@ var building_placement_target := Vector3.ZERO
 var building_placement_transform := Transform3D.IDENTITY
 var building_placement_revision := -1
 var building_placement_operation := ""
+var building_placement_design_id := ""
+var building_placement_wall_material_id := ""
+var building_placement_roof_material_id := ""
+var building_placement_previous_selection := ""
 var building_placement_valid := false
 var building_placement_reason := ""
 var building_rotation_snap := true
@@ -128,6 +132,8 @@ func _begin_building_placement() -> void:
 	if not transform_value is Transform3D: return
 	building_placement_active = true
 	building_placement_operation = "duplicate"
+	building_placement_design_id = ""
+	building_placement_previous_selection = selected_building_id
 	building_placement_source_id = selected_building_id
 	building_placement_revision = building_world.get_revision()
 	building_placement_origin = (transform_value as Transform3D).origin
@@ -145,6 +151,41 @@ func _begin_building_placement() -> void:
 	cursor = building_placement_target
 	cottage_cursor = cursor
 	_set_status("Place home copy • left stick move • D-pad left/right rotate • A place / B cancel")
+
+func _begin_new_building_placement(design_id: String, wall_material_id: String = "", roof_material_id: String = "") -> void:
+	if building_placement_active or detail_move_active or resize_active: return
+	var original_cursor := cursor
+	var start := cursor
+	var selected: Dictionary = building_world.get_building(selected_building_id)
+	if not selected.is_empty() and selected.get("transform", null) is Transform3D:
+		start = (selected["transform"] as Transform3D).origin + Vector3(8.0, 0.0, 8.0)
+	var target := Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * BuildingWorldScript.MINIATURE_SCALE), start)
+	var preview: Dictionary = building_world.preview_home_design(design_id, target, wall_material_id, roof_material_id)
+	if preview.is_empty():
+		_set_status("That home design is unavailable")
+		return
+	building_placement_active = true
+	building_placement_operation = "new"
+	building_placement_design_id = design_id
+	building_placement_wall_material_id = str(preview.get("wall_material_id", ""))
+	building_placement_roof_material_id = str(preview.get("roof_material_id", ""))
+	building_placement_previous_selection = selected_building_id
+	building_placement_source_id = ""
+	building_placement_revision = building_world.get_revision()
+	building_placement_origin = original_cursor
+	building_placement_target = start
+	building_placement_transform = target
+	_clamp_building_placement()
+	_snap_building_placement_to_ground()
+	tools_open = false
+	detail_open = false
+	if tools_panel: tools_panel.visible = false
+	if building_placement_ghost:
+		building_placement_ghost.show_source(preview, building_world.get_revision())
+		_update_building_preview_transform()
+	cursor = building_placement_target
+	cottage_cursor = cursor
+	_set_status("Place %s • left stick move • D-pad rotate • A place / B cancel" % str(preview.get("name", "home")))
 
 func _clamp_building_placement() -> void:
 	# Keep the cursor in the editable world, but do not hide invalid footprint
@@ -181,12 +222,16 @@ func _update_building_preview_transform() -> void:
 func _update_building_placement_validity() -> void:
 	building_placement_valid = false
 	building_placement_reason = "Placement unavailable"
-	var source: Dictionary = building_world.get_building(building_placement_source_id)
-	if source.is_empty():
-		building_placement_reason = "Home no longer exists"
-		return
 	if building_world.get_revision() != building_placement_revision:
 		building_placement_reason = "Home changed; restart placement"
+		return
+	var source: Dictionary
+	if building_placement_operation == "new":
+		source = building_world.preview_home_design(building_placement_design_id, building_placement_transform, building_placement_wall_material_id, building_placement_roof_material_id)
+	else:
+		source = building_world.get_building(building_placement_source_id)
+	if source.is_empty():
+		building_placement_reason = "Home design unavailable" if building_placement_operation == "new" else "Home no longer exists"
 		return
 	var footprint := _building_footprint(building_placement_transform, source.get("dimensions", Vector3.ZERO))
 	if footprint.is_empty(): return
@@ -240,32 +285,39 @@ func _commit_building_placement() -> bool:
 	if not building_placement_valid:
 		_set_status("Cannot place home: %s" % building_placement_reason)
 		return false
-	var duplicate_id: String = building_world.duplicate_building_at(building_placement_source_id, building_placement_transform, building_placement_revision)
-	var ok := not duplicate_id.is_empty()
+	var placed_id: String
+	if building_placement_operation == "new": placed_id = building_world.create_home_at(building_placement_design_id, building_placement_transform, building_placement_revision, building_placement_wall_material_id, building_placement_roof_material_id)
+	else: placed_id = building_world.duplicate_building_at(building_placement_source_id, building_placement_transform, building_placement_revision)
+	var was_new := building_placement_operation == "new"
+	var ok := not placed_id.is_empty()
 	if ok:
-		selected_building_id = duplicate_id
+		selected_building_id = placed_id
 		selected_detail_id = ""
 		selected_surface_id = ""
 		_record_history("building")
 	_clear_building_placement()
-	_set_status("Cottage copy placed" if ok else "Duplicate rejected")
+	_set_status(("New home placed" if was_new else "Cottage copy placed") if ok else "Home placement rejected")
 	super._update_presentation()
 	return ok
 
 func _cancel_building_placement() -> void:
 	if not building_placement_active: return
-	var source_id := building_placement_source_id
+	var source_id := building_placement_previous_selection
 	var source_origin := building_placement_origin
 	_clear_building_placement()
 	selected_building_id = source_id
 	cursor = source_origin
 	cottage_cursor = cursor
-	_set_status("Cottage duplication cancelled")
+	_set_status("Home placement cancelled")
 	super._update_presentation()
 
 func _clear_building_placement() -> void:
 	building_placement_active = false
 	building_placement_operation = ""
+	building_placement_design_id = ""
+	building_placement_wall_material_id = ""
+	building_placement_roof_material_id = ""
+	building_placement_previous_selection = ""
 	building_placement_source_id = ""
 	building_placement_revision = -1
 	building_placement_origin = Vector3.ZERO

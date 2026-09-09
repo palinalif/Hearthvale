@@ -16,6 +16,8 @@ on:
       - scripts/m1_scene_tool_ui.gd
       - scripts/m1_scene_full_ui.gd
       - scripts/m1_scene_house_actions.gd
+      - scripts/m2_scene_catalogue.gd
+      - scripts/m2_home_silhouette.gd
       - scripts/building_world.gd
       - scripts/cottage_resize_world.gd
       - scripts/building_placement_ghost.gd
@@ -28,6 +30,7 @@ on:
       - tests/m1_attachment_placement_test.gd
       - tests/m1_building_placement_test.gd
       - tests/m2_placement_rotation_test.gd
+      - tests/m2_home_catalogue_test.gd
       - tests/m1_building_camera_test.gd
       - tests/m1_window_layout_test.gd
       - tests/m1_cottage_edit_ux_test.gd
@@ -51,6 +54,8 @@ on:
       - scripts/m1_scene_tool_ui.gd
       - scripts/m1_scene_full_ui.gd
       - scripts/m1_scene_house_actions.gd
+      - scripts/m2_scene_catalogue.gd
+      - scripts/m2_home_silhouette.gd
       - scripts/building_world.gd
       - scripts/cottage_resize_world.gd
       - scripts/building_placement_ghost.gd
@@ -63,6 +68,7 @@ on:
       - tests/m1_attachment_placement_test.gd
       - tests/m1_building_placement_test.gd
       - tests/m2_placement_rotation_test.gd
+      - tests/m2_home_catalogue_test.gd
       - tests/m1_building_camera_test.gd
       - tests/m1_window_layout_test.gd
       - tests/m1_cottage_edit_ux_test.gd

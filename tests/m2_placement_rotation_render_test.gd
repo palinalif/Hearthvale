@@ -27,4 +27,9 @@ func _finish() -> void:
 		check(scene.target_label.text.contains("Overlaps"), "overlap reason is visible as text")
 		await _capture("19-m2-invalid-overlap")
 		scene._cancel_building_placement()
+
+		scene._open_home_catalogue()
+		check(scene._home_catalogue_panel.visible and scene._home_catalogue_buttons.size() == 3, "rendered M2 residential catalogue exposes all designs")
+		await _capture("20-m2-home-catalogue")
+		scene._close_home_catalogue(false)
 	super._finish()

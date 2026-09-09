@@ -7,10 +7,11 @@ const Grid = preload("res://scripts/visual_grid.gd")
 var _unit := Vector3.ONE * 0.25
 var _detail_unit := Vector3.ONE * 0.125
 var _craft_seed := 0
+var _roof_rise_ratio := 0.42
+var _roof_tile_colors: Array[Color] = [Color("#b9654c"), Color("#bf6c50"), Color("#c47457")]
+var _roof_edge_color := Color("#b85f4b")
 const WALL_COLOR := Color("#e7cfab")
 const TRIM_COLOR := Color("#634d42")
-const ROOF_COLOR := Color("#b85f4b")
-const ROOF_TILE_COLORS := [Color("#b9654c"), Color("#bf6c50"), Color("#c47457")]
 const CORNICE_COLOR := Color("#f0d9a5")
 const SHUTTER_COLOR := Color("#557a70")
 const STONE_COLOR := Color("#a48770")
@@ -46,6 +47,8 @@ func apply_building(view: Dictionary, source_revision: int) -> bool:
 	_unit = Vector3(Grid.UNIT / world_scale.x, Grid.UNIT / world_scale.y, Grid.UNIT / world_scale.z)
 	_detail_unit = _unit * (Grid.COTTAGE_DETAIL_UNIT / Grid.UNIT)
 	_craft_seed = int(view.get("seed", 0))
+	_roof_rise_ratio = {"swept_gable": 0.30, "steep_gable": 0.62}.get(str(view.get("roof_profile", "gentle_gable")), 0.42)
+	_apply_roof_material(str(view.get("roof_material_id", "terracotta")))
 	_build_shell(dimensions, view)
 	_build_details(view, dimensions)
 	for child in get_children():
@@ -54,7 +57,7 @@ func apply_building(view: Dictionary, source_revision: int) -> bool:
 	return true
 
 func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
-	var material_id := str(view.get("material_id", "stone_plaster"))
+	var material_id := str(view.get("wall_material_id", view.get("material_id", "stone_plaster")))
 	var wall_color := WALL_COLOR
 	if material_id == "warm_plaster": wall_color = Color("#d5a982")
 	elif material_id == "timber": wall_color = Color("#9c684d")
@@ -76,9 +79,9 @@ func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 		var z: float = side * (snappedf(dimensions.z * 0.5, _unit.z) + _unit.z * 0.5)
 		_add_detail_boxes("Trim_%s" % side, [_piece(Vector3(0, eave - _unit.y * 2.5, z), Vector3(dimensions.x, _detail_unit.y, _unit.z))], TRIM_COLOR)
 		_add_detail_boxes("Cornice_%s" % side, [_piece(Vector3(0, eave - _unit.y * 1.5, z), Vector3(dimensions.x, _detail_unit.y, _unit.z))], CORNICE_COLOR)
-	var roof_angle := atan2(dimensions.y * 0.42, dimensions.z * 0.5)
+	var roof_angle := atan2(dimensions.y * _roof_rise_ratio, dimensions.z * 0.5)
 	_build_roof_tile_batches(dimensions, roof_angle)
-	var rise := dimensions.y * 0.42
+	var rise := dimensions.y * _roof_rise_ratio
 	var gable_run := dimensions.z * 0.5 + 0.45
 	var row_height := _unit.y
 	var row_count := maxi(1, ceili(rise / row_height))
@@ -88,14 +91,15 @@ func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 		var span := maxf(0.12, gable_run * 2.0 * (1.0 - ratio) - 0.12)
 		_add_box("GableLeft_%d" % step, Vector3(0.22, row_height, span), Vector3(-dimensions.x * 0.5, level, 0), wall_color)
 		_add_box("GableRight_%d" % step, Vector3(0.22, row_height, span), Vector3(dimensions.x * 0.5, level, 0), wall_color)
-	_build_corner_quoin_batch(dimensions)
+	if str(view.get("style_id", "riverside_cottage")) != "woodland_lodge": _build_corner_quoin_batch(dimensions)
 	_build_crafted_shell(dimensions, wall_color)
 	_build_gable_vent(dimensions, deleted)
+	_build_style_accents(dimensions, str(view.get("style_id", "riverside_cottage")))
 
 func _build_roof_tile_batches(dimensions: Vector3, _roof_angle: float) -> void:
 	var buckets: Array = [[], [], []]
 	var run := dimensions.z * 0.5 + 0.5
-	var rise := dimensions.y * 0.42
+	var rise := dimensions.y * _roof_rise_ratio
 	var dx := _detail_unit.x * 2.0
 	var dz := _detail_unit.z
 	var span := dimensions.x + 0.75
@@ -110,7 +114,7 @@ func _build_roof_tile_batches(dimensions: Vector3, _roof_angle: float) -> void:
 				# Preserve the broad, quiet colour rhythm while doubling geometry resolution.
 				var shade := (column / 18 + row / 14) % 3
 				buckets[shade].append(_piece(Vector3(x, height, side * z), Vector3(dx, _detail_unit.y * 2.0, dz)))
-	for shade in 3: _add_detail_boxes("RoofTiles_%d" % shade, buckets[shade], ROOF_TILE_COLORS[shade])
+	for shade in 3: _add_detail_boxes("RoofTiles_%d" % shade, buckets[shade], _roof_tile_colors[shade])
 
 func _build_corner_quoin_batch(dimensions: Vector3) -> void:
 	# Corner stones straddle both wall planes. Sub-cell widths rounded inward
@@ -121,6 +125,32 @@ func _build_corner_quoin_batch(dimensions: Vector3) -> void:
 			for level in 3:
 				boxes.append(_piece(Vector3(dimensions.x * 0.5 * corner_x, 0.9 + float(level) * 1.45, dimensions.z * 0.5 * corner_z), Vector3(_unit.x * 2.0, 0.70, _unit.z * 2.0)))
 	_add_batched_boxes("CornerQuoins", boxes, QUOIN_COLOR)
+
+func _apply_roof_material(material_id: String) -> void:
+	var palettes := {
+		"terracotta": [Color("#b9654c"), Color("#bf6c50"), Color("#c47457")],
+		"moss_tile": [Color("#66765d"), Color("#718164"), Color("#7c8c6c")],
+		"slate": [Color("#59636d"), Color("#636e79"), Color("#6d7883")],
+		"thatch": [Color("#aa8a52"), Color("#b6975c"), Color("#c1a468")],
+	}
+	var selected: Array = palettes.get(material_id, palettes["terracotta"])
+	_roof_tile_colors = [selected[0], selected[1], selected[2]]
+	_roof_edge_color = (_roof_tile_colors[0] as Color).darkened(0.12)
+
+func _build_style_accents(dimensions: Vector3, style_id: String) -> void:
+	if style_id == "woodland_lodge":
+		var beams: Array = []
+		for side in [-1.0, 1.0]:
+			var z: float = side * (dimensions.z * 0.5 + _detail_unit.z * 0.5)
+			beams.append(_piece(Vector3(0, dimensions.y * 0.58, z), Vector3(dimensions.x, _detail_unit.y * 2.0, _detail_unit.z)))
+			for x_value in [-dimensions.x * 0.34, 0.0, dimensions.x * 0.34]: beams.append(_piece(Vector3(x_value, dimensions.y * 0.50, z), Vector3(_detail_unit.x * 2.0, dimensions.y * 0.72, _detail_unit.z)))
+		_add_detail_boxes("LodgeTimberFrame", beams, TRIM_COLOR)
+	elif style_id == "village_gable":
+		var finials: Array = []
+		var top := snappedf(dimensions.y + dimensions.y * _roof_rise_ratio, _detail_unit.y)
+		for x_value in [-dimensions.x * 0.5, dimensions.x * 0.5]:
+			for level in 4: finials.append(_piece(Vector3(x_value, top + (level + 0.5) * _detail_unit.y, 0), _detail_unit))
+		_add_detail_boxes("GableFinials", finials, CORNICE_COLOR)
 
 func _build_details(view: Dictionary, dimensions: Vector3) -> void:
 	var window_material := StandardMaterial3D.new()
@@ -415,18 +445,18 @@ func _build_crafted_shell(dimensions: Vector3, _color: Color) -> void:
 			timber.append(_piece(Vector3(x, eave - _unit.y * 1.5, z), Vector3(_detail_unit.x, _detail_unit.y, _unit.z)))
 		var end_x: float = side * (snappedf((dimensions.x + 0.75) * 0.5, _unit.x) + _unit.x * 0.5)
 		timber.append(_piece(Vector3(end_x, eave + _unit.y * 0.5, 0), Vector3(_unit.x, _unit.y, dimensions.z)))
-		timber.append(_piece(Vector3(end_x, eave + dimensions.y * 0.21, 0), Vector3(_unit.x, dimensions.y * 0.42, _unit.z)))
+		timber.append(_piece(Vector3(end_x, eave + dimensions.y * _roof_rise_ratio * 0.5, 0), Vector3(_unit.x, dimensions.y * _roof_rise_ratio, _unit.z)))
 	_add_batched_boxes("FoundationCourses", stone, QUOIN_COLOR)
 	_add_detail_boxes("EaveJoinery", timber, TRIM_COLOR)
 	# A single crest begins above the actual highest roof top, replacing three
 	# separately rounded ridge layers with conflicting colours at identical depth.
 	var run := dimensions.z * 0.5 + 0.5
-	var top := snappedf(dimensions.y + dimensions.y * 0.42 * (1.0 - _unit.z * 0.5 / run), _unit.y) + _unit.y
+	var top := snappedf(dimensions.y + dimensions.y * _roof_rise_ratio * (1.0 - _unit.z * 0.5 / run), _unit.y) + _unit.y
 	var crest: Array = [_piece(Vector3(0, top + _detail_unit.y * 0.5, 0), Vector3(dimensions.x + 0.75, _detail_unit.y, _unit.z * 2.0))]
 	var ridge_half := snappedf((dimensions.x + 0.75) * 0.5, _unit.x)
 	for i in ceili(ridge_half * 2.0 / (_detail_unit.x * 4.0)):
 		crest.append(_piece(Vector3(-ridge_half + (i * 4.0 + 1.5) * _detail_unit.x, top + _detail_unit.y * 1.5, 0), Vector3(_detail_unit.x * 3.0, _detail_unit.y, _unit.z)))
-	_add_detail_boxes("RidgeCourses", crest, ROOF_TILE_COLORS[2])
+	_add_detail_boxes("RidgeCourses", crest, _roof_tile_colors[2])
 	_build_roof_edges(dimensions)
 
 func _build_roof_edges(dimensions: Vector3) -> void:
@@ -441,9 +471,9 @@ func _build_roof_edges(dimensions: Vector3) -> void:
 		for side in [-1.0, 1.0]:
 			for row in ceili(run / _unit.z):
 				var z := (row + 0.5) * _unit.z
-				var height := snappedf(dimensions.y + dimensions.y * 0.42 * (1.0 - z / run), _unit.y)
+				var height := snappedf(dimensions.y + dimensions.y * _roof_rise_ratio * (1.0 - z / run), _unit.y)
 				edges.append(_piece(Vector3(end, height - _detail_unit.y * 0.5, side * z), Vector3(_detail_unit.x, _detail_unit.y, _unit.z)))
-	_add_detail_boxes("RoofEdgeLip", edges, ROOF_COLOR.darkened(0.12))
+	_add_detail_boxes("RoofEdgeLip", edges, _roof_edge_color)
 
 func _add_batched_boxes(node_name: String, boxes: Array, color: Color) -> GeometryInstance3D:
 	if not node_name.begins_with("Wall"): return _add_instanced_boxes(node_name, boxes, color)
@@ -490,7 +520,7 @@ func _build_entrance_canopy(id: String, width: float, height: float, basis: Basi
 	for row in 5:
 		for column in columns: tiles.append(_piece(Vector3(-(columns - 1) * _detail_unit.x * 0.5 + column * _detail_unit.x, y + _unit.y - row * _detail_unit.y, row * _detail_unit.z), _detail_unit))
 	_add_detail_boxes("PorchBrackets_%s" % id, timber, TRIM_COLOR, basis, anchor)
-	_add_detail_boxes("PorchTileCourses_%s" % id, tiles, ROOF_TILE_COLORS[1], basis, anchor)
+	_add_detail_boxes("PorchTileCourses_%s" % id, tiles, _roof_tile_colors[1], basis, anchor)
 
 func _build_gable_vent(dimensions: Vector3, deleted: Dictionary) -> void:
 	if bool(deleted.get("left", false)): return
