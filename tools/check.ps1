@@ -98,6 +98,7 @@ Invoke-GodotBounded 'm1-landscape' @('--headless','--path','.','--script','res:/
 Invoke-GodotBounded 'm1-landscape-cold' @('--headless','--path','.','--script','res://tests/m1_landscape_test.gd','--max-fps','60','--','--read-fixture',("--fixture-root=user://landscape-check-"+$fixtureTag))
 Invoke-GodotBounded 'controller' @('--headless','--path','.','--script','res://tests/controller_test.gd','--max-fps','60')
 Invoke-GodotBounded 'm1-controller' @('--headless','--path','.','--script','res://tests/m1_controller_test.gd','--max-fps','60')
+Invoke-GodotBounded 'm2-pc-input' @('--headless','--path','.','--script','res://tests/m2_pc_input_test.gd','--max-fps','60')
 # The write-fixture mode runs the full acceptance scenario before saving its
 # expectation. Run it once, then verify a separate cold process.
 Invoke-GodotBounded 'm1-acceptance-write-fixture' @('--headless','--path','.','--script','res://tests/m1_acceptance_test.gd','--max-fps','60','--','--write-fixture')
