@@ -36,7 +36,13 @@ controller approval.
 
 ## Delivery
 
-The implementation is ready for the branch push. The automated branch-wide
-delivery must still provide the verified ARM64 APK, Windows x86-64 ZIP, and
-private Google Drive receipts for the final commit before this slice is called
-delivered.
+Source commit `822ffaa6620436240e9dc22ba720869527c98be4` passed verified
+delivery run `34404866082`:
+
+- all prerequisite gameplay and render jobs passed;
+- the isolated ARM64 APK was exported and verified;
+- the Windows x86-64 playtest ZIP was exported, launched, and verified;
+- both artifacts and their verification receipts were uploaded to private
+  Google Drive.
+
+[GitHub delivery run 34404866082](https://github.com/palinalif/Hearthvale/actions/runs/34404866082)

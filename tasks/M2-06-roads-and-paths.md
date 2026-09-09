@@ -1,6 +1,6 @@
 # M2-06 — Roads & Paths vertical slice
 
-**Status:** implemented on `feat/m2-hamlet-building` on 2026-09-09; branch delivery pending.
+**Status:** implemented and delivered on `feat/m2-hamlet-building` on 2026-09-09.
 
 ## Player-facing result
 
@@ -54,3 +54,10 @@ endpoint touching an edge is allowed for a natural approach to a home.
 
 Desktop Mobile output is visual-development evidence only. Physical Thor feel,
 performance, and player visual approval remain separate acceptance records.
+
+## Delivery
+
+Source commit `822ffaa6620436240e9dc22ba720869527c98be4` passed verified
+delivery run `34404866082`. The run produced and verified the isolated ARM64
+APK and Windows x86-64 playtest ZIP, then uploaded both packages and their
+receipts to private Google Drive.
