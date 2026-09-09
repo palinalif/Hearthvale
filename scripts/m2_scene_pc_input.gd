@@ -11,7 +11,9 @@ var _pc_prompt_mode := false
 var _mouse_orbiting := false
 
 func _ready() -> void:
-	_pc_prompt_mode = OS.get_name() in ["Windows", "macOS", "Linux", "FreeBSD", "NetBSD", "OpenBSD", "BSD"]
+	# The desktop export carries this feature tag. Editor-driven Mobile render
+	# harnesses run on Windows too, so the host OS alone cannot choose prompts.
+	_pc_prompt_mode = OS.has_feature("pc_playtest")
 	PCInputGlyph.set_keyboard_mouse_mode(_pc_prompt_mode)
 	super._ready()
 	get_window().title = "Hearthvale — M2 Playtest"
