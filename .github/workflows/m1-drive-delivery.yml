@@ -1,9 +1,15 @@
-name: M1 verified Drive delivery
+name: Hearthvale verified Drive delivery
 
 on:
   push:
-    branches: [master, feat/m1-ui-polish]
+    # Every branch receives a gated, commit-specific test APK. A branch filter
+    # intentionally excludes tag pushes while allowing newly created branches.
+    branches: ['**']
   workflow_dispatch:
+
+concurrency:
+  group: verified-drive-delivery-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   actions: read
