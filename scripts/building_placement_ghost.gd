@@ -7,9 +7,12 @@ func show_source(view: Dictionary, revision: int) -> void:
 	_apply_translucency(self)
 
 func set_preview_origin(origin: Vector3) -> void:
-	var t := transform
-	t.origin = origin
-	transform = t
+	var preview_transform := transform
+	preview_transform.origin = origin
+	set_preview_transform(preview_transform)
+
+func set_preview_transform(preview_transform: Transform3D) -> void:
+	transform = preview_transform
 
 func hide_preview() -> void:
 	visible = false

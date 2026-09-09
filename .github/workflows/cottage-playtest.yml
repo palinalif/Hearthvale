@@ -8,7 +8,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [fix/m1-cottage-playtest-2, fix/m1-terrain-camera-retest, feat/m1-direct-resize-handles, feat/m1-house-move-resize]
+    branches: [fix/m1-cottage-playtest-2, fix/m1-terrain-camera-retest, feat/m1-direct-resize-handles, feat/m1-house-move-resize, feat/m2-hamlet-building]
   pull_request:
     branches: [master]
   workflow_dispatch:
@@ -53,7 +53,7 @@ jobs:
           $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           $out = Join-Path (Get-Location) '.tools/cottage-repair/render.out.log'
           $err = Join-Path (Get-Location) '.tools/cottage-repair/render.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m1_ui_glyph_render_test.gd')
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_placement_rotation_render_test.gd')
           $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
           if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'Mobile render capture timed out' }
           $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)

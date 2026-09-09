@@ -1,6 +1,6 @@
 # M2 — Build a convincing hamlet
 
-**Status:** planned for M2; not authorized for implementation while M1 remains the active milestone.
+**Status:** active; implementation authorized by the player on 2026-09-09.
 
 **Objective:** broaden the proven M1 cottage system into a small but expressive residential building vocabulary, and let the player freely compose those homes through a controller-first placement and rotation workflow before inhabitants or autonomous place simulation are introduced.
 
@@ -46,4 +46,4 @@ Support the paths, simple bridges, gardens, street furniture, vegetation placeme
 - From a cold launch without touch input, the player can compose several distinct homes into an attractive hamlet scene without using predetermined lots.
 - Automated evidence, Mobile-render captures, Thor performance/controller review, and player visual approval are reported separately.
 
-Implementation requires a later explicit start instruction and does not begin from this planning ticket alone.
+Implementation began from the accepted M1 baseline on `feat/m2-hamlet-building`. Deliver in bounded vertical slices; the first is controller-first placement and rotation using the existing cottage before expanding the residential catalogue.

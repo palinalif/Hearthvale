@@ -602,7 +602,8 @@ func _refresh_controller_hud() -> void:
 		return
 	if tools_open or detail_open or detail_move_active or resize_active: return
 	if building_placement_active:
-		_set_prompts([["A", "Place"], ["B", "Cancel"], ["LS", "Free move"], ["RS", "Orbit"], ["L3", "Precision"]])
+		_tool_meta.text = "%s%s%s" % [building_placement_reason, " • SNAP" if building_rotation_snap else " • FREE", " • PRECISION" if precision_mode else ""]
+		_set_prompts([["A", "Place"], ["B", "Cancel"], ["LS", "Move"], ["◀▶", "Turn"], ["▲", "Snap"], ["RS", "Orbit"], ["L3", "Fine"]])
 		return
 	var prompts: Array = [["B", "Finish editing"], ["X", "Cottage options"], ["RS", "Orbit"], ["LT/RT", "Zoom"]]
 	if not hovered_detail_id.is_empty():

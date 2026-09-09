@@ -148,9 +148,9 @@ func _refresh_controller_hud() -> void:
 	if menu_open or tools_open or detail_open: return
 	var prompts: Array = []
 	if building_placement_active:
-		_tool_name.text = "Place cottage"
-		_tool_meta.text = "Free placement • grounded to terrain%s" % (" • PRECISION" if precision_mode else "")
-		prompts = [["A", "Place"], ["B", "Cancel"], ["LS", "Move"], ["RS", "Orbit"], ["L3", "Precision"]]
+		_tool_name.text = "Place home" if building_placement_operation == "duplicate" else "Move / rotate home"
+		_tool_meta.text = "%s%s%s" % [building_placement_reason, " • SNAP" if building_rotation_snap else " • FREE", " • PRECISION" if precision_mode else ""]
+		prompts = [["A", "Place"], ["B", "Cancel"], ["LS", "Move"], ["◀▶", "Rotate"], ["▲", "Snap"], ["L3", "Precision"]]
 	elif detail_move_active and not placement_kind.is_empty():
 		_tool_name.text = "Place %s" % placement_kind.replace("_", " ").capitalize()
 		_tool_meta.text = "Wall locked • soft alignment"

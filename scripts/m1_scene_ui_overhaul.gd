@@ -25,7 +25,7 @@ func _ready() -> void:
 
 func _finish_hud_presentation() -> void:
 	if not is_instance_valid(_tool_meta): return
-	_tool_meta.visible = view_context == "terrain" or resize_active
+	_tool_meta.visible = view_context == "terrain" or resize_active or building_placement_active
 	_tool_card.custom_minimum_size.y = 94 if _tool_meta.visible else 64
 	_tool_card.size.y = 0
 	# Status remains available in the debug overlay; ordinary instructions already

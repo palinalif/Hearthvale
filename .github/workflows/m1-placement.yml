@@ -2,7 +2,7 @@ name: M1 attachment placement regressions
 on:
   workflow_call:
   push:
-    branches: [fix/m1-sculpt-feedback, fix/m1-building-edit-camera, fix/m1-window-layout, feat/m1-cottage-edit-ux, feat/m1-ui-ux-overhaul]
+    branches: [fix/m1-sculpt-feedback, fix/m1-building-edit-camera, fix/m1-window-layout, feat/m1-cottage-edit-ux, feat/m1-ui-ux-overhaul, feat/m2-hamlet-building]
     paths:
       - scenes/m1.tscn
       - scripts/m1_scene_placement.gd
@@ -15,6 +15,10 @@ on:
       - scripts/m1_scene_ui_overhaul.gd
       - scripts/m1_scene_tool_ui.gd
       - scripts/m1_scene_full_ui.gd
+      - scripts/m1_scene_house_actions.gd
+      - scripts/building_world.gd
+      - scripts/cottage_resize_world.gd
+      - scripts/building_placement_ghost.gd
       - scripts/ui/**
       - assets/ui/**
       - scripts/cottage_visual.gd
@@ -23,6 +27,7 @@ on:
       - tests/wall_attachment_placement_test.gd
       - tests/m1_attachment_placement_test.gd
       - tests/m1_building_placement_test.gd
+      - tests/m2_placement_rotation_test.gd
       - tests/m1_building_camera_test.gd
       - tests/m1_window_layout_test.gd
       - tests/m1_cottage_edit_ux_test.gd
@@ -45,6 +50,10 @@ on:
       - scripts/m1_scene_ui_overhaul.gd
       - scripts/m1_scene_tool_ui.gd
       - scripts/m1_scene_full_ui.gd
+      - scripts/m1_scene_house_actions.gd
+      - scripts/building_world.gd
+      - scripts/cottage_resize_world.gd
+      - scripts/building_placement_ghost.gd
       - scripts/ui/**
       - assets/ui/**
       - scripts/cottage_visual.gd
@@ -53,6 +62,7 @@ on:
       - tests/wall_attachment_placement_test.gd
       - tests/m1_attachment_placement_test.gd
       - tests/m1_building_placement_test.gd
+      - tests/m2_placement_rotation_test.gd
       - tests/m1_building_camera_test.gd
       - tests/m1_window_layout_test.gd
       - tests/m1_cottage_edit_ux_test.gd

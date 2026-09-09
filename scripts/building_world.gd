@@ -280,6 +280,15 @@ func set_material(building_id: String, material_id: String) -> bool:
 	return _record_change(before)
 
 func duplicate_building(building_id: String, offset: Vector3 = Vector3(4.0, 0.0, 4.0)) -> String:
+	var source := get_building(building_id)
+	if source.is_empty(): return ""
+	var target: Transform3D = source["transform"]
+	target.origin += offset
+	return duplicate_building_at(building_id, target)
+
+func duplicate_building_at(building_id: String, target: Transform3D, expected_revision: int = -1) -> String:
+	if expected_revision >= 0 and expected_revision != get_revision(): return ""
+	if not target.origin.is_finite() or not _valid_transform_data(_transform_from_transform(target, target.origin)): return ""
 	var index := _building_index(building_id)
 	if index < 0 or (_document["buildings"] as Array).size() >= MAX_BUILDINGS: return ""
 	var before := _copy(_document) as Dictionary
@@ -292,8 +301,7 @@ func duplicate_building(building_id: String, offset: Vector3 = Vector3(4.0, 0.0,
 	var new_id := _allocate_id("building")
 	copy["id"] = new_id
 	copy["name"] = str(copy.get("name", "Cottage")) + " Copy"
-	var copy_transform := _as_transform(copy.get("transform", {}))
-	copy["transform"] = _transform_from_transform(copy_transform, copy_transform.origin + offset)
+	copy["transform"] = _transform_from_transform(target, target.origin)
 	for surface_index in (copy["surfaces"] as Array).size():
 		var surface: Dictionary = (copy["surfaces"] as Array)[surface_index]
 		var old_surface_id := str(surface["id"])

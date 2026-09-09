@@ -1,6 +1,6 @@
-# Hearthvale — current M1 handoff
+# Hearthvale — current M2 handoff
 
-Updated 2026-09-09 after final physical Thor validation on `feat/m1-ui-polish`. Read AGENTS.md and the latest user request first. **M1 is complete at `e3ef8e0d` for its bounded editable-cottage, continuous-terrain and landscaped-riverbank scope. Do not start M2 without a new user request.** The earlier Thor-accepted interaction baseline remains `44ebca5b`; the final visual/performance/device receipt is `reports/M1-e3ef8e0d-thor-acceptance.md`.
+Updated 2026-09-09 at the start of `feat/m2-hamlet-building`. Read AGENTS.md, `tasks/M2-hamlet-building.md`, and the latest user request first. **M1 is complete and M2 is active.** The first bounded M2 slice adds controller-first translation/rotation, explicit bounds/overlap validity, atomic confirmation, cancellation, undo/redo and save compatibility using the existing cottage before new residential recipes are authored. The Thor-accepted M1 interaction baseline remains `44ebca5b`; the final M1 visual/performance/device receipt is `reports/M1-e3ef8e0d-thor-acceptance.md`.
 
 ## Current visual-finish branch
 
