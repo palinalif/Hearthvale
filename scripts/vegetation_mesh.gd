@@ -13,16 +13,30 @@ const FOLIAGE_PATHS := [
 	"res://assets/models/magicavoxel/hearthvale_foliage_grass.res",
 	"res://assets/models/magicavoxel/hearthvale_foliage_wildflowers.res",
 	"res://assets/models/magicavoxel/hearthvale_foliage_leafy.res",
+	"res://assets/models/magicavoxel/hearthvale_foliage_seedgrass.res",
+	"res://assets/models/magicavoxel/hearthvale_foliage_cream.res",
+	"res://assets/models/magicavoxel/hearthvale_foliage_mauve.res",
+	"res://assets/models/magicavoxel/hearthvale_foliage_reeds.res",
+	"res://assets/models/magicavoxel/hearthvale_foliage_fern.res",
+	"res://assets/models/magicavoxel/hearthvale_foliage_mushrooms.res",
+	"res://assets/models/magicavoxel/hearthvale_foliage_mushrooms_flat.res",
+	"res://assets/models/magicavoxel/hearthvale_foliage_mushrooms_flat_scatter.res",
 ]
 static var _cache: Dictionary = {}
 
+static func variant_count(kind: String) -> int:
+	if kind == "tree": return TREE_PATHS.size()
+	if kind == "foliage": return FOLIAGE_PATHS.size()
+	return 3
+
 static func meshes(kind: String, variant: int) -> Array:
-	var key := "%s:%d" % [kind, posmod(variant, 3)]
+	var normalized := posmod(variant, variant_count(kind))
+	var key := "%s:%d" % [kind, normalized]
 	if _cache.has(key): return _cache[key]
 	if kind in ["tree", "foliage"]:
 		var paths: Array = TREE_PATHS if kind == "tree" else FOLIAGE_PATHS
-		var mesh := load(paths[posmod(variant, 3)]) as Mesh
-		assert(mesh != null, "Missing authored %s mesh variant %d" % [kind, posmod(variant, 3)])
+		var mesh := load(paths[normalized]) as Mesh
+		assert(mesh != null, "Missing authored %s mesh variant %d" % [kind, normalized])
 		# Preserve the existing one-material-per-batch renderer while swapping in
 		# the authored geometry. This keeps opaque/shadow draw ordering stable.
 		var authored: Array = []

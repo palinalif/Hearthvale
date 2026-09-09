@@ -2,6 +2,7 @@ extends SceneTree
 
 const SceneScript = preload("res://scripts/m1_scene.gd")
 const State = preload("res://scripts/landscape_state.gd")
+const Flora = preload("res://scripts/vegetation_mesh.gd")
 var checks := 0
 var failures := 0
 var scene: Node
@@ -31,7 +32,8 @@ func _initialize() -> void:
 	await _run_controller_checks()
 	await _press(JOY_BUTTON_START)
 	await _press(JOY_BUTTON_A)
-	_check(scene.backend.stats().save_status == "saved", "controller pause Save writes complete checkpoint")
+	var save_stats: Dictionary = scene.backend.stats()
+	_check(save_stats.save_status == "saved", "controller pause Save writes complete checkpoint (%s)" % str(save_stats.get("error", "")))
 	var saved_document: Dictionary = scene.building_world.get_document()
 	saved_document["landscape"] = scene.landscape_state.document()
 	var expected := {"landscape": _canonical(scene.landscape_state.document()), "terrain_hash": _terrain_hash(), "building": _canonical(saved_document)}
@@ -47,6 +49,10 @@ func _run_controller_checks() -> void:
 	_check(not invalid.add("unknown", Vector3(12, 8, 12), 1) and not invalid.add("tree", Vector3(-1, 8, 12), 1), "invalid kinds and out-of-bounds planting rejected")
 	var initial: Dictionary = scene.landscape_state.document()
 	_check(State.validate(initial) and initial.records.size() > 20, "deterministic native-ground scatter starts populated")
+	var starting_foliage_variants := {}
+	for record: Dictionary in initial.records:
+		if record.kind == "foliage": starting_foliage_variants[posmod(int(record.seed), Flora.variant_count("foliage"))] = true
+	_check(starting_foliage_variants.size() == Flora.variant_count("foliage"), "starting scene includes every authored foliage variant")
 	scene._restore_landscape({})
 	_check(scene.landscape_state.document() == initial, "seeded scatter repeats every position kind id and seed")
 	var terrain_before := _terrain_hash()
@@ -70,6 +76,10 @@ func _run_controller_checks() -> void:
 	await _press(JOY_BUTTON_A)
 	var foliage_doc: Dictionary = scene.landscape_state.document()
 	_check(foliage_doc.records.size() > tree_doc.records.size(), "foliage brush paints native ground")
+	var brush_added_new_variant := false
+	for record_index in range(tree_doc.records.size(), foliage_doc.records.size()):
+		if int(foliage_doc.records[record_index].seed) >= 3: brush_added_new_variant = true
+	_check(brush_added_new_variant, "foliage brush draws from the expanded authored variant set")
 	_check(scene._history_tags.size() == history_before + 1, "foliage press-release is one transaction")
 	await _press(JOY_BUTTON_LEFT_SHOULDER)
 	_check(scene.landscape_state.document() == tree_doc, "foliage undo exact")

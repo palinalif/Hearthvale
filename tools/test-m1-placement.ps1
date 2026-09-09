@@ -30,6 +30,6 @@ function Invoke-Gate([string]$label, [string[]]$arguments) {
     }
 }
 Invoke-Gate 'import' @('--headless', '--path', '.', '--editor', '--import', '--quit')
-foreach ($test in @('wall_attachment_placement_test','building_world_test','m1_attachment_placement_test','m1_building_placement_test','m1_controller_test','m1_building_camera_test','m1_window_layout_test','m1_cottage_edit_ux_test','m1_ui_overhaul_test','m1_tool_ui_test','m1_full_ui_test')) {
+foreach ($test in @('wall_attachment_placement_test','building_world_test','vegetation_integration_test','m1_landscape_test','m1_attachment_placement_test','m1_building_placement_test','m1_controller_test','m1_building_camera_test','m1_window_layout_test','m1_cottage_edit_ux_test','m1_ui_overhaul_test','m1_tool_ui_test','m1_full_ui_test')) {
     Invoke-Gate $test @('--headless', '--path', '.', '--script', "tests/$test.gd")
 }

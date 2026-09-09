@@ -1,0 +1,38 @@
+{
+  "asset": "hearthvale_foliage_mushrooms_flat",
+  "declared_dimensions": [
+    14,
+    6,
+    10
+  ],
+  "emitted_quads": 89,
+  "exposed_quads": 220,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      13,
+      4,
+      9
+    ],
+    "min": [
+      1,
+      0,
+      1
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    6,
+    12,
+    13,
+    14
+  ],
+  "source": "hearthvale_foliage_mushrooms_flat.vox",
+  "source_sha256": "bfd7158ef42bea57583061e0dde3763fd43a4a67410ad1d2997b826fe328d197",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 178,
+  "voxel_count": 86,
+  "voxel_unit": 0.125
+}

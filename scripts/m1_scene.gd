@@ -10,6 +10,7 @@ const BrushPreviewScript = preload("res://scripts/brush_preview.gd")
 const CursorReticleScript = preload("res://scripts/m1_cursor_reticle.gd")
 const LandscapeScript = preload("res://scripts/landscape_state.gd")
 const Grid = preload("res://scripts/visual_grid.gd")
+const Flora = preload("res://scripts/vegetation_mesh.gd")
 
 const GardenVisualScript = preload("res://scripts/m1_garden_visual.gd")
 
@@ -1381,7 +1382,7 @@ func _restore_landscape(document: Dictionary) -> void:
 			var point := Vector3(cluster.x + cos(angle) * radius, 8, cluster.y + sin(angle) * radius)
 			if point.x > 17 and point.x < 28 and point.z > 13 and point.z < 25: continue
 			var ground := _plant_ground(point, true)
-			if not ground.is_empty(): landscape_state.add("foliage", ground["point"], rng.randi_range(0, 2))
+			if not ground.is_empty(): landscape_state.add("foliage", ground["point"], rng.randi_range(0, Flora.variant_count("foliage") - 1))
 	for point in [Vector3(37, 7, 7), Vector3(37, 7, 12), Vector3(37, 7, 30), Vector3(36, 7, 38), Vector3(32, 8, 37), Vector3(13, 8, 34), Vector3(8, 8, 16)]:
 		var ground := _plant_ground(point, true)
 		if not ground.is_empty(): landscape_state.add("rock", ground["point"], rng.randi_range(0, 2))
@@ -1437,7 +1438,7 @@ func _paint_plant_sample() -> void:
 			var angle := rng.randf_range(0, TAU)
 			var radius := sqrt(rng.randf()) * brush_radius if sculpt_tool != "tree" else 0.0
 			var ground := _plant_ground(center + Vector3(cos(angle) * radius, 0, sin(angle) * radius))
-			if not ground.is_empty(): landscape_state.add(sculpt_tool, ground["point"], rng.randi_range(0, 2))
+			if not ground.is_empty(): landscape_state.add(sculpt_tool, ground["point"], rng.randi_range(0, Flora.variant_count(sculpt_tool) - 1))
 	_plant_last = center; _plant_sequence += 1
 	garden_visual.apply_records(landscape_state.records)
 

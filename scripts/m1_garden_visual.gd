@@ -16,7 +16,7 @@ func apply_records(records: Array) -> void:
 	# retains every fine cell while avoiding hundreds of per-plant draw calls.
 	var batches := {}
 	for record: Dictionary in records:
-		var kind := str(record["kind"]); var variant := posmod(int(record["seed"]), 3)
+		var kind := str(record["kind"]); var variant := posmod(int(record["seed"]), Flora.variant_count(kind))
 		var meshes: Array = Flora.meshes(kind, variant)
 		for index in meshes.size():
 			var key := "%s_%d_%d" % [kind, variant, index]

@@ -3,7 +3,7 @@ extends SceneTree
 const Flora = preload("res://scripts/vegetation_mesh.gd")
 const Garden = preload("res://scripts/m1_garden_visual.gd")
 const TREE_NAMES := ["orchard", "riverside", "wind"]
-const FOLIAGE_NAMES := ["grass", "wildflowers", "leafy"]
+const FOLIAGE_NAMES := ["grass", "wildflowers", "leafy", "seedgrass", "cream", "mauve", "reeds", "fern", "mushrooms", "mushrooms_flat", "mushrooms_flat_scatter"]
 
 var checks := 0
 var failures := 0
@@ -11,7 +11,8 @@ var failures := 0
 func _initialize() -> void:
 	for kind in ["tree", "foliage"]:
 		var names: Array = TREE_NAMES if kind == "tree" else FOLIAGE_NAMES
-		for variant in 3:
+		_check(Flora.variant_count(kind) == names.size(), "%s exposes every authored variant" % kind)
+		for variant in names.size():
 			var expected := load("res://assets/models/magicavoxel/hearthvale_%s_%s.res" % [kind, names[variant]]) as Mesh
 			var actual: Array = Flora.meshes(kind, variant)
 			_check(actual.size() == expected.get_surface_count(), "%s variant %d keeps every authored palette surface" % [kind, variant])
@@ -23,14 +24,15 @@ func _initialize() -> void:
 	var garden := Garden.new()
 	root.add_child(garden)
 	var records: Array = []
-	for variant in 3:
+	for variant in TREE_NAMES.size():
 		records.append({"id": variant + 1, "kind": "tree", "seed": variant, "position": [4.0 + variant * 6.0, 8.0, 8.0]})
+	for variant in FOLIAGE_NAMES.size():
 		records.append({"id": variant + 4, "kind": "foliage", "seed": variant, "position": [4.0 + variant * 2.0, 8.0, 14.0]})
 	garden.apply_records(records)
 	await process_frame
 	var expected_groups := 0
 	for kind in ["tree", "foliage"]:
-		for variant in 3: expected_groups += Flora.meshes(kind, variant).size()
+		for variant in Flora.variant_count(kind): expected_groups += Flora.meshes(kind, variant).size()
 	_check(garden._groups.size() == expected_groups, "world batches every authored tree and foliage palette surface")
 	for key in garden._groups:
 		var node: MultiMeshInstance3D = garden._groups[key]
