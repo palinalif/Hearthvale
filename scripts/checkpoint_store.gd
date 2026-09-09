@@ -5,7 +5,10 @@ const ROOT := "user://checkpoints"
 const SCHEMA := 2
 const BUILDING_SCHEMA := 3
 const LEGACY_SCHEMA := 1
-const KEEP_GENERATIONS := 2
+const KEEP_GENERATIONS := 3
+const KEEP_DISPOSABLE_ROOTS := 3
+const PLAYER_ROOT_NAMES := ["checkpoints", "m1_checkpoints"]
+const ACTIVE_MARKER_MAX_AGE_SECONDS := 24 * 60 * 60
 const DIMENSIONS := Vector3i(48, 32, 48)
 const MAX_MANIFEST_BYTES := 16 * 1024
 const MAX_BUILDING_DOCUMENT_BYTES := 256 * 1024
@@ -25,12 +28,18 @@ var require_building_document := false
 var last_error := ""
 var loaded_revision := -1
 var loaded_building_document: Dictionary = {}
+var _active_marker := ""
 
 func _payload_bytes() -> int:
 	return expected_dimensions.x * expected_dimensions.y * expected_dimensions.z * 2
 
 func _init(test_root: String = "") -> void:
 	if not test_root.is_empty(): root_path = test_root
+	_start_disposable_root_use()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and not _active_marker.is_empty():
+		DirAccess.remove_absolute(_active_marker)
 
 func save(buffer: Object, revision: int, generator_id: String, building_document: Dictionary = {}) -> bool:
 	last_error = ""; loaded_revision = -1; loaded_building_document = {}
@@ -79,6 +88,7 @@ func save(buffer: Object, revision: int, generator_id: String, building_document
 	if not staged_check["valid"]: return _fail("staged manifest verification failed: %s" % staged_check["error"])
 	if DirAccess.rename_absolute(ProjectSettings.globalize_path(staged_manifest), ProjectSettings.globalize_path(final_manifest)) != OK: return _fail("manifest rename failed")
 	_gc()
+	_gc_disposable_roots()
 	return true
 
 func load(revision: int = -1) -> Object:
@@ -213,6 +223,93 @@ func _gc() -> void:
 		if not keep:
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(item["manifest"]))
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(item["data"]))
+
+func _gc_disposable_roots() -> void:
+	# Headless/editor tests use unique user:// roots so their fixtures cannot
+	# collide. Bound those roots globally without ever touching player saves or
+	# exported builds.
+	if not OS.has_feature("editor") or not root_path.begins_with("user://"): return
+	var current_name := root_path.trim_prefix("user://").trim_suffix("/")
+	if current_name.is_empty() or current_name.contains("/") or current_name in PLAYER_ROOT_NAMES: return
+	var user_root := ProjectSettings.globalize_path("user://")
+	var directory := DirAccess.open(user_root)
+	if directory == null: return
+	var roots: Array[Dictionary] = []
+	directory.list_dir_begin()
+	var name := directory.get_next()
+	while not name.is_empty():
+		if directory.current_is_dir() and name not in PLAYER_ROOT_NAMES:
+			var absolute := user_root.path_join(name)
+			var is_current := name == current_name
+			var modified := _checkpoint_root_modified_time(absolute)
+			if modified >= 0 and (is_current or not _checkpoint_root_is_active(absolute)):
+				roots.append({"path": absolute, "modified": modified, "current": is_current})
+		name = directory.get_next()
+	directory.list_dir_end()
+	roots.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a["current"] != b["current"]: return a["current"]
+		if a["modified"] != b["modified"]: return a["modified"] > b["modified"]
+		return a["path"] > b["path"])
+	for i in range(KEEP_DISPOSABLE_ROOTS, roots.size()):
+		_remove_checkpoint_files(roots[i]["path"])
+
+func _start_disposable_root_use() -> void:
+	if not OS.has_feature("editor") or not root_path.begins_with("user://"): return
+	var name := root_path.trim_prefix("user://").trim_suffix("/")
+	if name.is_empty() or name.contains("/") or name in PLAYER_ROOT_NAMES: return
+	var absolute := ProjectSettings.globalize_path(root_path)
+	if DirAccess.make_dir_recursive_absolute(absolute) != OK: return
+	_active_marker = absolute.path_join(".checkpoint-active-%d-%d" % [OS.get_process_id(), get_instance_id()])
+	var marker := FileAccess.open(_active_marker, FileAccess.WRITE)
+	if marker == null:
+		_active_marker = ""
+		return
+	marker.store_line(str(Time.get_unix_time_from_system()))
+	marker.close()
+
+func _checkpoint_root_is_active(absolute: String) -> bool:
+	var directory := DirAccess.open(absolute)
+	if directory == null: return false
+	var active := false
+	var now := int(Time.get_unix_time_from_system())
+	directory.list_dir_begin()
+	var name := directory.get_next()
+	while not name.is_empty():
+		if not directory.current_is_dir() and name.begins_with(".checkpoint-active-"):
+			var marker := absolute.path_join(name)
+			if now - int(FileAccess.get_modified_time(marker)) > ACTIVE_MARKER_MAX_AGE_SECONDS:
+				DirAccess.remove_absolute(marker)
+			else:
+				active = true
+		name = directory.get_next()
+	directory.list_dir_end()
+	return active
+
+func _checkpoint_root_modified_time(absolute: String) -> int:
+	var directory := DirAccess.open(absolute)
+	if directory == null: return -1
+	var rx := RegEx.new(); rx.compile(GENERATION_RE)
+	var latest := -1
+	directory.list_dir_begin()
+	var name := directory.get_next()
+	while not name.is_empty():
+		if not directory.current_is_dir() and rx.search(name) != null:
+			latest = maxi(latest, int(FileAccess.get_modified_time(absolute.path_join(name))))
+		name = directory.get_next()
+	directory.list_dir_end()
+	return latest
+
+func _remove_checkpoint_files(absolute: String) -> void:
+	var directory := DirAccess.open(absolute)
+	if directory == null: return
+	var rx := RegEx.new(); rx.compile("^checkpoint_[0-9]{16,}(?:\\.(?:json|bin)|\\.staged\\.(?:json|bin))$")
+	directory.list_dir_begin()
+	var name := directory.get_next()
+	while not name.is_empty():
+		if not directory.current_is_dir() and rx.search(name) != null:
+			DirAccess.remove_absolute(absolute.path_join(name))
+		name = directory.get_next()
+	directory.list_dir_end()
 
 func _gc_owns_candidate(item: Dictionary) -> bool:
 	var file := FileAccess.open(item["manifest"], FileAccess.READ)
