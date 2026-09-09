@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://0edc13qe1jal"
+path="res://.godot/imported/hearthvale_foliage_seedgrass.vox-231ad95623485ddabb36b4d15320e947.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_foliage_seedgrass.vox"
+dest_files=["res://.godot/imported/hearthvale_foliage_seedgrass.vox-231ad95623485ddabb36b4d15320e947.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -1,0 +1,1376 @@
+{
+  "server": "hearthvale-magicavoxel",
+  "baseline": "d2535ed",
+  "intent": "Two low mushroom patches and one compact voxel-resampled size variation for each approved tree. Cubes remain 0.125; originals remain unchanged.",
+  "grid_correction_operations": [
+    {
+      "tool": "create_voxel_model",
+      "args": {
+        "filename": "hearthvale_tree_orchard_compact_even",
+        "width": 32,
+        "height": 32,
+        "depth": 20
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Created model 'hearthvale_tree_orchard_compact_even' with dimensions 32x32x20"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_tree_orchard_compact_even",
+        "color_index": 1,
+        "r": 118,
+        "g": 89,
+        "b": 66
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 1 to RGBA(118, 89, 66, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_tree_orchard_compact_even",
+        "color_index": 2,
+        "r": 99,
+        "g": 131,
+        "b": 72
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 2 to RGBA(99, 131, 72, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_tree_orchard_compact_even",
+        "color_index": 3,
+        "r": 72,
+        "g": 109,
+        "b": 70
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 3 to RGBA(72, 109, 70, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_tree_orchard_compact_even",
+        "color_index": 4,
+        "r": 135,
+        "g": 166,
+        "b": 87
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 4 to RGBA(135, 166, 87, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "union_models",
+      "args": {
+        "source_filename": "hearthvale_tree_orchard_compact",
+        "target_filename": "hearthvale_tree_orchard_compact_even",
+        "offset_x": 0,
+        "offset_y": 0,
+        "offset_z": 0
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Combined 'hearthvale_tree_orchard_compact' into 'hearthvale_tree_orchard_compact_even' with offset (0, 0, 0)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "take_snapshot",
+      "args": {
+        "filename": "hearthvale_tree_orchard_compact_even",
+        "snapshot_name": "hearthvale_tree_orchard_compact_even_grid_corrected"
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Snapshot saved as 'hearthvale_tree_orchard_compact_even_grid_corrected.vox'\nImages saved from 6 angles:\n  - front: hearthvale_tree_orchard_compact_even_grid_corrected_front.png\n  - back: hearthvale_tree_orchard_compact_even_grid_corrected_back.png\n  - left: hearthvale_tree_orchard_compact_even_grid_corrected_left.png\n  - right: hearthvale_tree_orchard_compact_even_grid_corrected_right.png\n  - top: hearthvale_tree_orchard_compact_even_grid_corrected_top.png\n  - bottom: hearthvale_tree_orchard_compact_even_grid_corrected_bottom.png"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "create_voxel_model",
+      "args": {
+        "filename": "hearthvale_tree_riverside_young_even",
+        "width": 20,
+        "height": 40,
+        "depth": 16
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Created model 'hearthvale_tree_riverside_young_even' with dimensions 20x40x16"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_tree_riverside_young_even",
+        "color_index": 1,
+        "r": 118,
+        "g": 89,
+        "b": 66
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 1 to RGBA(118, 89, 66, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_tree_riverside_young_even",
+        "color_index": 2,
+        "r": 99,
+        "g": 131,
+        "b": 72
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 2 to RGBA(99, 131, 72, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_tree_riverside_young_even",
+        "color_index": 3,
+        "r": 72,
+        "g": 109,
+        "b": 70
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 3 to RGBA(72, 109, 70, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_tree_riverside_young_even",
+        "color_index": 4,
+        "r": 135,
+        "g": 166,
+        "b": 87
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 4 to RGBA(135, 166, 87, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "union_models",
+      "args": {
+        "source_filename": "hearthvale_tree_riverside_young",
+        "target_filename": "hearthvale_tree_riverside_young_even",
+        "offset_x": 0,
+        "offset_y": 0,
+        "offset_z": 0
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Combined 'hearthvale_tree_riverside_young' into 'hearthvale_tree_riverside_young_even' with offset (0, 0, 0)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "take_snapshot",
+      "args": {
+        "filename": "hearthvale_tree_riverside_young_even",
+        "snapshot_name": "hearthvale_tree_riverside_young_even_grid_corrected"
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Snapshot saved as 'hearthvale_tree_riverside_young_even_grid_corrected.vox'\nImages saved from 6 angles:\n  - front: hearthvale_tree_riverside_young_even_grid_corrected_front.png\n  - back: hearthvale_tree_riverside_young_even_grid_corrected_back.png\n  - left: hearthvale_tree_riverside_young_even_grid_corrected_left.png\n  - right: hearthvale_tree_riverside_young_even_grid_corrected_right.png\n  - top: hearthvale_tree_riverside_young_even_grid_corrected_top.png\n  - bottom: hearthvale_tree_riverside_young_even_grid_corrected_bottom.png"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "create_voxel_model",
+      "args": {
+        "filename": "hearthvale_tree_wind_low_even",
+        "width": 32,
+        "height": 33,
+        "depth": 20
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Created model 'hearthvale_tree_wind_low_even' with dimensions 32x33x20"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_tree_wind_low_even",
+        "color_index": 1,
+        "r": 118,
+        "g": 89,
+        "b": 66
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 1 to RGBA(118, 89, 66, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_tree_wind_low_even",
+        "color_index": 2,
+        "r": 99,
+        "g": 131,
+        "b": 72
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 2 to RGBA(99, 131, 72, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_tree_wind_low_even",
+        "color_index": 3,
+        "r": 72,
+        "g": 109,
+        "b": 70
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 3 to RGBA(72, 109, 70, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_tree_wind_low_even",
+        "color_index": 4,
+        "r": 135,
+        "g": 166,
+        "b": 87
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 4 to RGBA(135, 166, 87, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "union_models",
+      "args": {
+        "source_filename": "hearthvale_tree_wind_low",
+        "target_filename": "hearthvale_tree_wind_low_even",
+        "offset_x": 0,
+        "offset_y": 0,
+        "offset_z": 0
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Combined 'hearthvale_tree_wind_low' into 'hearthvale_tree_wind_low_even' with offset (0, 0, 0)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "take_snapshot",
+      "args": {
+        "filename": "hearthvale_tree_wind_low_even",
+        "snapshot_name": "hearthvale_tree_wind_low_even_grid_corrected"
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Snapshot saved as 'hearthvale_tree_wind_low_even_grid_corrected.vox'\nImages saved from 6 angles:\n  - front: hearthvale_tree_wind_low_even_grid_corrected_front.png\n  - back: hearthvale_tree_wind_low_even_grid_corrected_back.png\n  - left: hearthvale_tree_wind_low_even_grid_corrected_left.png\n  - right: hearthvale_tree_wind_low_even_grid_corrected_right.png\n  - top: hearthvale_tree_wind_low_even_grid_corrected_top.png\n  - bottom: hearthvale_tree_wind_low_even_grid_corrected_bottom.png"
+          }
+        ],
+        "isError": false
+      }
+    }
+  ],
+  "operations": [
+    {
+      "tool": "copy_model",
+      "args": {
+        "source_filename": "hearthvale_tree_orchard",
+        "target_filename": "hearthvale_tree_orchard_compact"
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Copied 'hearthvale_tree_orchard' to 'hearthvale_tree_orchard_compact'"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "scale_model",
+      "args": {
+        "filename": "hearthvale_tree_orchard_compact",
+        "factor": 0.8
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Scaled model by (0.8, 0.8, 0.8)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "take_snapshot",
+      "args": {
+        "filename": "hearthvale_tree_orchard_compact",
+        "snapshot_name": "hearthvale_tree_orchard_compact_compact_blockout"
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Snapshot saved as 'hearthvale_tree_orchard_compact_compact_blockout.vox'\nImages saved from 6 angles:\n  - front: hearthvale_tree_orchard_compact_compact_blockout_front.png\n  - back: hearthvale_tree_orchard_compact_compact_blockout_back.png\n  - left: hearthvale_tree_orchard_compact_compact_blockout_left.png\n  - right: hearthvale_tree_orchard_compact_compact_blockout_right.png\n  - top: hearthvale_tree_orchard_compact_compact_blockout_top.png\n  - bottom: hearthvale_tree_orchard_compact_compact_blockout_bottom.png"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "copy_model",
+      "args": {
+        "source_filename": "hearthvale_tree_riverside",
+        "target_filename": "hearthvale_tree_riverside_young"
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Copied 'hearthvale_tree_riverside' to 'hearthvale_tree_riverside_young'"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "scale_model",
+      "args": {
+        "filename": "hearthvale_tree_riverside_young",
+        "factor": 0.8
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Scaled model by (0.8, 0.8, 0.8)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "take_snapshot",
+      "args": {
+        "filename": "hearthvale_tree_riverside_young",
+        "snapshot_name": "hearthvale_tree_riverside_young_compact_blockout"
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Snapshot saved as 'hearthvale_tree_riverside_young_compact_blockout.vox'\nImages saved from 6 angles:\n  - front: hearthvale_tree_riverside_young_compact_blockout_front.png\n  - back: hearthvale_tree_riverside_young_compact_blockout_back.png\n  - left: hearthvale_tree_riverside_young_compact_blockout_left.png\n  - right: hearthvale_tree_riverside_young_compact_blockout_right.png\n  - top: hearthvale_tree_riverside_young_compact_blockout_top.png\n  - bottom: hearthvale_tree_riverside_young_compact_blockout_bottom.png"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "copy_model",
+      "args": {
+        "source_filename": "hearthvale_tree_wind",
+        "target_filename": "hearthvale_tree_wind_low"
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Copied 'hearthvale_tree_wind' to 'hearthvale_tree_wind_low'"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "scale_model",
+      "args": {
+        "filename": "hearthvale_tree_wind_low",
+        "factor": 0.8
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Scaled model by (0.8, 0.8, 0.8)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "take_snapshot",
+      "args": {
+        "filename": "hearthvale_tree_wind_low",
+        "snapshot_name": "hearthvale_tree_wind_low_compact_blockout"
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Snapshot saved as 'hearthvale_tree_wind_low_compact_blockout.vox'\nImages saved from 6 angles:\n  - front: hearthvale_tree_wind_low_compact_blockout_front.png\n  - back: hearthvale_tree_wind_low_compact_blockout_back.png\n  - left: hearthvale_tree_wind_low_compact_blockout_left.png\n  - right: hearthvale_tree_wind_low_compact_blockout_right.png\n  - top: hearthvale_tree_wind_low_compact_blockout_top.png\n  - bottom: hearthvale_tree_wind_low_compact_blockout_bottom.png"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "create_voxel_model",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "width": 14,
+        "height": 6,
+        "depth": 10
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Created model 'hearthvale_foliage_mushrooms_flat' with dimensions 14x6x10"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "color_index": 6,
+        "r": 199,
+        "g": 184,
+        "b": 151
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 6 to RGBA(199, 184, 151, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "color_index": 12,
+        "r": 118,
+        "g": 89,
+        "b": 66
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 12 to RGBA(118, 89, 66, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "color_index": 13,
+        "r": 161,
+        "g": 115,
+        "b": 89
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 13 to RGBA(161, 115, 89, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "color_index": 14,
+        "r": 186,
+        "g": 144,
+        "b": 111
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 14 to RGBA(186, 144, 111, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "x1": 3,
+        "y1": 0,
+        "z1": 3,
+        "x2": 3,
+        "y2": 1,
+        "z2": 3,
+        "color_index": 6
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (3, 0, 3) to (3, 1, 3)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "x1": 1,
+        "y1": 2,
+        "z1": 2,
+        "x2": 5,
+        "y2": 2,
+        "z2": 4,
+        "color_index": 12
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (1, 2, 2) to (5, 2, 4)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "x1": 2,
+        "y1": 2,
+        "z1": 1,
+        "x2": 4,
+        "y2": 2,
+        "z2": 5,
+        "color_index": 13
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (2, 2, 1) to (4, 2, 5)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "x1": 2,
+        "y1": 3,
+        "z1": 2,
+        "x2": 4,
+        "y2": 3,
+        "z2": 4,
+        "color_index": 14
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (2, 3, 2) to (4, 3, 4)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "x1": 8,
+        "y1": 0,
+        "z1": 5,
+        "x2": 8,
+        "y2": 0,
+        "z2": 5,
+        "color_index": 6
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (8, 0, 5) to (8, 0, 5)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "x1": 6,
+        "y1": 1,
+        "z1": 4,
+        "x2": 10,
+        "y2": 1,
+        "z2": 7,
+        "color_index": 12
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (6, 1, 4) to (10, 1, 7)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "x1": 7,
+        "y1": 1,
+        "z1": 3,
+        "x2": 9,
+        "y2": 1,
+        "z2": 8,
+        "color_index": 13
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (7, 1, 3) to (9, 1, 8)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "x1": 7,
+        "y1": 2,
+        "z1": 4,
+        "x2": 9,
+        "y2": 2,
+        "z2": 7,
+        "color_index": 14
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (7, 2, 4) to (9, 2, 7)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "x1": 11,
+        "y1": 0,
+        "z1": 2,
+        "x2": 11,
+        "y2": 1,
+        "z2": 2,
+        "color_index": 6
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (11, 0, 2) to (11, 1, 2)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "x1": 10,
+        "y1": 2,
+        "z1": 1,
+        "x2": 12,
+        "y2": 2,
+        "z2": 3,
+        "color_index": 12
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (10, 2, 1) to (12, 2, 3)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "x1": 9,
+        "y1": 2,
+        "z1": 2,
+        "x2": 12,
+        "y2": 2,
+        "z2": 3,
+        "color_index": 13
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (9, 2, 2) to (12, 2, 3)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "x1": 10,
+        "y1": 3,
+        "z1": 2,
+        "x2": 11,
+        "y2": 3,
+        "z2": 2,
+        "color_index": 14
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (10, 3, 2) to (11, 3, 2)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "take_snapshot",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat",
+        "snapshot_name": "hearthvale_foliage_mushrooms_flat_flat_blockout"
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Snapshot saved as 'hearthvale_foliage_mushrooms_flat_flat_blockout.vox'\nImages saved from 6 angles:\n  - front: hearthvale_foliage_mushrooms_flat_flat_blockout_front.png\n  - back: hearthvale_foliage_mushrooms_flat_flat_blockout_back.png\n  - left: hearthvale_foliage_mushrooms_flat_flat_blockout_left.png\n  - right: hearthvale_foliage_mushrooms_flat_flat_blockout_right.png\n  - top: hearthvale_foliage_mushrooms_flat_flat_blockout_top.png\n  - bottom: hearthvale_foliage_mushrooms_flat_flat_blockout_bottom.png"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "create_voxel_model",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "width": 16,
+        "height": 6,
+        "depth": 12
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Created model 'hearthvale_foliage_mushrooms_flat_scatter' with dimensions 16x6x12"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "color_index": 6,
+        "r": 199,
+        "g": 184,
+        "b": 151
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 6 to RGBA(199, 184, 151, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "color_index": 12,
+        "r": 118,
+        "g": 89,
+        "b": 66
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 12 to RGBA(118, 89, 66, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "color_index": 13,
+        "r": 161,
+        "g": 115,
+        "b": 89
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 13 to RGBA(161, 115, 89, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "set_palette_color",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "color_index": 14,
+        "r": 186,
+        "g": 144,
+        "b": 111
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Set palette color 14 to RGBA(186, 144, 111, 255)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 2,
+        "y1": 0,
+        "z1": 3,
+        "x2": 2,
+        "y2": 0,
+        "z2": 3,
+        "color_index": 6
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (2, 0, 3) to (2, 0, 3)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 0,
+        "y1": 1,
+        "z1": 1,
+        "x2": 4,
+        "y2": 1,
+        "z2": 5,
+        "color_index": 12
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (0, 1, 1) to (4, 1, 5)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 1,
+        "y1": 1,
+        "z1": 0,
+        "x2": 3,
+        "y2": 1,
+        "z2": 6,
+        "color_index": 13
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (1, 1, 0) to (3, 1, 6)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 1,
+        "y1": 2,
+        "z1": 2,
+        "x2": 3,
+        "y2": 2,
+        "z2": 4,
+        "color_index": 14
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (1, 2, 2) to (3, 2, 4)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 7,
+        "y1": 0,
+        "z1": 7,
+        "x2": 7,
+        "y2": 1,
+        "z2": 7,
+        "color_index": 6
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (7, 0, 7) to (7, 1, 7)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 5,
+        "y1": 2,
+        "z1": 5,
+        "x2": 9,
+        "y2": 2,
+        "z2": 9,
+        "color_index": 12
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (5, 2, 5) to (9, 2, 9)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 6,
+        "y1": 2,
+        "z1": 4,
+        "x2": 10,
+        "y2": 2,
+        "z2": 8,
+        "color_index": 13
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (6, 2, 4) to (10, 2, 8)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 6,
+        "y1": 3,
+        "z1": 6,
+        "x2": 8,
+        "y2": 3,
+        "z2": 8,
+        "color_index": 14
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (6, 3, 6) to (8, 3, 8)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 13,
+        "y1": 0,
+        "z1": 3,
+        "x2": 13,
+        "y2": 0,
+        "z2": 3,
+        "color_index": 6
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (13, 0, 3) to (13, 0, 3)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 11,
+        "y1": 1,
+        "z1": 2,
+        "x2": 15,
+        "y2": 1,
+        "z2": 5,
+        "color_index": 12
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (11, 1, 2) to (15, 1, 5)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 12,
+        "y1": 1,
+        "z1": 1,
+        "x2": 14,
+        "y2": 1,
+        "z2": 6,
+        "color_index": 13
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (12, 1, 1) to (14, 1, 6)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 12,
+        "y1": 2,
+        "z1": 2,
+        "x2": 14,
+        "y2": 2,
+        "z2": 4,
+        "color_index": 14
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (12, 2, 2) to (14, 2, 4)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 11,
+        "y1": 0,
+        "z1": 9,
+        "x2": 11,
+        "y2": 1,
+        "z2": 9,
+        "color_index": 6
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (11, 0, 9) to (11, 1, 9)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 10,
+        "y1": 2,
+        "z1": 8,
+        "x2": 12,
+        "y2": 2,
+        "z2": 10,
+        "color_index": 12
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (10, 2, 8) to (12, 2, 10)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 10,
+        "y1": 2,
+        "z1": 7,
+        "x2": 13,
+        "y2": 2,
+        "z2": 10,
+        "color_index": 13
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (10, 2, 7) to (13, 2, 10)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "fill_box",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "x1": 11,
+        "y1": 3,
+        "z1": 8,
+        "x2": 11,
+        "y2": 3,
+        "z2": 9,
+        "color_index": 14
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Filled box from (11, 3, 8) to (11, 3, 9)"
+          }
+        ],
+        "isError": false
+      }
+    },
+    {
+      "tool": "take_snapshot",
+      "args": {
+        "filename": "hearthvale_foliage_mushrooms_flat_scatter",
+        "snapshot_name": "hearthvale_foliage_mushrooms_flat_scatter_flat_blockout"
+      },
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Snapshot saved as 'hearthvale_foliage_mushrooms_flat_scatter_flat_blockout.vox'\nImages saved from 6 angles:\n  - front: hearthvale_foliage_mushrooms_flat_scatter_flat_blockout_front.png\n  - back: hearthvale_foliage_mushrooms_flat_scatter_flat_blockout_back.png\n  - left: hearthvale_foliage_mushrooms_flat_scatter_flat_blockout_left.png\n  - right: hearthvale_foliage_mushrooms_flat_scatter_flat_blockout_right.png\n  - top: hearthvale_foliage_mushrooms_flat_scatter_flat_blockout_top.png\n  - bottom: hearthvale_foliage_mushrooms_flat_scatter_flat_blockout_bottom.png"
+          }
+        ],
+        "isError": false
+      }
+    }
+  ]
+}

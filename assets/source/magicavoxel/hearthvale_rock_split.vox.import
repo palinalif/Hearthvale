@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://tmue8jnccvo5"
+path="res://.godot/imported/hearthvale_rock_split.vox-95768715a50339ccf7e82bb9583c126c.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_rock_split.vox"
+dest_files=["res://.godot/imported/hearthvale_rock_split.vox-95768715a50339ccf7e82bb9583c126c.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

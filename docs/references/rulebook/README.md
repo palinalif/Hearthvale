@@ -10,7 +10,7 @@ Use Town to City 01/02/03 and Station to Station 00/04/07 for architecture, plan
 
 ## Shared scale rule
 
-Hearthvale requires one world-space visible voxel unit across asset families and terrain detail. Larger objects contain more cells; they must not use enlarged or stretched voxels. Rendering and editing resolution remain separate. These screenshots do not establish an exact numeric unit or prove the source games use one.
+Hearthvale uses a `0.125` world-space visible structural unit across terrain, cottage shells and authoritative roof profiles, general vegetation and props. The player-approved cottage-only presentation tier is `0.0625` for visible roof tiles/edges, window and door joinery, the entrance canopy, shutters, trims, flower boxes and flowers; structural dimensions, roof authority and anchors stay at `0.125`, while bounded window/door width and height overrides retain native detail increments. Larger objects contain more cubic cells and must not use enlarged or stretched voxels. Rendering and editing resolution remain separate. These screenshots do not establish an exact numeric unit or prove the source games use either tier.
 
 ## Worker briefing use
 

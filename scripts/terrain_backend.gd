@@ -43,6 +43,7 @@ var _dirty := false
 var _checkpoint: RefCounted
 @export var checkpoint_root := ""
 @export var require_building_document := false
+@export var initialization_budget_override_ms := 0
 var loaded_building_document: Dictionary = {}
 
 var _stroke_active := false
@@ -115,7 +116,7 @@ func _ready() -> void:
 		add_child(viewer)
 	voxels = generator_script.generate()
 	var full_area := AABB(Vector3.ZERO, Vector3(patch_size))
-	var initialization_budget_ms := 45000 if patch_size.x > 96 else 15000
+	var initialization_budget_ms := initialization_budget_override_ms if initialization_budget_override_ms > 0 else (45000 if patch_size.x > 96 else 15000)
 	var load_deadline := Time.get_ticks_msec() + initialization_budget_ms
 	var tool = terrain.get_voxel_tool()
 	while not tool.is_area_editable(full_area) and Time.get_ticks_msec() < load_deadline:

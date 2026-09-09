@@ -1,0 +1,38 @@
+{
+  "asset": "hearthvale_foliage_grass",
+  "declared_dimensions": [
+    10,
+    8,
+    10
+  ],
+  "emitted_quads": 103,
+  "exposed_quads": 156,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      9,
+      6,
+      8
+    ],
+    "min": [
+      1,
+      0,
+      2
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    2,
+    3,
+    4
+  ],
+  "source": "hearthvale_foliage_grass.vox",
+  "source_sha256": "0d535c7bb0b45ee0830756b7ca4b901cca0172d15863150347a469b0335cd3f6",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 206,
+  "voxel_count": 44,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}

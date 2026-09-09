@@ -1,0 +1,39 @@
+{
+  "asset": "hearthvale_tree_wind_low",
+  "declared_dimensions": [
+    64,
+    66,
+    40
+  ],
+  "emitted_quads": 1791,
+  "exposed_quads": 8954,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      62,
+      66,
+      34
+    ],
+    "min": [
+      2,
+      0,
+      4
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "source": "hearthvale_tree_wind_low.vox",
+  "source_sha256": "fd8618ed5ef56a548edfc89e60b150ae984c76b5816eb547adcdc6ddab6811c6",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 3582,
+  "voxel_count": 17587,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}

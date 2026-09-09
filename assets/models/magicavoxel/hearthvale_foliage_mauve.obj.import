@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://p0br1fgj7t4d"
+path="res://.godot/imported/hearthvale_foliage_mauve.obj-07a49f5a4b1cea38e78821081408e097.mesh"
+
+[deps]
+
+files=["res://.godot/imported/hearthvale_foliage_mauve.obj-07a49f5a4b1cea38e78821081408e097.mesh"]
+
+source_file="res://assets/models/magicavoxel/hearthvale_foliage_mauve.obj"
+dest_files=["res://.godot/imported/hearthvale_foliage_mauve.obj-07a49f5a4b1cea38e78821081408e097.mesh", "res://.godot/imported/hearthvale_foliage_mauve.obj-07a49f5a4b1cea38e78821081408e097.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

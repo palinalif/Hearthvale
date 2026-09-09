@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://da4yhsbvoh4od"
+path="res://.godot/imported/hearthvale_foliage_mauve.vox-da87d1719ff488d72ed5b4667a07eebf.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_foliage_mauve.vox"
+dest_files=["res://.godot/imported/hearthvale_foliage_mauve.vox-da87d1719ff488d72ed5b4667a07eebf.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://gep8qprv0wqn"
+path="res://.godot/imported/hearthvale_foliage_mushrooms.vox-9d3ed1b61aa20d3ec24aec2c98a0fa60.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_foliage_mushrooms.vox"
+dest_files=["res://.godot/imported/hearthvale_foliage_mushrooms.vox-9d3ed1b61aa20d3ec24aec2c98a0fa60.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

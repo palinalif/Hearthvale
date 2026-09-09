@@ -1,40 +1,67 @@
 extends Control
-## Geometry-drawn targets: no icon font fallback and no input-owning Controls.
+## Presentation adapter: accepted screen-space candidates still own hit testing.
+## The same candidate centres are displayed as small world-space spheres.
 var handles: Array = []
 var edges: Array = []
 var hovered := ""
 var grabbed := ""
+var _world_root: Node3D
+var _spheres: Dictionary = {}
+var _sphere_mesh: SphereMesh
+var _materials: Array[StandardMaterial3D] = []
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	visibility_changed.connect(_sync_visibility)
+
+func attach_world(parent: Node3D) -> void:
+	_world_root = Node3D.new()
+	_world_root.name = "CottageResizeSpheres"
+	parent.add_child(_world_root)
+	_sphere_mesh = SphereMesh.new()
+	_sphere_mesh.radius = 0.14
+	_sphere_mesh.height = 0.28
+	_sphere_mesh.radial_segments = 12
+	_sphere_mesh.rings = 5
+	for colour in [Color("#c1b18c"), Color("#f3edda"), Color("#edc27c")]:
+		var material := StandardMaterial3D.new()
+		material.albedo_color = colour
+		material.roughness = 0.85
+		# Preserve the prior overlay's visibility over terrain relief: accepted
+		# facing/other-cottage filtering owns occlusion, including sunken targets.
+		material.no_depth_test = true
+		material.disable_receive_shadows = true
+		material.render_priority = 10
+		_materials.append(material)
+	_sync_visibility()
 
 func set_layout(next_handles: Array, next_edges: Array, next_hovered: String, next_grabbed: String) -> void:
-	if handles == next_handles and edges == next_edges and hovered == next_hovered and grabbed == next_grabbed: return
 	handles = next_handles
 	edges = next_edges
 	hovered = next_hovered
 	grabbed = next_grabbed
-	queue_redraw()
-
-func _draw() -> void:
-	for edge in edges:
-		draw_line(edge[0], edge[1], Color(1.0, 0.82, 0.43, 0.40), 1.5, true)
+	if not is_instance_valid(_world_root): return
+	for sphere in _spheres.values(): sphere.visible = false
 	for handle in handles:
-		var point: Vector2 = handle["screen"]
-		var selected: bool = str(handle["id"]) in [hovered, grabbed]
-		var colour := Color("#fff4c7") if selected else Color("#ffd069")
-		var radius := 13.0 if selected else 10.0
-		draw_line(handle["anchor_screen"], point, colour, 2.0, true)
-		var polygon := PackedVector2Array([point + Vector2(0, -radius), point + Vector2(radius, 0), point + Vector2(0, radius), point + Vector2(-radius, 0)])
-		draw_colored_polygon(polygon, Color("#24392e"))
-		polygon.append(polygon[0])
-		draw_polyline(polygon, colour, 2.5 if selected else 1.5, true)
-		var direction: Vector2 = handle["arrow"]
-		if direction.length_squared() < 0.01: direction = Vector2.UP
-		direction = direction.normalized() * 6.0
-		draw_line(point - direction, point + direction, colour, 2.0, true)
-		var tip := point + direction
-		var wing := direction.normalized().orthogonal() * 3.0
-		draw_line(tip, point + wing, colour, 2.0, true)
-		draw_line(tip, point - wing, colour, 2.0, true)
+		var id := str(handle["id"])
+		if not _spheres.has(id):
+			var sphere := MeshInstance3D.new()
+			sphere.name = "Handle_" + id
+			sphere.mesh = _sphere_mesh
+			sphere.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_world_root.add_child(sphere)
+			_spheres[id] = sphere
+		var sphere: MeshInstance3D = _spheres[id]
+		var state := 2 if id == grabbed else (1 if id == hovered else 0)
+		sphere.material_override = _materials[state]
+		sphere.scale = Vector3.ONE * [1.0, 1.18, 1.3][state]
+		sphere.global_position = handle["world"]
+		sphere.visible = true
+	_sync_visibility()
+
+func _sync_visibility() -> void:
+	if is_instance_valid(_world_root): _world_root.visible = is_visible_in_tree()
+
+func _exit_tree() -> void:
+	if is_instance_valid(_world_root): _world_root.queue_free()

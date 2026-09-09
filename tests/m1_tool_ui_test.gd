@@ -25,6 +25,16 @@ func _initialize() -> void:
 	_check(scene.tools_open and scene._terrain_panel.visible, "X opens compact terrain settings")
 	_check(not scene.tools_panel.visible, "legacy action dump stays hidden")
 	_check(scene._terrain_ui_buttons.size() <= 16, "terrain surface stays compact")
+	scene._refresh_controller_hud()
+	var focus: Button = scene.get_viewport().gui_get_focus_owner() as Button
+	_check(focus != null and focus.has_meta("setting"), "opening settings retains controller focus on a setting row")
+	if focus:
+		var focus_style := focus.get_theme_stylebox("focus") as StyleBoxFlat
+		_check(focus_style != null and focus_style.border_width_left >= 3, "controller focus has a strong visible outline")
+	var marked_tools := 0
+	for button in scene._terrain_ui_buttons:
+		if bool(button.get_meta("active_tool", false)): marked_tools += 1
+	_check(marked_tools == 1, "selected tool remains visually distinct from focused setting")
 
 	var radius_before: float = scene.brush_radius
 	scene._change_radius(1)

@@ -1,9 +1,11 @@
 extends RefCounted
 class_name VisualGrid
 
-## One visible cell edge in world units. Native terrain and
-## derived asset steps share this edge; merged surfaces span integer cells.
+## Structural visible cell edge. Merged surfaces span integer cubic cells.
 const UNIT := 0.125
+## Derived cottage roof tiles/edges, window/door joinery, shutters, trim,
+## entrance canopy and planters only.
+const COTTAGE_DETAIL_UNIT := UNIT * 0.5
 
 static func quantized_box(center: Vector3, size: Vector3, unit: Vector3) -> Dictionary:
 	var low := (center - size * 0.5).snapped(unit)

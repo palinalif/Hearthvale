@@ -1,6 +1,6 @@
 # M1 — continuous volumetric terrain sculpting
 
-**Status:** explicitly authorized alongside [the editable cottage](M1-editable-cottage.md). Both tickets are required; neither replaces the other. M0 evidence gaps remain open.
+**Status:** complete as part of the bounded M1 milestone at `e3ef8e0d`; automated evidence and the accepted physical Thor interaction lineage are supplemented by the final device receipt in `../reports/M1-e3ef8e0d-thor-acceptance.md`.
 
 ## Interaction and visual intent
 

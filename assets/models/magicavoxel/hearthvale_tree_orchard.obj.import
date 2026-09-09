@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://qphxh8x3twti"
+path="res://.godot/imported/hearthvale_tree_orchard.obj-bcb8e22324069876e3ea47aa36b5ad53.mesh"
+
+[deps]
+
+files=["res://.godot/imported/hearthvale_tree_orchard.obj-bcb8e22324069876e3ea47aa36b5ad53.mesh"]
+
+source_file="res://assets/models/magicavoxel/hearthvale_tree_orchard.obj"
+dest_files=["res://.godot/imported/hearthvale_tree_orchard.obj-bcb8e22324069876e3ea47aa36b5ad53.mesh", "res://.godot/imported/hearthvale_tree_orchard.obj-bcb8e22324069876e3ea47aa36b5ad53.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

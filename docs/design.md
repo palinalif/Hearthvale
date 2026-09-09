@@ -165,7 +165,7 @@ Start with a small set of art-directed valley templates plus a seed: river bend,
 
 ## Primary interaction
 
-Choose a building tool, place an initial footprint, and stretch width, depth, and height using large visible handles. The building receives a suitable roof, wall treatment, windows, doors, and restrained decoration. Select any generated detail to move, replace, recolour, duplicate, suppress, or lock it.
+Choose a building tool, place an initial footprint, and stretch width, depth, and height using large visible handles. The building receives a suitable roof, wall treatment, windows, doors, and restrained decoration. Select any generated detail to move, resize where appropriate, replace, recolour, duplicate, suppress, or lock it. M1 windows and the entrance door resize in width and height; the door's cutout and porch remain attached to it.
 
 Initial structural forms are rectangular volumes with gabled roofs. Add connected wings, more roof profiles, round towers, and arches after the first generator is dependable. Start with explicit roof-joining rules rather than promising arbitrary flawless boolean unions.
 
@@ -607,21 +607,29 @@ The player explicitly rejected the first M1 visuals. The main Astra session now 
 This is an M1 review candidate, not accepted final art. The pad/channel remain geometrically simple, vegetation still needs player judgment, and planted beds are terrain-rooted scenery rather than resizing building attachments. Do not infer M2 authorization or visual approval from automated tests or this description.
 
 
-## Consistent visible voxel size
+## Coherent two-tier visible voxel scale
 
-The player requires one shared world-space visual voxel unit across buildings, vegetation, props and visible terrain steps. A small plant must not use a different voxel size from a large house. Asset-local units and object transforms do not excuse a mismatch: measure after the complete transform. Do not stretch cubes into rectangular voxels or enlarge their size to make an asset larger. Change the number and arrangement of fixed-size visual cells instead.
+Animation exception, approved by the player on 2026-09-08: gentle tree and ground-foliage wind may
+temporarily deform the rendered voxel mesh off-grid. Authored rest geometry,
+structural dimensions, placement/collision and saved data retain their existing
+grid contracts. The first standalone wind study uses small affine sway with
+fixed ground-contact vertices; this does not authorize a new voxel scale.
 
-This preserves the distinction between appearance and simulation. The native terrain editing grid, brush increments, collision and attachment coordinates may use different resolutions; they do not require independently simulated decorative blocks. Coarser simulation cells must not become an exemption from the common visible detail scale. Merged surfaces are allowed when equivalent to a union of cells on the shared visual grid; not every rendered box or wall is one voxel.
+The structural world-space visual unit is `VisualGrid.UNIT = 0.125` across native terrain, cottage shells and authoritative roof profiles. The player approved a deliberately finer `0.0625` presentation tier for all non-terrain visual assets: trees, foliage, mushrooms, flowers, rocks, visible roof tiles and edges, window/door joinery, the entrance canopy, shutters, trims, and flower boxes. The ground-foliage family is explicitly half the linear size of the 7131d22 revision; trees and rocks keep their established dimensions. This supplies readable miniature detail without authorizing finer terrain and structural building cells.
 
-Before further asset production, establish a shared visual-unit constant and enforce it in generators/imports. Test final world-space cell edge lengths, cubic proportions, and cell counts after building resizing, legacy miniature conversion, duplication and asset transforms. Review different asset families side by side at gameplay zoom. Preserve saved authoritative dimensions/anchors and the native backend; regenerate derived presentation rather than silently rewriting saves.
+Structural dimensions, resize increments and attachment anchors remain on the `0.125` grid. Decorative meshes are derived presentation around those authoritative anchors and may regenerate without rewriting saves. At both tiers, asset-local units and object transforms do not excuse a mismatch: measure after the complete transform, keep cells cubic, and change the number and arrangement of cells instead of stretching them into rectangular voxels.
+
+Trees and ground foliage receive deterministic cardinal Y rotation from each existing planting record. These exact quarter turns preserve voxel alignment and apply equally to the starter scatter and brush placement without expanding the save schema. Foliage and rocks use per-instance color modulation for a restrained stable hue/value range without extra draw batches. Mushroom geometry retains pale stems below the restored warm 7131d22 caps.
+
+This preserves the distinction between appearance and simulation. The native terrain editing grid, brush increments, collision and attachment coordinates do not require independently simulated decorative blocks. Merged surfaces are allowed when equivalent to a union of cells on their declared tier; not every rendered box or wall is one voxel. Tests must validate final world-space cell edges, cubic proportions and grid phase after building resizing, legacy miniature conversion, duplication and asset transforms, while visual review compares normal gameplay zoom with close inspection.
 
 Historical audit of the preceding M1 review build: tree crowns used a 0.24-world-unit grid (0.255 cube size including overlap), while roof pieces derived widths/depths from building extent and transform; shrubs used further independently sized boxes. That build did not satisfy this requirement. Iteration 2 below replaces those generators and adds world-space geometry checks; visual approval remains the player's decision.
 
 
 ## M1 physical-feedback iteration 2
 
-The next build uses `VisualGrid.UNIT = 0.125` for actual native terrain cells and derived asset steps. Native dimensions increase to 384 x 256 x 384 while retaining the 48 x 32 x 48 world. The player explicitly rejected keeping visibly coarse terrain while calling it merged fine cells. Legacy .5-grid checkpoints migrate by exact material-run expansion, retaining caves, edits and original files. Existing stepped landforms retain their shape; freshly generated terrain uses finer contour increments. This increases raw terrain payload to 72 MiB per generation and requires separate Thor performance review.
+The next build uses `VisualGrid.UNIT = 0.125` for actual native terrain cells and structural asset steps. Non-terrain presentation uses the `0.0625` half-cell tier described above, while cottage structure and the roof profile remain authoritative at `0.125`. Native dimensions increase to 384 x 256 x 384 while retaining the 48 x 32 x 48 world. The player explicitly rejected keeping visibly coarse terrain while calling it merged fine cells. Legacy .5-grid checkpoints migrate by exact material-run expansion, retaining caves, edits and original files. Existing stepped landforms retain their shape; freshly generated terrain uses finer contour increments. This increases raw terrain payload to 72 MiB per generation and requires separate Thor performance review.
 
-Fresh cottages now use uniform .25 scale (4.5 x 1.75 x 3.5 before the roof); existing saved cottage transforms use the explicit undoable Miniature scale action. Trees have rebuilt overlapping crowns about 4.8–6 world units tall. Automatic window counts and spacing respond to wall length, yield to manual choices, and reserve suppressed footprints; optional shutters hide if crowded. Manual shutters and flower boxes remain editable/recoverable attachments.
+Fresh cottages now use uniform .25 scale (4.5 x 1.75 x 3.5 before the roof); existing saved cottage transforms use the explicit undoable Miniature scale action. Trees have rebuilt overlapping crowns about 4.8–6 world units tall. Automatic window counts and spacing respond to wall length, yield to manual choices, and reserve suppressed footprints; optional shutters hide if crowded. Windows have bounded width/height overrides. The entrance is a migrated stable detail record that can move between wall surfaces, resize and recolour while its cutout and porch follow it. Manual shutters and flower boxes remain editable/recoverable attachments.
 
 Controller foliage/tree brushes and default tree/foliage/rock scatter use saved placements in the same checkpoint envelope. Terrain edits clear roots near actual changed cells; undo restores both layers. The sage/olive palette remains a review candidate, and the player requested a dedicated palette pass soon. This iteration does not establish visual approval.

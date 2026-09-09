@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://d2l0g5r20rhlp"
+path="res://.godot/imported/hearthvale_tree_wind_low.vox-94358071702ad19875b696c60686f94c.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_tree_wind_low.vox"
+dest_files=["res://.godot/imported/hearthvale_tree_wind_low.vox-94358071702ad19875b696c60686f94c.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

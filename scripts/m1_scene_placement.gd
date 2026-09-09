@@ -250,13 +250,16 @@ func _clamp_existing_detail_move() -> void:
 	var view: Dictionary = building_world.get_building(selected_building_id)
 	var kind := "window"
 	var asset := "window_wood"
+	var selected_record: Dictionary = {}
 	for detail_value in view.get("details", []):
 		var detail: Dictionary = detail_value
 		if str(detail.get("id", "")) == selected_detail_id:
+			selected_record = detail
 			kind = str(detail.get("kind", "window"))
 			asset = str(detail.get("asset_id", "window_wood"))
 			break
-	var snapped := WallPlacement.clamp_to_wall(view, detail_move_surface_id, detail_move_position, WallPlacement.footprint(kind, asset))
+	var half := WallPlacement.footprint_for_detail(selected_record) if not selected_record.is_empty() else WallPlacement.footprint(kind, asset)
+	var snapped := WallPlacement.clamp_to_wall(view, detail_move_surface_id, detail_move_position, half)
 	if not snapped.is_empty() and snapped["position"] != detail_move_position:
 		detail_move_position = snapped["position"]
 		super._update_presentation()
@@ -271,16 +274,19 @@ func _cycle_attachment_surface(direction: int) -> void:
 	if next_surface == detail_move_surface_id: return
 	var kind := placement_kind
 	var asset := placement_asset_id
+	var selected_record: Dictionary = {}
 	if kind.is_empty():
 		kind = "window"
 		asset = "window_wood"
 		for detail_value in view.get("details", []):
 			var detail: Dictionary = detail_value
 			if str(detail.get("id", "")) == selected_detail_id:
+				selected_record = detail
 				kind = str(detail.get("kind", "window"))
 				asset = str(detail.get("asset_id", "window_wood"))
 				break
-	var remapped := WallPlacement.remap_between_walls(view, detail_move_surface_id, next_surface, detail_move_position, WallPlacement.footprint(kind, asset))
+	var half := WallPlacement.footprint_for_detail(selected_record) if not selected_record.is_empty() else WallPlacement.footprint(kind, asset)
+	var remapped := WallPlacement.remap_between_walls(view, detail_move_surface_id, next_surface, detail_move_position, half)
 	if remapped.is_empty():
 		_set_status("Attachment does not fit that wall")
 		return

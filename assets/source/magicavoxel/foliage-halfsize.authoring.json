@@ -1,0 +1,52 @@
+{
+  "server": "hearthvale-magicavoxel",
+  "tool": "Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "pipeline_baseline": "7131d22a6f027eb7c867247c231929ac90139484",
+  "intent": "Reduce all eleven gameplay foliage variants to half their previous linear dimensions while retaining 0.0625 cubic cells; keep broad mushroom caps above narrow stems and restore their player-preferred 7131d22 colors.",
+  "assets": [
+    "hearthvale_foliage_grass",
+    "hearthvale_foliage_wildflowers",
+    "hearthvale_foliage_leafy",
+    "hearthvale_foliage_seedgrass",
+    "hearthvale_foliage_cream",
+    "hearthvale_foliage_mauve",
+    "hearthvale_foliage_reeds",
+    "hearthvale_foliage_fern",
+    "hearthvale_foliage_mushrooms",
+    "hearthvale_foliage_mushrooms_flat",
+    "hearthvale_foliage_mushrooms_flat_scatter"
+  ],
+  "operations": {
+    "all_assets": [
+      "copy_model canonical -> canonical_halfsize_blockout",
+      "scale_model factor=0.5",
+      "find_connected_components",
+      "take_snapshot *_halfsize_blockout_review",
+      "copy_model reviewed blockout -> canonical"
+    ],
+    "mushrooms_rejected_first_pass": [
+      "clear_region across the complete declared source volume",
+      "place_voxel for each resampled cell at y=(component_max_y-old_y), preserving x, z, palette index, and a Y=0 root per component",
+      "take_snapshot *_halfsize_blockout_upright_review; rejected after actual Mobile close review because narrow stem geometry remained on top"
+    ],
+    "mushrooms_final": [
+      "repeat the component-local Y inversion to restore broad cap geometry above narrow stems",
+      "set_palette_color index 6 to brown stem #765942",
+      "set_palette_color indices 12/13/14 to restrained cream cap shades #c7b897/#dbd4b2/#e6d7bb",
+      "take_snapshot *_halfsize_blockout_cap_semantics_review"
+    ],
+    "mushroom_palette_restoration": [
+      "set_palette_color index 6 to pale stem #c7b897",
+      "set_palette_color indices 12/13/14 to the 7131d22 warm cap shades #765942/#a17359/#ba906f",
+      "take_snapshot *_halfsize_warm_caps_review from six angles"
+    ],
+    "mushroom_place_voxel_calls_total": 528
+  },
+  "review": {
+    "voxel_unit": 0.0625,
+    "linear_scale_relative_to_7131d22": 0.5,
+    "connectivity": "Every connected foliage component reaches Y=0 after resampling and final mushroom correction.",
+    "unchanged_families": ["trees", "rocks", "terrain", "cottage structure", "placement and save records"]
+  }
+}

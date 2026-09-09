@@ -1,6 +1,6 @@
 # M1 — one cottage that does not eat your edits
 
-**Status:** implementation authorized by the player's scope correction; unresolved M0 evidence remains open and must be reported separately.
+**Status:** complete as part of the bounded M1 milestone at `e3ef8e0d`; see `../reports/M1-e3ef8e0d-thor-acceptance.md`. Unresolved historical M0 evidence remains reported separately.
 **Objective:** prove the core interaction and non-destructive generation model before adding content.
 
 **Parallel required workstream:** [M1 continuous terrain sculpting](M1-terrain-sculpting.md), explicitly added by the player. It supports the same cottage pad/riverbank and does not replace or reduce any building requirement below. Continuous sculpting uses hold/release; lock/confirm remains appropriate for optional geometric stamping and discrete building previews.
@@ -29,7 +29,7 @@ Meshes are regenerated output. Keep the original record and its overrides availa
 
 ## Controller route
 
-Select the cottage, select/cycle a handle, stretch one constrained axis, commit or cancel, choose a detail, move it in its surface plane, replace it, suppress it, and add a new attachment. Provide visible snap increments and a precision mode. Menus must block world edits.
+Select the cottage, select/cycle a handle, stretch one constrained axis, commit or cancel, choose a detail, move it in its surface plane, resize windows and doors in width/height, recolour them, replace supported variations, suppress them, and add a new attachment. The entrance door is a stable attachment record rather than baked shell geometry; its wall opening and porch follow its authored anchor and size. Provide visible snap increments and a precision mode. Menus must block world edits.
 
 ## Required regression scenario
 
@@ -54,4 +54,4 @@ Capture the target at normal/near/far zoom and behind an occluding cottage, with
 
 ## Visual voxel consistency correction
 
-Normalize derived visual geometry to one world-space voxel unit across the cottage, vegetation, props and terrain presentation. The current rework is not yet compliant. Validate cubic cell size after transforms, resizing and duplication, while preserving saved dimensions/anchors and independent native editing resolution. Larger forms use additional cells, not stretched voxels. Include side-by-side visual evidence and meaningful world-space geometry checks before marking this requirement passed.
+Normalize structural visual geometry to the `0.125` world-space unit across the cottage shell and authoritative roof profile, vegetation, props and terrain presentation. Use the player-approved cottage-only `0.0625` presentation tier for visible roof tiles/edges, window and door joinery, entrance canopy, shutters, trims, flower boxes and flowers. Preserve `0.125` structural dimensions, roof authority, attachment anchors and saved data; window/door width and height use their own bounded native detail increments. Validate declared cell size, cubic proportions and grid phase after transforms, resizing and duplication. Larger forms use additional cells, not stretched voxels. Include side-by-side visual evidence and meaningful world-space geometry checks before marking this requirement passed.

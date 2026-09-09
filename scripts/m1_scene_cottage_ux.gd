@@ -214,7 +214,7 @@ func _pick_detail_at_screen_position(screen_position: Vector2) -> Dictionary:
 	return best
 
 func _detail_screen_bounds(detail: Dictionary, local: Vector3, orientation: String, building_transform: Transform3D) -> Rect2:
-	var half := WallPlacement.footprint(str(detail.get("kind", "window")), str(detail.get("asset_id", "")))
+	var half := WallPlacement.footprint_for_detail(detail)
 	var wall_basis := _orientation_basis(orientation)
 	var min_point := Vector2(INF, INF)
 	var max_point := Vector2(-INF, -INF)
