@@ -8,7 +8,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [fix/m1-cottage-playtest-2, fix/m1-terrain-camera-retest, feat/m1-direct-resize-handles, feat/m1-house-move-resize, feat/m2-hamlet-building]
+    branches: [fix/m1-cottage-playtest-2, fix/m1-terrain-camera-retest, feat/m1-direct-resize-handles, feat/m1-house-move-resize]
   pull_request:
     branches: [master]
   workflow_dispatch:

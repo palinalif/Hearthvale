@@ -2,7 +2,7 @@ name: M1 attachment placement regressions
 on:
   workflow_call:
   push:
-    branches: [fix/m1-sculpt-feedback, fix/m1-building-edit-camera, fix/m1-window-layout, feat/m1-cottage-edit-ux, feat/m1-ui-ux-overhaul, feat/m2-hamlet-building]
+    branches: [fix/m1-sculpt-feedback, fix/m1-building-edit-camera, fix/m1-window-layout, feat/m1-cottage-edit-ux, feat/m1-ui-ux-overhaul]
     paths:
       - scenes/m1.tscn
       - scripts/m1_scene_placement.gd
