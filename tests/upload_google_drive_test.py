@@ -11,6 +11,21 @@ SPEC.loader.exec_module(drive_upload)
 
 
 class DriveUploadContractTest(unittest.TestCase):
+    def test_builds_versioned_apk_and_pc_delivery_specs(self):
+        commit = "a" * 40
+        apk_artifact, apk_files = drive_upload.delivery_spec("apk", commit)
+        pc_artifact, pc_files = drive_upload.delivery_spec("pc", commit)
+        self.assertEqual(apk_artifact, f"hearthvale-m1-repair-{commit}")
+        self.assertEqual(
+            apk_files,
+            {"hearthvale-m1-repair-aaaaaaaa.apk", "hearthvale-m1-repair-aaaaaaaa.verification.json"},
+        )
+        self.assertEqual(pc_artifact, f"hearthvale-m2-pc-{commit}")
+        self.assertEqual(
+            pc_files,
+            {"Hearthvale-M2-PC-aaaaaaaa.zip", "Hearthvale-M2-PC-aaaaaaaa.verification.json"},
+        )
+
     def test_selects_exact_unexpired_artifact(self):
         artifact = drive_upload.select_artifact(
             {

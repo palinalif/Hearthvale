@@ -119,9 +119,31 @@ def notify(webhook_url: str, secret: str, download_url: str, expected_files: set
     return validate_webhook_response(payload, expected_files)
 
 
+def delivery_spec(kind: str, commit: str) -> tuple[str, set[str]]:
+    short = commit[:8]
+    if kind == "apk":
+        return (
+            f"hearthvale-m1-repair-{commit}",
+            {
+                f"hearthvale-m1-repair-{short}.apk",
+                f"hearthvale-m1-repair-{short}.verification.json",
+            },
+        )
+    if kind == "pc":
+        return (
+            f"hearthvale-m2-pc-{commit}",
+            {
+                f"Hearthvale-M2-PC-{short}.zip",
+                f"Hearthvale-M2-PC-{short}.verification.json",
+            },
+        )
+    raise RuntimeError(f"Unsupported delivery kind: {kind}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--artifact-kind", choices=("apk", "pc"), default="apk")
     args = parser.parse_args()
 
     api_url = required_env("GITHUB_API_URL").rstrip("/")
@@ -134,17 +156,12 @@ def main() -> int:
     if not webhook_url.startswith("https://script.google.com/"):
         raise RuntimeError("APPS_SCRIPT_WEBHOOK_URL must be an HTTPS script.google.com URL")
 
-    artifact_name = f"hearthvale-m1-repair-{commit}"
+    artifact_name, expected_files = delivery_spec(args.artifact_kind, commit)
     listing_url = f"{api_url}/repos/{repository}/actions/runs/{urllib.parse.quote(run_id)}/artifacts?per_page=100"
     artifact = select_artifact(github_json(listing_url, token), artifact_name)
     download_url = signed_archive_url(str(artifact["archive_download_url"]), token)
-    short = commit[:8]
-    expected_files = {
-        f"hearthvale-m1-repair-{short}.apk",
-        f"hearthvale-m1-repair-{short}.verification.json",
-    }
     result = notify(webhook_url, webhook_secret, download_url, expected_files)
-    result.update({"artifact": artifact_name, "commit": commit})
+    result.update({"artifact": artifact_name, "artifact_kind": args.artifact_kind, "commit": commit})
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"ok": True, "artifact": artifact_name, "files": sorted(expected_files)}, separators=(",", ":")))
