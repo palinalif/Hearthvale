@@ -483,27 +483,33 @@ The separately authorized `../tasks/M1-terrain-sculpting.md` is also required: c
 
 **Exit:** the moved/replaced/deleted-window test from section 5 passes after resize, undo/redo, save/load, and duplication. The player can comfortably perform it using only a controller, and has reviewed the cottage-and-riverbank visual target.
 
-## M2 — A small place worth visiting
+## M2 — Build a convincing hamlet
 
-Combine a 128-metre riverside scene, cottage kit, paths, simple bridge, vegetation placement, a café function, four humans, two ducks, useful sound, and dependable saves. Include basic add/remove terrain editing and a visible cave/overhang demonstration carried forward from M0.
+Turn the M1 cottage foundation into a convincing, editable residential vocabulary. Add at least three materially different home configurations spanning several shapes or footprints and multiple coherent architectural styles. Let the player customise wall and roof materials independently while preserving compatible manual details and recovering incompatible attachments. Add a controller-first home catalogue and placement mode so the player can create an independent chosen home, preview its footprint and facing, rotate it freely, place it without relying on duplication, and later move or rotate an existing home without losing its identity or edits. Add paths, simple bridges, gardens, street furniture, stronger vegetation placement, and composition tools that make several homes read as a hamlet. Preserve dependable saves and the carried-forward volumetric terrain demonstration. Do not add inhabitants, autonomous activity simulation, or multi-storey generation yet. The planned acceptance is detailed in `../tasks/M2-hamlet-building.md`.
 
-**Exit:** the representative session works from cold launch without touch input. The result is enjoyable enough to revisit, even before every landscape tool exists.
+**Exit:** from a cold launch and without touch input, the player can choose, preview, freely rotate, place, move, and customise several materially different attractive homes, then preserve their transforms, shapes, styles, separate wall/roof materials, identities, and manual details through cancellation, undo/redo, and save/reload. The hamlet is visually worth exploring before people are introduced.
 
-## M3 — Full valley-editing freedom
+## M3 — Shape the whole setting
 
-Expand to the provisional 256-metre valley after benchmarking. Extend the M1 sculpting tools with terrace, dedicated tunnel and cutaway tools, editable river/lake boundaries, a waterfall, foundation responses, and robust dirty-region navigation.
+Expand toward the provisional 256-metre valley only after benchmarking. Extend the M1 sculpting tools with terrace, dedicated tunnel and cutaway tools, editable river/lake boundaries, a waterfall, foundation responses, recessed roads and paths, and robust dirty-region updates. Establish the landscape and access routes that later inhabitants will depend on without adding inhabitants yet.
 
-**Exit:** a tunnel under a lake, an overhang beside buildings, a moved riverbank, a deleted bridge, and a large undo all behave correctly. No hidden substitution of a heightmap-only system.
+**Exit:** a tunnel under a lake, an overhang beside buildings, a moved riverbank, a deleted bridge, a changed road, and a large undo all behave correctly. The expanded setting remains pleasant and responsive on the target device, with no hidden substitution of a heightmap-only system.
 
-## M4 — More life and architectural range
+## M4 — Define usable places
 
-Add home, inn, playground, and park purposes; improve activity reservations and animation; deliver the second complete architectural kit. Expand detail editing and connected building forms based on actual use.
+Add café, inn, home, playground, garden, and park purposes as authored place data. Provide entrances, approach points, seats, tables, signs, and other activity anchors, and validate their accessibility in the editable world without requiring autonomous characters. Expand connected building forms and architectural range only where these places need them.
 
-**Exit:** the same place function works in both styles, existing saves remain intact, and the normal benchmark population behaves without blocking edits. Art quantity grows only after the data-driven style boundary is proven.
+**Exit:** the player can create several clearly legible places, inspect their usable anchors, break and repair access through ordinary edits, and retain everything across save/load. The same place function works across the supported styles before character art and behaviour multiply.
 
-## M5 — A dependable wind-down game
+## M5 — Bring the village to life
 
-Polish golden-hour lighting, optional time controls, camera bookmarks, UI scale, photo view, controller remapping, external-pad reconnect, TV behaviour, quiet mode, and save recovery. Run the full thermal and stress suite.
+Introduce the first reusable human rig, a small animal family beginning with ducks, regional navigation, activity selection, reservations, safe rerouting, and a deliberately small animation set. Start with four humans and two ducks, then grow only after behaviour remains understandable and edits cannot strand them permanently. Add useful ambient sound around inhabited places.
+
+**Exit:** the small population can travel to and use the M4 places, recover safely when terrain or anchors change, survive save/load, and remain within the measured device budget without blocking edits.
+
+## M6 — A dependable wind-down game
+
+Polish golden-hour lighting, optional time controls, camera bookmarks, UI scale, photo view, controller remapping, external-pad reconnect, TV behaviour, quiet mode, sound balance, and save recovery. Expand architectural or activity content only where playtesting demonstrates a meaningful gap. Run the full thermal and stress suite.
 
 **Exit:** a 30-minute couch session has no need for touch, no lost edits, no persistent navigation failures, and no unexplained input or render stalls. Record which performance modes actually pass; leave unproven higher settings labelled experimental.
 

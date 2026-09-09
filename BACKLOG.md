@@ -56,6 +56,56 @@ Mounted transportation and ambient farm horses may fit Hearthvale's pastoral set
 
 **Known dependencies:** A justified traversal need, character/animal animation, and navigation appropriate to the active milestone.
 
+### IDEA-003 — Vertical house expansion
+
+**Status:** Idea  
+**Priority:** Unscheduled  
+**Added:** 2026-09-08
+
+Dragging a house upward past defined height thresholds should adapt its generated structure by adding a second or third floor, making height a meaningful way to expand a building rather than merely stretching a single-storey shell. Thresholds, floor composition, roof movement, stair/interior assumptions, and the effect on existing details remain to be designed. This remains an unscheduled idea and is not part of planned M2.
+
+**Known dependencies:** Stretchable-building architecture, floor-aware procedural generation, attachment/decoration recovery, and save/undo compatibility.
+
+### IDEA-004 — Water physics
+
+**Status:** Idea  
+**Priority:** Unscheduled  
+**Added:** 2026-09-08
+
+Add simulated water behavior to the world, including fluid movement and interactions appropriate to Hearthvale's voxel terrain. The simulation scope, visual treatment, and performance budget remain undefined.
+
+**Known dependencies:** A defined water model, terrain integration, persistence, controller interaction, and a mobile-safe performance budget.
+
+### IDEA-005 — Seasonal world changes
+
+**Status:** Idea  
+**Priority:** Unscheduled  
+**Added:** 2026-09-08
+
+Add changing seasons with seasonal variants for the affected world items and corresponding changes in people's behavior. The season cycle, transition rules, variant coverage, and behavior model remain to be designed.
+
+**Known dependencies:** Villager simulation, seasonal asset pipeline and variants, world-state persistence, lighting/environment presentation, and behavior scheduling.
+
+### IDEA-006 — Paintable recessed roads and pathing
+
+**Status:** Idea  
+**Priority:** Unscheduled  
+**Added:** 2026-09-08
+
+Allow players to paint roads and paths from a broad texture palette. Road surfaces should be slightly recessed so materials such as cobblestone can read as proper paths; painted roads would later influence villager pathing. Town to City is a reference for the intended path composition and variety.
+
+**Known dependencies:** Terrain editing and material representation, a large authored texture/road set, recessed path geometry, villager navigation/pathing, and save/undo compatibility.
+
+### IDEA-007 — Free building placement and rotation
+
+**Status:** Approved milestone — M2
+**Priority:** M2
+**Added:** 2026-09-09
+
+Allow the player to choose a home design, preview it, rotate it freely, and place a new independent building at a valid location instead of creating new buildings only by copying the default cottage. Existing homes can also be moved and rotated without losing their identities or edits. Placement is controller-first, cancellable, undoable, and compatible with terrain, foundations, saves, and stable building identities. Detailed UI, UX, safety, and acceptance requirements are authoritative in `tasks/M2-hamlet-building.md`.
+
+**Known dependencies:** Multiple home recipes, placement validation and previews, terrain/foundation response rules, controller targeting, collision policy, and save/undo compatibility. This is assigned to M2 but does not authorize implementation before M2 becomes active.
+
 ## Rejected and out of scope
 
 ### IDEA-002 — Cars and traffic simulation

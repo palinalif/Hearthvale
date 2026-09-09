@@ -1,6 +1,6 @@
 # M1 implementation and integration plan
 
-The player authorizes both `tasks/M1-editable-cottage.md` and `tasks/M1-terrain-sculpting.md`. Their acceptance checks are cumulative. A modest visual checkpoint surrounds the same editable cottage. No M2, villagers, catalogue, full valley, bridge system or day/night cycle.
+The player authorizes both `tasks/M1-editable-cottage.md` and `tasks/M1-terrain-sculpting.md`. Their acceptance checks are cumulative. A modest visual checkpoint surrounds the same editable cottage. No M2, villagers, catalogue, full valley, bridge system or day/night cycle. Several home shapes/styles, separate wall/roof material customisation, and free building placement/rotation belong to planned M2, not M1. Multi-storey generation remains an unscheduled backlog idea.
 
 ## Preserve the baseline
 
