@@ -2,8 +2,9 @@ extends "res://tests/magicavoxel_asset_test.gd"
 
 const ASSET_NAMES := ["foliage_reeds", "foliage_fern", "foliage_mushrooms"]
 const GROUPS := [[2,3,4,12], [2,3,4], [6,12,13,14]]
-const PALETTE := {2: Color("#638348"), 3: Color("#486d46"), 4: Color("#87a657"), 6: Color("#c7b897"), 12: Color("#765942"), 13: Color("#a17359"), 14: Color("#ba906f")}
-const ENVELOPES := [Vector3(1.25,1.75,1.0), Vector3(1.375,0.75,1.25), Vector3(1.0,0.75,1.0)]
+const PALETTE := {2: Color("#638348"), 3: Color("#486d46"), 4: Color("#87a657"), 12: Color("#765942")}
+const MUSHROOM_PALETTE := {6: Color("#765942"), 12: Color("#c7b897"), 13: Color("#dbd4b2"), 14: Color("#e6d7bb")}
+const ENVELOPES := [Vector3(0.625,0.875,0.5), Vector3(0.75,0.5,0.625), Vector3(0.5,0.375,0.5)]
 
 func _initialize() -> void:
 	for i in ASSET_NAMES.size():
@@ -28,9 +29,10 @@ func _initialize() -> void:
 		_check(PackedInt32Array(receipt.palette_indices) == indices and mesh.get_surface_count() == indices.size(), name + " palette groups")
 		for surface in mesh.get_surface_count():
 			var material := mesh.surface_get_material(surface) as StandardMaterial3D
-			_check(material != null and material.albedo_color.is_equal_approx(PALETTE[indices[surface]]) and is_zero_approx(material.metallic) and is_equal_approx(material.roughness, 1.0), name + " matte source palette")
+			var expected: Color = MUSHROOM_PALETTE[indices[surface]] if name == "foliage_mushrooms" else PALETTE[indices[surface]]
+			_check(material != null and material.albedo_color.is_equal_approx(expected) and is_zero_approx(material.metallic) and is_equal_approx(material.roughness, 1.0), name + " matte source palette")
 		if name == "foliage_mushrooms":
-			_check(_surface_mean_y(mesh, 0) < (_surface_mean_y(mesh, 1) + _surface_mean_y(mesh, 2) + _surface_mean_y(mesh, 3)) / 3.0, "mushroom caps remain above their cream stems")
+			_check(_surface_mean_y(mesh, 0) < (_surface_mean_y(mesh, 1) + _surface_mean_y(mesh, 2) + _surface_mean_y(mesh, 3)) / 3.0, "brown mushroom stems remain below their cream caps")
 		var current_triangles := 0
 		for current: Mesh in Flora.meshes("rock" if i >= 3 else "foliage", i % 3):
 			for s in current.get_surface_count(): current_triangles += current.surface_get_arrays(s)[Mesh.ARRAY_INDEX].size() / 3

@@ -22,7 +22,7 @@ func _initialize() -> void:
 		var low := Vector3(float(occupied.min[0]) - float(dimensions[0]) / 2.0, float(occupied.min[1]), float(occupied.min[2]) - float(dimensions[2]) / 2.0) * UNIT
 		var high := Vector3(float(occupied.max[0]) - float(dimensions[0]) / 2.0, float(occupied.max[1]), float(occupied.max[2]) - float(dimensions[2]) / 2.0) * UNIT
 		_check(box.position.is_equal_approx(low) and box.end.is_equal_approx(high) and is_zero_approx(box.position.y), name + " source bounds and centred ground pivot")
-		_check(box.size.x <= (1.5 if i >= 3 else 1.125) and box.size.y <= 1.0 and box.size.z <= 1.0, name + " small ground foliage envelope")
+		_check(box.size.x <= (1.5 if i >= 3 else 0.625) and box.size.y <= (1.0 if i >= 3 else 0.625) and box.size.z <= (1.0 if i >= 3 else 0.5625), name + (" rock envelope" if i >= 3 else " half-size ground foliage envelope"))
 		var indices := PackedInt32Array(GROUPS[i])
 		_check(PackedInt32Array(receipt.palette_indices) == indices and mesh.get_surface_count() == indices.size(), name + " palette groups")
 		for surface in mesh.get_surface_count():

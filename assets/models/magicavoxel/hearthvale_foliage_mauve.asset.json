@@ -1,24 +1,24 @@
 {
   "asset": "hearthvale_foliage_mauve",
   "declared_dimensions": [
-    20,
-    20,
-    20
+    10,
+    10,
+    10
   ],
-  "emitted_quads": 161,
-  "exposed_quads": 510,
+  "emitted_quads": 104,
+  "exposed_quads": 144,
   "license": "Project-authored; MCP development tool is MIT",
   "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
   "occupied_bounds": {
     "max": [
-      18,
-      16,
-      16
+      9,
+      8,
+      8
     ],
     "min": [
-      2,
+      1,
       0,
-      4
+      2
     ]
   },
   "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
@@ -30,11 +30,11 @@
     9
   ],
   "source": "hearthvale_foliage_mauve.vox",
-  "source_sha256": "873f0ec1b39383683212ba9ca2899dc1caa0a2a4a87156e6b85676881233a315",
+  "source_sha256": "cd8144b3a8a6d387e91a7054fcd1c34636f6159706ebdcbab776d18b6b8f82e6",
   "tool": "https://github.com/Mahinika/magicavoxel-mcp",
   "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
-  "triangles": 322,
-  "voxel_count": 250,
+  "triangles": 208,
+  "voxel_count": 37,
   "voxel_tier": "prop/detail",
   "voxel_unit": 0.0625
 }

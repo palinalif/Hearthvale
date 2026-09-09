@@ -5,7 +5,8 @@ const ORIGINALS := ["tree_orchard", "tree_riverside", "tree_wind"]
 const ORIGINAL_HASHES := ["412375e7cd775aaafad042a5ecd43f54f4de90db64b3fe394db74ddaa0924a6a", "aee75af62a5f8b47bf44d220a65777a3aad43179cbce335ceb975ae7798930e2", "88b53a39027d08175bc905f42e6fb3129b59b43ccecc03b1aea8b7b2c16caaa0"]
 const ORIGINAL_BOUNDS := [AABB(Vector3(-2.375, 0, -1.25), Vector3(4.5, 5, 2.625)), AABB(Vector3(-1.375, 0, -1), Vector3(2.5, 6.125, 2)), AABB(Vector3(-2.25, 0, -1.125), Vector3(4.625, 5.125, 2.25))]
 const GROUPS := [[1, 2, 3, 4], [1, 2, 3, 4], [1, 2, 3, 4], [6, 12, 13, 14], [6, 12, 13, 14]]
-const PALETTE := {1: Color("#765942"), 2: Color("#638348"), 3: Color("#486d46"), 4: Color("#87a657"), 6: Color("#c7b897"), 12: Color("#765942"), 13: Color("#a17359"), 14: Color("#ba906f")}
+const PALETTE := {1: Color("#765942"), 2: Color("#638348"), 3: Color("#486d46"), 4: Color("#87a657")}
+const MUSHROOM_PALETTE := {6: Color("#765942"), 12: Color("#c7b897"), 13: Color("#dbd4b2"), 14: Color("#e6d7bb")}
 
 func _initialize() -> void:
 	for i in NAMES.size():
@@ -29,7 +30,8 @@ func _initialize() -> void:
 		_check(PackedInt32Array(receipt.palette_indices) == indices and mesh.get_surface_count() == indices.size(), name + " palette groups")
 		for surface in mesh.get_surface_count():
 			var material := mesh.surface_get_material(surface) as StandardMaterial3D
-			_check(material != null and material.albedo_color.is_equal_approx(PALETTE[indices[surface]]) and is_zero_approx(material.metallic) and is_equal_approx(material.roughness, 1.0), name + " matte source palette")
+			var expected: Color = PALETTE[indices[surface]] if i < 3 else MUSHROOM_PALETTE[indices[surface]]
+			_check(material != null and material.albedo_color.is_equal_approx(expected) and is_zero_approx(material.metallic) and is_equal_approx(material.roughness, 1.0), name + " matte source palette")
 		if i < 3:
 			var original := load("res://assets/models/magicavoxel/hearthvale_" + ORIGINALS[i] + ".res") as Mesh
 			_check(original != null, name + " original comparison loads")
@@ -39,7 +41,7 @@ func _initialize() -> void:
 				var ratio := box.size / original.get_aabb().size
 				_check(ratio.x >= 0.74 and ratio.x <= 0.86 and ratio.y >= 0.74 and ratio.y <= 0.86 and ratio.z >= 0.74 and ratio.z <= 0.86, name + " is a consistent compact size without stretched cells")
 		else:
-			_check(box.size.y <= 0.5 and box.size.x <= 2.0 and box.size.z <= 1.5, name + " low mushroom envelope")
-			_check(_surface_mean_y(mesh, 0) < (_surface_mean_y(mesh, 1) + _surface_mean_y(mesh, 2) + _surface_mean_y(mesh, 3)) / 3.0, name + " mushroom caps remain above their cream stems")
+			_check(box.size.y <= 0.25 and box.size.x <= 1.0 and box.size.z <= 0.75, name + " half-size low mushroom envelope")
+			_check(_surface_mean_y(mesh, 0) < (_surface_mean_y(mesh, 1) + _surface_mean_y(mesh, 2) + _surface_mean_y(mesh, 3)) / 3.0, name + " brown mushroom stems remain below their cream caps")
 		candidate_results.append({"name": name, "triangles": triangles, "bounds": str(box)})
 	_finish(0, 0)

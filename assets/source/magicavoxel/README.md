@@ -115,3 +115,12 @@ to preserve every pre-existing asset AABB exactly, and the three compact-tree so
 were rebuilt with corrected even horizontal declared volumes. Mushroom caps are explicitly
 validated above their cream stems. `fine-prop-grid.authoring.json` records the
 MCP operation pattern, per-asset cut counts, snapshot names, and connectivity review.
+
+## Half-size ground-foliage revision
+
+All eleven gameplay foliage variants are now half the linear size of the 7131d22
+revision while retaining cubic 0.0625 cells and their existing brush indices and
+placement anchors. Trees and rocks are unchanged. The three mushroom sources keep
+broad cap geometry above narrow stems and now use light cream cap palettes over
+brown stems; every independent cluster remains grounded. See
+`foliage-halfsize.authoring.json` for the MCP operation record.

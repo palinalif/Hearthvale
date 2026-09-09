@@ -4,6 +4,11 @@ Player direction: preserve current object dimensions, but use the smaller visual
 cell tier for trees, foliage, mushrooms, flowers, and rocks so they read as detailed
 miniatures against the terrain.
 
+Follow-up direction supersedes that size constraint for ground foliage: all eleven
+foliage variants are now half these dimensions. Trees and rocks remain unchanged.
+The cream mushroom surfaces are caps, not stems; broad cream cap geometry is now
+above narrow brown stems.
+
 The 20 approved MCP sources were doubled in coordinate space and filled into solid
 2x2x2 subcells, preserving their established world bounds when converted at 0.0625.
 A restrained trihedral corner pass removes 2,487 half-cells from exposed silhouette

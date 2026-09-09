@@ -4,6 +4,14 @@ Updated 2026-09-08 during the M1 visual-finish work on `feat/m1-ui-polish`. Read
 
 ## Current visual-finish branch
 
+On 2026-09-09 the player approved the 0.0625 detail cells but clarified that all
+eleven ground-foliage variants should also be physically smaller. Their authored
+sources are now half the 7131d22 linear dimensions, with trees and rocks unchanged.
+The player also clarified that cream is the mushroom cap color: all three mushroom
+variants retain broad cap geometry above narrow stems, with cream cap palettes over
+brown stems and every cluster grounded. Placement anchors, brush indices, and saves
+are unchanged. See `foliage-halfsize.authoring.json`.
+
 On 2026-09-09 the player clarified that the authored trees were correctly sized
 overall but their 0.125 cells made vegetation feel too blocky, then explicitly
 included rocks in the finer tier. All six gameplay trees, eleven foliage assets,
