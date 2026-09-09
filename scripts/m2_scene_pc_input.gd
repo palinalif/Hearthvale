@@ -9,6 +9,7 @@ const PCInputGlyph = preload("res://scripts/ui/m1_input_glyph.gd")
 
 var _pc_prompt_mode := false
 var _mouse_orbiting := false
+var pc_input_test_enabled := false
 
 func _ready() -> void:
 	# The desktop export carries this feature tag. Editor-driven Mobile render
@@ -23,6 +24,11 @@ func _exit_tree() -> void:
 	super._exit_tree()
 
 func _input(event: InputEvent) -> void:
+	# Hidden Windows render workers can emit a continuous mouse-motion stream.
+	# Their captures are controller-only; avoid ray marching in that environment.
+	if test_mode and not pc_input_test_enabled and event is InputEventMouse:
+		super._input(event)
+		return
 	if event is InputEventJoypadButton or (event is InputEventJoypadMotion and absf((event as InputEventJoypadMotion).axis_value) > 0.2):
 		_set_pc_prompt_mode(false)
 	elif event is InputEventKey or event is InputEventMouse:

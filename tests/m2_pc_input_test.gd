@@ -7,6 +7,7 @@ func _initialize() -> void:
 	scene = preload("res://scripts/m2_scene_pc_input.gd").new()
 	scene.checkpoint_root = "user://m2-pc-input-test-%s" % Time.get_ticks_usec()
 	scene.test_mode = true
+	scene.pc_input_test_enabled = true
 	root.add_child(scene)
 	var deadline := Time.get_ticks_msec() + 15000
 	while (scene.backend == null or not scene.backend.is_ready() or not scene._player_restored) and Time.get_ticks_msec() < deadline:
