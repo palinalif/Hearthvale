@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://8nyw5td7ptot"
+path="res://.godot/imported/hearthvale_tree_orchard_compact.vox-b0fb2f8b4473a4aeb1689d30f85c59ca.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_tree_orchard_compact.vox"
+dest_files=["res://.godot/imported/hearthvale_tree_orchard_compact.vox-b0fb2f8b4473a4aeb1689d30f85c59ca.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -2,7 +2,7 @@ extends SceneTree
 
 const Flora = preload("res://scripts/vegetation_mesh.gd")
 const Garden = preload("res://scripts/m1_garden_visual.gd")
-const TREE_NAMES := ["orchard", "riverside", "wind"]
+const TREE_NAMES := ["orchard", "riverside", "wind", "orchard_compact", "riverside_young", "wind_low"]
 const FOLIAGE_NAMES := ["grass", "wildflowers", "leafy", "seedgrass", "cream", "mauve", "reeds", "fern", "mushrooms", "mushrooms_flat", "mushrooms_flat_scatter"]
 
 var checks := 0

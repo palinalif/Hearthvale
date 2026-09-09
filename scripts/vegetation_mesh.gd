@@ -8,6 +8,9 @@ const TREE_PATHS := [
 	"res://assets/models/magicavoxel/hearthvale_tree_orchard.res",
 	"res://assets/models/magicavoxel/hearthvale_tree_riverside.res",
 	"res://assets/models/magicavoxel/hearthvale_tree_wind.res",
+	"res://assets/models/magicavoxel/hearthvale_tree_orchard_compact.res",
+	"res://assets/models/magicavoxel/hearthvale_tree_riverside_young.res",
+	"res://assets/models/magicavoxel/hearthvale_tree_wind_low.res",
 ]
 const FOLIAGE_PATHS := [
 	"res://assets/models/magicavoxel/hearthvale_foliage_grass.res",

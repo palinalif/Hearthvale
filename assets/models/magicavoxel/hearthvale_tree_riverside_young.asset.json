@@ -1,0 +1,38 @@
+{
+  "asset": "hearthvale_tree_riverside_young",
+  "declared_dimensions": [
+    20,
+    40,
+    16
+  ],
+  "emitted_quads": 564,
+  "exposed_quads": 1794,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      17,
+      39,
+      14
+    ],
+    "min": [
+      0,
+      0,
+      1
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "source": "hearthvale_tree_riverside_young.vox",
+  "source_sha256": "513ea6bf8341e98442440327e8802fa2e7f9946a863ca6a6a6c78400672d0796",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 1128,
+  "voxel_count": 1960,
+  "voxel_unit": 0.125
+}

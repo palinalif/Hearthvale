@@ -65,6 +65,7 @@ func _run_controller_checks() -> void:
 	await _hold(JOY_BUTTON_A, 20)
 	var tree_doc: Dictionary = scene.landscape_state.document()
 	_check(tree_doc.records.size() == initial.records.size() + 1, "stationary held tree brush plants one tree")
+	_check(int(tree_doc.records.back().seed) >= 3, "tree brush draws from the expanded compact-variant set")
 	_check(scene._history_tags.size() == history_before + 1 and not scene.landscape_active, "tree press-release is one completed transaction")
 	await _press(JOY_BUTTON_LEFT_SHOULDER)
 	_check(scene.landscape_state.document() == initial, "tree undo restores exact document")
