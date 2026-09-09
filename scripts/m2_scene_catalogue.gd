@@ -95,7 +95,7 @@ func _build_global_catalogue() -> void:
 	var box := _catalogue_box(_build_catalogue_panel)
 	_add_catalogue_heading(box, "BUILD CATALOGUE", "Choose what you want to add to the hamlet")
 	_add_catalogue_button(box, _build_catalogue_buttons, "Buildings\nHomes and structural details", _open_home_catalogue)
-	_add_catalogue_button(box, _build_catalogue_buttons, "Roads & paths\nCatalogue slot ready • placement tools coming next", _show_roads_catalogue)
+	_add_catalogue_button(box, _build_catalogue_buttons, "Roads & paths\nFootpaths, lanes, and stepping stones", _open_roads_catalogue)
 	_add_catalogue_button(box, _build_catalogue_buttons, "Outdoor decorations\nFoliage, trees, and clearing tools", _open_outdoor_catalogue)
 
 	_outdoor_catalogue_panel = _make_catalogue_panel("OutdoorCatalogue", Vector2(520, 390))
@@ -235,8 +235,11 @@ func _close_all_catalogues(clear_tools: bool = true) -> void:
 		_set_status("Terrain editing" if view_context == "terrain" else "Home editing")
 	_refresh_controller_hud()
 
-func _show_roads_catalogue() -> void:
-	_set_status("Roads & paths are the next M2 composition tool • no placement action yet")
+## Composition layers provide the real Roads & Paths submenu. Keep a small
+## virtual seam here so the global catalogue remains usable in older scene
+## variants that do not include that layer.
+func _open_roads_catalogue() -> void:
+	_set_status("Roads & paths unavailable in this scene")
 
 func _open_outdoor_catalogue() -> void:
 	_build_catalogue_open = false
