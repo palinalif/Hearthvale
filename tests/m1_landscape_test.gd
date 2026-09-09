@@ -60,6 +60,11 @@ func _run_controller_checks() -> void:
 			starting_foliage_turns[GardenVisual.planting_turn(record)] = true
 	_check(starting_foliage_variants.size() == Flora.variant_count("foliage"), "starting scene includes every authored foliage variant")
 	_check(starting_tree_turns.size() >= 3 and starting_foliage_turns.size() == 4, "starting trees and foliage use varied deterministic quarter turns")
+	var starter_wind_ok := true
+	for record: Dictionary in initial.records:
+		if GardenVisual.wind_strength(str(record.kind), posmod(int(record.seed), Flora.variant_count(str(record.kind)))) > 0.0:
+			starter_wind_ok = starter_wind_ok and _record_has_gameplay_wind(record)
+	_check(starter_wind_ok, "starter trees and foliage use independent gameplay wind batches")
 	var tint_slots := {}
 	for index in 20:
 		var tint_record := {"id": index + 1, "kind": "foliage", "position": [24.0, 8.0, 24.0], "seed": index % Flora.variant_count("foliage")}
@@ -97,6 +102,7 @@ func _run_controller_checks() -> void:
 	var tree_doc: Dictionary = scene.landscape_state.document()
 	_check(tree_doc.records.size() == initial.records.size() + 1, "stationary held tree brush plants one tree")
 	_check(int(tree_doc.records.back().seed) >= 3, "tree brush draws from the expanded compact-variant set")
+	_check(_record_has_gameplay_wind(tree_doc.records.back()), "tree brush placement receives gameplay wind")
 	_check(scene._history_tags.size() == history_before + 1 and not scene.landscape_active, "tree press-release is one completed transaction")
 	await _press(JOY_BUTTON_LEFT_SHOULDER)
 	_check(scene.landscape_state.document() == initial, "tree undo restores exact document")
@@ -109,9 +115,13 @@ func _run_controller_checks() -> void:
 	var foliage_doc: Dictionary = scene.landscape_state.document()
 	_check(foliage_doc.records.size() > tree_doc.records.size(), "foliage brush paints native ground")
 	var brush_added_new_variant := false
+	var brush_added_wind := false
 	for record_index in range(tree_doc.records.size(), foliage_doc.records.size()):
 		if int(foliage_doc.records[record_index].seed) >= 3: brush_added_new_variant = true
+		if GardenVisual.wind_strength("foliage", posmod(int(foliage_doc.records[record_index].seed), Flora.variant_count("foliage"))) > 0.0:
+			brush_added_wind = brush_added_wind or _record_has_gameplay_wind(foliage_doc.records[record_index])
 	_check(brush_added_new_variant, "foliage brush draws from the expanded authored variant set")
+	_check(brush_added_wind, "foliage brush placement receives gameplay wind")
 	_check(scene._history_tags.size() == history_before + 1, "foliage press-release is one transaction")
 	await _press(JOY_BUTTON_LEFT_SHOULDER)
 	_check(scene.landscape_state.document() == tree_doc, "foliage undo exact")
@@ -193,6 +203,27 @@ func _terrain_hash() -> String:
 	var context := HashingContext.new(); context.start(HashingContext.HASH_SHA256)
 	context.update(scene.backend.voxels.get_channel_as_byte_array(0))
 	return context.finish().hex_encode()
+
+func _record_has_gameplay_wind(record: Dictionary) -> bool:
+	var kind := str(record.kind)
+	var variant := posmod(int(record.seed), Flora.variant_count(kind))
+	var expected_phase := GardenVisual.wind_phase(record)
+	var expected_count := 0
+	for current: Dictionary in scene.landscape_state.records:
+		if str(current.kind) == kind and posmod(int(current.seed), Flora.variant_count(kind)) == variant: expected_count += 1
+	for surface in Flora.meshes(kind, variant).size():
+		var key := "%s_%d_%d" % [kind, variant, surface]
+		if not scene.garden_visual._groups.has(key): return false
+		var node: MultiMeshInstance3D = scene.garden_visual._groups[key]
+		if node.multimesh.instance_count != expected_count or not node.multimesh.use_custom_data or not (node.material_override is ShaderMaterial): return false
+		# The headless dummy renderer intentionally does not retain MultiMesh
+		# buffer values. The actual Mobile render gate verifies their phases.
+		if DisplayServer.get_name() == "headless": continue
+		var found_phase := false
+		for instance in node.multimesh.instance_count:
+			found_phase = found_phase or absf(node.multimesh.get_instance_custom_data(instance).r - expected_phase) < 0.005
+		if not found_phase: return false
+	return true
 
 func _canonical(value: Variant) -> Variant:
 	return JSON.parse_string(JSON.stringify(value))
