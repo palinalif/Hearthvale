@@ -59,7 +59,15 @@ func _run_controller_checks() -> void:
 			starting_foliage_variants[posmod(int(record.seed), Flora.variant_count("foliage"))] = true
 			starting_foliage_turns[GardenVisual.planting_turn(record)] = true
 	_check(starting_foliage_variants.size() == Flora.variant_count("foliage"), "starting scene includes every authored foliage variant")
-	_check(starting_tree_turns.size() >= 3 and starting_foliage_turns.size() == 4, "starting trees and foliage use varied deterministic quarter turns")
+	_check(starting_tree_turns.size() >= 3 and starting_foliage_turns.size() == 4, "starting trees use varied deterministic 15-degree steps and foliage uses quarter turns")
+	var tree_turns := {}
+	for index in GardenVisual.TREE_TURN_COUNT:
+		var tree_record := {"id": index + 1, "kind": "tree", "position": [12.0, 8.0, 12.0], "seed": 0}
+		var turn := GardenVisual.planting_turn(tree_record)
+		tree_turns[turn] = true
+		var expected := Basis(Vector3.UP, float(turn) * deg_to_rad(15.0))
+		_check(GardenVisual.planting_rotation(tree_record).is_equal_approx(expected), "automatic tree rotation follows the house's 15-degree coarse step")
+	_check(tree_turns.size() == GardenVisual.TREE_TURN_COUNT, "deterministic tree rotation can select all 24 house-style facings")
 	var starter_wind_ok := true
 	for record: Dictionary in initial.records:
 		if GardenVisual.wind_strength(str(record.kind), posmod(int(record.seed), Flora.variant_count(str(record.kind)))) > 0.0:
@@ -70,7 +78,7 @@ func _run_controller_checks() -> void:
 		var tint_record := {"id": index + 1, "kind": "foliage", "position": [24.0, 8.0, 24.0], "seed": index % Flora.variant_count("foliage")}
 		tint_slots[GardenVisual.prop_tint_slot(tint_record)] = true
 		var basis := GardenVisual.planting_rotation(tint_record)
-		_check(is_equal_approx(basis.determinant(), 1.0) and basis.get_scale().is_equal_approx(Vector3.ONE), "planting quarter turn preserves scale and handedness")
+		_check(is_equal_approx(basis.determinant(), 1.0) and basis.get_scale().is_equal_approx(Vector3.ONE), "planting rotation preserves scale and handedness")
 	_check(tint_slots.size() == GardenVisual.PROP_TINTS.size(), "foliage records span restrained deterministic tint slots")
 	var distinct_tints := {}
 	for slot in GardenVisual.PROP_TINTS.size():

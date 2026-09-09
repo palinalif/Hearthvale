@@ -7,10 +7,11 @@ Updated 2026-09-09 after M2-01 on `feat/m2-hamlet-building`. Read AGENTS.md, `ta
 On 2026-09-09 the player approved the half-size foliage and requested the earlier
 mushroom coloring plus placement variety. Mushroom sources restore the exact
 7131d22 pale-stem/warm-cap palette. Foliage and rocks receive subtle deterministic
-per-instance hue/value modulation without extra draw batches. Trees and foliage
-use deterministic 0/90/180/270-degree Y turns derived from existing planting
-records; this covers the starter scene and both brushes without changing saves,
-anchors, voxel cells, undo/redo, or rock orientation.
+per-instance hue/value modulation without extra draw batches. Tree rotations are
+derived deterministically from existing planting records using the home's
+15-degree coarse steps; foliage retains cardinal quarter turns. This covers the
+starter scene and both brushes without changing saves, anchors, voxel cells,
+undo/redo, or rock orientation.
 
 On 2026-09-09 the player approved the 0.0625 detail cells but clarified that all
 eleven ground-foliage variants should also be physically smaller. Their authored
