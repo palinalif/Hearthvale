@@ -8,7 +8,7 @@ M1 artifacts, exact verification results, screenshots and remaining checks are r
 
 ## Start here
 
-Read `AGENTS.md`, then `docs/design.md`, then both authoritative M1 tickets: `tasks/M1-editable-cottage.md` and `tasks/M1-terrain-sculpting.md`. The player has authorized one editable procedural cottage, continuous volumetric sculpting and a modest visual checkpoint. Build instructions are in `docs/build-and-test.md`; M1 controls and physical checks are in `docs/M1-controller-and-review.md` and `docs/M1-thor-playtest.md`. M0 evidence gaps remain open in `reports/M0-platform-spike.md`, `reports/M0-placement-followup.md` and `docs/thor-playtest.md`.
+Read `AGENTS.md`, then `docs/design.md`, then both authoritative M1 tickets: `tasks/M1-editable-cottage.md` and `tasks/M1-terrain-sculpting.md`. The player has authorized one editable procedural cottage, continuous volumetric sculpting and a modest visual checkpoint. The planned M2 residential expansion—including free placement and rotation—is recorded in `tasks/M2-hamlet-building.md` and is not active implementation scope. Build instructions are in `docs/build-and-test.md`; M1 controls and physical checks are in `docs/M1-controller-and-review.md` and `docs/M1-thor-playtest.md`. M0 evidence gaps remain open in `reports/M0-platform-spike.md`, `reports/M0-placement-followup.md` and `docs/thor-playtest.md`.
 
 The pinned bundle is official Godot 4.7.2 with matching export templates and Voxel Tools GDExtension v1.7x. Exact origins, commits, and hashes are in `dependencies.lock.json`. The Godot AI 3.2.5 MCP sandbox is development-only under `dev/mcp`.
 

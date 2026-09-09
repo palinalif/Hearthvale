@@ -40,6 +40,137 @@ The first protocol-level pilot called the real server, discovered 40 tools, gene
 
 The Drive delivery workflow now matches the deployed Apps Script contract: repository secrets `APPS_SCRIPT_WEBHOOK_URL` and `APPS_SCRIPT_WEBHOOK_SECRET`, plus the `GOOGLE_DRIVE_UPLOAD_ENABLED` switch. After every prerequisite gate and APK verification succeeds, CI resolves the authenticated GitHub artifact endpoint to a short-lived signed URL and sends only that URL and the webhook secret to Apps Script. The receiver downloads the ZIP and admits its APK/JSON receipt privately. Automatic delivery remains tied to `master` pushes; use `workflow_dispatch` on an explicit feature ref for a requested playtest APK. The 50 MiB artifact-archive ceiling is checked before notification.
 
+## Three MagicaVoxel tree review candidates (2026-09-08)
+
+The `d2535ed` MCP pipeline baseline now has three review-only alternatives:
+`hearthvale_tree_orchard`, `hearthvale_tree_riverside`, and `hearthvale_tree_wind`.
+The user rejected the first chunky shelf-shaped crowns and requested a trunk
+repair; the final MCP-authored sources use 22/16/20 small overlapping sprays,
+tapered bent trunks, thin forks and small roots. Six six-angle snapshot passes
+per candidate remain in ignored staging, along with rejected models. Canonical
+VOX sources, exact MCP operation records, converted OBJ/MTL receipts and baked
+RES meshes are retained. Existing procedural/gameplay trees and pilot assets
+are unchanged. No integration is approved.
+
+Final triangle counts are 2,274 / 1,548 / 1,918. The opt-in converter now merges
+same-palette coplanar faces with exact unit-face coverage regression. Baking
+enforces matte foliage/bark after actual Mobile captures exposed the OBJ
+importer's metallic=0.999 interpretation. All candidates pass 121 headless
+asset checks and 125 checks per actual Mobile capture run (front/close,
+normal-distance and reverse). The full suite result and reproduction commands
+are recorded in `reports/MagicaVoxel-tree-candidates.md`.
+
+The user liked the revised set and requested a small tree #1 top-variation pass.
+That pass lowers matching caps, adds broad low shoulders and one taller offset
+tip, with a seventh orchard MCP snapshot and separate provenance operation log.
+It passes 121 headless checks, mesher coverage and 125 checks per fresh Mobile
+close/normal/reverse run. The earlier full-suite pass is reused for this
+source-only tweak. Gameplay integration remains unperformed.
+
+Review `reports/screenshots/tree-candidates-comparison.png` (current left,
+candidate right in each labelled row). Player judgement of foliage rhythm and
+thin trunk proportions, plus Thor performance, remain open. Ask which
+candidates, if any, the user wants integrated; do not replace gameplay trees
+based on automated validation alone.
+
+## Gentle wind study
+
+The user explicitly approved trying render-only off-grid tree sway. The new
+standalone `scenes/tree_wind_preview.tscn` uses the three approved candidate
+meshes with a subtle 12-second shader cycle, individual phases, fixed ground
+contacts, corrected normals and expanded culling bounds. Space pauses; W
+toggles wind. Affine height-weighted motion preserves the greedy mesh's shared
+edges without subdivision. The authored 0.125 rest grid and gameplay remain
+unchanged. This animation exception does not apply to simulation or placement.
+
+See `reports/Tree-wind-preview.md` and the actual Mobile loop at
+`reports/screenshots/tree-wind-preview.mp4` / `.gif`. Headless wind checks and
+actual Mobile reference-render/pause checks pass; the normal suite now includes
+the wind gate. The player approved the tree motion and requested the remaining
+ground foliage receive the same treatment. Physical Thor performance remains
+open. No automatic gameplay integration was performed.
+
+## Ground foliage and wind review (2026-09-08)
+
+Three new MCP-authored sources `hearthvale_foliage_grass`,
+`hearthvale_foliage_wildflowers`, and `hearthvale_foliage_leafy` are promoted
+through the existing pipeline with receipts and palette groups: 206 / 226 / 232
+triangles. Source rest geometry remains 0.125. The user-authorized render-only
+wind exception also covers this ground foliage trial. The standalone
+`scenes/foliage_wind_preview.tscn` compares old/new; `-- --context` adds approved
+trees at true scale. Grass/flowers/leaves use smaller wind strengths and
+independent phases. Gameplay and cottage flower boxes are untouched.
+
+See `reports/Foliage-candidates.md`, its labelled comparison and the two
+`reports/screenshots/foliage-wind-*.mp4` loops. Asset checks (54), headless wind
+checks (21), and actual Mobile close/context checks (30 each) pass. Palette,
+pivot, bounds, budget, rest grid, rooted components and exact exposed-cell
+coverage are verified. Player review and Thor performance remain open.
+The final normal `tools/check.ps1` suite passed; see
+`reports/logs/foliage-check-suite-rerun.log`. An initial terrain acceptance failure
+passed both its isolated retry and the full rerun without code changes; the report
+retains this transient failure rather than discarding its evidence.
+
+## Additional meadow review candidates
+
+The user liked the first foliage set and requested three further flower/grass
+variants plus rocks. Six new MCP-authored review sources are retained:
+`foliage_seedgrass`, `foliage_cream`, `foliage_mauve`, `rock_slab`, `rock_split`,
+`rock_moss` (each prefixed `hearthvale_`). Triangles: 168/212/208 and 120/154/142.
+Plants reuse gentle render-only sway; rocks stay static. Rest geometry is 0.125.
+All have provenance receipts/palette groups through VOX → greedy OBJ → baked RES.
+No gameplay replacement or cottage-flower change is included. Review
+`reports/Meadow-expansion-candidates.md` and `scenes/meadow_expansion_preview.tscn`.
+The new headless asset gate has 117 checks; all 12 candidate sources now receive
+bounded Python exact-coverage/root-connectivity validation in the normal suite.
+Close and tree-scale actual Mobile runs each pass 44 checks. The full suite
+attempt stopped at import on undeclared `kind`/`variant` in the independently
+modified `scripts/m1_garden_visual.gd:38–42`; this pass left that work untouched.
+See `reports/logs/meadow-expansion-check-suite.log`. The earlier foliage full-suite
+pass does not establish a pass for this later shared-workspace state.
+After the independent parse fix, the rerun reached `visual-grid` but failed on
+the concurrent gameplay wind integration calling `set_surface_override_material`
+on `MultiMeshInstance3D` through `M1GardenVisual`. Preserve
+`reports/logs/meadow-expansion-shared-wind-failure.log`; that integration was left
+untouched. Standalone MeshInstance3D previews pass 35 headless / 44 Mobile checks.
+
+## Woodland and riverside review additions
+
+The user approved making reeds, fern and mushrooms. These are new standalone
+MCP-authored sources `hearthvale_foliage_reeds`, `hearthvale_foliage_fern`, and
+`hearthvale_foliage_mushrooms`, with receipts/palette groups and 212/274/182
+triangles. Rest geometry remains 0.125. Reeds/fern sway gently; mushrooms stay
+static. This pass does not wire these three into gameplay. See
+`reports/Woodland-candidates.md` and `scenes/woodland_preview.tscn` (optional
+`-- --context` for tree scale). Asset checks pass 54, and close/context actual
+Mobile checks pass 29 each. Meshing validation includes all 15 source candidates.
+The shared wind test now handles two or three animated instances and separately
+checks static mushroom materials/transforms. Independent review found no defect.
+The full normal suite now passes (exit 0 / `check ok`), including 20 headless
+woodland wind checks; see `reports/logs/woodland-check-suite.log`. The prior
+shared-workspace integration errors did not recur. Physical Thor performance
+and player visual approval of this set remain open.
+
+## Compact trees and flat mushroom review additions
+
+At the player's request, the three approved trees now have new MCP-authored
+roughly-80% companions: `tree_orchard_compact`, `tree_riverside_young`, and
+`tree_wind_low` (prefix each with `hearthvale_`). Two static low mushroom patches
+were also added: `foliage_mushrooms_flat` and `_flat_scatter`. Triangles are
+1,696/1,128/1,448 and 178/222. Compact trees retain gentle sway; mushrooms stay
+static. The first MCP resample produced odd horizontal volume sizes, causing
+half-cell centering and collapsed bake faces; those blockouts were rejected and
+MCP-unioned into even horizontal declared volumes. Final rest geometry is cubic
+on 0.125, grounded, palette-preserving and provenance checked. Originals remain
+byte-identical and have pinned baked bounds. No gameplay integration was done.
+See `reports/Size-variation-candidates.md` and
+`scenes/size_variations_preview.tscn`. Targeted asset/Mobile checks pass 104/40;
+the converter now validates all 20 candidate sources. Independent review found
+no defect and its requested original-immutability assertions were added.
+The final normal `tools/check.ps1` suite passes with exit 0 / `check ok`; see
+`reports/logs/size-variations-check-suite.log`. Actual Mobile has 40 passing
+checks and the normal suite's headless size-variation wind gate has 31.
+
 ## Master integration and evidence
 
 PR #1: https://github.com/palinalif/Hearthvale/pull/1
