@@ -1,6 +1,6 @@
 # M1 — one cottage that does not eat your edits
 
-**Status:** implementation authorized by the player's scope correction; unresolved M0 evidence remains open and must be reported separately.
+**Status:** complete as part of the bounded M1 milestone at `e3ef8e0d`; see `../reports/M1-e3ef8e0d-thor-acceptance.md`. Unresolved historical M0 evidence remains reported separately.
 **Objective:** prove the core interaction and non-destructive generation model before adding content.
 
 **Parallel required workstream:** [M1 continuous terrain sculpting](M1-terrain-sculpting.md), explicitly added by the player. It supports the same cottage pad/riverbank and does not replace or reduce any building requirement below. Continuous sculpting uses hold/release; lock/confirm remains appropriate for optional geometric stamping and discrete building previews.

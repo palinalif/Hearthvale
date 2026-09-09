@@ -1,5 +1,8 @@
 # M1 physical-feedback iteration 2
 
+**Status:** complete on physical Thor at `e3ef8e0d`; see
+`../reports/M1-e3ef8e0d-thor-acceptance.md`.
+
 Authorized by the player after the tree trial. This supplements the editable cottage and sculpting tickets; all existing acceptance requirements remain. No M2, villagers, additional house catalogue or engine/backend replacement.
 
 - Make default held sculpting substantially faster; retain a usable precision rate and controller strength adjustment.
@@ -9,4 +12,4 @@ Authorized by the player after the tree trial. This supplements the editable cot
 - Use a 0.125 world-unit visible cell for native terrain and authoritative cottage structure. Use cubic 0.0625 presentation cells for non-terrain visuals, including vegetation and rocks, with 0.125 placement authority. The player explicitly approved reducing all ground-foliage variants to half their 7131d22 linear size while keeping trees and rocks unchanged. Merged surfaces represent integer spans of the selected tier. Preserve old saves through exact volumetric upsampling; keep legacy checkpoints. Measure the larger data/memory cost. Earlier plans to count visibly coarse terrain steps as merged fine cells were rejected by the player.
 - Provide separate controller foliage and tree brushes, plus local planting removal. Seed a restrained scatter of trees, foliage and rocks. Trees and foliage use stable cardinal rotations derived from their planting records; foliage and rocks use subtle stable per-instance color modulation. Trees and non-mushroom foliage use gentle GPU sway with fixed roots and stable independent phases in both the starter scene and brush placements; mushrooms and rocks remain static. Mushroom sources retain the earlier pale-stem/warm-cap palette. Save placement records in the same atomic checkpoint. A terrain edit clears roots intersecting changed cells, not its whole bounding rectangle. Undo/redo/cancel restores both layers; reload must not resurrect removed planting.
 
-Evidence: rerun full existing regression suite, new placement/history/checkpoint and visual-grid tests; actual Mobile normal/close/edited captures; short desktop cost measurements; versioned signed ARM64 debug APK. Upload to the player's Drive only when the writable connection is actually available. Physical Thor checks and palette/visual approval remain separate and pending player review.
+Evidence: rerun full existing regression suite, new placement/history/checkpoint and visual-grid tests; actual Mobile normal/close/edited captures; short desktop cost measurements; versioned signed ARM64 debug APK. Upload to the player's Drive only when the writable connection is actually available. Final physical Thor renderer, controller, vegetation, save/restart, suspend/resume, thermal and ten-minute frame evidence passed at `e3ef8e0d`.

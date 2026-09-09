@@ -1,6 +1,6 @@
 # Hearthvale — current M1 handoff
 
-Updated 2026-09-08 during the M1 visual-finish work on `feat/m1-ui-polish`. Read AGENTS.md and the latest user request first. **The accepted M1 interaction lineage is merged into master; current visual work continues from that lineage on this feature branch.** The Thor-accepted gameplay baseline remains `44ebca5b`. M1 is not complete.
+Updated 2026-09-09 after final physical Thor validation on `feat/m1-ui-polish`. Read AGENTS.md and the latest user request first. **M1 is complete at `e3ef8e0d` for its bounded editable-cottage, continuous-terrain and landscaped-riverbank scope. Do not start M2 without a new user request.** The earlier Thor-accepted interaction baseline remains `44ebca5b`; the final visual/performance/device receipt is `reports/M1-e3ef8e0d-thor-acceptance.md`.
 
 ## Current visual-finish branch
 
