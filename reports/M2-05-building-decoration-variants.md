@@ -27,3 +27,7 @@ Existing asset IDs are preserved, so old saves retain their prior deterministic 
 ![Decoration variant gameplay capture](screenshots/m2-home-details/decoration-variants.png)
 
 Physical Thor feel/performance and player visual approval remain separate from desktop Mobile verification.
+
+## Delivery
+
+Tested source commit `2b3b4ea5e6c1c7658d1c693f91db2171dbef97eb` passed verified delivery run `34394758607`. The workflow produced and validated the isolated ARM64 APK and Windows x86-64 playtest ZIP, then the Apps Script bridge copied both packages and their receipts to private Google Drive.

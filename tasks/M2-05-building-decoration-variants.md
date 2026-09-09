@@ -1,6 +1,6 @@
 # M2-05 — Building decoration variants
 
-**Status:** implemented and locally verified on `feat/m2-hamlet-building`; awaiting branch CI/package delivery and physical player review.
+**Status:** implemented, verified, and delivered from tested commit `2b3b4ea5`; physical player review remains open.
 
 ## Scope
 
@@ -32,3 +32,4 @@
 - `tests/m2_decoration_variants_render_test.gd`: 11 checks on D3D12 Forward Mobile at 1280×720.
 - `reports/screenshots/m2-home-details/decoration-variants.png`: actual Mobile gameplay capture.
 - `tools/test-m1-placement.ps1` and `tools/check.ps1`: exit 0.
+- Delivery run `34394758607`: success; verified ARM64 APK and Windows ZIP copied to private Google Drive.
