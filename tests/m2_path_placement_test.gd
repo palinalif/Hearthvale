@@ -80,7 +80,10 @@ func _initialize() -> void:
 	_aim(Vector2(30.0, 35.0))
 	await _press(JOY_BUTTON_A)
 	await _press(JOY_BUTTON_B)
-	_check(not scene.path_placement_active and JSON.stringify(scene.landscape_state.document()) == cancel_before and scene._history_tags.size() == history_after_reload, "B cancels the preview without history or document drift")
+	_check(scene.path_placement_active and not scene.path_point_active and scene.path_points.size() == 1, "first B stops only the live next point and keeps the confirmed route")
+	_check(JSON.stringify(scene.landscape_state.document()) == cancel_before and scene._history_tags.size() == history_after_reload, "stopping the live point does not mutate authority or history")
+	await _press(JOY_BUTTON_B)
+	_check(not scene.path_placement_active and JSON.stringify(scene.landscape_state.document()) == cancel_before and scene._history_tags.size() == history_after_reload, "second B exits path placement without document drift")
 
 	var home: Dictionary = scene.building_world.get_building(scene.selected_building_id)
 	var home_center: Vector3 = (home["transform"] as Transform3D).origin
