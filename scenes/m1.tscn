@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://scripts/m2_scene_terrain_house_outline.gd" id="1_m1"]
+[ext_resource type="Script" path="res://scripts/m2_scene_window_customization.gd" id="1_m1"]
 
 [node name="M1CottagePlaytest" type="Node3D"]
 script = ExtResource("1_m1")
