@@ -27,8 +27,8 @@ func _ready() -> void:
 
 func _install_house_shape_action() -> void:
 	if not _building_panel: return
-	var margin := _building_panel.get_child(0) as MarginContainer
-	var box := margin.get_child(0) as VBoxContainer
+	var margin: MarginContainer = _building_panel.get_child(0) as MarginContainer
+	var box: VBoxContainer = margin.get_child(0) as VBoxContainer
 	_house_shape_button = Button.new()
 	_house_shape_button.name = "HouseShapeAction"
 	_house_shape_button.text = "House shape"
@@ -44,8 +44,8 @@ func _install_house_shape_action() -> void:
 			break
 	if duplicate_button:
 		box.move_child(_house_shape_button, duplicate_button.get_index() + 1)
-		var index := _building_buttons.find(duplicate_button)
-		_building_buttons.insert(index + 1, _house_shape_button)
+		var insert_index: int = _building_buttons.find(duplicate_button)
+		_building_buttons.insert(insert_index + 1, _house_shape_button)
 	else:
 		_building_buttons.append(_house_shape_button)
 	for button in _building_buttons: button.custom_minimum_size.y = 29
@@ -53,10 +53,11 @@ func _install_house_shape_action() -> void:
 
 func _build_house_shape_picker() -> void:
 	_house_shape_picker = _make_catalogue_panel("HouseShapePicker", Vector2(520, 430))
-	var box := _catalogue_box(_house_shape_picker)
+	var box: VBoxContainer = _catalogue_box(_house_shape_picker)
 	box.add_theme_constant_override("separation", 5)
 	_add_catalogue_heading(box, "HOUSE SHAPE", "Simple masses auto-join walls and roofs")
-	for spec in HouseMassing.PRESETS:
+	for spec_value in HouseMassing.PRESETS:
+		var spec: Dictionary = spec_value
 		var button := Button.new()
 		button.text = str(spec["label"])
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -110,7 +111,7 @@ func _input(event: InputEvent) -> void:
 		elif event.is_action_pressed("m1_pause"):
 			_close_house_shape_picker(false); super._input(event)
 		elif event.is_action_pressed("m1_accept"):
-			var focus := get_viewport().gui_get_focus_owner()
+			var focus: Control = get_viewport().gui_get_focus_owner()
 			if focus in _house_shape_buttons: (focus as Button).pressed.emit()
 		elif event.is_action_pressed("m1_height_up") or event.is_action_pressed("ui_up"):
 			_move_focus(_house_shape_buttons, -1)
@@ -126,8 +127,8 @@ func _read_camera_and_cursor(delta: float) -> void:
 		return
 	var move := Vector2(Input.get_axis("m1_move_left", "m1_move_right"), Input.get_axis("m1_move_up", "m1_move_down"))
 	if move.length() > 0.05:
-		var view := building_world.get_building(selected_building_id)
-		var transform_value = view.get("transform", Transform3D.IDENTITY)
+		var view: Dictionary = building_world.get_building(selected_building_id)
+		var transform_value: Variant = view.get("transform", Transform3D.IDENTITY)
 		if transform_value is Transform3D:
 			var forward := Vector3(sin(camera_yaw), 0, cos(camera_yaw))
 			var right := Vector3(forward.z, 0, -forward.x)
@@ -153,7 +154,7 @@ func _open_house_shape_picker() -> void:
 	tools_open = true
 	if _building_panel: _building_panel.visible = false
 	_house_shape_picker.visible = true
-	var view := building_world.get_building(selected_building_id)
+	var view: Dictionary = building_world.get_building(selected_building_id)
 	_house_shape_remove_button.disabled = HouseMassing.sections_for(view).size() <= 1
 	if not _house_shape_buttons.is_empty(): _house_shape_buttons[0].grab_focus()
 	_set_status("House shape • presets or add a portion • A choose / B back")
@@ -172,7 +173,7 @@ func _close_house_shape_picker(return_to_options: bool) -> void:
 	_refresh_controller_hud()
 
 func _apply_house_shape_preset(preset_id: String) -> bool:
-	var index := building_world._building_index(selected_building_id)
+	var index: int = building_world._building_index(selected_building_id)
 	if index < 0: return false
 	var before: Dictionary = building_world._copy(building_world._document)
 	var buildings: Array = building_world._document["buildings"]
@@ -181,11 +182,11 @@ func _apply_house_shape_preset(preset_id: String) -> bool:
 		building.erase("massing_sections")
 		building.erase("massing_preset")
 	else:
-		var view := building_world.get_building(selected_building_id)
+		var view: Dictionary = building_world.get_building(selected_building_id)
 		building["massing_sections"] = _serialize_sections(HouseMassing.preset_sections(view, preset_id))
 		building["massing_preset"] = preset_id
 	buildings[index] = building
-	var ok := building_world._record_change(before)
+	var ok: bool = building_world._record_change(before)
 	_close_house_shape_picker(false)
 	if ok:
 		_record_history("building")
@@ -197,14 +198,14 @@ func _apply_house_shape_preset(preset_id: String) -> bool:
 	return ok
 
 func _begin_portion_placement() -> void:
-	var view := building_world.get_building(selected_building_id)
+	var view: Dictionary = building_world.get_building(selected_building_id)
 	if view.is_empty(): return
-	var sections := HouseMassing.sections_for(view)
+	var sections: Array[Dictionary] = HouseMassing.sections_for(view)
 	if sections.size() >= HouseMassing.MAX_SECTIONS:
 		_set_status("This house already has the maximum number of portions")
 		return
 	_close_house_shape_picker(false)
-	var bounds := HouseMassing.union_bounds(sections)
+	var bounds: Rect2 = HouseMassing.union_bounds(sections)
 	var dimensions: Vector3 = view.get("dimensions", Vector3(12, 6, 10))
 	portion_size = Vector3(snappedf(clampf(dimensions.x * 0.40, 4.0, 8.0), HouseMassing.CELL), dimensions.y, snappedf(clampf(dimensions.z * 0.42, 4.0, 8.0), HouseMassing.CELL))
 	portion_offset = Vector3(bounds.end.x + portion_size.x * 0.5, 0.0, bounds.get_center().y)
@@ -223,13 +224,13 @@ func _resize_portion(axis: String, direction: int) -> void:
 
 func _update_portion_preview() -> void:
 	if not portion_placement_active: return
-	var view := building_world.get_building(selected_building_id)
+	var view: Dictionary = building_world.get_building(selected_building_id)
 	if view.is_empty() or building_world.get_revision() != portion_revision:
 		portion_valid = false
 		portion_reason = "House changed; cancel and restart"
 	else:
-		var sections := HouseMassing.sections_for(view)
-		var candidate := _candidate_portion("preview")
+		var sections: Array[Dictionary] = HouseMassing.sections_for(view)
+		var candidate: Dictionary = _candidate_portion("preview")
 		portion_valid = HouseMassing.can_add_portion(sections, candidate)
 		portion_reason = "Needs a shared wall with the house" if not portion_valid else _portion_world_reason(view, _sections_with_candidate(sections, candidate))
 		portion_valid = portion_valid and portion_reason.is_empty()
@@ -243,19 +244,19 @@ func _commit_portion_placement() -> bool:
 	if not portion_valid:
 		_set_status("Cannot add portion: %s" % portion_reason)
 		return false
-	var index := building_world._building_index(selected_building_id)
+	var index: int = building_world._building_index(selected_building_id)
 	if index < 0: return false
 	var before: Dictionary = building_world._copy(building_world._document)
 	var buildings: Array = building_world._document["buildings"]
 	var building: Dictionary = buildings[index]
-	var view := building_world.get_building(selected_building_id)
-	var sections := HouseMassing.sections_for(view)
-	var portion_id := building_world._allocate_id("portion")
+	var view: Dictionary = building_world.get_building(selected_building_id)
+	var sections: Array[Dictionary] = HouseMassing.sections_for(view)
+	var portion_id: String = building_world._allocate_id("portion")
 	sections.append(_candidate_portion(portion_id))
 	building["massing_sections"] = _serialize_sections(sections)
 	building["massing_preset"] = "custom"
 	buildings[index] = building
-	var ok := building_world._record_change(before)
+	var ok: bool = building_world._record_change(before)
 	_clear_portion_placement()
 	if ok:
 		_record_history("building")
@@ -283,10 +284,10 @@ func _clear_portion_placement() -> void:
 	portion_reason = ""
 
 func _remove_last_portion() -> bool:
-	var index := building_world._building_index(selected_building_id)
+	var index: int = building_world._building_index(selected_building_id)
 	if index < 0: return false
-	var view := building_world.get_building(selected_building_id)
-	var sections := HouseMassing.sections_for(view)
+	var view: Dictionary = building_world.get_building(selected_building_id)
+	var sections: Array[Dictionary] = HouseMassing.sections_for(view)
 	if sections.size() <= 1:
 		_set_status("This house has no added portions")
 		return false
@@ -301,7 +302,7 @@ func _remove_last_portion() -> bool:
 		building["massing_sections"] = _serialize_sections(sections)
 		building["massing_preset"] = "custom"
 	buildings[index] = building
-	var ok := building_world._record_change(before)
+	var ok: bool = building_world._record_change(before)
 	_close_house_shape_picker(false)
 	if ok:
 		_record_history("building")
@@ -320,23 +321,25 @@ func _sections_with_candidate(sections: Array[Dictionary], candidate: Dictionary
 	return result
 
 func _portion_world_reason(view: Dictionary, sections: Array[Dictionary]) -> String:
-	var world_rect := _world_rect_for_sections(view, sections)
+	var world_rect: Rect2 = _world_rect_for_sections(view, sections)
 	if world_rect.position.x < BUILDING_WORLD_MIN or world_rect.position.y < BUILDING_WORLD_MIN or world_rect.end.x > BUILDING_WORLD_MAX or world_rect.end.y > BUILDING_WORLD_MAX:
 		return "Outside editable world"
-	for other in building_world.get_buildings():
+	for other_value in building_world.get_buildings():
+		var other: Dictionary = other_value
 		if str(other.get("id", "")) == selected_building_id: continue
-		var other_rect := _world_rect_for_sections(other, HouseMassing.sections_for(other))
+		var other_rect: Rect2 = _world_rect_for_sections(other, HouseMassing.sections_for(other))
 		if _rects_overlap(world_rect, other_rect): return "Overlaps %s" % str(other.get("name", "another home"))
 	return ""
 
 func _world_rect_for_sections(view: Dictionary, sections: Array[Dictionary]) -> Rect2:
-	var transform_value = view.get("transform", Transform3D.IDENTITY)
+	var transform_value: Variant = view.get("transform", Transform3D.IDENTITY)
 	if not transform_value is Transform3D: return Rect2()
-	var bounds := HouseMassing.union_bounds(sections)
+	var bounds: Rect2 = HouseMassing.union_bounds(sections)
 	var minimum := Vector2(INF, INF)
 	var maximum := Vector2(-INF, -INF)
-	for corner in [bounds.position, Vector2(bounds.end.x, bounds.position.y), bounds.end, Vector2(bounds.position.x, bounds.end.y)]:
-		var world := (transform_value as Transform3D) * Vector3(corner.x, 0.0, corner.y)
+	for corner_value in [bounds.position, Vector2(bounds.end.x, bounds.position.y), bounds.end, Vector2(bounds.position.x, bounds.end.y)]:
+		var corner: Vector2 = corner_value
+		var world: Vector3 = (transform_value as Transform3D) * Vector3(corner.x, 0.0, corner.y)
 		minimum = minimum.min(Vector2(world.x, world.z))
 		maximum = maximum.max(Vector2(world.x, world.z))
 	return Rect2(minimum, maximum - minimum)
@@ -354,8 +357,8 @@ func _serialize_sections(sections: Array[Dictionary]) -> Array:
 
 func _preview_massing_view(view: Dictionary) -> Dictionary:
 	if not portion_placement_active or str(view.get("id", "")) != selected_building_id: return view
-	var preview := view.duplicate(true)
-	var sections := HouseMassing.sections_for(view)
+	var preview: Dictionary = view.duplicate(true)
+	var sections: Array[Dictionary] = HouseMassing.sections_for(view)
 	sections.append(_candidate_portion("preview"))
 	preview["massing_sections"] = _serialize_sections(sections)
 	preview["massing_preset"] = "custom"
@@ -368,7 +371,7 @@ func _update_presentation() -> void:
 
 func _refresh_house_shape_label() -> void:
 	if not _house_shape_button or not building_world: return
-	var view := building_world.get_building(selected_building_id)
+	var view: Dictionary = building_world.get_building(selected_building_id)
 	_house_shape_button.text = "House shape: %s" % HouseMassing.shape_name(view) if not view.is_empty() else "House shape"
 
 func _refresh_massing_shells() -> void:
@@ -377,13 +380,13 @@ func _refresh_massing_shells() -> void:
 		var building_id := str(id_value)
 		var visual := cottage_visuals.get(building_id, null) as Node3D
 		if not is_instance_valid(visual): continue
-		var view := building_world.get_building(building_id)
+		var view: Dictionary = building_world.get_building(building_id)
 		if view.is_empty(): continue
 		view = _preview_massing_view(view)
 		_refresh_massing_shell_for_visual(visual, view)
 
 func _refresh_massing_shell_for_visual(visual: Node3D, view: Dictionary) -> void:
-	var active := HouseMassing.sections_for(view).size() > 1
+	var active: bool = HouseMassing.sections_for(view).size() > 1
 	var existing := visual.get_node_or_null("M2JoinedMassing") as Node3D
 	if not active:
 		if existing: visual.remove_child(existing); existing.queue_free()
@@ -398,7 +401,7 @@ func _refresh_massing_shell_for_visual(visual: Node3D, view: Dictionary) -> void
 	var wall_id := str(view.get("wall_material_id", view.get("material_id", "stone_plaster")))
 	var roof_id := str(view.get("roof_material_id", "terracotta"))
 	var wall_colour: Color = SURFACE_MATERIAL_COLOURS.get(wall_id, Color("#e7cfab"))
-	var palette := _massing_roof_palette(roof_id)
+	var palette: Array = _massing_roof_palette(roof_id)
 	var roof_edge: Color = (palette[0] as Color).darkened(0.14)
 	existing.show_view(view, wall_colour, palette, roof_edge)
 	if portion_placement_active and str(view.get("id", "")) == selected_building_id: _refresh_portion_ghost(visual)
@@ -440,7 +443,7 @@ func _refresh_portion_ghost(visual: Node3D) -> void:
 	visual.add_child(ghost)
 
 func _remove_portion_ghost(visual: Node3D) -> void:
-	var ghost := visual.get_node_or_null("M2PortionGhost")
+	var ghost: Node = visual.get_node_or_null("M2PortionGhost")
 	if ghost: visual.remove_child(ghost); ghost.queue_free()
 
 func _set_world_mesh_highlight(building_id: String) -> void:
@@ -449,7 +452,7 @@ func _set_world_mesh_highlight(building_id: String) -> void:
 		var id := str(id_value)
 		var visual := cottage_visuals.get(id, null) as Node3D
 		if not is_instance_valid(visual): continue
-		var massing := visual.get_node_or_null("M2JoinedMassing")
+		var massing: Node = visual.get_node_or_null("M2JoinedMassing")
 		if massing and massing.has_method("set_highlight"):
 			massing.set_highlight(view_context == "terrain" and id == building_id and not building_id.is_empty(), TERRAIN_HOUSE_OUTLINE_GROW_AMOUNT)
 
