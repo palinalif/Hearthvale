@@ -7,7 +7,6 @@ extends "res://scripts/m2_scene_building_feedback.gd"
 ## their authored corner quoins instead of leaving the three default courses
 ## stranded halfway down a resized wall. All of this is disposable presentation.
 
-const Grid = preload("res://scripts/visual_grid.gd")
 const RAISED_FOUNDATION_STYLE := "riverside_cottage"
 const RAISED_FOUNDATION_THRESHOLD := 0.18
 const RAISED_FOUNDATION_MAX_DEPTH := 1.75
