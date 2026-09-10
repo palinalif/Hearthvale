@@ -3,8 +3,11 @@ extends "res://scripts/m2_scene_building_feedback.gd"
 ## Terrain-aware presentation for the Riverside Cottage. Its ordinary foundation
 ## remains quiet on flat ground; when the terrain drops away beside the house,
 ## staggered masonry courses extend down the exposed side instead of leaving the
-## miniature looking like it is floating. This is disposable presentation only.
+## miniature looking like it is floating. Taller Riverside Cottages also extend
+## their authored corner quoins instead of leaving the three default courses
+## stranded halfway down a resized wall. All of this is disposable presentation.
 
+const Grid = preload("res://scripts/visual_grid.gd")
 const RAISED_FOUNDATION_STYLE := "riverside_cottage"
 const RAISED_FOUNDATION_THRESHOLD := 0.18
 const RAISED_FOUNDATION_MAX_DEPTH := 1.75
@@ -14,7 +17,16 @@ const FOUNDATION_BRICK_HEIGHT_LOCAL := 0.5
 const FOUNDATION_BRICK_DEPTH_LOCAL := 0.5
 const FOUNDATION_BRICK_COLOUR := Color("#a48770")
 
+const RIVERSIDE_BASE_HEIGHT_LOCAL := 7.0
+const BASE_QUOIN_LEVELS := 3
+const QUOIN_LEVEL_START_LOCAL := 0.9
+const QUOIN_LEVEL_SPACING_LOCAL := 1.45
+const QUOIN_HEIGHT_LOCAL := 0.70
+const QUOIN_RESIZE_THRESHOLD_LOCAL := 0.25
+const QUOIN_COLOUR := Color("#c09c78")
+
 var _raised_foundation_roots: Dictionary = {}
+var _raised_quoin_roots: Dictionary = {}
 var _raised_foundation_signature := ""
 
 func _update_presentation() -> void:
@@ -39,7 +51,10 @@ func _refresh_raised_foundation_masonry(force: bool = false) -> void:
 		seen[building_id] = true
 		if str(building.get("style_id", "")) != RAISED_FOUNDATION_STYLE:
 			_remove_raised_foundation(building_id)
+			_remove_raised_quoins(building_id)
 			continue
+
+		_refresh_height_quoin_extension(building_id, building)
 		var exposure := _foundation_side_exposure(building)
 		if _max_foundation_exposure(exposure) < RAISED_FOUNDATION_THRESHOLD:
 			_remove_raised_foundation(building_id)
@@ -48,6 +63,41 @@ func _refresh_raised_foundation_masonry(force: bool = false) -> void:
 
 	for building_id in _raised_foundation_roots.keys():
 		if not seen.has(building_id): _remove_raised_foundation(str(building_id))
+	for building_id in _raised_quoin_roots.keys():
+		if not seen.has(building_id): _remove_raised_quoins(str(building_id))
+
+func _refresh_height_quoin_extension(building_id: String, building: Dictionary) -> void:
+	_remove_raised_quoins(building_id)
+	var dimensions: Vector3 = building.get("dimensions", Vector3.ZERO)
+	if not dimensions.is_finite(): return
+	var extra_levels := _extra_quoin_levels(dimensions.y)
+	if extra_levels <= 0: return
+	var transform_value = building.get("transform", Transform3D.IDENTITY)
+	if not transform_value is Transform3D: return
+	var building_transform := transform_value as Transform3D
+	var world_scale := building_transform.basis.get_scale().abs()
+	if world_scale.x <= 0.0001 or world_scale.y <= 0.0001 or world_scale.z <= 0.0001: return
+	var local_unit := Vector3(Grid.UNIT / world_scale.x, Grid.UNIT / world_scale.y, Grid.UNIT / world_scale.z)
+	var quoin_size := Vector3(local_unit.x * 2.0, QUOIN_HEIGHT_LOCAL, local_unit.z * 2.0)
+	var transforms: Array[Transform3D] = []
+	for corner_x in [-1.0, 1.0]:
+		for corner_z in [-1.0, 1.0]:
+			for extra_level in extra_levels:
+				var level := BASE_QUOIN_LEVELS + extra_level
+				var y := QUOIN_LEVEL_START_LOCAL + float(level) * QUOIN_LEVEL_SPACING_LOCAL
+				transforms.append(Transform3D(Basis.IDENTITY.scaled(quoin_size), Vector3(dimensions.x * 0.5 * corner_x, y, dimensions.z * 0.5 * corner_z)))
+	if transforms.is_empty(): return
+	var root := Node3D.new()
+	root.name = "RaisedCornerQuoins_%s" % building_id
+	root.transform = building_transform
+	root.add_child(_unit_box_multimesh("ExtraQuoinCourses", transforms, QUOIN_COLOUR))
+	add_child(root)
+	_raised_quoin_roots[building_id] = root
+
+func _extra_quoin_levels(height_local: float) -> int:
+	var added_height := height_local - RIVERSIDE_BASE_HEIGHT_LOCAL
+	if added_height <= QUOIN_RESIZE_THRESHOLD_LOCAL: return 0
+	return ceili((added_height - QUOIN_RESIZE_THRESHOLD_LOCAL) / QUOIN_LEVEL_SPACING_LOCAL)
 
 func _foundation_side_exposure(building: Dictionary) -> Dictionary:
 	var transform_value = building.get("transform", Transform3D.IDENTITY)
@@ -152,8 +202,31 @@ func _foundation_multimesh(node_name: String, brick_size: Vector3, transforms: A
 	node.multimesh = multimesh
 	return node
 
+func _unit_box_multimesh(node_name: String, transforms: Array[Transform3D], colour: Color) -> MultiMeshInstance3D:
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3.ONE
+	var material := StandardMaterial3D.new()
+	material.albedo_color = colour
+	material.roughness = 0.94
+	mesh.material = material
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.mesh = mesh
+	multimesh.instance_count = transforms.size()
+	for index in transforms.size(): multimesh.set_instance_transform(index, transforms[index])
+	var node := MultiMeshInstance3D.new()
+	node.name = node_name
+	node.multimesh = multimesh
+	return node
+
 func _remove_raised_foundation(building_id: String) -> void:
 	if not _raised_foundation_roots.has(building_id): return
 	var root: Node = _raised_foundation_roots[building_id]
 	if is_instance_valid(root): root.queue_free()
 	_raised_foundation_roots.erase(building_id)
+
+func _remove_raised_quoins(building_id: String) -> void:
+	if not _raised_quoin_roots.has(building_id): return
+	var root: Node = _raised_quoin_roots[building_id]
+	if is_instance_valid(root): root.queue_free()
+	_raised_quoin_roots.erase(building_id)
