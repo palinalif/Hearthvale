@@ -30,7 +30,7 @@ func _finish() -> void:
 
 		scene._set_view_context("terrain")
 		scene._open_build_catalogue()
-		check(scene._build_catalogue_panel.visible and scene._build_catalogue_buttons.size() == 3, "rendered global build catalogue exposes all categories")
+		check(scene._build_catalogue_panel.visible and scene._build_catalogue_buttons.size() == 4, "rendered global build catalogue exposes all four categories")
 		await _capture("20-m2-build-catalogue")
 		scene._open_outdoor_catalogue()
 		check(scene._outdoor_catalogue_panel.visible and scene._outdoor_catalogue_buttons.size() == 3, "rendered outdoor catalogue exposes usable planting tools")
