@@ -24,7 +24,7 @@ func _serializable_sections(view: Dictionary) -> Array:
 		var section: Dictionary = section_value
 		var offset: Vector3 = section["offset"]
 		var size: Vector3 = section["size"]
-		result.append({"id": str(section.get("id", "")), "offset": [offset.x, offset.y, offset.z], "size": [size.x, size.y, size.z]})
+		result.append({"id": str(section.get("id", "")), "level": Massing.section_level(section), "offset": [offset.x, offset.y, offset.z], "size": [size.x, size.y, size.z]})
 	return result
 
 func _build_eave_beams(view: Dictionary) -> void:
@@ -50,10 +50,11 @@ func _build_ridge_beams(view: Dictionary) -> void:
 		var key: Vector2i = tile["cell"]
 		var distance: int = int(tile.get("distance", 0))
 		if distance <= 0: continue
-		var left: int = _distance_at(by_cell, key + Vector2i.LEFT)
-		var right: int = _distance_at(by_cell, key + Vector2i.RIGHT)
-		var front: int = _distance_at(by_cell, key + Vector2i.UP)
-		var back: int = _distance_at(by_cell, key + Vector2i.DOWN)
+		var base_height: float = float(tile.get("base_height", 0.0))
+		var left: int = _distance_at(by_cell, key + Vector2i.LEFT, base_height)
+		var right: int = _distance_at(by_cell, key + Vector2i.RIGHT, base_height)
+		var front: int = _distance_at(by_cell, key + Vector2i.UP, base_height)
+		var back: int = _distance_at(by_cell, key + Vector2i.DOWN, base_height)
 		var ridge_x: bool = (left == distance or right == distance) and distance >= front and distance >= back and (front < distance or back < distance)
 		var ridge_z: bool = (front == distance or back == distance) and distance >= left and distance >= right and (left < distance or right < distance)
 		if not ridge_x and not ridge_z: continue
@@ -63,9 +64,10 @@ func _build_ridge_beams(view: Dictionary) -> void:
 		if ridge_z: transforms.append(_beam_transform(center, Massing.CELL * 1.10, true))
 	_add_multimesh("JoinedRoofRidgeBeams", transforms)
 
-func _distance_at(by_cell: Dictionary, key: Vector2i) -> int:
+func _distance_at(by_cell: Dictionary, key: Vector2i, base_height: float) -> int:
 	if not by_cell.has(key): return -999
 	var tile: Dictionary = by_cell[key]
+	if absf(float(tile.get("base_height", 0.0)) - base_height) > Massing.JOIN_EPSILON: return -999
 	return int(tile.get("distance", 0))
 
 func _beam_transform(center: Vector3, length: float, along_z: bool) -> Transform3D:
