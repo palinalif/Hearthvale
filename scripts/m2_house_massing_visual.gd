@@ -14,7 +14,7 @@ var _highlight_grow := 0.12
 var _highlight_material: StandardMaterial3D
 
 func show_view(view: Dictionary, wall_colour: Color, roof_palette: Array, roof_edge_colour: Color) -> void:
-	var signature := "%s|%s|%s|%s|%s|%s" % [JSON.stringify(_serializable_sections(view)), str(view.get("dimensions", Vector3.ZERO)), str(view.get("roof_profile", "gentle_gable")), wall_colour.to_html(), str(roof_palette), roof_edge_colour.to_html()]
+	var signature := "%s|%s|%s|%s|%s|%s|%s" % [JSON.stringify(_serializable_sections(view)), JSON.stringify(_opening_signature(view)), str(view.get("dimensions", Vector3.ZERO)), str(view.get("roof_profile", "gentle_gable")), wall_colour.to_html(), str(roof_palette), roof_edge_colour.to_html()]
 	if signature == _signature: return
 	_signature = signature
 	for child in get_children(): child.free()
@@ -56,6 +56,22 @@ func _serializable_sections(view: Dictionary) -> Array:
 		var offset: Vector3 = section["offset"]
 		var size: Vector3 = section["size"]
 		result.append({"id": str(section.get("id", "")), "level": Massing.section_level(section), "offset": [offset.x, offset.y, offset.z], "size": [size.x, size.y, size.z]})
+	return result
+
+func _opening_signature(view: Dictionary) -> Array:
+	var result: Array = []
+	for detail_value in view.get("details", []):
+		if not detail_value is Dictionary: continue
+		var detail: Dictionary = detail_value
+		var kind: String = str(detail.get("kind", ""))
+		if kind not in ["window", "door"]: continue
+		var position_value: Variant = detail.get("resolved_position", null)
+		var position_data: Array = []
+		if position_value is Vector3:
+			var position: Vector3 = position_value
+			position_data = [position.x, position.y, position.z]
+		var size: Vector2 = _detail_size(detail, kind)
+		result.append({"id": str(detail.get("id", "")), "surface": str((detail.get("anchor", {}) as Dictionary).get("surface_id", "")), "position": position_data, "size": [size.x, size.y], "visible": bool(detail.get("visible", true)), "needs": bool(detail.get("needs_placement", false))})
 	return result
 
 func _build_foundation(view: Dictionary) -> void:
