@@ -8,6 +8,8 @@ const JoinedVisual = preload("res://scripts/m2_house_massing_visual.gd")
 var scene: Node
 var checks := 0
 var failures := 0
+var geometry_checks := 0
+var unverified_headless_openings := 0
 
 func check(condition: bool, label: String) -> void:
 	checks += 1
@@ -19,6 +21,13 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
+	var rendered := DisplayServer.get_name() != "headless"
+	if "--require-rendering" in OS.get_cmdline_user_args():
+		check(rendered and RenderingServer.get_current_rendering_method() == "mobile", "actual Mobile renderer is required for opening geometry")
+		if failures:
+			await _finish()
+			return
+	if rendered: root.size = Vector2i(1280, 720)
 	scene = preload("res://scenes/m1.tscn").instantiate()
 	scene.test_mode = true
 	scene.checkpoint_root = "user://m2-upper-detail-%s" % Time.get_ticks_usec()
@@ -90,7 +99,8 @@ func _run() -> void:
 
 	var joined: Node3D = _joined_visual()
 	var wall_before := _wall_instance_count(joined, "JoinedWall_Front")
-	check(wall_before > 0 and _opening_blockers(joined, placed_position) > 0, "fresh-cut fixture has real wall geometry behind the intended window")
+	check(wall_before > 0, "fresh-cut fixture contains a front-wall batch")
+	_check_opening(joined, placed_position, false, "fresh-cut fixture has real wall geometry behind the intended window")
 	var window_id: String = scene.building_world.add_detail(scene.selected_building_id, "window", upper_id, placed_position, "window_wood")
 	check(not window_id.is_empty(), "BuildingWorld accepts a real manual window on floor 2")
 	scene.selected_detail_id = window_id
@@ -104,14 +114,16 @@ func _run() -> void:
 	joined = _joined_visual()
 	var wall_after := _wall_instance_count(joined, "JoinedWall_Front")
 	check(wall_after < wall_before, "joined wall mesh recuts immediately for the upstairs window opening")
-	check(_opening_blockers(joined, resolved) == 0, "no rendered front-wall boxes intersect the new upstairs opening")
+	_check_opening(joined, resolved, true, "no rendered front-wall boxes intersect the new upstairs opening")
 
 	check(scene.building_world.undo(), "manual upstairs opening is undoable")
 	await _refresh_visual()
-	check(_wall_instance_count(_joined_visual(), "JoinedWall_Front") == wall_before and _opening_blockers(_joined_visual(), placed_position) > 0, "undo restores solid wall geometry at the removed opening")
+	check(_wall_instance_count(_joined_visual(), "JoinedWall_Front") == wall_before, "undo restores the original wall instance count")
+	_check_opening(_joined_visual(), placed_position, false, "undo restores solid wall geometry at the removed opening")
 	check(scene.building_world.redo(), "manual upstairs opening is redoable")
 	await _refresh_visual()
-	check(_wall_instance_count(_joined_visual(), "JoinedWall_Front") == wall_after and _opening_blockers(_joined_visual(), resolved) == 0, "redo recuts the same upstairs opening")
+	check(_wall_instance_count(_joined_visual(), "JoinedWall_Front") == wall_after, "redo restores the cut wall instance count")
+	_check_opening(_joined_visual(), resolved, true, "redo recuts the same upstairs opening")
 	scene.selected_detail_id = window_id
 	scene.selected_surface_id = upper_id
 
@@ -136,7 +148,9 @@ func _run() -> void:
 	var rebuilt := JoinedVisual.new()
 	root.add_child(rebuilt)
 	rebuilt.show_view(restored_view, Color.WHITE, [Color.WHITE], Color.WHITE)
-	check(_wall_instance_count(rebuilt, "JoinedWall_Front") == wall_after and _opening_blockers(rebuilt, resolved) == 0, "reload regenerates the same open wall geometry, not only the saved detail record")
+	check(_wall_instance_count(rebuilt, "JoinedWall_Front") == wall_after, "reload regenerates the same wall instance count")
+	if rendered: await RenderingServer.frame_post_draw
+	_check_opening(rebuilt, resolved, true, "reload regenerates the same open wall geometry, not only the saved detail record")
 	rebuilt.free()
 
 	# Removing the supporting storey must not silently eat authored facade decor.
@@ -174,7 +188,7 @@ func _check_automatic_replacement(view: Dictionary, upper_id: String) -> void:
 	var manual: Dictionary = _detail(replaced_view, manual_id)
 	var displaced: Dictionary = _detail(replaced_view, str(automatic["id"]))
 	check(bool(manual.get("visible", false)) and not bool(manual.get("needs_placement", true)) and not bool(displaced.get("visible", true)), "manual window wins while the overlapping automatic window yields")
-	check(_opening_blockers(_joined_visual(), position) == 0, "replacement opening remains clear even when total wall count does not decrease")
+	_check_opening(_joined_visual(), position, true, "replacement opening remains clear even when total wall count does not decrease")
 	check(scene.building_world.undo(), "automatic-to-manual replacement is one undoable edit")
 	await _refresh_visual()
 	var undone: Dictionary = scene.building_world.get_building(scene.selected_building_id)
@@ -184,10 +198,22 @@ func _refresh_visual() -> void:
 	scene._presentation_key = ""
 	scene._update_presentation()
 	await process_frame
+	if DisplayServer.get_name() != "headless": await RenderingServer.frame_post_draw
 
 func _joined_visual() -> Node3D:
 	var visual := scene.cottage_visuals.get(scene.selected_building_id, null) as Node3D
 	return visual.get_node_or_null("M2JoinedMassing") as Node3D if visual else null
+
+func _check_opening(joined: Node3D, center: Vector3, expect_clear: bool, label: String) -> void:
+	# Godot's dummy rendering backend does not retain per-instance transforms.
+	# Authority and instance counts still run headlessly; the same test must
+	# also pass in Mobile CI with every geometry assertion actually executed.
+	if DisplayServer.get_name() == "headless":
+		unverified_headless_openings += 1
+		return
+	geometry_checks += 1
+	var blockers := _opening_blockers(joined, center)
+	check(blockers == 0 if expect_clear else blockers > 0, label + " (blockers=%d)" % blockers)
 
 func _opening_blockers(joined: Node3D, center: Vector3) -> int:
 	# Inspect actual rendered box extents, independently of the generator's
@@ -222,5 +248,6 @@ func _finish() -> void:
 		scene.queue_free()
 		await process_frame
 		await process_frame
+	print("UPPER_STOREY_GEOMETRY checked=%d unverified=%d" % [geometry_checks, unverified_headless_openings])
 	print("m2_upper_storey_detail_test checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures else 0)
