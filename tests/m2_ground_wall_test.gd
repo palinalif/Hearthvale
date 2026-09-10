@@ -55,10 +55,14 @@ func _initialize() -> void:
 		var serialized := world.serialize_document()
 		var restored := World.new()
 		check(restored.load_serialized_document(serialized), shape + ": new ground surfaces remain save-compatible")
-		check(restored.get_building(id)["details"] == world.get_building(id)["details"], shape + ": window records resolve identically after reload")
+		check(JSON.parse_string(JSON.stringify(restored.get_building(id)["details"])) == JSON.parse_string(JSON.stringify(world.get_building(id)["details"])), shape + ": window records resolve identically after reload")
 		if not added.is_empty():
 			check(world.undo() and world.redo(), shape + ": window placement undo/redo remains available")
-			check(world.serialize_document() == serialized, shape + ": redo retains surface/detail identities")
+			var expected: Dictionary = JSON.parse_string(serialized)
+			var redone: Dictionary = JSON.parse_string(world.serialize_document())
+			check(int(redone["revision"]) == int(expected["revision"]) + 2, shape + ": undo/redo advances the revision guard")
+			redone["revision"] = expected["revision"]
+			check(redone == expected, shape + ": redo retains every saved field except its advancing revision")
 	print("m2_ground_wall_test checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures else 0)
 
