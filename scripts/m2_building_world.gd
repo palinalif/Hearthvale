@@ -130,9 +130,8 @@ func _resolved_details(building: Dictionary) -> Array[Dictionary]:
 	return result
 
 func _reflow_automatic_windows(building: Dictionary) -> void:
-	# Automatic M1 windows belong to the four authored base walls. Generated
-	# massing walls are intentionally player-authored until we add a separate
-	# procedural upper-storey facade pass.
+	# Let the original layout own only the four authored base walls, then run a
+	# second stable slot pass over generated upper-storey facade runs.
 	var surfaces: Array = building.get("surfaces", [])
 	var deleted_states: Dictionary = {}
 	for index in surfaces.size():
@@ -152,3 +151,74 @@ func _reflow_automatic_windows(building: Dictionary) -> void:
 			support["deleted"] = bool(deleted_states[id])
 			surfaces[index] = support
 	building["surfaces"] = surfaces
+	_reflow_upper_storey_windows(building)
+
+func _reflow_upper_storey_windows(building: Dictionary) -> void:
+	var surfaces: Array = building.get("surfaces", [])
+	var details: Array = building.get("details", [])
+	var default_asset: String = _upper_window_asset(building)
+	var remaining_capacity: int = maxi(0, MAX_DETAILS - details.size())
+	for surface_value in surfaces:
+		if not surface_value is Dictionary: continue
+		var support: Dictionary = surface_value
+		if not bool(support.get("massing_wall", false)) or int(support.get("massing_level", 0)) <= 0: continue
+		var surface_id: String = str(support.get("id", ""))
+		if surface_id.is_empty(): continue
+		var count: int = _upper_window_count(support)
+		if bool(support.get("deleted", false)): count = 0
+		var slots: Dictionary = {}
+		for detail_value in details:
+			if not detail_value is Dictionary: continue
+			var detail: Dictionary = detail_value
+			if not bool(detail.get("generated", false)) or not bool(detail.get("massing_auto", false)) or str(detail.get("kind", "")) != "window": continue
+			var default_value: Variant = detail.get("default", {})
+			var default_anchor: Dictionary = {}
+			if default_value is Dictionary: default_anchor = (default_value as Dictionary).get("anchor", {})
+			if default_anchor.is_empty(): default_anchor = detail.get("anchor", {})
+			if str(default_anchor.get("surface_id", "")) != surface_id: continue
+			var slot: int = int(detail.get("layout_slot", slots.size()))
+			detail["layout_slot"] = slot
+			slots[slot] = detail
+		for slot in count:
+			if slots.has(slot): continue
+			if remaining_capacity <= 0: break
+			var detail_id: String = "%s-auto-%s-%d" % [str(building.get("id", "building")), surface_id, slot]
+			var detail: Dictionary = _window(detail_id, surface_id, 0.5, 0.48)
+			detail["asset_id"] = default_asset
+			detail["massing_auto"] = true
+			detail["layout_slot"] = slot
+			var default_record: Dictionary = detail.get("default", {})
+			default_record["asset_id"] = default_asset
+			detail["default"] = default_record
+			details.append(detail)
+			slots[slot] = detail
+			remaining_capacity -= 1
+		for slot_value in slots.keys():
+			var slot: int = int(slot_value)
+			var detail: Dictionary = slots[slot]
+			detail["layout_active"] = slot < count
+			if str(detail.get("state", "")) != "automatic" or slot >= count: continue
+			var u: float = (float(slot) + 0.5) / float(maxi(1, count))
+			var anchor := {"surface_id": surface_id, "policy": "proportional", "u": u, "v": 0.48, "fixed_offset": 1.25}
+			detail["anchor"] = anchor
+			var default_record: Dictionary = detail.get("default", {})
+			default_record["id"] = str(detail.get("id", ""))
+			default_record["asset_id"] = str(detail.get("asset_id", default_asset))
+			default_record["u"] = u
+			default_record["v"] = 0.48
+			default_record["anchor"] = anchor.duplicate(true)
+			detail["default"] = default_record
+	building["details"] = details
+
+func _upper_window_count(surface: Dictionary) -> int:
+	var span: float = float(surface.get("tangent_max", 0.0)) - float(surface.get("tangent_min", 0.0))
+	var height: float = float(surface.get("top", 0.0)) - float(surface.get("bottom", 0.0))
+	var minimum_span: float = (WINDOW_HALF_WIDTH + WINDOW_CORNER_CLEARANCE) * 2.0
+	if span < minimum_span or height < 4.2: return 0
+	return maxi(1, floori((span - WINDOW_CORNER_CLEARANCE * 2.0) / WINDOW_TARGET_SPACING))
+
+func _upper_window_asset(building: Dictionary) -> String:
+	var style_id: String = str(building.get("style_id", "riverside_cottage"))
+	if style_id == "woodland_lodge": return "window_lodge"
+	if style_id == "village_gable": return "window_tudor"
+	return "window_wood"
