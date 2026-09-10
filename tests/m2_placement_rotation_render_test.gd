@@ -40,4 +40,31 @@ func _finish() -> void:
 		check(scene._home_catalogue_panel.visible and scene._home_catalogue_buttons.size() == 3, "rendered M2 residential catalogue exposes all designs")
 		await _capture("22-m2-home-catalogue")
 		scene._close_home_catalogue(false)
+		# The Thor UX repair must also be exercised by the existing real-Mobile
+		# rendering gate, not only by headless state assertions.
+		scene._set_view_context("building")
+		scene._begin_next_storey()
+		check(scene.portion_valid and scene._commit_portion_placement(), "UX fixture adds an upper floor")
+		scene._update_presentation()
+		scene._open_building_panel()
+		scene._open_floor_edit_picker()
+		check(scene._floor_edit_picker.visible, "placed floor has a visible edit entry")
+		await _capture("23-m2-edit-floors")
+		scene._choose_floor_to_edit(0)
+		scene._resize_portion("x", 1)
+		scene._update_camera()
+		check(scene.portion_placement_active and not scene._editing_portion_id.is_empty(), "real Mobile shows existing floor edit preview")
+		await _capture("24-m2-resize-placed-floor")
+		scene._cancel_portion_placement()
+		var ux_view: Dictionary = scene.building_world.get_building(scene.selected_building_id)
+		for detail_value in ux_view.get("details", []):
+			var detail: Dictionary = detail_value
+			if str(detail.get("kind", "")) != "window" or not bool(detail.get("visible", false)) or bool(detail.get("needs_placement", true)): continue
+			scene.selected_detail_id = str(detail["id"])
+			scene._begin_style_picker("colour")
+			scene._preview_style_choice("colour", "berry")
+			check(scene._style_picker_mode == "colour", "compact colour picker opens in real gameplay")
+			await _capture("25-m2-compact-recolour")
+			scene._cancel_style_picker()
+			break
 	super._finish()
