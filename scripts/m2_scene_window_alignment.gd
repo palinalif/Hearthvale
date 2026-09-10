@@ -14,6 +14,12 @@ func _build_open_window(parent: Node3D, asset_id: String, pane_center: Vector3, 
 		var glass_size := Vector2(maxf(cell.x, pane_size.x - cell.x * 2.0), maxf(cell.y, pane_size.y - cell.y * 2.0))
 		var hinge := Vector3(pane_center.x, pane_center.y + half.y, cell.z)
 		_add_edge_hinged_glass(parent, "AwningOpenLeaf", "Awning", glass_center, glass_size, hinge, Vector3.RIGHT, -0.48, cell, accent)
+	elif pane_size.x < cell.x * 6.0:
+		# At the smallest legal width, two complete framed panes cannot fit.
+		# Use one right-hinged sash rather than overlap frames or shrink cells.
+		var glass_size := Vector2(maxf(cell.x, pane_size.x - cell.x * 2.0), maxf(cell.y, pane_size.y - cell.y * 2.0))
+		var hinge := Vector3(pane_center.x + half.x, pane_center.y, cell.z)
+		_add_edge_hinged_glass(parent, "CasementOpenLeaf", "Open", glass_center, glass_size, hinge, Vector3.UP, 0.62, cell, accent)
 	else:
 		# Two disjoint sashes occupy the left and right halves of the opening.
 		# Frame thickness is included, not added outside overlapping glass.
@@ -61,7 +67,8 @@ func _build_adventure_shape(parent: Node3D, asset_id: String, pane_center: Vecto
 	# settings, and never silently rewrite an automatic window's overrides.
 	if str(extras.get("shutter_style", "original")) == "none": return
 	var shutter_state := str(extras.get("shutter_state", "open"))
-	var blocked := shutter_state == "closed" or (asset_id == "window_awning" and shutter_state == "half_open")
+	var full_width_sash := asset_id == "window_awning" or pane_size.x < cell.x * 6.0
+	var blocked := shutter_state == "closed" or (full_width_sash and shutter_state == "half_open")
 	if not blocked: return
 	var leaf := parent.get_node_or_null("AwningOpenLeaf" if asset_id == "window_awning" else "CasementOpenLeaf") as Node3D
 	if leaf: leaf.basis = Basis.IDENTITY
