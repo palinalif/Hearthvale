@@ -44,6 +44,18 @@ jobs:
           $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
           Write-Output $log
           if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch '"ok"\s*:\s*true') { throw 'House-shape Mobile render failed' }
+      - name: Render actual Mobile multi-floor houses
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/m2-house-shapes' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $out = Join-Path (Get-Location) '.tools/m2-house-shapes/multi-floor.out.log'
+          $err = Join-Path (Get-Location) '.tools/m2-house-shapes/multi-floor.err.log'
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_multi_floor_render_test.gd')
+          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+          if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'Multi-floor Mobile render timed out' }
+          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
+          Write-Output $log
+          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch '"ok"\s*:\s*true') { throw 'Multi-floor Mobile render failed' }
       - name: Upload shaped house screenshots
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -51,7 +63,7 @@ jobs:
           name: m2-house-shapes-${{ github.sha }}
           path: |
             reports/screenshots/m2-house-shapes/
-            .tools/m2-house-shapes/render.out.log
-            .tools/m2-house-shapes/render.err.log
+            reports/screenshots/m2-multi-floor/
+            .tools/m2-house-shapes/*.log
           if-no-files-found: warn
           retention-days: 14
