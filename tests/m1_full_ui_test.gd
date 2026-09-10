@@ -20,7 +20,7 @@ func _initialize() -> void:
 	_check(not scene.tools_panel.visible, "legacy cottage action dump stays hidden for shell")
 	var labels: Array[String] = []
 	for button in scene._building_buttons: labels.append(button.text)
-	_check("Duplicate" in labels and "Add flower box" in labels and "Add shutter" in labels, "shell menu exposes cottage placement and detail placement")
+	_check("Duplicate" in labels and "Add window" in labels and "Add door" in labels and "Add flower box" in labels and "Add shutter" in labels, "shell menu exposes structural and decorative detail placement")
 	scene._close_building_panel()
 
 	scene._set_menu(true)

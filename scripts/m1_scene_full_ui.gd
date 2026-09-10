@@ -41,6 +41,8 @@ func _build_building_panel() -> void:
 	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 6); margin.add_child(box)
 	var title := Label.new(); title.text = "COTTAGE"; title.add_theme_font_size_override("font_size", 16); box.add_child(title)
 	_add_building_button(box, "Duplicate", _begin_building_placement)
+	_add_building_button(box, "Add window", _begin_new_attachment.bind("window"))
+	_add_building_button(box, "Add door", _begin_new_attachment.bind("door"))
 	_add_building_button(box, "Add flower box", _begin_new_attachment.bind("flower_box"))
 	_add_building_button(box, "Add shutter", _begin_new_attachment.bind("shutter"))
 	_add_building_button(box, "Material: warm plaster", _cycle_cottage_material)
@@ -148,9 +150,9 @@ func _refresh_controller_hud() -> void:
 	if menu_open or tools_open or detail_open: return
 	var prompts: Array = []
 	if building_placement_active:
-		_tool_name.text = "Place cottage"
-		_tool_meta.text = "Free placement • grounded to terrain%s" % (" • PRECISION" if precision_mode else "")
-		prompts = [["A", "Place"], ["B", "Cancel"], ["LS", "Move"], ["RS", "Orbit"], ["L3", "Precision"]]
+		_tool_name.text = "Place home" if building_placement_operation == "duplicate" else "Move / rotate home"
+		_tool_meta.text = "%s%s%s" % [building_placement_reason, " • SNAP" if building_rotation_snap else " • FREE", " • PRECISION" if precision_mode else ""]
+		prompts = [["A", "Place"], ["B", "Cancel"], ["LS", "Move"], ["◀▶", "Rotate"], ["▲", "Snap"], ["L3", "Precision"]]
 	elif detail_move_active and not placement_kind.is_empty():
 		_tool_name.text = "Place %s" % placement_kind.replace("_", " ").capitalize()
 		_tool_meta.text = "Wall locked • soft alignment"

@@ -1,9 +1,15 @@
-name: M1 verified Drive delivery
+name: Hearthvale verified Drive delivery
 
 on:
   push:
-    branches: [master, feat/m1-ui-polish]
+    # Every branch receives gated, commit-specific Android and Windows builds. A branch filter
+    # intentionally excludes tag pushes while allowing newly created branches.
+    branches: ['**']
   workflow_dispatch:
+
+concurrency:
+  group: verified-drive-delivery-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   actions: read
@@ -32,7 +38,7 @@ jobs:
     uses: ./.github/workflows/cottage-playtest.yml
 
   drive-delivery:
-    name: Upload verified APK to private Google Drive
+    name: Upload verified builds to private Google Drive
     needs: [delivery-contract, sculpt-feedback, terrain-ux, placement, cottage-and-apk]
     if: vars.GOOGLE_DRIVE_UPLOAD_ENABLED == 'true'
     runs-on: ubuntu-24.04
@@ -42,38 +48,50 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download the verified APK and receipt
+      - name: Download verified APK and PC receipts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          pattern: hearthvale-m1-repair-${{ github.sha }}
+          pattern: hearthvale-*-${{ github.sha }}
           path: delivery
           merge-multiple: true
 
-      - name: Revalidate artifact receipt
+      - name: Revalidate artifact receipts
         shell: pwsh
         run: |
           $short = $env:GITHUB_SHA.Substring(0, 8)
           $apk = Get-Item "delivery/hearthvale-m1-repair-$short.apk"
-          $receipt = Get-Item "delivery/hearthvale-m1-repair-$short.verification.json"
-          $record = Get-Content $receipt.FullName -Raw | ConvertFrom-Json
-          $actual = (Get-FileHash $apk.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          if (-not $record.ok -or $record.commit -ne $env:GITHUB_SHA -or $record.sha256 -ne $actual -or [int64]$record.bytes -ne $apk.Length) {
+          $apkReceipt = Get-Item "delivery/hearthvale-m1-repair-$short.verification.json"
+          $apkRecord = Get-Content $apkReceipt.FullName -Raw | ConvertFrom-Json
+          $apkHash = (Get-FileHash $apk.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (-not $apkRecord.ok -or $apkRecord.commit -ne $env:GITHUB_SHA -or $apkRecord.sha256 -ne $apkHash -or [int64]$apkRecord.bytes -ne $apk.Length) {
             throw 'Downloaded APK does not match its successful verification receipt'
           }
 
-      - name: Ask Apps Script to copy the verified artifact to Drive
+          $pc = Get-Item "delivery/Hearthvale-M2-PC-$short.zip"
+          $pcReceipt = Get-Item "delivery/Hearthvale-M2-PC-$short.verification.json"
+          $pcRecord = Get-Content $pcReceipt.FullName -Raw | ConvertFrom-Json
+          $pcHash = (Get-FileHash $pc.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (-not $pcRecord.ok -or $pcRecord.commit -ne $env:GITHUB_SHA -or $pcRecord.sha256 -ne $pcHash -or [int64]$pcRecord.bytes -ne $pc.Length -or $pcRecord.platform -ne 'windows' -or $pcRecord.architecture -ne 'x86_64') {
+            throw 'Downloaded PC build does not match its successful verification receipt'
+          }
+
+      - name: Ask Apps Script to copy verified artifacts to Drive
         env:
           APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
           APPS_SCRIPT_WEBHOOK_SECRET: ${{ secrets.APPS_SCRIPT_WEBHOOK_SECRET }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: python tools/upload-google-drive.py --output delivery/drive-delivery.json
+        run: |
+          python tools/upload-google-drive.py --artifact-kind apk --output delivery/drive-apk-delivery.json
+          python tools/upload-google-drive.py --artifact-kind pc --output delivery/drive-pc-delivery.json
 
       - name: Record private Drive links
         shell: pwsh
         run: |
-          $result = Get-Content delivery/drive-delivery.json -Raw | ConvertFrom-Json
           "### Private Google Drive delivery" | Out-File $env:GITHUB_STEP_SUMMARY -Append
-          foreach ($file in $result.files) {
-            "- [$($file.name)]($($file.url))" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+          foreach ($receipt in @('delivery/drive-apk-delivery.json', 'delivery/drive-pc-delivery.json')) {
+            $result = Get-Content $receipt -Raw | ConvertFrom-Json
+            foreach ($file in $result.files) {
+              "- [$($file.name)]($($file.url))" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+            }
           }
           "- Commit: ``$env:GITHUB_SHA``" | Out-File $env:GITHUB_STEP_SUMMARY -Append

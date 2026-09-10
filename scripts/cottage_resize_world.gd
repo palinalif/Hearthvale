@@ -64,14 +64,23 @@ static func handle_dimensions(original: Vector3, requested: Vector3, world_scale
 	return result
 
 func move_building(building_id: String, origin: Vector3, expected_revision: int) -> bool:
-	# Only translate the existing record. IDs, local anchors, suppressions,
+	var view := get_building(building_id)
+	if view.is_empty(): return false
+	var target: Transform3D = view["transform"]
+	target.origin = origin
+	return move_building_transform(building_id, target, expected_revision)
+
+func move_building_transform(building_id: String, target: Transform3D, expected_revision: int) -> bool:
+	# Transform the existing record atomically. IDs, local anchors, suppressions,
 	# material choices and all other cottages remain byte-for-byte unchanged.
-	if expected_revision != get_revision() or not origin.is_finite(): return false
+	if expected_revision != get_revision() or not target.origin.is_finite(): return false
 	var index := _building_index(building_id)
 	if index < 0: return false
 	var recipe: Dictionary = _document["buildings"][index]
 	var transform_data: Dictionary = recipe["transform"]
-	if _as_vec(transform_data["position"]).is_equal_approx(origin): return false
+	var encoded := _transform_from_transform(target, target.origin)
+	if not _valid_transform_data(encoded): return false
+	if _as_transform(transform_data).is_equal_approx(target): return false
 	var before: Dictionary = _copy(_document)
-	transform_data["position"] = _vec(origin)
+	recipe["transform"] = encoded
 	return _record_change(before)

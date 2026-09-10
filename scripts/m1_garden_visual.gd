@@ -4,10 +4,12 @@ class_name M1GardenVisual
 const Flora = preload("res://scripts/vegetation_mesh.gd")
 const State = preload("res://scripts/landscape_state.gd")
 const VEGETATION_WIND_SHADER = preload("res://shaders/vegetation_wind.gdshader")
-const PLANTING_TURN_COUNT := 4
-const TREE_WIND_STRENGTH := 0.16
-const FOLIAGE_WIND_STRENGTHS := [0.035, 0.025, 0.03, 0.04, 0.02, 0.035, 0.055, 0.025, 0.0, 0.0, 0.0]
-const MAX_WIND_STRENGTH := 0.16
+const TREE_ROTATION_STEP := PI * 0.5
+const TREE_TURN_COUNT := 4
+const FOLIAGE_TURN_COUNT := 4
+const TREE_WIND_STRENGTH := 0.18
+const FOLIAGE_WIND_STRENGTHS := [0.05, 0.045, 0.05, 0.055, 0.04, 0.05, 0.075, 0.045, 0.0, 0.0, 0.0]
+const MAX_WIND_STRENGTH := 0.18
 const PROP_TINTS: Array[Color] = [
 	Color(0.92, 0.97, 0.90),
 	Color(0.96, 0.92, 0.88),
@@ -46,8 +48,10 @@ func set_wind_enabled(enabled: bool) -> void:
 		material.set_shader_parameter("wind_strength", wind_strength(kind, variant) if wind_enabled else 0.0)
 
 func apply_records(records: Array) -> void:
-	# Quarter turns keep authored cells on-grid while breaking up repeated
-	# silhouettes. Per-instance colors vary foliage and rocks without extra draws.
+	# Trees return to quarter turns so their authored dense canopy views remain
+	# intact; arbitrary 15-degree yaw exposed intentional interior cavities.
+	# Foliage also keeps quarter turns, while per-instance colors vary foliage
+	# and rocks without extra draws.
 	var batches := {}
 	for record: Dictionary in records:
 		var kind := str(record["kind"]); var variant := posmod(int(record["seed"]), Flora.variant_count(kind))
@@ -87,13 +91,15 @@ func reset_records(records: Array) -> void:
 
 static func planting_rotation(record: Dictionary) -> Basis:
 	if not str(record.get("kind", "")) in ["tree", "foliage"]: return Basis.IDENTITY
-	return Basis(Vector3.UP, float(planting_turn(record)) * PI * 0.5)
+	var step := TREE_ROTATION_STEP if str(record.get("kind", "")) == "tree" else PI * 0.5
+	return Basis(Vector3.UP, float(planting_turn(record)) * step)
 
 static func planting_turn(record: Dictionary) -> int:
-	return posmod(_variation_hash(record), PLANTING_TURN_COUNT)
+	var count := TREE_TURN_COUNT if str(record.get("kind", "")) == "tree" else FOLIAGE_TURN_COUNT
+	return posmod(_variation_hash(record), count)
 
 static func prop_tint_slot(record: Dictionary) -> int:
-	return posmod(floori(float(_variation_hash(record)) / float(PLANTING_TURN_COUNT)), PROP_TINTS.size())
+	return posmod(floori(float(_variation_hash(record)) / float(FOLIAGE_TURN_COUNT)), PROP_TINTS.size())
 
 static func prop_instance_color(record: Dictionary) -> Color:
 	return PROP_TINTS[prop_tint_slot(record)] if str(record.get("kind", "")) in ["foliage", "rock"] else Color.WHITE

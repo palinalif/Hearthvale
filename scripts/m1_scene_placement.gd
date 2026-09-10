@@ -19,7 +19,23 @@ var building_placement_active := false
 var building_placement_source_id := ""
 var building_placement_origin := Vector3.ZERO
 var building_placement_target := Vector3.ZERO
+var building_placement_transform := Transform3D.IDENTITY
+var building_placement_revision := -1
+var building_placement_operation := ""
+var building_placement_design_id := ""
+var building_placement_wall_material_id := ""
+var building_placement_roof_material_id := ""
+var building_placement_previous_selection := ""
+var building_placement_valid := false
+var building_placement_reason := ""
+var building_rotation_snap := true
 var building_placement_ghost: Node3D
+
+const BUILDING_ROTATION_COARSE := deg_to_rad(15.0)
+const BUILDING_ROTATION_FINE := deg_to_rad(1.0)
+const BUILDING_WORLD_MIN := 0.25
+const BUILDING_WORLD_MAX := 47.75
+const BUILDING_OVERLAP_CLEARANCE := 0.125
 
 func _ready() -> void:
 	super._ready()
@@ -44,14 +60,23 @@ func _input(event: InputEvent) -> void:
 			return
 		if event.is_action_pressed("m1_precision"):
 			precision_mode = not precision_mode
-			_set_status("Cottage placement precision %s" % ("ON" if precision_mode else "OFF"))
+			_set_status("Home placement precision %s" % ("ON" if precision_mode else "OFF"))
+			get_viewport().set_input_as_handled()
+			return
+		if event.is_action_pressed("m1_cycle_left") or event.is_action_pressed("m1_cycle_right"):
+			_rotate_building_preview(-1 if event.is_action_pressed("m1_cycle_left") else 1)
+			get_viewport().set_input_as_handled()
+			return
+		if event.is_action_pressed("m1_height_up"):
+			building_rotation_snap = not building_rotation_snap
+			_set_status("Rotation snap %s" % ("ON" if building_rotation_snap else "OFF"))
 			get_viewport().set_input_as_handled()
 			return
 		if event.is_action_pressed("m1_pause"):
 			_cancel_building_placement()
 			super._input(event)
 			return
-		if event.is_action_pressed("m1_tools") or event.is_action_pressed("m1_view") or event.is_action_pressed("m1_cycle_left") or event.is_action_pressed("m1_cycle_right") or event.is_action_pressed("m1_undo") or event.is_action_pressed("m1_redo"):
+		if event.is_action_pressed("m1_tools") or event.is_action_pressed("m1_view") or event.is_action_pressed("m1_height_down") or event.is_action_pressed("m1_undo") or event.is_action_pressed("m1_redo"):
 			get_viewport().set_input_as_handled()
 			return
 	if view_context == "building" and detail_move_active and not menu_open and not tools_open and not detail_open:
@@ -69,8 +94,9 @@ func _tool_choice(choice: String) -> void:
 	if view_context == "building" and choice == "Duplicate cottage":
 		_begin_building_placement()
 		return
-	if view_context == "building" and choice in ["Add flower box", "Add shutter"]:
-		_begin_new_attachment("flower_box" if choice == "Add flower box" else "shutter")
+	if view_context == "building" and choice in ["Add window", "Add door", "Add flower box", "Add shutter"]:
+		var kinds := {"Add window": "window", "Add door": "door", "Add flower box": "flower_box", "Add shutter": "shutter"}
+		_begin_new_attachment(str(kinds[choice]))
 		return
 	super._tool_choice(choice)
 
@@ -97,7 +123,7 @@ func _read_camera_and_cursor(delta: float) -> void:
 	camera_distance = clampf(camera_distance - zoom * delta * 18.0, 8, 52)
 	cursor = building_placement_target
 	cottage_cursor = cursor
-	if building_placement_ghost: building_placement_ghost.set_preview_origin(building_placement_target)
+	_update_building_preview_transform()
 
 func _begin_building_placement() -> void:
 	if building_placement_active or detail_move_active or resize_active: return
@@ -106,9 +132,15 @@ func _begin_building_placement() -> void:
 	var transform_value = view.get("transform", Transform3D.IDENTITY)
 	if not transform_value is Transform3D: return
 	building_placement_active = true
+	building_placement_operation = "duplicate"
+	building_placement_design_id = ""
+	building_placement_previous_selection = selected_building_id
 	building_placement_source_id = selected_building_id
+	building_placement_revision = building_world.get_revision()
 	building_placement_origin = (transform_value as Transform3D).origin
-	building_placement_target = building_placement_origin + Vector3(4.0, 0.0, 4.0)
+	building_placement_target = building_placement_origin + Vector3(8.0, 0.0, 8.0)
+	building_placement_transform = transform_value as Transform3D
+	building_placement_transform.origin = building_placement_target
 	_clamp_building_placement()
 	_snap_building_placement_to_ground()
 	tools_open = false
@@ -116,60 +148,184 @@ func _begin_building_placement() -> void:
 	if tools_panel: tools_panel.visible = false
 	if building_placement_ghost:
 		building_placement_ghost.show_source(view, building_world.get_revision())
-		building_placement_ghost.set_preview_origin(building_placement_target)
+		_update_building_preview_transform()
 	cursor = building_placement_target
 	cottage_cursor = cursor
-	_set_status("Place cottage copy • left stick free place • A place / B cancel • L3 precision")
+	_set_status("Place home copy • left stick move • D-pad left/right rotate • A place / B cancel")
+
+func _begin_new_building_placement(design_id: String, wall_material_id: String = "", roof_material_id: String = "") -> void:
+	if building_placement_active or detail_move_active or resize_active: return
+	var original_cursor := cursor
+	var start := cursor
+	var selected: Dictionary = building_world.get_building(selected_building_id)
+	if not selected.is_empty() and selected.get("transform", null) is Transform3D:
+		start = (selected["transform"] as Transform3D).origin + Vector3(8.0, 0.0, 8.0)
+	var target := Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * BuildingWorldScript.MINIATURE_SCALE), start)
+	var preview: Dictionary = building_world.preview_home_design(design_id, target, wall_material_id, roof_material_id)
+	if preview.is_empty():
+		_set_status("That home design is unavailable")
+		return
+	building_placement_active = true
+	building_placement_operation = "new"
+	building_placement_design_id = design_id
+	building_placement_wall_material_id = str(preview.get("wall_material_id", ""))
+	building_placement_roof_material_id = str(preview.get("roof_material_id", ""))
+	building_placement_previous_selection = selected_building_id
+	building_placement_source_id = ""
+	building_placement_revision = building_world.get_revision()
+	building_placement_origin = original_cursor
+	building_placement_target = start
+	building_placement_transform = target
+	_clamp_building_placement()
+	_snap_building_placement_to_ground()
+	tools_open = false
+	detail_open = false
+	if tools_panel: tools_panel.visible = false
+	if building_placement_ghost:
+		building_placement_ghost.show_source(preview, building_world.get_revision())
+		_update_building_preview_transform()
+	cursor = building_placement_target
+	cottage_cursor = cursor
+	_set_status("Place %s • left stick move • D-pad rotate • A place / B cancel" % str(preview.get("name", "home")))
 
 func _clamp_building_placement() -> void:
-	var view: Dictionary = building_world.get_building(building_placement_source_id)
-	if view.is_empty(): return
-	var dims: Vector3 = view.get("dimensions", Vector3(18, 7, 14))
-	var transform_value = view.get("transform", Transform3D.IDENTITY)
-	var scale := Vector3.ONE
-	if transform_value is Transform3D: scale = (transform_value as Transform3D).basis.get_scale().abs()
-	var half_x := dims.x * scale.x * 0.5
-	var half_z := dims.z * scale.z * 0.5
-	building_placement_target.x = clampf(building_placement_target.x, half_x + 0.25, 48.0 - half_x - 0.25)
-	building_placement_target.z = clampf(building_placement_target.z, half_z + 0.25, 48.0 - half_z - 0.25)
+	# Keep the cursor in the editable world, but do not hide invalid footprint
+	# states by forcing the whole house inside the boundary.
+	building_placement_target.x = clampf(building_placement_target.x, 0.0, 48.0)
+	building_placement_target.z = clampf(building_placement_target.z, 0.0, 48.0)
 
 func _snap_building_placement_to_ground() -> void:
 	if not backend or not backend.has_method("sample_surface_plane"): return
 	var sample: Dictionary = backend.sample_surface_plane(building_placement_target + Vector3.UP * 2.0, Vector3.UP, 8.0)
 	if bool(sample.get("valid", false)) and sample.get("point", null) is Vector3:
 		building_placement_target.y = (sample["point"] as Vector3).y
+	_update_building_preview_transform()
+
+func _rotate_building_preview(direction: int) -> void:
+	if not building_placement_active or direction == 0: return
+	var scale := building_placement_transform.basis.get_scale().abs()
+	var yaw := building_placement_transform.basis.get_euler().y
+	var step := BUILDING_ROTATION_FINE if precision_mode or not building_rotation_snap else BUILDING_ROTATION_COARSE
+	yaw += step * signi(direction)
+	if building_rotation_snap and not precision_mode:
+		yaw = snappedf(yaw, BUILDING_ROTATION_COARSE)
+	building_placement_transform.basis = Basis(Vector3.UP, yaw).scaled(scale)
+	_update_building_preview_transform()
+	_set_status("Rotation %.0f° • %s%s" % [rad_to_deg(yaw), "valid" if building_placement_valid else building_placement_reason, " • SNAP" if building_rotation_snap else ""])
+
+func _update_building_preview_transform() -> void:
+	if not building_placement_active: return
+	building_placement_transform.origin = building_placement_target
+	_update_building_placement_validity()
+	if building_placement_ghost:
+		building_placement_ghost.set_preview_transform(building_placement_transform)
+
+func _update_building_placement_validity() -> void:
+	building_placement_valid = false
+	building_placement_reason = "Placement unavailable"
+	if building_world.get_revision() != building_placement_revision:
+		building_placement_reason = "Home changed; restart placement"
+		return
+	var source: Dictionary
+	if building_placement_operation == "new":
+		source = building_world.preview_home_design(building_placement_design_id, building_placement_transform, building_placement_wall_material_id, building_placement_roof_material_id)
+	else:
+		source = building_world.get_building(building_placement_source_id)
+	if source.is_empty():
+		building_placement_reason = "Home design unavailable" if building_placement_operation == "new" else "Home no longer exists"
+		return
+	var footprint := _building_footprint(building_placement_transform, source.get("dimensions", Vector3.ZERO))
+	if footprint.is_empty(): return
+	var bounds: Vector2 = footprint["aabb_half"]
+	if building_placement_target.x - bounds.x < BUILDING_WORLD_MIN or building_placement_target.x + bounds.x > BUILDING_WORLD_MAX or building_placement_target.z - bounds.y < BUILDING_WORLD_MIN or building_placement_target.z + bounds.y > BUILDING_WORLD_MAX:
+		building_placement_reason = "Outside editable world"
+		return
+	for other in building_world.get_buildings():
+		var other_id := str(other.get("id", ""))
+		if building_placement_operation == "move" and other_id == building_placement_source_id: continue
+		var other_footprint := _building_footprint(other.get("transform", Transform3D.IDENTITY), other.get("dimensions", Vector3.ZERO))
+		if _footprints_overlap(footprint, other_footprint):
+			building_placement_reason = "Overlaps %s" % str(other.get("name", "another home"))
+			return
+	building_placement_valid = true
+	building_placement_reason = "Valid placement"
+
+func _building_footprint(transform_value: Transform3D, dimensions: Vector3) -> Dictionary:
+	if not dimensions.is_finite() or dimensions.x <= 0.0 or dimensions.z <= 0.0: return {}
+	var axis_x := Vector2(transform_value.basis.x.x, transform_value.basis.x.z)
+	var axis_z := Vector2(transform_value.basis.z.x, transform_value.basis.z.z)
+	var half_x := axis_x.length() * dimensions.x * 0.5
+	var half_z := axis_z.length() * dimensions.z * 0.5
+	if half_x <= 0.0 or half_z <= 0.0: return {}
+	axis_x = axis_x.normalized()
+	axis_z = axis_z.normalized()
+	return {
+		"center": Vector2(transform_value.origin.x, transform_value.origin.z),
+		"axes": [axis_x, axis_z],
+		"half": Vector2(half_x, half_z),
+		"aabb_half": Vector2(absf(axis_x.x) * half_x + absf(axis_z.x) * half_z, absf(axis_x.y) * half_x + absf(axis_z.y) * half_z),
+	}
+
+func _footprints_overlap(left: Dictionary, right: Dictionary) -> bool:
+	if left.is_empty() or right.is_empty(): return false
+	var delta: Vector2 = right["center"] - left["center"]
+	var left_axes: Array = left["axes"]
+	var right_axes: Array = right["axes"]
+	var left_half: Vector2 = left["half"]
+	var right_half: Vector2 = right["half"]
+	for axis_value in [left_axes[0], left_axes[1], right_axes[0], right_axes[1]]:
+		var axis: Vector2 = axis_value
+		var left_radius := absf(axis.dot(left_axes[0])) * left_half.x + absf(axis.dot(left_axes[1])) * left_half.y
+		var right_radius := absf(axis.dot(right_axes[0])) * right_half.x + absf(axis.dot(right_axes[1])) * right_half.y
+		if absf(delta.dot(axis)) >= left_radius + right_radius + BUILDING_OVERLAP_CLEARANCE: return false
+	return true
 
 func _commit_building_placement() -> bool:
 	if not building_placement_active: return false
-	var offset := building_placement_target - building_placement_origin
-	var duplicate_id: String = building_world.duplicate_building(building_placement_source_id, offset)
-	var ok := not duplicate_id.is_empty()
+	_update_building_placement_validity()
+	if not building_placement_valid:
+		_set_status("Cannot place home: %s" % building_placement_reason)
+		return false
+	var placed_id: String
+	if building_placement_operation == "new": placed_id = building_world.create_home_at(building_placement_design_id, building_placement_transform, building_placement_revision, building_placement_wall_material_id, building_placement_roof_material_id)
+	else: placed_id = building_world.duplicate_building_at(building_placement_source_id, building_placement_transform, building_placement_revision)
+	var was_new := building_placement_operation == "new"
+	var ok := not placed_id.is_empty()
 	if ok:
-		selected_building_id = duplicate_id
+		selected_building_id = placed_id
 		selected_detail_id = ""
 		selected_surface_id = ""
 		_record_history("building")
 	_clear_building_placement()
-	_set_status("Cottage copy placed" if ok else "Duplicate rejected")
+	_set_status(("New home placed" if was_new else "Cottage copy placed") if ok else "Home placement rejected")
 	super._update_presentation()
 	return ok
 
 func _cancel_building_placement() -> void:
 	if not building_placement_active: return
-	var source_id := building_placement_source_id
+	var source_id := building_placement_previous_selection
 	var source_origin := building_placement_origin
 	_clear_building_placement()
 	selected_building_id = source_id
 	cursor = source_origin
 	cottage_cursor = cursor
-	_set_status("Cottage duplication cancelled")
+	_set_status("Home placement cancelled")
 	super._update_presentation()
 
 func _clear_building_placement() -> void:
 	building_placement_active = false
+	building_placement_operation = ""
+	building_placement_design_id = ""
+	building_placement_wall_material_id = ""
+	building_placement_roof_material_id = ""
+	building_placement_previous_selection = ""
 	building_placement_source_id = ""
+	building_placement_revision = -1
 	building_placement_origin = Vector3.ZERO
 	building_placement_target = Vector3.ZERO
+	building_placement_transform = Transform3D.IDENTITY
+	building_placement_valid = false
+	building_placement_reason = ""
 	if building_placement_ghost: building_placement_ghost.hide_preview()
 
 func _begin_detail_move() -> void:
@@ -177,7 +333,7 @@ func _begin_detail_move() -> void:
 	if detail_move_active: detail_move_original_surface_id = detail_move_surface_id
 
 func _begin_new_attachment(kind: String) -> void:
-	if detail_move_active or resize_active or kind not in ["flower_box", "shutter"]: return
+	if detail_move_active or resize_active or kind not in ["window", "door", "flower_box", "shutter"]: return
 	var view: Dictionary = building_world.get_building(selected_building_id)
 	if view.is_empty(): return
 	var walls := WallPlacement.wall_ids(view)
@@ -202,17 +358,21 @@ func _begin_new_attachment(kind: String) -> void:
 	var dims: Vector3 = view.get("dimensions", Vector3(18, 7, 14))
 	var start := Vector3(0, clampf(dims.y * 0.45, 1.5, dims.y - 1.0), 0)
 	if selected_position is Vector3: start = selected_position
-	if kind == "flower_box" and selected_position is Vector3: start.y -= 1.8
+	if kind == "door": start.y = 2.0
+	elif kind == "flower_box" and selected_position is Vector3: start.y -= 1.8
 	elif kind == "shutter" and selected_position is Vector3:
 		var support := WallPlacement.surface(view, surface_id)
 		if str(support.get("orientation", "front")) in ["front", "back"]: start.x += 2.2
 		else: start.z += 2.2
-	var snapped := WallPlacement.clamp_to_wall(view, surface_id, start, WallPlacement.footprint(kind, kind + "_wood"))
+	var asset_id := _default_attachment_asset(kind, view)
+	var half := WallPlacement.footprint(kind, asset_id)
+	var snapped := WallPlacement.clamp_to_wall(view, surface_id, start, half)
+	if kind in ["window", "door"]: snapped = WallPlacement.nearest_available(view, "", surface_id, start, half)
 	if snapped.is_empty():
 		_set_status("Attachment does not fit this wall")
 		return
 	placement_kind = kind
-	placement_asset_id = kind + "_wood"
+	placement_asset_id = asset_id
 	selected_detail_id = ""
 	selected_surface_id = surface_id
 	detail_move_surface_id = surface_id
@@ -225,6 +385,14 @@ func _begin_new_attachment(kind: String) -> void:
 	if tools_panel: tools_panel.visible = false
 	_set_status("Place %s • left stick free on wall • D-pad ←/→ wall • A place / B cancel" % kind.replace("_", " "))
 	_update_presentation()
+
+func _default_attachment_asset(kind: String, view: Dictionary) -> String:
+	var style_id := str(view.get("style_id", "riverside_cottage"))
+	if kind == "window":
+		return {"woodland_lodge": "window_lodge", "village_gable": "window_tudor"}.get(style_id, "window_wood")
+	if kind == "door":
+		return {"woodland_lodge": "door_lodge", "village_gable": "door_tudor"}.get(style_id, "door_timber")
+	return kind + "_wood"
 
 func _read_detail_move(delta: float) -> void:
 	if placement_kind.is_empty():
@@ -349,9 +517,9 @@ func _update_presentation() -> void:
 	if building_placement_active:
 		if building_placement_ghost:
 			building_placement_ghost.visible = true
-			building_placement_ghost.set_preview_origin(building_placement_target)
+			building_placement_ghost.set_preview_transform(building_placement_transform)
 		if target_label:
-			target_label.text = "Place cottage copy (%.1f, %.1f, %.1f) • A place  B cancel  L3 precision" % [building_placement_target.x, building_placement_target.y, building_placement_target.z]
+			target_label.text = "%s • %s • D-pad left/right rotate • D-pad up snap • A place  B cancel" % ["Place home" if building_placement_operation == "duplicate" else "Move / rotate home", building_placement_reason]
 		_update_resize_handles()
 		return
 	if building_placement_ghost: building_placement_ghost.hide_preview()

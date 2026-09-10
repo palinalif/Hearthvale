@@ -77,6 +77,39 @@ func _run() -> void:
 	for index in 24:
 		variants[visual._craft_variant({"id": "detail-%d" % index, "asset_id": "window_wood"})] = true
 	_check(variants.size() == 3, "stable detail identities reach all craft choices")
+	_check(visual._craft_variant({"id": "same", "asset_id": "shutter_boarded"}) == 0, "boarded shutter selects its explicit craft")
+	_check(visual._craft_variant({"id": "same", "asset_id": "shutter_louvered"}) == 1, "louvered shutter selects its explicit craft")
+	_check(visual._craft_variant({"id": "same", "asset_id": "shutter_braced"}) == 2, "braced shutter selects its explicit craft")
+	_check(visual._craft_variant({"id": "same", "asset_id": "flower_box_timber"}) == 0, "timber planter selects its explicit craft")
+	_check(visual._craft_variant({"id": "same", "asset_id": "flower_box_bracketed"}) == 1, "bracketed planter selects its explicit craft")
+	_check(visual._craft_variant({"id": "same", "asset_id": "flower_box_woven"}) == 2, "woven planter selects its explicit craft")
+	var boarded := visual._shutter_pieces(0, 0.75, 3.0, cell, 0)
+	var louvered := visual._shutter_pieces(0, 0.75, 3.0, cell, 1)
+	var braced := visual._shutter_pieces(0, 0.75, 3.0, cell, 2)
+	_check(boarded != louvered and louvered != braced and boarded != braced, "selectable shutter variants have distinct geometry")
+	var window_id := ""
+	var door_id := ""
+	for detail in view.get("details", []):
+		if window_id.is_empty() and str(detail.get("kind", "")) == "window": window_id = str(detail.get("id", ""))
+		if door_id.is_empty() and str(detail.get("kind", "")) == "door": door_id = str(detail.get("id", ""))
+	var window_pairs := [["window_wood", "window_cottage_diamond"], ["window_lodge", "window_lodge_cross"], ["window_tudor", "window_tudor_tall"]]
+	for pair in window_pairs:
+		var signatures := []
+		for asset_id in pair:
+			for index in view["details"].size():
+				if str(view["details"][index].get("id", "")) == window_id: view["details"][index]["asset_id"] = asset_id
+			visual.apply_building(view, 1)
+			signatures.append(visual.uploads.get("Joinery_" + window_id, {}).duplicate(true))
+		_check(signatures[0] != signatures[1], "%s and %s window joinery differ" % pair)
+	var door_pairs := [["door_timber", "door_cottage_stable"], ["door_lodge", "door_lodge_split"], ["door_tudor", "door_tudor_arch"]]
+	for pair in door_pairs:
+		var signatures := []
+		for asset_id in pair:
+			for index in view["details"].size():
+				if str(view["details"][index].get("id", "")) == door_id: view["details"][index]["asset_id"] = asset_id
+			visual.apply_building(view, 1)
+			signatures.append(visual.uploads.get("DoorJoinery_" + door_id, {}).duplicate(true))
+		_check(signatures[0] != signatures[1], "%s and %s door joinery differ" % pair)
 	visual.free()
 	print(JSON.stringify({"ok": failures == 0, "checks": checks, "failures": failures, "detail_unit": Grid.COTTAGE_DETAIL_UNIT}))
 	quit(1 if failures else 0)

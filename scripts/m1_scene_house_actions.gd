@@ -154,17 +154,19 @@ func _begin_house_move() -> void:
 	super._begin_building_placement()
 	if not building_placement_active: return
 	_moving_house = true
+	building_placement_operation = "move"
 	building_placement_target = building_placement_origin
+	building_placement_transform = source["transform"]
 	_house_move_raw = building_placement_target
 	cursor = building_placement_target
 	cottage_cursor = cursor
-	building_placement_ghost.set_preview_origin(building_placement_target)
+	_update_building_preview_transform()
 	_colour_view(source, building_placement_ghost)
 	building_placement_ghost._apply_translucency(building_placement_ghost)
 	_moving_visual = cottage_visuals.get(selected_building_id)
 	if is_instance_valid(_moving_visual): _moving_visual.visible = false
 	_clear_hover()
-	_set_status("Move house; A place / B restore original position")
+	_set_status("Move / rotate house; D-pad left/right rotate • A place / B restore")
 	_update_resize_handles()
 	_refresh_controller_hud()
 
@@ -183,31 +185,23 @@ func _read_camera_and_cursor(delta: float) -> void:
 			building_placement_target[axis] = building_placement_origin[axis] + snappedf(_house_move_raw[axis] - building_placement_origin[axis], 0.125)
 		cursor = building_placement_target
 		cottage_cursor = cursor
-		building_placement_ghost.set_preview_origin(building_placement_target)
+		_update_building_preview_transform()
 
 func _clamp_building_placement() -> void:
-	if not _moving_house:
-		super._clamp_building_placement()
-		return
-	var view: Dictionary = building_world.get_building(building_placement_source_id)
-	if view.is_empty(): return
-	var transform_value: Transform3D = view["transform"]
-	var dimensions: Vector3 = view["dimensions"]
-	var extent := (transform_value.basis.x.abs() * dimensions.x + transform_value.basis.z.abs() * dimensions.z) * 0.5
-	for axis in [0, 2]:
-		var origin := building_placement_origin[axis]
-		var low := origin + ceilf((extent[axis] + 0.25 - origin) / 0.125) * 0.125
-		var high := origin + floorf((48.0 - extent[axis] - 0.25 - origin) / 0.125) * 0.125
-		building_placement_target[axis] = clampf(building_placement_target[axis], low, high)
+	super._clamp_building_placement()
 
 func _commit_building_placement() -> bool:
 	if not _moving_house: return super._commit_building_placement()
 	var id := building_placement_source_id
-	var origin := building_placement_target
+	_update_building_placement_validity()
+	if not building_placement_valid:
+		_set_status("Cannot move home: %s" % building_placement_reason)
+		return false
+	var target := building_placement_transform
 	_moving_house = false
 	_clear_building_placement()
 	selected_building_id = id
-	var ok: bool = building_world.move_building(id, origin, _house_move_revision)
+	var ok: bool = building_world.move_building_transform(id, target, _house_move_revision)
 	if ok: _record_history("building")
 	_finish_house_move()
 	_set_status("House moved" if ok else "No house move committed")
@@ -263,9 +257,9 @@ func _refresh_controller_hud() -> void:
 		_tool_meta.text = "Choose what to change"
 		_set_prompts([["A", "Choose"], ["B", "Back"], ["D-PAD", "Navigate"], ["RS", "Orbit"]])
 	elif _moving_house:
-		_tool_name.text = "Move house"
-		_tool_meta.text = "Moving the original, not a copy"
-		_set_prompts([["A", "Place"], ["B", "Restore"], ["LS", "Move"], ["RS", "Orbit"], ["LT/RT", "Zoom"], ["L3", "Precision"]])
+		_tool_name.text = "Move / rotate house"
+		_tool_meta.text = "%s%s" % [building_placement_reason, " • PRECISION" if precision_mode else ""]
+		_set_prompts([["A", "Place"], ["B", "Restore"], ["LS", "Move"], ["◀▶", "Rotate"], ["▲", "Snap"], ["L3", "Precision"]])
 	elif _idle_building():
 		if _resize_selecting:
 			_set_prompts([["A", "Grab handle"], ["B", "Finish resizing"], ["LS", "Point"], ["RS", "Orbit"], ["LT/RT", "Zoom"]] if not _handle_hover.is_empty() else [["B", "Finish resizing"], ["LS", "Point at handles"], ["RS", "Orbit"], ["LT/RT", "Zoom"]])

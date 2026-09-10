@@ -9,6 +9,12 @@ signal changed
 const SCHEMA_VERSION := 1
 const GENERATOR_VERSION := "m1-cottage-v1"
 const STYLE_ID := "riverside_cottage"
+const HOME_DESIGN_ORDER: Array[String] = ["riverside_cottage", "woodland_lodge", "village_gable"]
+const HOME_DESIGNS := {
+	"riverside_cottage": {"name": "Riverside Cottage", "shape_id": "classic_gable", "style_id": "riverside_cottage", "summary": "Balanced gable • stone and plaster", "dimensions": Vector3(18.0, 7.0, 14.0), "roof_profile": "gentle_gable", "wall_material_id": "stone_plaster", "roof_material_id": "terracotta", "window_asset_id": "window_wood", "door_asset_id": "door_timber"},
+	"woodland_lodge": {"name": "Woodland Lodge", "shape_id": "longhouse", "style_id": "woodland_lodge", "summary": "Broad low lodge • stacked log walls", "dimensions": Vector3(22.0, 6.0, 11.0), "roof_profile": "swept_gable", "wall_material_id": "timber", "roof_material_id": "moss_tile", "window_asset_id": "window_lodge", "door_asset_id": "door_lodge"},
+	"village_gable": {"name": "Village Gable", "shape_id": "tall_gable", "style_id": "village_gable", "summary": "Tall Tudor home • steep slate roof", "dimensions": Vector3(12.0, 9.0, 16.0), "roof_profile": "steep_gable", "wall_material_id": "chalk_white", "roof_material_id": "slate", "window_asset_id": "window_tudor", "door_asset_id": "door_tudor"},
+}
 const HISTORY_LIMIT := 50
 const HISTORY_BYTES_LIMIT := 8 * 1024 * 1024
 const DOCUMENT_BYTES_LIMIT := 256 * 1024
@@ -86,6 +92,46 @@ func get_building(building_id: String) -> Dictionary:
 	var index := _building_index(building_id)
 	if index < 0: return {}
 	return _resolved_building((_document["buildings"] as Array)[index] as Dictionary)
+
+static func home_catalogue() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for design_id in HOME_DESIGN_ORDER:
+		var design: Dictionary = (HOME_DESIGNS[design_id] as Dictionary).duplicate(true)
+		design["id"] = design_id
+		result.append(design)
+	return result
+
+func preview_home_design(design_id: String, target: Transform3D, wall_material_id: String = "", roof_material_id: String = "") -> Dictionary:
+	if not HOME_DESIGNS.has(design_id) or not target.origin.is_finite(): return {}
+	var design: Dictionary = HOME_DESIGNS[design_id]
+	var building := _new_cottage("preview-" + design_id, design["dimensions"], target.origin, 1042)
+	_apply_home_design(building, design)
+	if not wall_material_id.is_empty(): _apply_wall_material(building, wall_material_id)
+	if not roof_material_id.is_empty(): _apply_roof_material(building, roof_material_id)
+	building["transform"] = _transform_from_transform(target, target.origin)
+	return _resolved_building(building)
+
+func create_home_at(design_id: String, target: Transform3D, expected_revision: int = -1, wall_material_id: String = "", roof_material_id: String = "") -> String:
+	if expected_revision >= 0 and expected_revision != get_revision(): return ""
+	if not HOME_DESIGNS.has(design_id) or not target.origin.is_finite() or not _valid_transform_data(_transform_from_transform(target, target.origin)): return ""
+	if (_document["buildings"] as Array).size() >= MAX_BUILDINGS: return ""
+	var design: Dictionary = HOME_DESIGNS[design_id]
+	var before := _copy(_document) as Dictionary
+	var new_id := _allocate_id("building")
+	var building := _new_cottage(new_id, design["dimensions"], target.origin, 1042 + _next_id * 37)
+	_apply_home_design(building, design)
+	if not wall_material_id.is_empty(): _apply_wall_material(building, wall_material_id)
+	if not roof_material_id.is_empty(): _apply_roof_material(building, roof_material_id)
+	building["transform"] = _transform_from_transform(target, target.origin)
+	_freshen_home_ids(building)
+	var total_details := (building.get("details", []) as Array).size()
+	for building_value in _document.get("buildings", []): total_details += ((building_value as Dictionary).get("details", []) as Array).size()
+	if total_details > MAX_DETAILS:
+		_document = before
+		return ""
+	(_document["buildings"] as Array).append(building)
+	if not _record_change(before): return ""
+	return new_id
 
 func resize(building_id: String, dimensions: Vector3) -> bool:
 	if not _valid_dimensions(dimensions): return false
@@ -268,18 +314,40 @@ func delete_surface(building_id: String, surface_id: String) -> bool:
 	return _record_change(before)
 
 func set_material(building_id: String, material_id: String) -> bool:
+	return set_wall_material(building_id, material_id)
+
+func set_wall_material(building_id: String, material_id: String) -> bool:
 	if material_id.is_empty(): return false
 	var index := _building_index(building_id)
 	if index < 0: return false
 	var before := _copy(_document) as Dictionary
 	var buildings: Array = _document["buildings"]
 	var building: Dictionary = buildings[index]
-	building["material_id"] = material_id
-	building["material_overrides"] = {"shell": material_id}
+	_apply_wall_material(building, material_id)
+	buildings[index] = building
+	return _record_change(before)
+
+func set_roof_material(building_id: String, material_id: String) -> bool:
+	if material_id.is_empty(): return false
+	var index := _building_index(building_id)
+	if index < 0: return false
+	var before := _copy(_document) as Dictionary
+	var buildings: Array = _document["buildings"]
+	var building: Dictionary = buildings[index]
+	_apply_roof_material(building, material_id)
 	buildings[index] = building
 	return _record_change(before)
 
 func duplicate_building(building_id: String, offset: Vector3 = Vector3(4.0, 0.0, 4.0)) -> String:
+	var source := get_building(building_id)
+	if source.is_empty(): return ""
+	var target: Transform3D = source["transform"]
+	target.origin += offset
+	return duplicate_building_at(building_id, target)
+
+func duplicate_building_at(building_id: String, target: Transform3D, expected_revision: int = -1) -> String:
+	if expected_revision >= 0 and expected_revision != get_revision(): return ""
+	if not target.origin.is_finite() or not _valid_transform_data(_transform_from_transform(target, target.origin)): return ""
 	var index := _building_index(building_id)
 	if index < 0 or (_document["buildings"] as Array).size() >= MAX_BUILDINGS: return ""
 	var before := _copy(_document) as Dictionary
@@ -292,8 +360,7 @@ func duplicate_building(building_id: String, offset: Vector3 = Vector3(4.0, 0.0,
 	var new_id := _allocate_id("building")
 	copy["id"] = new_id
 	copy["name"] = str(copy.get("name", "Cottage")) + " Copy"
-	var copy_transform := _as_transform(copy.get("transform", {}))
-	copy["transform"] = _transform_from_transform(copy_transform, copy_transform.origin + offset)
+	copy["transform"] = _transform_from_transform(target, target.origin)
 	for surface_index in (copy["surfaces"] as Array).size():
 		var surface: Dictionary = (copy["surfaces"] as Array)[surface_index]
 		var old_surface_id := str(surface["id"])
@@ -379,10 +446,76 @@ func _new_cottage(building_id: String, dimensions: Vector3, position: Vector3, s
 	for index in 3:
 		details.append(_window("window-back-%d" % index, "wall-back", 0.18 + float(index) * 0.32, 0.48))
 	details.append(_door("door-left-0", "wall-left", dimensions))
-	var building := {"id": building_id, "name": "Riverside Cottage", "schema_version": SCHEMA_VERSION, "generator_version": GENERATOR_VERSION, "dimensions": _vec(dimensions), "transform": _transform(position, MINIATURE_SCALE), "seed": seed, "style_id": STYLE_ID, "roof_profile": "gabled", "material_id": "stone_plaster", "material_overrides": {}, "surfaces": surfaces, "details": details, "automatic_defaults": [], "overrides": {}, "exclusions": [], "modified_locked": [], "suppressed": [], "manual_attachments": []}
+	var building := {"id": building_id, "name": "Riverside Cottage", "schema_version": SCHEMA_VERSION, "generator_version": GENERATOR_VERSION, "dimensions": _vec(dimensions), "transform": _transform(position, MINIATURE_SCALE), "seed": seed, "shape_id": "classic_gable", "style_id": STYLE_ID, "roof_profile": "gentle_gable", "material_id": "stone_plaster", "wall_material_id": "stone_plaster", "roof_material_id": "terracotta", "material_overrides": {"shell": "stone_plaster", "roof": "terracotta"}, "surfaces": surfaces, "details": details, "automatic_defaults": [], "overrides": {}, "exclusions": [], "modified_locked": [], "suppressed": [], "manual_attachments": []}
 	_reflow_automatic_windows(building)
 	_refresh_buckets(building)
 	return building
+
+func _apply_home_design(building: Dictionary, design: Dictionary) -> void:
+	building["name"] = str(design["name"])
+	building["dimensions"] = _vec(design["dimensions"])
+	building["shape_id"] = str(design["shape_id"])
+	building["style_id"] = str(design["style_id"])
+	building["roof_profile"] = str(design["roof_profile"])
+	building["material_id"] = str(design["wall_material_id"])
+	building["wall_material_id"] = str(design["wall_material_id"])
+	building["roof_material_id"] = str(design["roof_material_id"])
+	building["material_overrides"] = {"shell": building["wall_material_id"], "roof": building["roof_material_id"]}
+	var window_asset := str(design.get("window_asset_id", "window_wood"))
+	var door_asset := str(design.get("door_asset_id", "door_timber"))
+	for detail_index in (building["details"] as Array).size():
+		var detail: Dictionary = (building["details"] as Array)[detail_index]
+		if not bool(detail.get("generated", false)) or str(detail.get("state", "")) != "automatic": continue
+		var asset := window_asset if str(detail.get("kind", "")) == "window" else door_asset if str(detail.get("kind", "")) == "door" else ""
+		if asset.is_empty(): continue
+		detail["asset_id"] = asset
+		var default_record = detail.get("default", null)
+		if default_record is Dictionary:
+			(default_record as Dictionary)["asset_id"] = asset
+			detail["default"] = default_record
+		(building["details"] as Array)[detail_index] = detail
+	_reflow_automatic_windows(building)
+	_refresh_buckets(building)
+
+func _apply_wall_material(building: Dictionary, material_id: String) -> void:
+	building["material_id"] = material_id
+	building["wall_material_id"] = material_id
+	var material_overrides: Dictionary = building.get("material_overrides", {})
+	material_overrides["shell"] = material_id
+	building["material_overrides"] = material_overrides
+
+func _apply_roof_material(building: Dictionary, material_id: String) -> void:
+	building["roof_material_id"] = material_id
+	var material_overrides: Dictionary = building.get("material_overrides", {})
+	material_overrides["roof"] = material_id
+	building["material_overrides"] = material_overrides
+
+func _freshen_home_ids(building: Dictionary) -> void:
+	var id_map := {}
+	for surface_index in (building["surfaces"] as Array).size():
+		var surface: Dictionary = (building["surfaces"] as Array)[surface_index]
+		var old_surface_id := str(surface["id"])
+		var fresh_surface_id := _allocate_id("surface")
+		id_map[old_surface_id] = fresh_surface_id
+		surface["id"] = fresh_surface_id
+		(building["surfaces"] as Array)[surface_index] = surface
+	for detail_index in (building["details"] as Array).size():
+		var detail: Dictionary = (building["details"] as Array)[detail_index]
+		var fresh_detail_id := _allocate_id("detail")
+		detail["id"] = fresh_detail_id
+		var anchor: Dictionary = detail.get("anchor", {})
+		anchor["surface_id"] = id_map.get(str(anchor.get("surface_id", "")), anchor.get("surface_id", ""))
+		detail["anchor"] = anchor
+		var original_default = detail.get("default", null)
+		if original_default is Dictionary:
+			var remapped_default: Dictionary = _copy(original_default)
+			remapped_default["id"] = fresh_detail_id
+			var default_anchor: Dictionary = remapped_default.get("anchor", {})
+			default_anchor["surface_id"] = id_map.get(str(default_anchor.get("surface_id", "")), default_anchor.get("surface_id", ""))
+			remapped_default["anchor"] = default_anchor
+			detail["default"] = remapped_default
+		(building["details"] as Array)[detail_index] = detail
+	_refresh_buckets(building)
 
 ## Slots are persistent recipe metadata, never attachment identities. Dormant
 ## slots keep their IDs and exclusions, so shrink/grow cannot resurrect a
@@ -471,6 +604,9 @@ func _resolved_building(building: Dictionary) -> Dictionary:
 	var result: Dictionary = _copy(building)
 	result["dimensions"] = _as_vec(building.get("dimensions", [0, 0, 0]))
 	result["transform"] = _as_transform(building.get("transform", {}))
+	result["shape_id"] = str(building.get("shape_id", "classic_gable"))
+	result["wall_material_id"] = str(building.get("wall_material_id", building.get("material_id", "stone_plaster")))
+	result["roof_material_id"] = str(building.get("roof_material_id", "terracotta"))
 	result["details"] = _resolved_details(building)
 	return result
 
@@ -690,6 +826,8 @@ func _validate_document(document: Dictionary) -> bool:
 		var dimensions = building.get("dimensions", null)
 		if not _valid_vec_data(dimensions) or not _valid_transform_data(building.get("transform", null)): return false
 		if not _valid_dimensions(_as_vec(dimensions)): return false
+		for field in ["shape_id", "style_id", "roof_profile", "material_id", "wall_material_id", "roof_material_id"]:
+			if building.has(field) and str(building[field]).is_empty(): return false
 		var surfaces = building.get("surfaces", null)
 		if not surfaces is Array or (surfaces as Array).size() > MAX_SURFACES: return false
 		var surface_ids := {}

@@ -299,7 +299,7 @@ func _update_action_buttons() -> void:
 	if _tool_buttons.has("Close"): (_tool_buttons["Close"] as Button).text = "Close"
 	if not _context_actions_open: return
 	var allowed := ["Move selected window", "Suppress / restore", "Close"]
-	if hovered_detail_kind == "window": allowed.insert(1, "Replace selected")
+	if hovered_detail_kind in ["window", "door"]: allowed.insert(1, "Replace selected")
 	for key in _tool_buttons.keys():
 		var button := _tool_buttons[key] as Button
 		button.visible = str(key) in allowed

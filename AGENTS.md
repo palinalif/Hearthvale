@@ -2,9 +2,9 @@
 
 ## Authority and scope
 
-Personal cozy voxel town-builder for AYN Thor Max. The user directs art and playtests; agents implement and report evidence. Implement approved M1 only: one editable stretchable cottage, continuous terrain sculpting and its small riverbank scene. No M2, villagers, expanded building catalogue, economy or railway systems. M2 is planned to add several home shapes and styles, separate wall/roof material customisation, and controller-first free placement and rotation, but that plan does not authorize implementation. Multi-storey generation remains an unscheduled backlog idea. The user's new acceptance changes take precedence; do not invent them.
+Personal cozy voxel town-builder for AYN Thor Max. The user directs art and playtests; agents implement and report evidence. M1 is complete and M2 is active under `tasks/M2-hamlet-building.md`. Implement the residential hamlet scope: several home shapes/styles, separate wall/roof materials, controller-first free placement and rotation, and the bounded hamlet-composition tools in that ticket. Do not add villagers, autonomous activities, multi-storey generation, economy or railway systems. The user's new acceptance changes take precedence; do not invent them.
 
-Start with `HANDOFF.md` and the user's current request. Read relevant sections of `tasks/M1-editable-cottage.md`, `tasks/M1-terrain-sculpting.md`, `tasks/M1-playtest-iteration-2.md` and `docs/design.md` once per workstream. Do not load historical reports or the whole repository by default.
+Start with `HANDOFF.md`, `tasks/M2-hamlet-building.md`, and the user's current request. Read the relevant M1 ticket only when changing an inherited contract, plus relevant sections of `docs/design.md` once per workstream. Do not load historical reports or the whole repository by default.
 
 ## Non-negotiable contracts
 
@@ -35,4 +35,4 @@ Use pinned dependencies and matching MCP documentation. MCP is development-only 
 
 Future debug uploads to the user's Google Drive are authorized when tools/destination are available: versioned filenames, preserve existing files, verify upload and return link; no public sharing. Check current availability rather than trusting an old connection report.
 
-Handoff must include actual tests/failures, versions, artifacts and remaining work. Desktop is not Thor evidence; unavailable checks are **not run**. Visual approval belongs to the user. M0 evidence gaps remain open; never declare M1 complete without its required evidence. Stop before M2.
+Handoff must include actual tests/failures, versions, artifacts and remaining work. Desktop is not Thor evidence; unavailable checks are **not run**. Visual approval belongs to the user. Preserve the accepted M1 baseline while progressing only the active M2 ticket.

@@ -1,5 +1,6 @@
 extends SceneTree
 ## Physical accept/cancel/mode events reach the complete exported scene.
+const PCInputScene = preload("res://scripts/m2_scene_pc_input.gd")
 var scene: Node
 var checks := 0
 var failures := 0
@@ -62,7 +63,7 @@ func _run() -> void:
 	check(scene._player_restored, "complete native scene ready")
 	if not scene._player_restored: _finish(); return
 	scene.set_process(false)
-	check(scene.get_script() == preload("res://scripts/m1_scene_detail_resize.gd"), "APK scene uses house and detail resize layers")
+	check(scene is PCInputScene, "exported scene retains inherited PC input, catalogue, house and detail resize layers")
 	scene._set_view_context("building")
 	scene._enter_resize_selection()
 	scene.camera_yaw = PI * 0.35

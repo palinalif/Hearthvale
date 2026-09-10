@@ -6,8 +6,8 @@ var _building_actions_open := false
 var _needs_open := false
 var _needs_action: Button
 var _world_hover: Dictionary = {}
-var _world_outline: Panel
 var _world_prompt: Label
+var _world_mesh_highlight_id := ""
 var _rendered_selection := ""
 var _style_render_key: Array = []
 var _colour_render_key := ""
@@ -23,16 +23,6 @@ func _ready() -> void:
 	brush_strength_level = int(_strength_by_tool.get(sculpt_tool, 5))
 	brush_strength = StrengthScale.rate(brush_strength_level)
 	super._ready()
-	_world_outline = Panel.new()
-	_world_outline.name = "CottageWorldHover"
-	_world_outline.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var outline := StyleBoxFlat.new()
-	outline.bg_color = Color(1, 0.8, 0.4, 0.06)
-	outline.border_color = Color("#ffd069")
-	outline.set_border_width_all(2)
-	_world_outline.add_theme_stylebox_override("panel", outline)
-	_world_outline.visible = false
-	hud.add_child(_world_outline)
 	_world_prompt = Label.new()
 	_world_prompt.name = "EditThisCottagePrompt"
 	_world_prompt.text = "X  Edit cottage"
@@ -148,21 +138,31 @@ func _pick_cottage(screen_position: Vector2) -> Dictionary:
 
 func _update_world_hover() -> void:
 	_world_hover = {}
-	if _world_outline: _world_outline.visible = false
 	if _world_prompt: _world_prompt.visible = false
-	if view_context != "terrain" or menu_open or tools_open or detail_open or stroke_active or landscape_active or _restoring or not camera: return
+	if view_context != "terrain" or menu_open or tools_open or detail_open or stroke_active or landscape_active or _restoring or not camera:
+		_set_world_mesh_highlight("")
+		return
 	var point := _terrain_target_point if _terrain_target_valid else cursor
-	if camera.is_position_behind(point): return
+	if camera.is_position_behind(point):
+		_set_world_mesh_highlight("")
+		return
 	_world_hover = _pick_cottage(camera.unproject_position(point))
-	if _world_hover.is_empty(): return
+	if _world_hover.is_empty():
+		_set_world_mesh_highlight("")
+		return
 	var bounds: Rect2 = _world_hover["bounds"]
-	if _world_outline:
-		_world_outline.position = bounds.position
-		_world_outline.size = bounds.size
-		_world_outline.visible = true
+	_set_world_mesh_highlight(str(_world_hover["id"]))
 	if _world_prompt:
 		_world_prompt.position = Vector2(clampf(bounds.position.x, 16, get_viewport().get_visible_rect().size.x - 220), maxf(16, bounds.position.y - 30))
 		_world_prompt.visible = true
+
+func _set_world_mesh_highlight(building_id: String) -> void:
+	if building_id == _world_mesh_highlight_id: return
+	for visual_id in cottage_visuals:
+		var visual: Node3D = cottage_visuals[visual_id]
+		if is_instance_valid(visual) and visual.has_method("set_building_highlight"):
+			visual.set_building_highlight(not building_id.is_empty() and str(visual_id) == building_id)
+	_world_mesh_highlight_id = building_id
 
 func _pointer_over_selected_shell() -> bool:
 	return str(_pick_cottage(edit_pointer).get("id", "")) == selected_building_id and not selected_building_id.is_empty()
@@ -300,7 +300,7 @@ func _update_action_buttons() -> void:
 	super._update_action_buttons()
 	if _context_actions_open and _style_picker_mode.is_empty() and _tool_buttons.has("Replace selected"):
 		var variation := _tool_buttons["Replace selected"] as Button
-		variation.visible = str(_selected_detail_record().get("kind", "")) == "window"
+		variation.visible = str(_selected_detail_record().get("kind", "")) in ["window", "door", "shutter", "flower_box"]
 		variation.disabled = not variation.visible
 
 func _selected_visual_roots() -> Array[Node3D]:
@@ -598,11 +598,15 @@ func _refresh_controller_hud() -> void:
 		_set_prompts([["A", "Recover"], ["B", "Back"], ["D-PAD", "Choose detail"], ["RS", "Orbit"]])
 		return
 	if not _style_picker_mode.is_empty():
+		var detail_kind := str(_selected_detail_record().get("kind", "detail")).replace("_", " ").capitalize()
+		_tool_name.text = detail_kind
+		_tool_meta.text = "Live %s preview" % _style_picker_mode
 		_set_prompts([["A", "Apply"], ["B", "Restore"], ["D-PAD", "Preview"], ["RS", "Orbit"]])
 		return
 	if tools_open or detail_open or detail_move_active or resize_active: return
 	if building_placement_active:
-		_set_prompts([["A", "Place"], ["B", "Cancel"], ["LS", "Free move"], ["RS", "Orbit"], ["L3", "Precision"]])
+		_tool_meta.text = "%s%s%s" % [building_placement_reason, " • SNAP" if building_rotation_snap else " • FREE", " • PRECISION" if precision_mode else ""]
+		_set_prompts([["A", "Place"], ["B", "Cancel"], ["LS", "Move"], ["◀▶", "Turn"], ["▲", "Snap"], ["RS", "Orbit"], ["L3", "Fine"]])
 		return
 	var prompts: Array = [["B", "Finish editing"], ["X", "Cottage options"], ["RS", "Orbit"], ["LT/RT", "Zoom"]]
 	if not hovered_detail_id.is_empty():

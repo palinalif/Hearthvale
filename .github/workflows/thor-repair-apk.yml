@@ -93,6 +93,21 @@ jobs:
           python ./tools/verify-repair-apk.py
           if ($LASTEXITCODE -ne 0) { throw 'Isolated repair APK verification failed' }
 
+      - name: Export, launch and verify Windows PC playtest
+        shell: pwsh
+        run: |
+          ./tools/build.ps1 -WindowsOnly
+          if ($LASTEXITCODE -ne 0) { throw 'Windows playtest export failed' }
+          $folder = (Resolve-Path 'builds/Hearthvale-M2-PC').Path
+          $exe = Join-Path $folder 'Hearthvale.exe'
+          $process = Start-Process -FilePath $exe -ArgumentList @('--headless','--quit-after','60') -WorkingDirectory $folder -WindowStyle Hidden -PassThru
+          if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Windows playtest smoke test timed out' }
+          if ($process.ExitCode -ne 0) { throw "Windows playtest smoke test failed with exit $($process.ExitCode)" }
+          $short = $env:GITHUB_SHA.Substring(0, 8)
+          Move-Item -LiteralPath 'builds/Hearthvale-M2-PC.zip' -Destination "builds/Hearthvale-M2-PC-$short.zip"
+          python ./tools/verify-pc-build.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows playtest verification failed' }
+
       - name: Upload verified repair APK and receipt
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -100,5 +115,15 @@ jobs:
           path: |
             builds/hearthvale-m1-repair-*.apk
             builds/hearthvale-m1-repair-*.verification.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload verified Windows playtest and receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: hearthvale-m2-pc-${{ github.sha }}
+          path: |
+            builds/Hearthvale-M2-PC-*.zip
+            builds/Hearthvale-M2-PC-*.verification.json
           if-no-files-found: error
           retention-days: 14

@@ -47,6 +47,7 @@ func _initialize() -> void:
 		return
 	_clear(ProjectSettings.globalize_path(ROOT))
 	_run_store_checks()
+	_run_disposable_root_retention_checks()
 	print(JSON.stringify({"ok": failures == 0, "checks": checks, "failures": failures, "root": ROOT}))
 	quit(1 if failures > 0 else 0)
 
@@ -70,12 +71,12 @@ func _run_store_checks() -> void:
 	var store2 := CheckpointStore.new(ROOT)
 	check(store2.save(_source(18), 4, PatchGenerator.GENERATOR_ID), "second store same revision")
 	var files := _json_files(ProjectSettings.globalize_path(ROOT))
-	check(files.size() == 2, "same-second saves have two generations")
-	check(files.size() == 2 and _generation(files[0]).length() >= 16 and _generation(files[0]) != _generation(files[1]), "fixed-width unique generations")
+	check(files.size() == 3, "same-second saves retain three generations")
+	check(files.size() == 3 and _generation(files[0]).length() >= 16 and _generation(files[0]) != _generation(files[1]) and _generation(files[1]) != _generation(files[2]), "fixed-width unique generations")
 	for i in 12:
 		check(store.save(_source(100 + i), 10 + i, PatchGenerator.GENERATOR_ID), "save generation %d" % i)
 	files = _json_files(ProjectSettings.globalize_path(ROOT))
-	check(files.size() == 2, "GC retains two valid generations")
+	check(files.size() == 3, "GC retains three valid generations")
 	var newest = store.load(21)
 	check(newest != null and _buffer_hash(newest) == _buffer_hash(_source(111)), "newest numeric generation ordering")
 	files = _json_files(ProjectSettings.globalize_path(ROOT))
@@ -111,6 +112,16 @@ func _run_store_checks() -> void:
 	check(not store.save(wrong_depth, 301, PatchGenerator.GENERATOR_ID), "native depth mismatch rejected")
 	check(store.load(20) != null and store.loaded_revision == 20, "depth rejection preserves prior checkpoint")
 	check(not store.save(source, -2, PatchGenerator.GENERATOR_ID), "negative revision rejected")
+
+func _run_disposable_root_retention_checks() -> void:
+	var roots := ["user://test-checkpoint-root-retention-a", "user://test-checkpoint-root-retention-b", "user://test-checkpoint-root-retention-c", "user://test-checkpoint-root-retention-d"]
+	for root in roots: _clear(ProjectSettings.globalize_path(root))
+	for i in roots.size():
+		var store := CheckpointStore.new(roots[i])
+		check(store.save(_source(300 + i), 300 + i, PatchGenerator.GENERATOR_ID), "disposable root %d saves" % i)
+	check(_json_files(ProjectSettings.globalize_path(roots[0])).is_empty(), "oldest disposable checkpoint root is pruned")
+	for i in range(1, roots.size()):
+		check(_json_files(ProjectSettings.globalize_path(roots[i])).size() == 1, "newest disposable checkpoint root %d is retained" % i)
 
 func _source(value: int) -> Object:
 	var out: Object = ClassDB.instantiate("VoxelBuffer")

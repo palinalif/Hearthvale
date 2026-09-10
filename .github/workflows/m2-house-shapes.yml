@@ -1,0 +1,69 @@
+name: M2 shaped house gallery
+on:
+  push:
+    branches: [feat/m2-hamlet-building]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  house-shapes-mobile:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install pinned Godot and voxel extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $lock = Get-Content dependencies.lock.json -Raw | ConvertFrom-Json
+          $root = Join-Path (Get-Location) '.tools/m2-house-shapes'
+          New-Item -ItemType Directory -Force $root | Out-Null
+          Set-Content -LiteralPath (Join-Path (Split-Path $root) '.gdignore') -Value ''
+          Invoke-WebRequest -Uri $lock.engine.editor_url -OutFile (Join-Path $root 'editor.zip')
+          if ((Get-FileHash -LiteralPath (Join-Path $root 'editor.zip') -Algorithm SHA512).Hash.ToLowerInvariant() -ne $lock.engine.editor_sha512.ToLowerInvariant()) { throw 'Editor archive hash mismatch' }
+          Invoke-WebRequest -Uri $lock.voxel.url -OutFile (Join-Path $root 'voxel.zip')
+          if ((Get-FileHash -LiteralPath (Join-Path $root 'voxel.zip') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $lock.voxel.sha256.ToLowerInvariant()) { throw 'Voxel archive hash mismatch' }
+          Expand-Archive -LiteralPath (Join-Path $root 'editor.zip') -DestinationPath $root -Force
+          Expand-Archive -LiteralPath (Join-Path $root 'voxel.zip') -DestinationPath (Get-Location) -Force
+          $editor = Get-ChildItem $root -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $editor) { throw 'Pinned Godot console editor missing' }
+          if ((& $editor --version | Out-String).Trim() -ne $lock.engine.version) { throw 'Unexpected Godot version' }
+          & $editor --headless --path . --editor --import --quit
+          if ($LASTEXITCODE -ne 0) { throw 'Godot import failed' }
+      - name: Render actual Mobile house shapes
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/m2-house-shapes' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $out = Join-Path (Get-Location) '.tools/m2-house-shapes/render.out.log'
+          $err = Join-Path (Get-Location) '.tools/m2-house-shapes/render.err.log'
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_house_shapes_render_test.gd')
+          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+          if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'House-shape Mobile render timed out' }
+          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
+          Write-Output $log
+          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch '"ok"\s*:\s*true') { throw 'House-shape Mobile render failed' }
+      - name: Render actual Mobile multi-floor houses
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/m2-house-shapes' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $out = Join-Path (Get-Location) '.tools/m2-house-shapes/multi-floor.out.log'
+          $err = Join-Path (Get-Location) '.tools/m2-house-shapes/multi-floor.err.log'
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_multi_floor_render_test.gd')
+          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+          if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'Multi-floor Mobile render timed out' }
+          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
+          Write-Output $log
+          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch '"ok"\s*:\s*true') { throw 'Multi-floor Mobile render failed' }
+      - name: Upload shaped house screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: m2-house-shapes-${{ github.sha }}
+          path: |
+            reports/screenshots/m2-house-shapes/
+            reports/screenshots/m2-multi-floor/
+            .tools/m2-house-shapes/*.log
+          if-no-files-found: warn
+          retention-days: 14

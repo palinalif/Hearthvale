@@ -47,15 +47,27 @@ jobs:
             $json = $joined -match '"failures"\s*:\s*0' -and $joined -match '"ok"\s*:\s*true'
             if ($exitCode -ne 0 -or ($output -match 'ERROR:|Parse Error:|FAIL:') -or -not ($plain -or $json)) { throw "Cottage regression failed: $test" }
           }
+      - name: Verify upstairs window cuts on actual Mobile renderer
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $out = Join-Path (Get-Location) '.tools/cottage-repair/upper-openings.out.log'
+          $err = Join-Path (Get-Location) '.tools/cottage-repair/upper-openings.err.log'
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_upper_storey_detail_test.gd', '--', '--require-rendering')
+          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+          if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'Upper-storey Mobile geometry validation timed out' }
+          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
+          Write-Output $log
+          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'UPPER_STOREY_GEOMETRY checked=[1-9][0-9]* unverified=0' -or $log -notmatch 'm2_upper_storey_detail_test checks=[1-9][0-9]* failures=0') { throw 'Upper-storey openings must pass actual Mobile geometry checks before export' }
       - name: Capture actual Mobile UI and style restoration
         shell: pwsh
         run: |
           $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           $out = Join-Path (Get-Location) '.tools/cottage-repair/render.out.log'
           $err = Join-Path (Get-Location) '.tools/cottage-repair/render.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m1_ui_glyph_render_test.gd')
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_placement_rotation_render_test.gd')
           $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
-          if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'Mobile render capture timed out' }
+          if (-not $process.WaitForExit(300000)) { $process.Kill(); $process.WaitForExit(); throw 'Mobile render capture timed out' }
           $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
           Write-Output $log
           if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'COTTAGE_RENDER_START' -or $log -notmatch 'failures=0') { throw 'Mobile rendering or assertions failed; inspect captures and logs' }
@@ -107,6 +119,54 @@ jobs:
           $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
           Write-Output $log
           if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'COTTAGE_DETAIL_RENDER_RESULT' -or $log -notmatch '"failures"\s*:\s*0') { throw 'Mobile cottage-detail capture failed' }
+      - name: Capture actual Mobile M2 home variants
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $out = Join-Path (Get-Location) '.tools/cottage-repair/m2-home-variants.out.log'
+          $err = Join-Path (Get-Location) '.tools/cottage-repair/m2-home-variants.err.log'
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_home_variants_render_test.gd')
+          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+          if (-not $process.WaitForExit(120000)) { $process.Kill(); $process.WaitForExit(); throw 'M2 home variants Mobile render timed out' }
+          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
+          Write-Output $log
+          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch '"ok"\s*:\s*true') { throw 'M2 home variants Mobile rendering failed' }
+      - name: Capture actual Mobile building-decoration variants
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $out = Join-Path (Get-Location) '.tools/cottage-repair/m2-decoration-variants.out.log'
+          $err = Join-Path (Get-Location) '.tools/cottage-repair/m2-decoration-variants.err.log'
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_decoration_variants_render_test.gd')
+          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+          if (-not $process.WaitForExit(120000)) { $process.Kill(); $process.WaitForExit(); throw 'M2 decoration-variants Mobile render timed out' }
+          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
+          Write-Output $log
+          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'M2_DECORATION_RENDER_RESULT' -or $log -notmatch '"ok"\s*:\s*true') { throw 'M2 decoration-variants Mobile rendering failed' }
+      - name: Capture actual Mobile Roads and Paths slice
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $out = Join-Path (Get-Location) '.tools/cottage-repair/m2-paths.out.log'
+          $err = Join-Path (Get-Location) '.tools/cottage-repair/m2-paths.err.log'
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_path_render_test.gd')
+          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+          if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'M2 paths Mobile render timed out' }
+          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
+          Write-Output $log
+          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch '"ok"\s*:\s*true' -or $log -notmatch '"capture"') { throw 'M2 paths Mobile rendering failed' }
+      - name: Capture full M2 hamlet composition
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $out = Join-Path (Get-Location) '.tools/cottage-repair/m2-hamlet.out.log'
+          $err = Join-Path (Get-Location) '.tools/cottage-repair/m2-hamlet.err.log'
+          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_hamlet_composition_render_test.gd')
+          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+          if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'M2 full hamlet Mobile render timed out' }
+          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
+          Write-Output $log
+          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'M2_HAMLET_RENDER_RESULT' -or $log -notmatch '"ok"\s*:\s*true') { throw 'M2 full hamlet Mobile rendering failed' }
       - name: Retain source and diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -117,6 +177,9 @@ jobs:
             reports/screenshots/m1-cottage-detail/
             reports/screenshots/fine-prop-grid.png
             reports/screenshots/foliage-halfsize.png
+            reports/screenshots/m2-home-catalogue/
+            reports/screenshots/m2-paths/
+            reports/screenshots/m2-hamlet/
           if-no-files-found: error
           retention-days: 14
 

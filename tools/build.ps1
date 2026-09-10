@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$Windows, [switch]$Compatibility, [switch]$CompatibilityOnly)
+param([switch]$Windows, [switch]$WindowsOnly, [switch]$Compatibility, [switch]$CompatibilityOnly)
 
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
@@ -13,6 +13,7 @@ if (-not (Test-Path -LiteralPath $Godot)) { throw "Pinned Godot editor is missin
 function Export-Target([string]$Mode, [string]$Preset, [string]$Output) {
     $log = Join-Path $Logs ("build-{0}-{1}.log" -f $Preset.Replace(' ', '-').ToLowerInvariant(), $Mode)
     $args = @('--headless','--path','.');
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent (Join-Path $ProjectRoot $Output)) | Out-Null
     if ($Mode -eq 'debug') { $args += @('--export-debug',$Preset,$Output) } else { $args += @('--export-release',$Preset,$Output) }
     $oldAction = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
@@ -71,7 +72,7 @@ if ([string]::IsNullOrWhiteSpace($savedRelease['GODOT_ANDROID_KEYSTORE_RELEASE_P
     [Environment]::SetEnvironmentVariable('GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD', 'android', 'Process')
 }
 try {
-    if (-not $CompatibilityOnly) {
+    if (-not $CompatibilityOnly -and -not $WindowsOnly) {
         Export-Target 'debug' 'Android ARM64' 'builds/hearthvale-m1-debug.apk'
         Export-Target 'release' 'Android ARM64' 'builds/hearthvale-m1-release.apk'
     }
@@ -79,11 +80,19 @@ try {
 } finally {
     foreach ($name in $releaseVars) { [Environment]::SetEnvironmentVariable($name, $savedRelease[$name], 'Process') }
 }
-if ($Windows) {
+if ($Windows -or $WindowsOnly) {
     if (-not $CompatibilityOnly) {
-        Export-Target 'debug' 'Windows' 'builds/hearthvale-m1-debug.exe'
-        Export-Target 'release' 'Windows' 'builds/hearthvale-m1-release.exe'
+        if (-not $WindowsOnly) { Export-Target 'debug' 'Windows Playtest' 'builds/Hearthvale-M2-PC/Hearthvale-debug.exe' }
+        Export-Target 'release' 'Windows Playtest' 'builds/Hearthvale-M2-PC/Hearthvale.exe'
     }
     if ($Compatibility -or $CompatibilityOnly) { Export-Target 'release' 'Windows Compatibility' 'builds/hearthvale-m1-compatibility.exe' }
+    if (-not $CompatibilityOnly) {
+        $pcFolder = Join-Path $Builds 'Hearthvale-M2-PC'
+        Copy-Item -LiteralPath (Join-Path $ProjectRoot 'docs\PC_PLAYTEST.md') -Destination (Join-Path $pcFolder 'README.txt') -Force
+        $pcZip = Join-Path $Builds 'Hearthvale-M2-PC.zip'
+        if (Test-Path -LiteralPath $pcZip) { Remove-Item -LiteralPath $pcZip -Force }
+        $packageFiles = @((Join-Path $pcFolder 'Hearthvale.exe'), (Join-Path $pcFolder 'Hearthvale.pck'), (Join-Path $pcFolder 'README.txt'))
+        Compress-Archive -Path $packageFiles -DestinationPath $pcZip -CompressionLevel Optimal
+    }
 }
-"build ok mobile=$(-not $CompatibilityOnly) compatibility=$($Compatibility -or $CompatibilityOnly) windows=$Windows" | Tee-Object -FilePath (Join-Path $Logs 'build-summary.log')
+"build ok mobile=$(-not $CompatibilityOnly -and -not $WindowsOnly) compatibility=$($Compatibility -or $CompatibilityOnly) windows=$($Windows -or $WindowsOnly)" | Tee-Object -FilePath (Join-Path $Logs 'build-summary.log')

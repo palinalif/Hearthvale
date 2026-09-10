@@ -209,7 +209,7 @@ func _run_format_retention_checks() -> void:
 	check(FileAccess.get_file_as_bytes(legacy_path) == legacy_manifest_bytes and FileAccess.get_file_as_bytes(legacy_data_path) == legacy_data_bytes, "new-format GC preserves predecessor pair byte-for-byte")
 	check(legacy.load(1) != null, "predecessor remains independently recoverable")
 	check(FileAccess.get_file_as_bytes(unknown_path) == unknown_bytes, "GC preserves unknown checkpoint format")
-	check(current.load(4) != null and current.load(3) != null and current.load(2) == null, "new format retains its own two generations")
+	check(current.load(4) != null and current.load(3) != null and current.load(2) != null, "new format retains its own three generations")
 
 func _buffer_hash(buffer: Object) -> String:
 	if buffer == null: return ""

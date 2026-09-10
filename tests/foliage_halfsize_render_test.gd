@@ -39,7 +39,7 @@ func _run() -> void:
 	var camera := Camera3D.new(); camera.projection = Camera3D.PROJECTION_ORTHOGONAL; camera.size = 6.5; camera.position = Vector3(6.5, 6.5, 10); camera.look_at_from_position(camera.position, Vector3(0, 0.35, 0)); camera.current = true; scene.add_child(camera)
 	var overlay := CanvasLayer.new(); scene.add_child(overlay)
 	var title := Label.new(); title.text = "HEARTHVALE / ROTATED + TINTED PLANTING / MOBILE REVIEW"; title.position = Vector2(28, 20); title.add_theme_font_size_override("font_size", 25); title.modulate = Color("#26392f"); overlay.add_child(title)
-	var note := Label.new(); note.text = "tree/foliage quarter turns  •  foliage/rock hue + value variety  •  warm mushroom caps"; note.position = Vector2(28, 54); note.add_theme_font_size_override("font_size", 17); note.modulate = Color("#3f594a"); overlay.add_child(note)
+	var note := Label.new(); note.text = "tree + foliage quarter turns  •  foliage/rock hue + value variety  •  warm mushroom caps"; note.position = Vector2(28, 54); note.add_theme_font_size_override("font_size", 17); note.modulate = Color("#3f594a"); overlay.add_child(note)
 	for unused in 20: await RenderingServer.frame_post_draw
 	var image := root.get_texture().get_image()
 	_check(not image.is_empty() and image.get_width() == 1280, "actual Mobile image rendered")

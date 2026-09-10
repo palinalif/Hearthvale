@@ -96,12 +96,19 @@ func _inspect_node(node: Node, origin: Vector3, label: String, rendered: bool) -
 			unverified_instances += multi.instance_count
 		else:
 			var has_fine_step := false
+			var rotated_tree := node.get_parent() is Garden and str(node.name).begins_with("PlantBatch_tree_")
 			for i in multi.instance_count:
 				var instance: Transform3D = node.global_transform * multi.get_instance_transform(i)
 				var size := instance.basis.get_scale().abs()
 				has_fine_step = has_fine_step or is_equal_approx(minf(size.x, minf(size.y, size.z)), Grid.COTTAGE_DETAIL_UNIT)
 				_check(instance.basis.determinant() > 0.000000001, label + "/" + str(node.name) + " nonzero native instance")
-				_inspect_mesh(multi.mesh, instance, origin, label + "/" + str(node.name), unit)
+				if rotated_tree:
+					# Like a rotated home, a tree keeps its authored cubic voxel grid in
+					# object space while its complete instance turns in world space.
+					var grid_transform := Transform3D(Basis.IDENTITY.scaled(size), instance.origin)
+					_inspect_mesh(multi.mesh, grid_transform, origin, label + "/" + str(node.name), unit, "object-local")
+				else:
+					_inspect_mesh(multi.mesh, instance, origin, label + "/" + str(node.name), unit)
 				instances_checked += 1
 			if cottage_detail:
 				_check(has_fine_step, label + "/" + str(node.name) + " actually contains half-cell detail")
@@ -109,7 +116,7 @@ func _inspect_node(node: Node, origin: Vector3, label: String, rendered: bool) -
 		_inspect_mesh(node.mesh, node.global_transform, origin, label + "/" + str(node.name), unit)
 	for child in node.get_children(): _inspect_node(child, origin, label, rendered)
 
-func _inspect_mesh(mesh: Mesh, transform_value: Transform3D, origin: Vector3, label: String, unit := Grid.UNIT) -> void:
+func _inspect_mesh(mesh: Mesh, transform_value: Transform3D, origin: Vector3, label: String, unit := Grid.UNIT, grid_space := "world") -> void:
 	for surface in mesh.get_surface_count():
 		var arrays := mesh.surface_get_arrays(surface)
 		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
@@ -120,7 +127,7 @@ func _inspect_mesh(mesh: Mesh, transform_value: Transform3D, origin: Vector3, la
 			for axis in 3:
 				on_grid = on_grid and absf(world_point[axis] / unit - roundf(world_point[axis] / unit)) < 0.0002
 		vertices_checked += vertices.size()
-		_check(on_grid, label + " world vertices share %.4f grid" % unit)
+		_check(on_grid, label + " %s vertices share %.4f grid" % [grid_space, unit])
 		var valid_faces := true
 		for i in range(0, indices.size(), 3):
 			var a: Vector3 = transform_value * vertices[indices[i]]
@@ -128,7 +135,7 @@ func _inspect_mesh(mesh: Mesh, transform_value: Transform3D, origin: Vector3, la
 			var c: Vector3 = transform_value * vertices[indices[i + 2]]
 			var normal := (b - a).cross(c - a).normalized().abs()
 			valid_faces = valid_faces and maxf(normal.x, maxf(normal.y, normal.z)) > 0.9999
-		_check(valid_faces, label + " faces remain axis-aligned voxel steps")
+		_check(valid_faces, label + " faces remain axis-aligned %s voxel steps" % grid_space)
 
 func _check(ok: bool, label: String) -> void:
 	checks += 1

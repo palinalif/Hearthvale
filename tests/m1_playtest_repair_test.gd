@@ -85,7 +85,11 @@ func _run() -> void:
 	scene.camera.global_position = target + Vector3(0, 2, -12)
 	scene.camera.look_at(target)
 	scene._update_world_hover()
-	check(str(scene._world_hover.get("id", "")) == first_id and scene._world_outline.visible, "Terrain hover highlights the cottage")
+	check(str(scene._world_hover.get("id", "")) == first_id and scene._world_mesh_highlight_id == first_id, "Terrain hover highlights the cottage mesh")
+	var highlighted_geometry := 0
+	for child in (scene.cottage_visuals[first_id] as Node3D).get_children():
+		if child is GeometryInstance3D and (child as GeometryInstance3D).material_overlay != null: highlighted_geometry += 1
+	check(highlighted_geometry > 0, "terrain hover applies amber outline material to actual house geometry")
 	await _button(JOY_BUTTON_X)
 	check(scene.view_context == "building" and scene.selected_building_id == first_id, "physical X enters hovered cottage, not terrain settings")
 	check(not scene.tools_open, "entry does not open a second menu")
