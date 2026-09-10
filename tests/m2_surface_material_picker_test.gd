@@ -30,7 +30,7 @@ func _initialize() -> void:
 		if button.text == "Roof colour": roof_button = button
 	_check(wall_button != null and roof_button != null, "home options expose Wall colour and Roof colour")
 
-	var before_serialized := scene.building_world.serialize_document()
+	var before_serialized: String = str(scene.building_world.serialize_document())
 	scene._open_surface_material_picker("wall")
 	_check(scene._surface_material_picker_open and scene._surface_material_picker_kind == "wall" and scene._surface_material_picker_panel.visible, "Wall colour opens browse picker")
 	_check(scene._surface_material_candidates().size() == scene.WALL_MATERIALS.size(), "wall picker shows every wall material")
@@ -51,7 +51,7 @@ func _initialize() -> void:
 	_check(scene._surface_material_picker_open and scene._surface_material_picker_kind == "roof", "Roof colour uses the same picker")
 	_check(scene._surface_material_candidates().size() == scene.ROOF_MATERIALS.size(), "roof picker shows every roof material")
 	var wall_persisted := str(scene.building_world.get_building(scene.selected_building_id).get("wall_material_id", ""))
-	var roof_before_preview := scene.building_world.serialize_document()
+	var roof_before_preview: String = str(scene.building_world.serialize_document())
 	scene._preview_surface_material(roof_choice)
 	_check(scene.building_world.serialize_document() == roof_before_preview, "roof colour browsing is read-only")
 	_check(visual != null and str(visual._applied_view.get("roof_material_id", "")) == roof_choice, "roof colour focus previews directly on house")
