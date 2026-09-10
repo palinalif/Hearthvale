@@ -28,8 +28,9 @@ func _initialize() -> void:
 		await _settle()
 		await _check_options_navigation(str(viewport_size))
 		await _check_shape_navigation(str(viewport_size))
-	# A taller/repositioned prompt bar must reserve its actual space too.
-	scene._prompt_bar.position.y -= 72.0
+	# Reserve enough prompt space to force real overflow in both menus,
+	# independently of window minimum sizes or viewport scaling.
+	scene._prompt_bar.position.y = 380.0
 	await _settle()
 	await _check_options_navigation("raised prompt bar")
 	await _check_shape_navigation("raised prompt bar")
@@ -131,8 +132,8 @@ func _check_shape_navigation(label: String) -> void:
 		_press("m1_height_down")
 		await _settle()
 	check(not needs_scroll or did_scroll, label + ": controller scrolls when enabled floor commands need it")
-	if label == str(Vector2i(1280, 600)):
-		check(needs_scroll and did_scroll, label + ": short viewport exercises real submenu scrolling")
+	if label == "raised prompt bar":
+		check(needs_scroll and did_scroll, "%s: constrained menu exercises real submenu scrolling; needs=%s scrolled=%s bounds=%s" % [label, needs_scroll, did_scroll, scroll.get_global_rect()])
 	check(root.gui_get_focus_owner() == buttons[0], label + ": shape navigation wraps down")
 	_press("m1_height_up")
 	await _settle()
