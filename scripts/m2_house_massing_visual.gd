@@ -8,6 +8,9 @@ const ROOF_THICKNESS := 0.22
 const EAVE_HEIGHT := 0.16
 
 var _signature := ""
+var _highlight_enabled := false
+var _highlight_grow := 0.12
+var _highlight_material: StandardMaterial3D
 
 func show_view(view: Dictionary, wall_colour: Color, roof_palette: Array, roof_edge_colour: Color) -> void:
 	var signature := "%s|%s|%s|%s|%s|%s" % [JSON.stringify(_serializable_sections(view)), str(view.get("dimensions", Vector3.ZERO)), str(view.get("roof_profile", "gentle_gable")), wall_colour.to_html(), str(roof_palette), roof_edge_colour.to_html()]
@@ -20,6 +23,29 @@ func show_view(view: Dictionary, wall_colour: Color, roof_palette: Array, roof_e
 	_build_walls(view, wall_colour)
 	_build_eaves(view, roof_edge_colour)
 	_build_roof(view, roof_palette, roof_edge_colour)
+	_apply_highlight()
+
+func set_highlight(enabled: bool, grow_amount: float = 0.12) -> void:
+	_highlight_enabled = enabled
+	_highlight_grow = grow_amount
+	_apply_highlight()
+
+func _apply_highlight() -> void:
+	var overlay: Material = _outline_material(_highlight_grow) if _highlight_enabled else null
+	for child in get_children():
+		if child is GeometryInstance3D: (child as GeometryInstance3D).material_overlay = overlay
+
+func _outline_material(grow_amount: float) -> StandardMaterial3D:
+	if not _highlight_material:
+		_highlight_material = StandardMaterial3D.new()
+		_highlight_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_highlight_material.albedo_color = Color("#ffbf3f")
+		_highlight_material.emission_enabled = true
+		_highlight_material.emission = Color("#ffbf3f")
+		_highlight_material.cull_mode = BaseMaterial3D.CULL_FRONT
+		_highlight_material.grow = true
+	_highlight_material.grow_amount = grow_amount
+	return _highlight_material
 
 func _serializable_sections(view: Dictionary) -> Array:
 	var result: Array = []
