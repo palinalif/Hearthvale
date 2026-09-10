@@ -40,18 +40,29 @@ func _install_hamlet_catalogue() -> void:
 	for style_id in FURNITURE_STYLE_ORDER:
 		var style: Dictionary = FURNITURE_STYLES[style_id]
 		_add_catalogue_button(box, _hamlet_catalogue_buttons, "%s\n%s" % [style["name"], style["summary"]], _choose_furniture_style.bind(style_id))
-	# Nine full 72px rows do not belong on a 720p handheld screen. Keep the
-	# descriptions, but compact the rows and spacing so the whole catalogue is
-	# controller-accessible without introducing scrolling for this bounded slice.
-	_hamlet_catalogue_panel.position.y = 42
-	_hamlet_catalogue_panel.custom_minimum_size = Vector2(540, 628)
-	box.add_theme_constant_override("separation", 4)
+
+	# This catalogue is deliberately bounded to nine choices, so keep it all on
+	# one 720p handheld page rather than adding scrolling. The selected item's
+	# placement HUD still carries the descriptive context once it enters world
+	# placement; this menu only needs fast, readable names.
+	_hamlet_catalogue_panel.position.y = 36
+	_hamlet_catalogue_panel.custom_minimum_size = Vector2(540, 580)
+	box.add_theme_constant_override("separation", 3)
 	for button in _hamlet_catalogue_buttons:
-		button.custom_minimum_size.y = 40
+		button.text = button.text.get_slice("\n", 0)
+		button.custom_minimum_size.y = 34
 	for child in box.get_children():
-		if child is Label:
-			var label := child as Label
-			if label.get_theme_font_size("font_size") >= 22: label.add_theme_font_size_override("font_size", 19)
+		if not child is Label: continue
+		var label := child as Label
+		if label.text in [
+			"Place small details directly into the village",
+			"A place • left/right rotate • B back",
+			"Fence segments and matching gates use the same placement controls",
+			"Small props use the same A/place and left-right/rotate grammar",
+		]:
+			label.visible = false
+		elif label.get_theme_font_size("font_size") >= 22:
+			label.add_theme_font_size_override("font_size", 17)
 
 func _choose_furniture_style(style_id: String) -> void:
 	if not FURNITURE_STYLES.has(style_id): return
