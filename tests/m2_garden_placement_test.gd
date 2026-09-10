@@ -33,7 +33,7 @@ func _initialize() -> void:
 	_check(scene._build_catalogue_open and scene._build_catalogue_buttons.size() == 4, "build catalogue includes Hamlet details")
 	scene._build_catalogue_buttons[3].grab_focus()
 	await _press(JOY_BUTTON_A)
-	_check(scene._hamlet_catalogue_open and scene._hamlet_catalogue_buttons.size() == 3, "Hamlet details opens the three-garden catalogue")
+	_check(scene._hamlet_catalogue_open and scene._hamlet_catalogue_buttons.size() == 9, "Hamlet details opens the complete composition catalogue")
 	_check(scene._hamlet_catalogue_buttons[0].text.begins_with("Cottage flower garden") and scene._hamlet_catalogue_buttons[2].text.begins_with("Herb garden"), "garden choices are visually named")
 	scene._hamlet_catalogue_buttons[0].grab_focus()
 	await _press(JOY_BUTTON_A)
