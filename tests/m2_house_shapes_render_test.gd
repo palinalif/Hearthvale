@@ -4,6 +4,7 @@ const World = preload("res://scripts/building_world.gd")
 const Visual = preload("res://scripts/cottage_visual.gd")
 const Massing = preload("res://scripts/m2_house_massing.gd")
 const MassingVisual = preload("res://scripts/m2_house_massing_visual.gd")
+const BeamVisual = preload("res://scripts/m2_joined_roof_beam_visual.gd")
 
 var checks := 0
 var failures := 0
@@ -63,8 +64,9 @@ func _run() -> void:
 	if Massing.can_add_portion(custom_sections, back_nook): custom_sections.append(back_nook)
 	custom_view["massing_sections"] = _serialize_sections(custom_sections)
 	custom_view["massing_preset"] = "custom"
+	custom_view["joined_roof_beams"] = true
 	var custom_visual := _make_visual(custom_view, 20)
-	entries.append({"id": "custom", "label": "CUSTOM ADDED PORTIONS", "visual": custom_visual, "position": Vector3.ZERO})
+	entries.append({"id": "custom", "label": "CUSTOM + EXPOSED ROOF BEAMS", "visual": custom_visual, "position": Vector3.ZERO})
 	custom_visual.visible = false
 
 	for unused in 18: await RenderingServer.frame_post_draw
@@ -150,13 +152,19 @@ func _make_visual(view: Dictionary, revision: int) -> Node3D:
 		visual.add_child(joined)
 		joined.show_view(view, Color("#e7cfab"), [Color("#ae5f49"), Color("#bb6a50"), Color("#9d4f40")], Color("#8d4438"))
 		check(joined.get_child_count() >= 4, "%s builds foundation/walls/eaves/joined roof" % str(view.get("massing_preset", "custom")))
+		if bool(view.get("joined_roof_beams", false)):
+			var beams := BeamVisual.new()
+			beams.name = "M2JoinedRoofBeams"
+			visual.add_child(beams)
+			beams.show_view(view)
+			check(beams.get_node_or_null("JoinedRoofEaveBeams") != null, "joined beam style follows generated eaves")
 	return visual
 
 func _hide_native_shell(visual: Node3D) -> void:
 	for child in visual.get_children():
 		if not child is Node3D: continue
 		var name_value := str(child.name)
-		for prefix in ["Foundation", "Wall", "LogCourses", "Trim_", "Cornice_", "RoofTiles_", "GableLeft_", "GableRight_", "CornerQuoins", "Crafted", "GableVent", "LodgeLogEnds", "TudorWallFrame", "GableFinials", "RidgeCourses", "RoofEdgeLip", "M2RoofDesign"]:
+		for prefix in ["Foundation", "Wall", "LogCourses", "Trim_", "Cornice_", "RoofTiles_", "GableLeft_", "GableRight_", "CornerQuoins", "Crafted", "GableVent", "LodgeLogEnds", "TudorWallFrame", "GableFinials", "RidgeCourses", "RoofEdgeLip", "EaveJoinery", "M2RoofDesign"]:
 			if name_value.begins_with(prefix):
 				(child as Node3D).visible = false
 				break
