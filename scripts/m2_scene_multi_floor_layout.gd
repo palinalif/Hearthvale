@@ -1,4 +1,4 @@
-extends "res://scripts/m2_scene_multi_floor.gd"
+extends "res://scripts/m2_scene_upper_wall_details.gd"
 
 ## The house editor has accumulated material, roof, decor, shape and storey
 ## actions. Keep the controller-first 720p panel clear of the persistent prompt
