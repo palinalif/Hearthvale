@@ -18,15 +18,25 @@ const BRIDGE_MAX_WIDTH := 2.0
 const BRIDGE_MIN_SPAN := 1.0
 const BRIDGE_MAX_SPAN := 10.0
 const BRIDGE_RENDER_CELL_LIMIT := 8000
+const COMPOSITION_STYLE_IDS := {
+	"garden": ["cottage_flowers", "kitchen_rows", "herb_garden"],
+	"fence": ["rustic_fence", "rustic_gate"],
+	"furniture": ["bench", "lantern", "signpost", "barrel_planter"],
+}
+const COMPOSITION_LIMIT := 96
+const COMPOSITION_MIN_SIZE := 0.125
+const COMPOSITION_MAX_SIZE := 6.0
+const COMPOSITION_RENDER_CELL_LIMIT := 24000
 const EDITABLE_WORLD_SIZE := 48.0
 const Grid = preload("res://scripts/visual_grid.gd")
 var records: Array = []
 var paths: Array = []
 var bridges: Array = []
+var composition: Array = []
 var next_id := 1
 
 func document() -> Dictionary:
-	return {"version": 1, "next_id": next_id, "records": records.duplicate(true), "paths": paths.duplicate(true), "bridges": bridges.duplicate(true)}
+	return {"version": 1, "next_id": next_id, "records": records.duplicate(true), "paths": paths.duplicate(true), "bridges": bridges.duplicate(true), "composition": composition.duplicate(true)}
 
 static func validate(value: Dictionary) -> bool:
 	if not _integer(value.get("version", null)) or int(value["version"]) != 1 or not value.get("records", null) is Array: return false
@@ -35,6 +45,8 @@ static func validate(value: Dictionary) -> bool:
 	if not path_values is Array or path_values.size() > PATH_LIMIT: return false
 	var bridge_values = value.get("bridges", [])
 	if not bridge_values is Array or bridge_values.size() > BRIDGE_LIMIT: return false
+	var composition_values = value.get("composition", [])
+	if not composition_values is Array or composition_values.size() > COMPOSITION_LIMIT: return false
 	var ids := {}
 	var trees := 0
 	for record in value["records"]:
@@ -69,6 +81,15 @@ static func validate(value: Dictionary) -> bool:
 		ids[id] = true
 		bridge_cells += _estimated_bridge_render_cells(bridge)
 		if bridge_cells > BRIDGE_RENDER_CELL_LIMIT: return false
+	var composition_cells := 0
+	for object_value in composition_values:
+		if not _validate_composition_record(object_value): return false
+		var object: Dictionary = object_value
+		var id := int(object["id"])
+		if id < 1 or id >= int(value["next_id"]) or ids.has(id): return false
+		ids[id] = true
+		composition_cells += _estimated_composition_render_cells(object)
+		if composition_cells > COMPOSITION_RENDER_CELL_LIMIT: return false
 	return true
 
 func restore(value: Dictionary) -> bool:
@@ -76,6 +97,7 @@ func restore(value: Dictionary) -> bool:
 	records = value["records"].duplicate(true)
 	paths = value.get("paths", []).duplicate(true)
 	bridges = value.get("bridges", []).duplicate(true)
+	composition = value.get("composition", []).duplicate(true)
 	next_id = int(value["next_id"])
 	# JSON has no integer/float distinction on reload. Reassert the integer
 	# identity fields so deterministic documents keep the same serialization
@@ -90,6 +112,10 @@ func restore(value: Dictionary) -> bool:
 	for bridge_value in bridges:
 		var bridge: Dictionary = bridge_value
 		bridge["id"] = int(bridge["id"])
+	for object_value in composition:
+		var object: Dictionary = object_value
+		object["id"] = int(object["id"])
+		object["yaw_quarters"] = int(object["yaw_quarters"])
 	return true
 
 static func position_of(record: Dictionary) -> Vector3:
@@ -160,6 +186,28 @@ func erase_bridge(bridge_id: int) -> bool:
 		return true
 	return false
 
+## Gardens, fences, and furniture share one bounded placement record. Their
+## generated meshes are disposable; saved authority is kind/style/footprint/yaw.
+func add_composition(kind: String, style_id: String, point_value: Variant, size_value: Variant, yaw_quarters: int) -> int:
+	var point := _point_array(point_value)
+	var size := _size_array(size_value)
+	if point.is_empty() or size.is_empty(): return -1
+	var candidate := {"id": next_id, "kind": kind, "style_id": style_id, "position": point, "size": size, "yaw_quarters": posmod(yaw_quarters, 4)}
+	var proposed := document()
+	(proposed["composition"] as Array).append(candidate)
+	proposed["next_id"] = next_id + 1
+	if not validate(proposed): return -1
+	composition.append(candidate)
+	next_id += 1
+	return int(candidate["id"])
+
+func erase_composition(object_id: int) -> bool:
+	for index in composition.size():
+		if int((composition[index] as Dictionary).get("id", -1)) != object_id: continue
+		composition.remove_at(index)
+		return true
+	return false
+
 ## Paths are composition data, so removing a plant here is still reversible by
 ## the surrounding landscape history entry. Trees use a wider root clearance;
 ## rocks and foliage are kept clear of the walking surface as well.
@@ -173,6 +221,32 @@ func clear_records_along_path(point_values: Array, width: float) -> bool:
 		var point := position_of(record)
 		var radius := clearance + (0.45 if str(record.get("kind", "")) == "tree" else 0.12)
 		if _distance_to_polyline_squared(Vector2(point.x, point.z), point_values) <= radius * radius:
+			changed = true
+		else:
+			kept.append(record)
+	if changed: records = kept
+	return changed
+
+## Clearing planting inside a placed object is part of the same surrounding
+## landscape undo transaction. Quarter turns keep the footprint exact and cheap.
+func clear_records_in_footprint(point_value: Variant, size_value: Variant, yaw_quarters: int, margin: float = 0.0) -> bool:
+	var point_array := _point_array(point_value)
+	var size_array := _size_array(size_value)
+	if point_array.is_empty() or size_array.is_empty(): return false
+	var center := Vector2(float(point_array[0]), float(point_array[1]))
+	var size := Vector2(float(size_array[0]), float(size_array[1]))
+	var angle := -float(posmod(yaw_quarters, 4)) * PI * 0.5
+	var cosine := cos(angle)
+	var sine := sin(angle)
+	var kept: Array = []
+	var changed := false
+	for record_value in records:
+		var record: Dictionary = record_value
+		var world := position_of(record)
+		var delta := Vector2(world.x, world.z) - center
+		var local := Vector2(delta.x * cosine - delta.y * sine, delta.x * sine + delta.y * cosine)
+		var extra := margin + (0.35 if str(record.get("kind", "")) == "tree" else 0.08)
+		if absf(local.x) <= size.x * 0.5 + extra and absf(local.y) <= size.y * 0.5 + extra:
 			changed = true
 		else:
 			kept.append(record)
@@ -211,6 +285,19 @@ static func _integer(value: Variant) -> bool:
 	return (value is int or value is float) and is_finite(float(value)) and float(value) == floorf(float(value)) and absf(float(value)) <= 1000000000.0
 
 static func _point_array(value: Variant) -> Array:
+	var x: Variant = NAN
+	var z: Variant = NAN
+	if value is Vector2:
+		x = value.x; z = value.y
+	elif value is Array and value.size() == 2:
+		x = value[0]; z = value[1]
+	else:
+		return []
+	if not (x is int or x is float) or not (z is int or z is float): return []
+	if not is_finite(float(x)) or not is_finite(float(z)): return []
+	return [snappedf(float(x), Grid.UNIT), snappedf(float(z), Grid.UNIT)]
+
+static func _size_array(value: Variant) -> Array:
 	var x: Variant = NAN
 	var z: Variant = NAN
 	if value is Vector2:
@@ -270,6 +357,32 @@ static func _validate_bridge_record(value: Variant) -> bool:
 	var span := parsed[0].distance_to(parsed[1])
 	return span >= BRIDGE_MIN_SPAN - 0.000001 and span <= BRIDGE_MAX_SPAN + 0.000001
 
+static func _validate_composition_record(value: Variant) -> bool:
+	if not value is Dictionary: return false
+	var object: Dictionary = value
+	if not _integer(object.get("id", null)) or int(object["id"]) < 1: return false
+	var kind := str(object.get("kind", ""))
+	if not COMPOSITION_STYLE_IDS.has(kind): return false
+	if not (COMPOSITION_STYLE_IDS[kind] as Array).has(str(object.get("style_id", ""))): return false
+	if not _integer(object.get("yaw_quarters", null)): return false
+	var yaw := int(object["yaw_quarters"])
+	if yaw < 0 or yaw > 3: return false
+	var position = object.get("position", null)
+	var size = object.get("size", null)
+	if not position is Array or position.size() != 2 or not size is Array or size.size() != 2: return false
+	for coordinate in position:
+		if not (coordinate is int or coordinate is float) or not is_finite(float(coordinate)): return false
+	for extent in size:
+		if not (extent is int or extent is float) or not is_finite(float(extent)): return false
+	var center := Vector2(float(position[0]), float(position[1]))
+	var dimensions := Vector2(float(size[0]), float(size[1]))
+	if dimensions.x < COMPOSITION_MIN_SIZE or dimensions.y < COMPOSITION_MIN_SIZE or dimensions.x > COMPOSITION_MAX_SIZE or dimensions.y > COMPOSITION_MAX_SIZE: return false
+	if not is_equal_approx(center.x, snappedf(center.x, Grid.UNIT)) or not is_equal_approx(center.y, snappedf(center.y, Grid.UNIT)): return false
+	if not is_equal_approx(dimensions.x, snappedf(dimensions.x, Grid.UNIT)) or not is_equal_approx(dimensions.y, snappedf(dimensions.y, Grid.UNIT)): return false
+	var rotated := Vector2(dimensions.y, dimensions.x) if yaw % 2 == 1 else dimensions
+	var half := rotated * 0.5
+	return center.x - half.x >= 0.0 and center.x + half.x <= EDITABLE_WORLD_SIZE and center.y - half.y >= 0.0 and center.y + half.y <= EDITABLE_WORLD_SIZE
+
 static func _estimated_render_cells(path: Dictionary) -> int:
 	var points: Array = path["points"]
 	var width := float(path["width"])
@@ -288,6 +401,12 @@ static func _estimated_bridge_render_cells(bridge: Dictionary) -> int:
 	var span_samples := maxi(1, ceili(a.distance_to(b) / 0.25))
 	var width_cells := maxi(1, ceili(float(bridge["width"]) / Grid.UNIT))
 	return span_samples * width_cells + span_samples * 4 + 16
+
+static func _estimated_composition_render_cells(object: Dictionary) -> int:
+	var size: Array = object["size"]
+	var area := float(size[0]) * float(size[1])
+	var base := 24 if str(object["kind"]) == "furniture" else (48 if str(object["kind"]) == "fence" else 72)
+	return base + ceili(area * 24.0)
 
 static func _distance_to_polyline_squared(point: Vector2, point_values: Array) -> float:
 	var best := INF
