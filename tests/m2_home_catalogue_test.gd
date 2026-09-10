@@ -68,40 +68,53 @@ func _initialize() -> void:
 	await process_frame
 	var home_action_labels: Array[String] = []
 	for button in scene._building_buttons: home_action_labels.append(button.text)
-	check("Add window" in home_action_labels and "Add door" in home_action_labels, "home options expose additional structural openings")
+	check("Add window" in home_action_labels and "Add door" in home_action_labels and "Accent colour" in home_action_labels, "home options expose openings and shared accent colour")
 	check(scene._building_panel.get_global_rect().end.y <= scene._prompt_bar.get_global_rect().position.y + 1.0, "expanded home options stay above the controller prompt bar")
 	scene._close_building_panel()
 
 	scene._open_home_catalogue()
 	check(scene._home_catalogue_open and scene._home_catalogue_panel.visible, "Place new home opens the controller catalogue")
-	check(scene._home_catalogue_buttons.size() == 3 and scene._home_catalogue_buttons.all(func(button): return button.text.contains("Walls:") and button.text.contains("Roof:")), "each catalogue entry names wall and roof choices")
+	check(scene._home_catalogue_buttons.size() == 3 and scene._home_catalogue_buttons.all(func(button): return button.text.contains("Walls:") and button.text.contains("Roof:") and button.text.contains("Accent:")), "each catalogue entry names wall roof and accent choices")
 	scene._home_catalogue_buttons[1].grab_focus()
+	var initial_wall := str(scene._catalogue_wall_choices["woodland_lodge"])
+	var initial_roof := str(scene._catalogue_roof_choices["woodland_lodge"])
 	scene._cycle_catalogue_material("wall", 1)
 	scene._cycle_catalogue_material("roof", 1)
-	check(scene._catalogue_wall_choices["woodland_lodge"] == "chalk_white" and scene._catalogue_roof_choices["woodland_lodge"] == "slate", "catalogue adjusts wall and roof choices independently")
+	var expected_wall := scene.WALL_MATERIALS[posmod(scene.WALL_MATERIALS.find(initial_wall) + 1, scene.WALL_MATERIALS.size())]
+	var expected_roof := scene.ROOF_MATERIALS[posmod(scene.ROOF_MATERIALS.find(initial_roof) + 1, scene.ROOF_MATERIALS.size())]
+	check(scene._catalogue_wall_choices["woodland_lodge"] == expected_wall and scene._catalogue_roof_choices["woodland_lodge"] == expected_roof, "catalogue adjusts randomized wall and roof choices independently")
+	var chosen_wall := str(scene._catalogue_wall_choices["woodland_lodge"])
+	var chosen_roof := str(scene._catalogue_roof_choices["woodland_lodge"])
+	var chosen_accent := str(scene._catalogue_accent_choices["woodland_lodge"])
+	check(chosen_accent in scene.ACCENT_MATERIALS, "catalogue supplies one accent from the expanded palette")
 	var before: String = scene.building_world.serialize_document()
 	var previous_selection: String = scene.selected_building_id
 	scene._choose_home_design("woodland_lodge")
 	check(scene.building_placement_active and scene.building_placement_operation == "new", "choosing a design enters new-home placement instead of duplication")
 	check(scene.building_placement_design_id == "woodland_lodge" and scene.building_world.serialize_document() == before, "catalogue preview is pure authoritative data")
 	check(str(scene.building_placement_ghost._applied_view.get("style_id", "")) == "woodland_lodge", "complete placement ghost uses the chosen recipe")
+	var preview_dimensions: Vector3 = scene.building_placement_ghost._applied_view.get("dimensions", Vector3.ZERO)
+	check(preview_dimensions == scene.SMALL_HOME_DIMENSIONS["woodland_lodge"], "new-home preview uses the smaller authored default")
 	check(scene.building_placement_valid, "chosen lodge begins at a valid free-placement target")
 	check(scene._commit_building_placement(), "valid catalogue home commits")
 	var lodge_id: String = scene.selected_building_id
 	var lodge: Dictionary = scene.building_world.get_building(lodge_id)
 	check(lodge_id != previous_selection and lodge["shape_id"] == "longhouse" and lodge["style_id"] == "woodland_lodge", "placed lodge receives an independent identity and saved design")
 	check(lodge["details"].any(func(detail): return detail["kind"] == "window" and detail["asset_id"] == "window_lodge") and lodge["details"].any(func(detail): return detail["kind"] == "door" and detail["asset_id"] == "door_lodge"), "lodge recipe receives lodge windows and door")
-	check(lodge["wall_material_id"] == "chalk_white" and lodge["roof_material_id"] == "slate", "placed lodge saves chosen wall and roof materials independently")
+	check(lodge["wall_material_id"] == chosen_wall and lodge["roof_material_id"] == chosen_roof and lodge["accent_material_id"] == chosen_accent, "placed lodge saves randomized or adjusted wall roof and accent materials together")
+	check(lodge["dimensions"] == scene.SMALL_HOME_DIMENSIONS["woodland_lodge"], "placed lodge keeps the smaller default dimensions")
 	var first_surface := str(lodge["surfaces"][0]["id"])
 	var original_surface := str(scene.building_world.get_building(previous_selection)["surfaces"][0]["id"])
 	check(first_surface != original_surface, "new design owns fresh surface identities")
 
-	check(scene.building_world.set_wall_material(lodge_id, "rose_lime"), "wall material changes independently")
-	check(scene.building_world.set_roof_material(lodge_id, "thatch"), "roof material changes independently")
+	var alternate_wall := _different_choice(scene.WALL_MATERIALS, chosen_wall)
+	var alternate_roof := _different_choice(scene.ROOF_MATERIALS, chosen_roof)
+	check(scene.building_world.set_wall_material(lodge_id, alternate_wall), "wall material changes independently")
+	check(scene.building_world.set_roof_material(lodge_id, alternate_roof), "roof material changes independently")
 	lodge = scene.building_world.get_building(lodge_id)
-	check(lodge["wall_material_id"] == "rose_lime" and lodge["roof_material_id"] == "thatch", "independent material selections coexist")
-	check(scene.building_world.undo() and scene.building_world.get_building(lodge_id)["roof_material_id"] == "slate", "roof material edit is one undo transaction")
-	check(scene.building_world.redo() and scene.building_world.get_building(lodge_id)["roof_material_id"] == "thatch", "roof material redo restores only that choice")
+	check(lodge["wall_material_id"] == alternate_wall and lodge["roof_material_id"] == alternate_roof, "independent material selections coexist")
+	check(scene.building_world.undo() and scene.building_world.get_building(lodge_id)["roof_material_id"] == chosen_roof, "roof material edit is one undo transaction")
+	check(scene.building_world.redo() and scene.building_world.get_building(lodge_id)["roof_material_id"] == alternate_roof, "roof material redo restores only that choice")
 
 	var gable_target := Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * World.MINIATURE_SCALE), Vector3(8, 8, 8))
 	var gable_id: String = scene.building_world.create_home_at("village_gable", gable_target, scene.building_world.get_revision())
@@ -111,7 +124,7 @@ func _initialize() -> void:
 	var serialized: String = scene.building_world.serialize_document()
 	var restored := World.new()
 	check(restored.load_serialized_document(serialized), "multi-design document reloads")
-	check(restored.get_building(lodge_id)["wall_material_id"] == "rose_lime" and restored.get_building(lodge_id)["roof_material_id"] == "thatch" and restored.get_building(gable_id)["style_id"] == "village_gable", "reload preserves design and independent materials")
+	check(restored.get_building(lodge_id)["wall_material_id"] == alternate_wall and restored.get_building(lodge_id)["roof_material_id"] == alternate_roof and restored.get_building(lodge_id)["accent_material_id"] == chosen_accent and restored.get_building(gable_id)["style_id"] == "village_gable", "reload preserves design dimensions and all three house colours")
 
 	var cancel_before: String = scene.building_world.serialize_document()
 	var selection_before: String = scene.selected_building_id
@@ -119,6 +132,11 @@ func _initialize() -> void:
 	scene._cancel_building_placement()
 	check(scene.building_world.serialize_document() == cancel_before and scene.selected_building_id == selection_before, "catalogue placement cancel restores authority and selection")
 	await _finish()
+
+func _different_choice(choices: Array, current: String) -> String:
+	for value in choices:
+		if str(value) != current: return str(value)
+	return ""
 
 func _finish() -> void:
 	if scene and is_instance_valid(scene):
