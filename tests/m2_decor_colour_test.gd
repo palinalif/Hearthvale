@@ -73,8 +73,23 @@ func _run() -> void:
 		await _refresh()
 		_check_base_colour(building_id, id, scene.DETAIL_COLOURS["natural"], "redo restores explicit colour")
 
+	# Attachments can displace automatic windows. Choose a currently visible
+	# inherited window, not the stale pre-attachment array: locking a hidden
+	# centre window would intentionally send the flower box into recovery.
+	var inherited_window_id := ""
+	for value in scene.building_world.get_building(building_id).get("details", []):
+		var candidate: Dictionary = value
+		if str(candidate.get("kind", "")) != "window" or str(candidate.get("id", "")) in ids: continue
+		if not bool(candidate.get("visible", false)) or bool(candidate.get("needs_placement", true)): continue
+		if (candidate.get("override", {}) as Dictionary).has("color_id"): continue
+		inherited_window_id = str(candidate["id"])
+		break
+	check(not inherited_window_id.is_empty(), "variation fixture uses a currently visible unpainted window")
+	if inherited_window_id.is_empty():
+		await _finish()
+		return
 	# A variation-only edit must not silently lock in the old picker default.
-	scene.selected_detail_id = windows[1]
+	scene.selected_detail_id = inherited_window_id
 	scene._begin_style_picker("variation")
 	scene._commit_style_choice("variation", "window_cottage_cross")
 	await _refresh()
@@ -82,18 +97,18 @@ func _run() -> void:
 	var before_accent: String = scene.building_world.serialize_document()
 	scene._open_accent_colour_picker()
 	scene._preview_surface_material("plum")
-	_check_cross_colour(building_id, windows[1], scene.ACCENT_COLOURS["plum"], "custom window follows live accent preview")
+	_check_cross_colour(building_id, inherited_window_id, scene.ACCENT_COLOURS["plum"], "custom window follows live accent preview")
 	for id in ids: _check_base_colour(building_id, id, scene.DETAIL_COLOURS["natural"], "accent preview respects manual colours")
 	scene._cancel_surface_material_picker()
 	await _refresh()
 	check(scene.building_world.serialize_document() == before_accent, "accent cancel remains read-only")
 	var saved_accent: Color = scene.ACCENT_COLOURS[scene._accent_material_id(scene.building_world.get_building(building_id))]
-	_check_cross_colour(building_id, windows[1], saved_accent, "accent cancel restores custom window colour")
+	_check_cross_colour(building_id, inherited_window_id, saved_accent, "accent cancel restores custom window colour")
 	scene._open_accent_colour_picker()
 	scene._commit_surface_material("plum")
 	await _refresh()
 	for id in ids: _check_base_colour(building_id, id, scene.DETAIL_COLOURS["natural"], "saved accent respects manual colours")
-	_check_cross_colour(building_id, windows[1], scene.ACCENT_COLOURS["plum"], "unpainted custom window follows saved accent")
+	_check_cross_colour(building_id, inherited_window_id, scene.ACCENT_COLOURS["plum"], "unpainted custom window follows saved accent")
 
 	# A later selection, duplicate and reload must not rely on selection-only tint.
 	var copy_id: String = scene.building_world.duplicate_building(building_id, Vector3(10, 0, 0))
@@ -132,7 +147,7 @@ func _check_base_colour(building_id: String, detail_id: String, expected: Color,
 		found += 1
 		var material := piece.material_override as StandardMaterial3D
 		check(material != null and material.albedo_color.is_equal_approx(expected), label + ": effective " + prefix + detail_id)
-	check(found > 0, label + ": inspect real material, not just saved colour ID")
+	check(found > 0, label + ": inspect actual colour-bearing geometry for " + detail_id)
 
 func _check_cross_colour(building_id: String, detail_id: String, expected: Color, label: String) -> void:
 	var visual: Node = scene.cottage_visuals.get(building_id, null)
