@@ -95,10 +95,16 @@ func _check_options_navigation(label: String) -> void:
 func _check_shape_navigation(label: String) -> void:
 	var before: String = scene.building_world.serialize_document()
 	var cursor_before: Vector3 = scene.cursor
-	scene._open_house_shape_picker()
+	# Enter through the actual Home options action. Opening the child alone
+	# bypasses the parent's _building_actions_open state used by Back.
+	scene._open_building_panel()
+	scene._house_shape_button.grab_focus()
+	await _settle()
+	_press("m1_accept")
 	await _settle()
 	var panel: PanelContainer = scene._house_shape_picker
 	var scroll: ScrollContainer = scene._house_shape_options_scroll
+	check(panel.visible and scene._house_shape_picker_open, label + ": controller opens shape submenu from home action")
 	check(scroll != null and scroll.follow_focus, label + ": shape options follow controller focus")
 	if not scroll: return
 	check(scene._catalogue_box(panel) is VBoxContainer, label + ": wrapped picker retains catalogue accessor")
@@ -112,6 +118,11 @@ func _check_shape_navigation(label: String) -> void:
 	if buttons.is_empty(): return
 	buttons[0].grab_focus()
 	await _settle()
+	# At taller sizes the enabled actions can fit without scrolling even
+	# though a disabled final action makes the full VBox slightly taller.
+	var needs_scroll := false
+	for button in buttons:
+		needs_scroll = needs_scroll or not scroll.get_global_rect().grow(1.0).encloses(button.get_global_rect())
 	var did_scroll := false
 	for index in buttons.size():
 		check(root.gui_get_focus_owner() == buttons[index], label + ": shape controller order skips disabled actions")
@@ -119,7 +130,9 @@ func _check_shape_navigation(label: String) -> void:
 		did_scroll = did_scroll or scroll.scroll_vertical > 0
 		_press("m1_height_down")
 		await _settle()
-	check(did_scroll, label + ": controller scrolls to all floor commands")
+	check(not needs_scroll or did_scroll, label + ": controller scrolls when enabled floor commands need it")
+	if label == str(Vector2i(1280, 600)):
+		check(needs_scroll and did_scroll, label + ": short viewport exercises real submenu scrolling")
 	check(root.gui_get_focus_owner() == buttons[0], label + ": shape navigation wraps down")
 	_press("m1_height_up")
 	await _settle()
