@@ -22,9 +22,15 @@ func _initialize() -> void:
 	var original_roof := str(original.get("roof_material_id", "terracotta"))
 	var original_accent := str(scene._accent_material_id(original))
 	var wall_choice := _different_choice(scene.WALL_MATERIALS, original_wall)
-	var roof_choice := _different_choice(scene.ROOF_MATERIALS, original_roof)
+	var roof_choices: Array[String] = scene._roof_material_choices()
+	var roof_choice := "wood_shake"
 	var accent_choice := _different_choice(scene.ACCENT_MATERIALS, original_accent)
-	_check(not wall_choice.is_empty() and not roof_choice.is_empty() and not accent_choice.is_empty(), "picker has alternate wall roof and accent colours")
+	_check(not wall_choice.is_empty() and roof_choice in roof_choices and not accent_choice.is_empty(), "picker has alternate wall roof and accent colours")
+	_check(roof_choices.size() == 7 and "wood_shake" in roof_choices and "standing_seam" in roof_choices and "green_roof" in roof_choices, "roof palette includes shake metal and living green finishes")
+	var randomized_roofs: Dictionary = {}
+	for seed in range(1000, 1100):
+		randomized_roofs[str(scene._palette_for_seed(seed, "riverside_cottage")["roof"])] = true
+	_check(randomized_roofs.has("wood_shake") and randomized_roofs.has("standing_seam") and randomized_roofs.has("green_roof"), "fresh-home randomization can select every added roof finish")
 	var wall_button: Button = null
 	var roof_button: Button = null
 	var accent_button: Button = null
@@ -53,12 +59,13 @@ func _initialize() -> void:
 
 	scene._open_surface_material_picker("roof")
 	_check(scene._surface_material_picker_open and scene._surface_material_picker_kind == "roof", "Roof colour uses the same picker")
-	_check(scene._surface_material_candidates().size() == scene.ROOF_MATERIALS.size(), "roof picker shows every roof material")
+	_check(scene._surface_material_candidates().size() == roof_choices.size(), "roof picker shows every roof material")
 	var wall_persisted := str(scene.building_world.get_building(scene.selected_building_id).get("wall_material_id", ""))
 	var roof_before_preview: String = str(scene.building_world.serialize_document())
 	scene._preview_surface_material(roof_choice)
 	_check(scene.building_world.serialize_document() == roof_before_preview, "roof colour browsing is read-only")
 	_check(visual != null and str(visual._applied_view.get("roof_material_id", "")) == roof_choice, "roof colour focus previews directly on house")
+	_check(_visual_uses_extra_roof_finish(visual, scene.EXTRA_ROOF_PALETTES[roof_choice]), "wood-shake preview reaches rendered roof geometry")
 	scene._commit_surface_material(roof_choice)
 	var after: Dictionary = scene.building_world.get_building(scene.selected_building_id)
 	_check(str(after.get("roof_material_id", "")) == roof_choice and str(after.get("wall_material_id", "")) == wall_persisted, "roof apply persists independently from wall colour")
@@ -82,8 +89,26 @@ func _initialize() -> void:
 	_check(_visual_uses_accent(visual, after, scene.ACCENT_COLOURS[accent_choice]), "saved accent drives shutters doors and window joinery together")
 	var serialized: String = scene.building_world.serialize_document()
 	var restored = preload("res://scripts/building_world.gd").new()
-	_check(restored.load_serialized_document(serialized) and str(restored.get_building(scene.selected_building_id).get("accent_material_id", "")) == accent_choice, "accent survives save and reload")
+	_check(restored.load_serialized_document(serialized) and str(restored.get_building(scene.selected_building_id).get("accent_material_id", "")) == accent_choice and str(restored.get_building(scene.selected_building_id).get("roof_material_id", "")) == roof_choice, "accent and expanded roof finish survive save and reload")
 	_finish()
+
+func _visual_uses_extra_roof_finish(visual: Node, palette: Array) -> bool:
+	if not visual: return false
+	var expected: Array[Color] = []
+	for value in palette: expected.append(value as Color)
+	return _tree_has_roof_colour(visual, expected, false)
+
+func _tree_has_roof_colour(node: Node, expected: Array[Color], inside_custom: bool) -> bool:
+	if str(node.name) == "M2RoofAccessories": return false
+	var custom: bool = inside_custom or str(node.name) == "M2RoofDesign"
+	if node is GeometryInstance3D:
+		var name := str(node.name)
+		var roof_piece := name.begins_with("RoofTiles_") or name in ["RidgeCourses", "RoofEdgeLip"] or (custom and not name.contains("Fill"))
+		var material = (node as GeometryInstance3D).material_override
+		if roof_piece and material is StandardMaterial3D and (material as StandardMaterial3D).albedo_color in expected: return true
+	for child in node.get_children():
+		if _tree_has_roof_colour(child, expected, custom): return true
+	return false
 
 func _visual_uses_accent(visual: Node, view: Dictionary, colour: Color) -> bool:
 	if not visual: return false
