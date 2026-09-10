@@ -69,7 +69,7 @@ func _run() -> void:
 		for section in Massing.sections_for(view): top = maxf(top, Massing.section_top(section))
 		var transform_value: Transform3D = view.get("transform", Transform3D.IDENTITY)
 		var target := transform_value * Vector3(bounds.get_center().x, top * 0.48, bounds.get_center().y)
-		camera.size = maxf(7.8, maxf(bounds.size.x, bounds.size.y, top * 0.78) * World.MINIATURE_SCALE * 1.50)
+		camera.size = maxf(7.8, maxf(maxf(bounds.size.x, bounds.size.y), top * 0.78) * World.MINIATURE_SCALE * 1.50)
 		camera.look_at_from_position(target + Vector3(8.7, 7.4, 10.7), target)
 		for unused in 10: await RenderingServer.frame_post_draw
 		var image := root.get_texture().get_image()
