@@ -145,7 +145,7 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 				for side in [-1.0, 1.0]:
 					var edge_wave := sin(float(path_id * 23 + index * 9 + int(side) * 4))
 					var edge_length := strip_length * (0.55 + 0.25 * (edge_wave * 0.5 + 0.5))
-					var edge_offset := side * (strip_width * 0.5 - edge_width * 0.45)
+					var edge_offset: float = float(side) * (strip_width * 0.5 - edge_width * 0.45)
 					var along_offset := 0.08 * sin(float(path_id * 7 + index * 13 + int(side) * 5))
 					var edge_point: Vector3 = strip_center + basis * Vector3(edge_offset, 0, along_offset)
 					_append_box(builder, _embedded_center(edge_point, PATH_THICKNESS, PATH_EDGE_RISE), Vector3(edge_width, PATH_THICKNESS, edge_length), basis, 1)
