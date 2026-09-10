@@ -10,6 +10,10 @@ var checks := 0
 var failures := 0
 
 func _initialize() -> void:
+	# Guard actual runtime overrides, not just the imported preview materials.
+	_check(_shader_uses_alpha("void fragment() { ALPHA=1.0; }"), "opacity guard catches even a constant fully-opaque output")
+	_check(_shader_uses_alpha("void fragment() { float value = ALPHA; }"), "opacity guard catches reads as well as writes")
+	_check(not _shader_uses_alpha("// ALPHA is forbidden\n/* ALPHA */ void fragment() { ALBEDO = vec3(1.0); }"), "opacity guard ignores comments")
 	for kind in ["tree", "foliage", "rock"]:
 		var names: Array = TREE_NAMES if kind == "tree" else (FOLIAGE_NAMES if kind == "foliage" else ROCK_NAMES)
 		_check(Flora.variant_count(kind) == names.size(), "%s exposes every authored variant" % kind)
@@ -48,6 +52,9 @@ func _initialize() -> void:
 		var source_material := expected.surface_get_material(0) as StandardMaterial3D
 		var effective_material := node.material_override as ShaderMaterial
 		_check(source_material != null and effective_material != null and (effective_material.get_shader_parameter("base_color") as Color).is_equal_approx(source_material.albedo_color), "%s variant %d surface %d preserves its authored palette color" % [kind, variant, surface])
+		_check(source_material != null and source_material.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED and is_equal_approx(source_material.albedo_color.a, 1.0), "%s source surface is intentionally solid" % key)
+		_check(effective_material != null and effective_material.shader != null and not _shader_uses_alpha(effective_material.shader.code), "%s gameplay override stays in the opaque pipeline" % key)
+		_check(node.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON and is_zero_approx(node.transparency), "%s solid batch participates in ordinary depth and shadow rendering" % key)
 		var animated := Garden.wind_strength(kind, variant) > 0.0
 		_check(node.multimesh.use_custom_data == animated, "%s variant %d uses per-instance wind data only when animated" % [kind, variant])
 		if animated:
@@ -95,3 +102,9 @@ func _check(ok: bool, label: String) -> void:
 	if not ok:
 		failures += 1
 		print("FAIL: " + label)
+
+func _shader_uses_alpha(code: String) -> bool:
+	# Source-level pipeline contract; rendered shadow quality is a separate gate.
+	var comments := RegEx.create_from_string("(?s)/\\*.*?\\*/|//[^\\n]*")
+	var alpha_token := RegEx.create_from_string("\\bALPHA\\b")
+	return alpha_token.search(comments.sub(code, "", true)) != null
