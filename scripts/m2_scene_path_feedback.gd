@@ -1,4 +1,4 @@
-extends "res://scripts/m2_scene_paths.gd"
+extends "res://scripts/m2_scene_composition.gd"
 ## Playtest interaction correction: B dismisses only the live prospective path
 ## point first. Confirmed route points remain intact; a second B exits once no
 ## point is actively being placed.

@@ -32,7 +32,7 @@ func _initialize() -> void:
 	_check(scene._build_catalogue_open, "D-pad Up opens the build catalogue")
 	scene._build_catalogue_buttons[1].grab_focus()
 	await _press(JOY_BUTTON_A)
-	_check(scene._roads_catalogue_open and scene._roads_catalogue_buttons.size() == 3, "Roads & Paths opens its three-style submenu")
+	_check(scene._roads_catalogue_open and scene._roads_catalogue_buttons.size() == 5, "Roads & Paths opens its three path styles plus two bridge styles")
 	_check(scene._roads_catalogue_buttons[0].text.begins_with("Packed-earth footpath") and scene._roads_catalogue_buttons[1].text.begins_with("Cobblestone lane") and scene._roads_catalogue_buttons[2].text.begins_with("Stepping-stone trail"), "all path styles are visually named")
 	scene._roads_catalogue_buttons[0].grab_focus()
 	await _press(JOY_BUTTON_A)

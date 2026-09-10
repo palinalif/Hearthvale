@@ -11,20 +11,30 @@ const PATH_MIN_WIDTH := 0.25
 const PATH_MAX_WIDTH := 3.0
 const PATH_MIN_SEGMENT := 0.125
 const PATH_RENDER_CELL_LIMIT := 24000
+const BRIDGE_STYLE_IDS: Array[String] = ["timber", "stone"]
+const BRIDGE_LIMIT := 16
+const BRIDGE_MIN_WIDTH := 0.75
+const BRIDGE_MAX_WIDTH := 2.0
+const BRIDGE_MIN_SPAN := 1.0
+const BRIDGE_MAX_SPAN := 10.0
+const BRIDGE_RENDER_CELL_LIMIT := 8000
 const EDITABLE_WORLD_SIZE := 48.0
 const Grid = preload("res://scripts/visual_grid.gd")
 var records: Array = []
 var paths: Array = []
+var bridges: Array = []
 var next_id := 1
 
 func document() -> Dictionary:
-	return {"version": 1, "next_id": next_id, "records": records.duplicate(true), "paths": paths.duplicate(true)}
+	return {"version": 1, "next_id": next_id, "records": records.duplicate(true), "paths": paths.duplicate(true), "bridges": bridges.duplicate(true)}
 
 static func validate(value: Dictionary) -> bool:
 	if not _integer(value.get("version", null)) or int(value["version"]) != 1 or not value.get("records", null) is Array: return false
 	if value["records"].size() > LIMIT or not _integer(value.get("next_id", null)) or int(value["next_id"]) < 1: return false
 	var path_values = value.get("paths", [])
 	if not path_values is Array or path_values.size() > PATH_LIMIT: return false
+	var bridge_values = value.get("bridges", [])
+	if not bridge_values is Array or bridge_values.size() > BRIDGE_LIMIT: return false
 	var ids := {}
 	var trees := 0
 	for record in value["records"]:
@@ -50,12 +60,22 @@ static func validate(value: Dictionary) -> bool:
 		ids[id] = true
 		rendered_cells += _estimated_render_cells(path)
 		if rendered_cells > PATH_RENDER_CELL_LIMIT: return false
+	var bridge_cells := 0
+	for bridge_value in bridge_values:
+		if not _validate_bridge_record(bridge_value): return false
+		var bridge: Dictionary = bridge_value
+		var id := int(bridge["id"])
+		if id < 1 or id >= int(value["next_id"]) or ids.has(id): return false
+		ids[id] = true
+		bridge_cells += _estimated_bridge_render_cells(bridge)
+		if bridge_cells > BRIDGE_RENDER_CELL_LIMIT: return false
 	return true
 
 func restore(value: Dictionary) -> bool:
 	if not validate(value): return false
 	records = value["records"].duplicate(true)
 	paths = value.get("paths", []).duplicate(true)
+	bridges = value.get("bridges", []).duplicate(true)
 	next_id = int(value["next_id"])
 	# JSON has no integer/float distinction on reload. Reassert the integer
 	# identity fields so deterministic documents keep the same serialization
@@ -67,6 +87,9 @@ func restore(value: Dictionary) -> bool:
 	for path_value in paths:
 		var path: Dictionary = path_value
 		path["id"] = int(path["id"])
+	for bridge_value in bridges:
+		var bridge: Dictionary = bridge_value
+		bridge["id"] = int(bridge["id"])
 	return true
 
 static func position_of(record: Dictionary) -> Vector3:
@@ -108,6 +131,32 @@ func erase_path(path_id: int) -> bool:
 	for index in paths.size():
 		if int((paths[index] as Dictionary).get("id", -1)) != path_id: continue
 		paths.remove_at(index)
+		return true
+	return false
+
+## Simple bridges remain separate composition authority instead of being baked
+## into terrain or path meshes. The two saved X/Z points define orientation;
+## generated supports, rails, and planks are disposable presentation.
+func add_bridge(style_id: String, width: float, point_values: Array) -> int:
+	if point_values.size() != 2: return -1
+	var normalized: Array = []
+	for point_value in point_values:
+		var point := _point_array(point_value)
+		if point.is_empty(): return -1
+		normalized.append(point)
+	var candidate := {"id": next_id, "style_id": style_id, "width": snappedf(width, Grid.UNIT), "points": normalized}
+	var proposed := document()
+	(proposed["bridges"] as Array).append(candidate)
+	proposed["next_id"] = next_id + 1
+	if not validate(proposed): return -1
+	bridges.append(candidate)
+	next_id += 1
+	return int(candidate["id"])
+
+func erase_bridge(bridge_id: int) -> bool:
+	for index in bridges.size():
+		if int((bridges[index] as Dictionary).get("id", -1)) != bridge_id: continue
+		bridges.remove_at(index)
 		return true
 	return false
 
@@ -198,6 +247,29 @@ static func _validate_path_record(value: Variant) -> bool:
 		previous = point
 	return true
 
+static func _validate_bridge_record(value: Variant) -> bool:
+	if not value is Dictionary: return false
+	var bridge: Dictionary = value
+	if not _integer(bridge.get("id", null)) or int(bridge["id"]) < 1: return false
+	if not BRIDGE_STYLE_IDS.has(str(bridge.get("style_id", ""))): return false
+	if not (bridge.get("width", null) is int or bridge.get("width", null) is float): return false
+	var width := float(bridge["width"])
+	if not is_finite(width) or width < BRIDGE_MIN_WIDTH or width > BRIDGE_MAX_WIDTH: return false
+	if not is_equal_approx(width, snappedf(width, Grid.UNIT)): return false
+	var point_values = bridge.get("points", null)
+	if not point_values is Array or point_values.size() != 2: return false
+	var parsed: Array[Vector2] = []
+	for point_value in point_values:
+		if not point_value is Array or point_value.size() != 2: return false
+		for coordinate in point_value:
+			if not (coordinate is int or coordinate is float) or not is_finite(float(coordinate)): return false
+		var point := Vector2(float(point_value[0]), float(point_value[1]))
+		if point.x < 0.0 or point.x > EDITABLE_WORLD_SIZE or point.y < 0.0 or point.y > EDITABLE_WORLD_SIZE: return false
+		if not is_equal_approx(point.x, snappedf(point.x, Grid.UNIT)) or not is_equal_approx(point.y, snappedf(point.y, Grid.UNIT)): return false
+		parsed.append(point)
+	var span := parsed[0].distance_to(parsed[1])
+	return span >= BRIDGE_MIN_SPAN - 0.000001 and span <= BRIDGE_MAX_SPAN + 0.000001
+
 static func _estimated_render_cells(path: Dictionary) -> int:
 	var points: Array = path["points"]
 	var width := float(path["width"])
@@ -208,6 +280,14 @@ static func _estimated_render_cells(path: Dictionary) -> int:
 		samples += maxi(1, ceili(a.distance_to(b) / 0.5))
 	var width_cells := ceili(width / Grid.UNIT)
 	return samples * maxi(1, width_cells) * (3 if str(path["style_id"]) == "stepping_stones" else 2)
+
+static func _estimated_bridge_render_cells(bridge: Dictionary) -> int:
+	var points: Array = bridge["points"]
+	var a := Vector2(float(points[0][0]), float(points[0][1]))
+	var b := Vector2(float(points[1][0]), float(points[1][1]))
+	var span_samples := maxi(1, ceili(a.distance_to(b) / 0.25))
+	var width_cells := maxi(1, ceili(float(bridge["width"]) / Grid.UNIT))
+	return span_samples * width_cells + span_samples * 4 + 16
 
 static func _distance_to_polyline_squared(point: Vector2, point_values: Array) -> float:
 	var best := INF
