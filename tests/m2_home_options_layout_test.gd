@@ -69,7 +69,7 @@ func _check_options_navigation(label: String) -> void:
 	var did_scroll := false
 	for index in buttons.size():
 		check(root.gui_get_focus_owner() == buttons[index], label + ": controller preserves visual action order")
-		check(scroll.get_global_rect().grow(1.0).encloses(buttons[index].get_global_rect()), label + ": focused option is fully visible")
+		check(scroll.get_global_rect().grow(1.0).encloses(buttons[index].get_global_rect()), "%s: focused option %d (%s) is fully visible; option=%s scroll=%s offset=%d" % [label, index, buttons[index].text, buttons[index].get_global_rect(), scroll.get_global_rect(), scroll.scroll_vertical])
 		did_scroll = did_scroll or scroll.scroll_vertical > 0
 		_press("m1_height_down")
 		await _settle()
