@@ -80,10 +80,11 @@ func _refresh_custom_window_overlays_for_visual(visual: Node3D) -> void:
 	for detail_value in view.get("details", []):
 		var detail: Dictionary = detail_value
 		var detail_id := str(detail.get("id", ""))
-		var base_joinery := visual.get_node_or_null("Joinery_" + detail_id) as Node3D
-		if base_joinery: base_joinery.visible = true
 		var asset_id := str(detail.get("asset_id", ""))
-		if asset_id not in CUSTOM_WINDOW_ASSETS or not bool(detail.get("visible", true)) or bool(detail.get("needs_placement", false)): continue
+		var uses_custom_joinery := asset_id in CUSTOM_WINDOW_ASSETS and bool(detail.get("visible", true)) and not bool(detail.get("needs_placement", false))
+		var base_joinery := visual.get_node_or_null("Joinery_" + detail_id) as Node3D
+		if base_joinery: base_joinery.visible = not uses_custom_joinery
+		if not uses_custom_joinery: continue
 		var local = detail.get("resolved_position", null)
 		if not local is Vector3: continue
 		custom_details.append(detail)
