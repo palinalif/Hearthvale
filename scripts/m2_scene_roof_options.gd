@@ -1,4 +1,4 @@
-extends "res://scripts/m2_scene_roof_design.gd"
+extends "res://scripts/m2_scene_roof_accessories.gd"
 
 ## Integration layer for the growing house roof controls. Keep the main Home
 ## options readable at 720p while leaving the dedicated roof pickers roomy.
