@@ -72,6 +72,8 @@ func _initialize() -> void:
 	check(str(_detail(restored_view, suppressed_id).get("state", "")) == "suppressed", "suppressed upper window survives reload")
 	check(_active_upper_windows(restored_view).size() >= 2, "ordinary generated upper windows survive reload")
 
+	_check_inherited_edits(serialized, building_id, styled_id, suppressed_id)
+
 	# If the storey disappears, untouched procedural windows become dormant,
 	# while explicit player edits retain recovery semantics.
 	index = world._building_index(building_id)
@@ -90,6 +92,79 @@ func _initialize() -> void:
 	check(not bool(untouched.get("layout_active", true)) and not bool(untouched.get("visible", true)) and not bool(untouched.get("needs_placement", true)), "untouched automatic window quietly goes dormant with its removed floor")
 
 	_finish()
+
+func _check_inherited_edits(serialized: String, building_id: String, styled_id: String, suppressed_id: String) -> void:
+	# Use the actual M2 model, not the M1 resize model: upstairs support must add
+	# to the existing edit API rather than accidentally replacing it.
+	var world = World.new()
+	var complete := true
+	for method in ["move_building", "move_building_transform", "preview_handle_resize", "commit_handle_resize"]:
+		var available: bool = world.has_method(method)
+		check(available, "M2 retains inherited " + method)
+		complete = complete and available
+	if not complete: return
+	check(world.load_serialized_document(serialized), "edited upper-floor move/resize fixture loads")
+	var neighbor_id: String = world.duplicate_building(building_id, Vector3(8, 0, 8))
+	check(not neighbor_id.is_empty(), "neighbor fixture has independent identity")
+	var before: Dictionary = world.get_document()
+	var original: Dictionary = world.get_building(building_id)
+	var revision: int = world.get_revision()
+	var target: Transform3D = original["transform"]
+	target.basis = Basis(Vector3.UP, deg_to_rad(37.0)) * target.basis
+	target.origin += Vector3(3.125, 0, 1.5)
+	check(world.move_building_transform(building_id, target, revision), "M2 moves and rotates an edited two-floor house")
+	check(world.get_revision() == revision + 1, "move/rotate is one revision")
+	var moved: Dictionary = world.get_building(building_id)
+	check((moved["transform"] as Transform3D).is_equal_approx(target), "M2 transform matches the requested position, yaw and miniature scale")
+	check(moved["details"] == original["details"], "moving preserves resolved upper windows, overrides and suppressions")
+	var after: Dictionary = world.get_document()
+	var expected: Array = (before["buildings"] as Array).duplicate(true)
+	var index: int = world._building_index(building_id)
+	expected[index]["transform"] = after["buildings"][index]["transform"]
+	check(after["buildings"] == expected and after["next_id"] == before["next_id"], "only the selected transform changes; neighbor, recipes and IDs are untouched")
+
+	var stable: String = world.serialize_document()
+	var current_revision: int = world.get_revision()
+	check(not world.move_building_transform(building_id, target, current_revision), "identical transform is a no-op")
+	check(not world.move_building_transform("missing-building", target, current_revision), "unknown building cannot move")
+	check(not world.move_building_transform(building_id, original["transform"], revision), "stale transform cannot replace the current recipe")
+	var invalid := target
+	invalid.origin.x = INF
+	check(not world.move_building_transform(building_id, invalid, current_revision), "nonfinite move is rejected")
+	check(world.serialize_document() == stable, "rejected and no-op moves leave authority and revision unchanged")
+	check(world.undo() and world.get_document()["buildings"] == before["buildings"], "one undo exactly restores the edited two-floor house and neighbor")
+	check(world.redo() and world.get_document()["buildings"] == after["buildings"], "one redo restores the complete moved recipe")
+
+	check(world.move_building(building_id, target.origin + Vector3(0.5, 0, 0), world.get_revision()), "legacy translation helper remains available on M2")
+	var translated: Transform3D = world.get_building(building_id)["transform"]
+	check(translated.origin.is_equal_approx(target.origin + Vector3(0.5, 0, 0)) and translated.basis.is_equal_approx(target.basis), "translation preserves yaw and scale")
+	check(world.undo() and world.get_document()["buildings"] == after["buildings"], "translation is a separate undoable edit")
+	var restored = World.new()
+	check(restored.load_serialized_document(world.serialize_document()), "moved upper-floor recipe reloads through M2")
+	var restored_view: Dictionary = restored.get_building(building_id)
+	check((restored_view["transform"] as Transform3D).is_equal_approx(target) and restored_view["details"] == moved["details"], "reload preserves yaw, upper support, window edits and suppressions")
+
+	# A preview is also cancellation: discarding it must not alter the document.
+	var dimensions: Vector3 = moved["dimensions"]
+	var requested := dimensions + Vector3(2, 0, 0)
+	stable = world.serialize_document()
+	revision = world.get_revision()
+	var preview: Dictionary = world.preview_handle_resize(building_id, requested, Vector3.RIGHT, revision)
+	check(not preview.is_empty(), "M2 retains one-sided resize previews on the same model")
+	check(world.serialize_document() == stable, "discarding a resize preview leaves authority untouched")
+	if preview.is_empty(): return
+	var preview_view: Dictionary = preview["view"]
+	check(str(_detail(preview_view, styled_id).get("asset_id", "")) == "window_arch_casement", "resize reflow retains the restyled upstairs window")
+	check(str(_detail(preview_view, suppressed_id).get("state", "")) == "suppressed", "resize reflow does not resurrect the suppressed upstairs window")
+	var upper: Array[Dictionary] = _active_upper_windows(preview_view)
+	check(upper.size() >= 2, "resize uses the M2 upper-window resolver, not only the base-wall layout")
+	for window in upper:
+		check((window.get("resolved_position", Vector3.ZERO) as Vector3).y > dimensions.y, "inherited resize keeps upper-window resolution upstairs")
+	check(world.commit_handle_resize(building_id, requested, Vector3.RIGHT, revision), "M2 commits the inherited one-sided resize")
+	check(world.get_revision() == revision + 1 and world.get_building(building_id) == preview_view, "resize commits exactly its preview in one revision")
+	check(not world.commit_handle_resize(building_id, dimensions, Vector3.RIGHT, revision), "stale resize cannot overwrite a committed edit")
+	check(world.undo() and world.get_document()["buildings"] == after["buildings"], "one resize undo restores all recipes and upper-window records")
+	check(world.redo() and world.get_building(building_id) == preview_view, "resize redo restores the approved preview")
 
 func _active_upper_windows(view: Dictionary) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []

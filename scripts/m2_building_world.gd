@@ -1,6 +1,7 @@
-extends "res://scripts/building_world.gd"
+extends "res://scripts/cottage_resize_world.gd"
 class_name M2BuildingWorld
 
+## Keep the inherited move/rotate and resize-handle edit contract.
 ## M2 keeps the M1 document schema, but generated massing walls can describe a
 ## bounded facade run instead of implicitly spanning the original rectangle.
 ## All legacy surfaces fall straight through to BuildingWorld behaviour.
