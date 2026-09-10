@@ -3,6 +3,18 @@ extends "res://scripts/m1_scene_detail_resize.gd"
 const HomeSilhouette = preload("res://scripts/m2_home_silhouette.gd")
 const WALL_MATERIALS: Array[String] = ["stone_plaster", "warm_plaster", "timber", "chalk_white", "moss_stone", "rose_lime"]
 const ROOF_MATERIALS: Array[String] = ["terracotta", "moss_tile", "slate", "thatch"]
+const SURFACE_MATERIAL_COLOURS := {
+	"stone_plaster": Color("#e7cfab"),
+	"warm_plaster": Color("#d5a982"),
+	"timber": Color("#9c684d"),
+	"chalk_white": Color("#e8e2d5"),
+	"moss_stone": Color("#a5b19b"),
+	"rose_lime": Color("#d7aaa0"),
+	"terracotta": Color("#b9654c"),
+	"moss_tile": Color("#66765d"),
+	"slate": Color("#59636d"),
+	"thatch": Color("#aa8a52"),
+}
 
 var _home_catalogue_open := false
 var _home_catalogue_panel: PanelContainer
@@ -19,12 +31,19 @@ var _catalogue_designs: Dictionary = {}
 var _catalogue_buttons_by_id: Dictionary = {}
 var _catalogue_wall_choices: Dictionary = {}
 var _catalogue_roof_choices: Dictionary = {}
+var _surface_material_picker_open := false
+var _surface_material_picker_kind := ""
+var _surface_material_picker_original := ""
+var _surface_material_picker_preview := ""
+var _surface_material_picker_panel: PanelContainer
+var _surface_material_picker_buttons: Array[Button] = []
 
 func _ready() -> void:
 	super._ready()
 	_install_place_home_action()
 	_build_global_catalogue()
 	_build_home_catalogue()
+	_build_surface_material_picker()
 
 func _install_place_home_action() -> void:
 	if not _building_panel: return
@@ -39,10 +58,10 @@ func _install_place_home_action() -> void:
 	_place_home_button = box.get_child(box.get_child_count() - 1) as Button
 	box.move_child(_place_home_button, 1)
 	for button in _building_buttons:
-		if button.text.begins_with("Material:"): button.text = "Wall material: next"
-	_add_building_button(box, "Roof material: next", _cycle_selected_roof)
+		if button.text.begins_with("Material:"): button.text = "Wall colour"
+	_add_building_button(box, "Roof colour", _cycle_selected_roof)
 	var ordered: Array[Button] = [_place_home_button]
-	for prefix in ["Duplicate", "Add window", "Add door", "Add flower box", "Add shutter", "Wall material", "Roof material", "Needs placement", "Close"]:
+	for prefix in ["Duplicate", "Add window", "Add door", "Add flower box", "Add shutter", "Wall colour", "Roof colour", "Needs placement", "Close"]:
 		for child in box.get_children():
 			if child is Button and (child as Button).text.begins_with(prefix) and child not in ordered: ordered.append(child)
 	for index in ordered.size(): box.move_child(ordered[index], index + 1)
@@ -86,9 +105,27 @@ func _build_home_catalogue() -> void:
 		button.focus_mode = Control.FOCUS_ALL
 		button.pressed.connect(_choose_home_design.bind(design_id))
 		row.add_child(button)
-		_home_catalogue_buttons.append(button)
+	_home_catalogue_buttons.append(button)
 		_catalogue_buttons_by_id[design_id] = button
 		_refresh_catalogue_button(design_id)
+
+func _build_surface_material_picker() -> void:
+	_surface_material_picker_panel = _make_catalogue_panel("SurfaceMaterialPicker", Vector2(430, 430))
+	var box := _catalogue_box(_surface_material_picker_panel)
+	_add_catalogue_heading(box, "HOUSE COLOUR", "Browse to preview • A apply • B cancel")
+	for material_id in WALL_MATERIALS + ROOF_MATERIALS:
+		var button := Button.new()
+		button.text = material_id.replace("_", " ").capitalize()
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.custom_minimum_size = Vector2(380, 44)
+		button.focus_mode = Control.FOCUS_ALL
+		button.icon = _colour_swatch(SURFACE_MATERIAL_COLOURS[material_id])
+		button.set_meta("material_id", material_id)
+		button.focus_entered.connect(_preview_surface_material.bind(material_id))
+		button.pressed.connect(_commit_surface_material.bind(material_id))
+		button.visible = false
+		box.add_child(button)
+		_surface_material_picker_buttons.append(button)
 
 func _build_global_catalogue() -> void:
 	_build_catalogue_panel = _make_catalogue_panel("BuildCatalogue", Vector2(520, 360))
@@ -103,7 +140,7 @@ func _build_global_catalogue() -> void:
 	_add_catalogue_heading(outdoor_box, "OUTDOOR DECORATIONS", "Choose a brush, then paint directly in the world")
 	_add_catalogue_button(outdoor_box, _outdoor_catalogue_buttons, "Foliage brush\nGrass, flowers, ferns, reeds, and mushrooms", _choose_outdoor_tool.bind("foliage"))
 	_add_catalogue_button(outdoor_box, _outdoor_catalogue_buttons, "Tree brush\nPlace varied orchard and riverside trees", _choose_outdoor_tool.bind("tree"))
-	_add_catalogue_button(outdoor_box, _outdoor_catalogue_buttons, "Clear decorations\nRemove planting without changing terrain", _choose_outdoor_tool.bind("clear_planting"))
+	_add_catalogue_button(outdoor_box, _outdoor_catalogue_buttons, "Clear decorations\nRemove planting without changing terrain", _choose_outdoor_tool.bind("clear_planting")
 
 func _make_catalogue_panel(node_name: String, minimum: Vector2) -> PanelContainer:
 	var panel := PanelContainer.new()
@@ -144,6 +181,21 @@ func _add_catalogue_button(box: VBoxContainer, buttons: Array[Button], label: St
 	buttons.append(button)
 
 func _input(event: InputEvent) -> void:
+	if _surface_material_picker_open and not menu_open:
+		if event.is_action_pressed("m1_cancel") or event.is_action_pressed("m1_tools"):
+			_cancel_surface_material_picker()
+		elif event.is_action_pressed("m1_pause"):
+			_cancel_surface_material_picker()
+			super._input(event)
+		elif event.is_action_pressed("m1_accept"):
+			var focus := get_viewport().gui_get_focus_owner()
+			if focus in _surface_material_candidates(): (focus as Button).pressed.emit()
+		elif event.is_action_pressed("m1_height_up") or event.is_action_pressed("ui_up"):
+			_move_focus(_surface_material_candidates(), -1)
+		elif event.is_action_pressed("m1_height_down") or event.is_action_pressed("ui_down"):
+			_move_focus(_surface_material_candidates(), 1)
+		get_viewport().set_input_as_handled()
+		return
 	if _home_catalogue_open and not menu_open:
 		if event.is_action_pressed("m1_cancel") or event.is_action_pressed("m1_tools"):
 			_close_home_catalogue(true)
@@ -170,7 +222,7 @@ func _input(event: InputEvent) -> void:
 			_close_all_catalogues()
 			super._input(event)
 		elif event.is_action_pressed("m1_accept"):
-			var focus := get_viewport().gui_get_focus_owner()
+			var focus := get_viewport().gui_get_focus_wner()
 			if focus in _outdoor_catalogue_buttons: (focus as Button).pressed.emit()
 		elif event.is_action_pressed("m1_height_up") or event.is_action_pressed("ui_up"):
 			_move_focus(_outdoor_catalogue_buttons, -1)
@@ -185,7 +237,7 @@ func _input(event: InputEvent) -> void:
 			_close_all_catalogues()
 			super._input(event)
 		elif event.is_action_pressed("m1_accept"):
-			var focus := get_viewport().gui_get_focus_owner()
+			var focus := get_viewport().gui_get_focus_wner()
 			if focus in _build_catalogue_buttons: (focus as Button).pressed.emit()
 		elif event.is_action_pressed("m1_height_up") or event.is_action_pressed("ui_up"):
 			_move_focus(_build_catalogue_buttons, -1)
@@ -226,9 +278,12 @@ func _close_all_catalogues(clear_tools: bool = true) -> void:
 	_outdoor_catalogue_open = false
 	_home_catalogue_open = false
 	_home_catalogue_returns_to_build = false
+	_surface_material_picker_open = false
+	_surface_material_picker_kind = ""
 	if _build_catalogue_panel: _build_catalogue_panel.visible = false
 	if _outdoor_catalogue_panel: _outdoor_catalogue_panel.visible = false
 	if _home_catalogue_panel: _home_catalogue_panel.visible = false
+	if _surface_material_picker_panel: _surface_material_picker_panel.visible = false
 	if clear_tools: tools_open = false
 	if clear_tools:
 		get_viewport().gui_release_focus()
@@ -315,13 +370,107 @@ func _refresh_catalogue_button(design_id: String) -> void:
 	var button: Button = _catalogue_buttons_by_id[design_id]
 	button.text = "%s\n%s\nWalls: %s   Roof: %s" % [design["name"], design["summary"], str(_catalogue_wall_choices[design_id]).replace("_", " ").capitalize(), str(_catalogue_roof_choices[design_id]).replace("_", " ").capitalize()]
 
+func _cycle_cottage_material() -> void:
+	_open_surface_material_picker("wall")
+
 func _cycle_selected_roof() -> void:
+	_open_surface_material_picker("roof")
+
+func _open_surface_material_picker(kind: String) -> void:
+	if kind not in ["wall", "roof"]: return
 	var view: Dictionary = building_world.get_building(selected_building_id)
 	if view.is_empty(): return
-	var current := str(view.get("roof_material_id", "terracotta"))
-	var next_material := ROOF_MATERIALS[posmod(ROOF_MATERIALS.find(current) + 1, ROOF_MATERIALS.size())]
-	if building_world.set_roof_material(selected_building_id, next_material): _record_history("building")
-	_set_status("Roof material: %s" % next_material.replace("_", " ").capitalize())
+	_surface_material_picker_kind = kind
+	_surface_material_picker_original = str(view.get("wall_material_id", view.get("material_id", "stone_plaster"))) if kind == "wall" else str(view.get("roof_material_id", "terracotta"))
+	_surface_material_picker_preview = _surface_material_picker_original
+	_surface_material_picker_open = true
+	tools_open = true
+	if _building_panel: _building_panel.visible = false
+	_surface_material_picker_panel.visible = true
+	var candidates := _surface_material_candidates()
+	for button in _surface_material_picker_buttons:
+		button.visible = button in candidates
+		button.disabled = not button.visible
+	var focus_button: Button = null
+	for button in candidates:
+		if str(button.get_meta("material_id", "")) == _surface_material_picker_original: focus_button = button
+	if focus_button == null and not candidates.is_empty(): focus_button = candidates[0]
+	if focus_button: focus_button.grab_focus()
+	_set_status("Choose %s colour • browse to preview • A apply / B cancel" % kind)
+	_apply_surface_material_preview()
+	_refresh_controller_hud()
+
+func _surface_material_candidates() -> Array:
+	var result: Array = []
+	var choices := WALL_MATERIALS if _surface_material_picker_kind == "wall" else ROOF_MATERIALS
+	for button in _surface_material_picker_buttons:
+		if str(button.get_meta("material_id", "")) in choices: result.append(button)
+	return result
+
+func _preview_surface_material(material_id: String) -> void:
+	if not _surface_material_picker_open: return
+	_surface_material_picker_preview = material_id
+	_apply_surface_material_preview()
+	_set_status("%s colour preview: %s • A apply / B cancel" % [_surface_material_picker_kind.capitalize(), material_id.replace("_", " ").capitalize()])
+
+func _apply_surface_material_preview() -> void:
+	if not _surface_material_picker_open: return
+	var presentation: Dictionary = building_world.get_building(selected_building_id)
+	if presentation.is_empty(): return
+	if _surface_material_picker_kind == "wall":
+		presentation["wall_material_id"] = _surface_material_picker_preview
+		presentation["material_id"] = _surface_material_picker_preview
+	else:
+		presentation["roof_material_id"] = _surface_material_picker_preview
+	var revision: int = building_world.get_revision()
+	for visual in _selected_visual_roots():
+		if visual.has_method("request_revision"): visual.request_revision(revision)
+		if visual.has_method("apply_building"): visual.apply_building(presentation, revision)
+
+func _commit_surface_material(material_id: String) -> void:
+	if not _surface_material_picker_open: return
+	var kind := _surface_material_picker_kind
+	var changed: bool = building_world.set_wall_material(selected_building_id, material_id) if kind == "wall" else building_world.set_roof_material(selected_building_id, material_id)
+	_close_surface_material_picker()
+	if changed: _record_history("building")
+	_set_status("%s colour %s" % [kind.capitalize(), "updated" if changed else "unchanged"])
+	_presentation_key = ""
+	_update_presentation()
+
+func _cancel_surface_material_picker() -> void:
+	if not _surface_material_picker_open: return
+	var kind := _surface_material_picker_kind
+	_close_surface_material_picker()
+	_presentation_key = ""
+	_update_presentation()
+	_set_status("%s colour change cancelled" % kind.capitalize())
+
+func _close_surface_material_picker() -> void:
+	_surface_material_picker_open = false
+	_surface_material_picker_kind = ""
+	_surface_material_picker_original = ""
+	_surface_material_picker_preview = ""
+	tools_open = false
+	if _surface_material_picker_panel: _surface_material_picker_panel.visible = false
+	for button in _surface_material_picker_buttons: button.visible = false
+	get_viewport().gui_release_focus()
+	_refresh_controller_hud()
+
+func _cancel_current_edit(reason: String) -> void:
+	if _surface_material_picker_open:
+			_surface_material_picker_open = false
+		_surface_material_picker_kind = ""
+		_surface_material_picker_original = ""
+		_surface_material_picker_preview = ""
+		tools_open = false
+		if _surface_material_picker_panel: _surface_material_picker_panel.visible = false
+		_presentation_key = ""
+		super._update_presentation()
+	super._cancel_current_edit(reason)
+
+func _update_presentation() -> void:
+	super._update_presentation()
+	if _surface_material_picker_open: _apply_surface_material_preview()
 
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
@@ -329,7 +478,7 @@ func _refresh_controller_hud() -> void:
 	if _mode_label and not menu_open:
 		_mode_label.text = "BUILD"
 		_mode_label.modulate = Color("#f2c982")
-	var catalogue_active := _build_catalogue_open or _outdoor_catalogue_open or _home_catalogue_open
+	var catalogue_active := _build_catalogue_open or _outdoor_catalogue_open or _home_catalogue_open or _surface_material_picker_open
 	if catalogue_active:
 		if _terrain_panel: _terrain_panel.visible = false
 		if _building_panel: _building_panel.visible = false
@@ -338,7 +487,12 @@ func _refresh_controller_hud() -> void:
 	if _build_catalogue_panel: _build_catalogue_panel.visible = _build_catalogue_open and not menu_open
 	if _outdoor_catalogue_panel: _outdoor_catalogue_panel.visible = _outdoor_catalogue_open and not menu_open
 	_home_catalogue_panel.visible = _home_catalogue_open and not menu_open
-	if _build_catalogue_open:
+	if _surface_material_picker_panel: _surface_material_picker_panel.visible = _surface_material_picker_open and not menu_open
+	if _surface_material_picker_open:
+		_tool_name.text = "%s colour" % _surface_material_picker_kind.capitalize()
+		_tool_meta.text = _surface_material_picker_preview.replace("_", " ").capitalize()
+		_set_prompts([["UP/DOWN", "Choose"], ["A", "Apply"], ["B", "Cancel"], ["RS", "Orbit"]])
+	elif _build_catalogue_open:
 		_tool_name.text = "Build catalogue"
 		_tool_meta.text = "Buildings • roads • outdoor decorations"
 		_set_prompts([["UP/DOWN", "Choose"], ["A", "Open"], ["B", "Close"]])
