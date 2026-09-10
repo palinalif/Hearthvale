@@ -63,8 +63,13 @@ func _initialize() -> void:
 			else: phases_by_asset[asset_key] = phase
 		elif kind == "rock" or variant >= 8:
 			_check(not node.multimesh.use_custom_data, "%s variant %d remains intentionally static" % [kind, variant])
+	for variant in 8:
+		_check(Garden.wind_strength("foliage", variant) >= 0.04, "small foliage variant %d has visible gameplay wind strength" % variant)
+	for variant in range(8, FOLIAGE_NAMES.size()):
+		_check(is_zero_approx(Garden.wind_strength("foliage", variant)), "mushroom variant %d remains intentionally static" % variant)
+	_check(Garden.TREE_WIND_STRENGTH > 0.16 and Garden.MAX_WIND_STRENGTH >= Garden.TREE_WIND_STRENGTH, "tree wind is slightly stronger with matching cull margin")
 	var phase_a := Garden.wind_phase({"id": 1, "kind": "tree", "seed": 0, "position": [4.0, 8.0, 8.0]})
-	var phase_b := Garden.wind_phase({"id": 2, "kind": "tree", "seed": 0, "position": [10.0, 8.0, 8.0]})
+	var phase_b := Garden.wind_phase({"id": 2, "kind": "treee", "seed": 0, "position": [10.0, 8.0, 8.0]})
 	_check(not is_equal_approx(phase_a, phase_b), "separate plantings receive independent deterministic wind phases")
 	garden.set_wind_enabled(false)
 	var all_paused := true

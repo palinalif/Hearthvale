@@ -59,15 +59,15 @@ func _run_controller_checks() -> void:
 			starting_foliage_variants[posmod(int(record.seed), Flora.variant_count("foliage"))] = true
 			starting_foliage_turns[GardenVisual.planting_turn(record)] = true
 	_check(starting_foliage_variants.size() == Flora.variant_count("foliage"), "starting scene includes every authored foliage variant")
-	_check(starting_tree_turns.size() >= 3 and starting_foliage_turns.size() == 4, "starting trees use varied deterministic 15-degree steps and foliage uses quarter turns")
+	_check(starting_tree_turns.size() >= 3 and starting_foliage_turns.size() == 4, "starting trees and foliage use varied deterministic quarter turns")
 	var tree_turns := {}
 	for index in GardenVisual.TREE_TURN_COUNT:
 		var tree_record := {"id": index + 1, "kind": "tree", "position": [12.0, 8.0, 12.0], "seed": 0}
 		var turn := GardenVisual.planting_turn(tree_record)
 		tree_turns[turn] = true
-		var expected := Basis(Vector3.UP, float(turn) * deg_to_rad(15.0))
-		_check(GardenVisual.planting_rotation(tree_record).is_equal_approx(expected), "automatic tree rotation follows the house's 15-degree coarse step")
-	_check(tree_turns.size() == GardenVisual.TREE_TURN_COUNT, "deterministic tree rotation can select all 24 house-style facings")
+		var expected := Basis(Vector3.UP, float(turn) * PI * 0.5)
+		_check(GardenVisual.planting_rotation(tree_record).is_equal_approx(expected), "automatic tree rotation stays on dense authored quarter-turn views")
+	_check(tree_turns.size() == GardenVisual.TREE_TURN_COUNT, "deterministic tree rotation can select all four quarter-turn facings")
 	var starter_wind_ok := true
 	for record: Dictionary in initial.records:
 		if GardenVisual.wind_strength(str(record.kind), posmod(int(record.seed), Flora.variant_count(str(record.kind)))) > 0.0:
