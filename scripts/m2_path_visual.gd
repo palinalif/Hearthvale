@@ -14,10 +14,11 @@ const SAMPLE_SPACING := 0.5
 const PATH_THICKNESS := 0.125
 const PATH_SURFACE_RISE := 0.012
 const PATH_EDGE_RISE := 0.032
+const PACKED_EARTH_TEXTURE_RISE := 0.017
 const STONE_SURFACE_RISE := 0.026
 const STONE_EDGE_RISE := 0.040
 const STYLE_COLOURS := {
-	"packed_earth": [Color("#a8784f"), Color("#c29261")],
+	"packed_earth": [Color("#a8784f"), Color("#8f6244")],
 	"cobblestone": [Color("#89908b"), Color("#b6b9a5")],
 	"stepping_stones": [Color("#a5a398"), Color("#d0c4a4")],
 }
@@ -127,17 +128,41 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 				var sample: Dictionary = points[index]
 				var tangent: Vector2 = sample["tangent"]
 				var basis := Basis(Vector3.UP, atan2(tangent.x, tangent.y))
-				var irregular := 1.0 + 0.06 * sin(float(path_id * 17 + index * 13))
-				var strip_width := safe_width * irregular
-				var strip_length := SAMPLE_SPACING + 0.12
+				# Left and right shoulders wander independently. Shifting the strip
+				# between those extents avoids the old perfectly centred ribbon look.
+				var left_extent := safe_width * (0.50 + 0.11 * sin(float(path_id * 13 + index * 5 + 1)))
+				var right_extent := safe_width * (0.50 + 0.10 * sin(float(path_id * 19 + index * 7 + 3)))
+				var strip_width := maxf(safe_width * 0.72, left_extent + right_extent)
+				var lateral_shift := (right_extent - left_extent) * 0.5
+				var strip_length := SAMPLE_SPACING + 0.15 + 0.04 * sin(float(path_id * 5 + index * 11))
 				var surface_rise := PATH_SURFACE_RISE + 0.003 * sin(float(path_id * 11 + index * 5))
-				_append_box(builder, _embedded_center(sample["point"], PATH_THICKNESS, surface_rise), Vector3(strip_width, PATH_THICKNESS, strip_length), basis, 0)
-				var edge_width := clampf(strip_width * 0.12, 0.07, 0.12)
-				var edge_offset := strip_width * 0.5 - edge_width * 0.5
+				var strip_center: Vector3 = sample["point"] + basis * Vector3(lateral_shift, 0, 0)
+				_append_box(builder, _embedded_center(strip_center, PATH_THICKNESS, surface_rise), Vector3(strip_width, PATH_THICKNESS, strip_length), basis, 0)
+
+				# Broken shoulder fragments make the silhouette less uniform without
+				# adding a new material or draw batch.
+				var edge_width := clampf(strip_width * 0.10, 0.055, 0.10)
 				for side in [-1.0, 1.0]:
-					var edge_point: Vector3 = sample["point"] + basis * Vector3(side * edge_offset, 0, 0)
-					_append_box(builder, _embedded_center(edge_point, PATH_THICKNESS, PATH_EDGE_RISE), Vector3(edge_width, PATH_THICKNESS, strip_length * 0.94), basis, 1)
+					var edge_wave := sin(float(path_id * 23 + index * 9 + int(side) * 4))
+					var edge_length := strip_length * (0.55 + 0.25 * (edge_wave * 0.5 + 0.5))
+					var edge_offset := side * (strip_width * 0.5 - edge_width * 0.45)
+					var along_offset := 0.08 * sin(float(path_id * 7 + index * 13 + int(side) * 5))
+					var edge_point: Vector3 = strip_center + basis * Vector3(edge_offset, 0, along_offset)
+					_append_box(builder, _embedded_center(edge_point, PATH_THICKNESS, PATH_EDGE_RISE), Vector3(edge_width, PATH_THICKNESS, edge_length), basis, 1)
 				cells += 3
+
+				# Sparse darker patches suggest compacted soil, little ruts and damp
+				# spots. They stay almost flush with the path so this is texture, not
+				# a field of tiny speed bumps.
+				if (path_id + index) % 2 == 0:
+					var patch_across := strip_width * 0.24 * sin(float(path_id * 29 + index * 17))
+					var patch_along := 0.15 * sin(float(path_id * 31 + index * 3))
+					var patch_width := clampf(strip_width * (0.16 + 0.04 * sin(float(index * 7 + path_id))), 0.08, 0.20)
+					var patch_length := 0.16 + 0.10 * (sin(float(path_id * 3 + index * 19)) * 0.5 + 0.5)
+					var patch_yaw := 0.10 * sin(float(path_id * 17 + index * 2))
+					var patch_point: Vector3 = strip_center + basis * Vector3(patch_across, 0, patch_along)
+					_append_box(builder, _embedded_center(patch_point, PATH_THICKNESS * 0.35, PACKED_EARTH_TEXTURE_RISE), Vector3(patch_width, PATH_THICKNESS * 0.35, patch_length), basis * Basis(Vector3.UP, patch_yaw), 1)
+					cells += 1
 		"cobblestone":
 			var rows := maxi(2, ceili(safe_width / 0.52))
 			for index in points.size() - 1:
