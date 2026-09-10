@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -20,6 +21,9 @@ from pathlib import Path
 
 
 MAX_ARCHIVE_BYTES = 50 * 1024 * 1024
+WEBHOOK_MAX_ATTEMPTS = 4
+WEBHOOK_RETRY_BASE_SECONDS = 2.0
+TRANSIENT_HTTP_CODES = {408, 425, 429, 500, 502, 503, 504}
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -102,7 +106,24 @@ def validate_webhook_response(payload: dict, expected_files: set[str]) -> dict:
     return {"ok": True, "files": [item for item in files if item.get("name") in expected_files]}
 
 
-def notify(webhook_url: str, secret: str, download_url: str, expected_files: set[str]) -> dict:
+def _webhook_retry_delay(error: urllib.error.HTTPError, attempt: int) -> float:
+    retry_after = error.headers.get("Retry-After", "") if error.headers else ""
+    try:
+        if retry_after:
+            return min(30.0, max(0.0, float(retry_after)))
+    except ValueError:
+        pass
+    return WEBHOOK_RETRY_BASE_SECONDS * (2 ** attempt)
+
+
+def notify(
+    webhook_url: str,
+    secret: str,
+    download_url: str,
+    expected_files: set[str],
+    *,
+    sleep_fn=time.sleep,
+) -> dict:
     body = json.dumps({"secret": secret, "download_url": download_url}, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(
         webhook_url,
@@ -110,13 +131,26 @@ def notify(webhook_url: str, secret: str, download_url: str, expected_files: set
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(request, timeout=360) as response:
-            payload = json.loads(response.read())
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")[:500]
-        raise RuntimeError(f"Apps Script webhook failed with HTTP {error.code}: {detail}") from error
-    return validate_webhook_response(payload, expected_files)
+    for attempt in range(WEBHOOK_MAX_ATTEMPTS):
+        try:
+            with urllib.request.urlopen(request, timeout=360) as response:
+                payload = json.loads(response.read())
+            return validate_webhook_response(payload, expected_files)
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")[:500]
+            transient = error.code in TRANSIENT_HTTP_CODES or 500 <= error.code <= 599
+            if not transient or attempt + 1 >= WEBHOOK_MAX_ATTEMPTS:
+                raise RuntimeError(f"Apps Script webhook failed with HTTP {error.code}: {detail}") from error
+            delay = _webhook_retry_delay(error, attempt)
+            print(
+                f"Apps Script webhook returned transient HTTP {error.code}; "
+                f"retrying attempt {attempt + 2}/{WEBHOOK_MAX_ATTEMPTS} in {delay:g}s",
+                file=sys.stderr,
+            )
+            # The receiver treats already-copied files as reusable, so retrying
+            # a transient response is safe even if the prior request completed.
+            sleep_fn(delay)
+    raise RuntimeError("Apps Script webhook retry loop ended unexpectedly")
 
 
 def delivery_spec(kind: str, commit: str) -> tuple[str, set[str]]:

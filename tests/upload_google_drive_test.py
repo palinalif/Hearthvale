@@ -1,6 +1,9 @@
 import importlib.util
+import io
 import unittest
+import urllib.error
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = Path(__file__).parents[1] / "tools" / "upload-google-drive.py"
@@ -8,6 +11,20 @@ SPEC = importlib.util.spec_from_file_location("drive_upload", SCRIPT)
 drive_upload = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(drive_upload)
+
+
+class FakeResponse:
+    def __init__(self, payload: bytes):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def read(self):
+        return self.payload
 
 
 class DriveUploadContractTest(unittest.TestCase):
@@ -79,6 +96,56 @@ class DriveUploadContractTest(unittest.TestCase):
                 {"ok": True, "files": [{"name": "candidate.apk", "size": 12, "url": "https://drive.google.com/file/d/apk/view"}]},
                 {"candidate.apk", "candidate.verification.json"},
             )
+
+    def test_retries_transient_webhook_503_then_succeeds(self):
+        expected = {"candidate.zip", "candidate.verification.json"}
+        transient = urllib.error.HTTPError(
+            "https://script.google.com/macros/s/test/exec",
+            503,
+            "Service Unavailable",
+            {},
+            io.BytesIO(b"busy"),
+        )
+        success = FakeResponse(
+            b'{"ok":true,"files":['
+            b'{"name":"candidate.zip","size":12,"url":"https://drive.google.com/file/d/zip/view"},'
+            b'{"name":"candidate.verification.json","size":4,"url":"https://drive.google.com/file/d/json/view"}'
+            b']}'
+        )
+        delays = []
+        with mock.patch.object(drive_upload.urllib.request, "urlopen", side_effect=[transient, success]) as urlopen:
+            result = drive_upload.notify(
+                "https://script.google.com/macros/s/test/exec",
+                "secret",
+                "https://example.invalid/artifact.zip",
+                expected,
+                sleep_fn=delays.append,
+            )
+        self.assertTrue(result["ok"])
+        self.assertEqual(urlopen.call_count, 2)
+        self.assertEqual(delays, [drive_upload.WEBHOOK_RETRY_BASE_SECONDS])
+
+    def test_does_not_retry_non_transient_webhook_error(self):
+        expected = {"candidate.zip"}
+        bad_request = urllib.error.HTTPError(
+            "https://script.google.com/macros/s/test/exec",
+            400,
+            "Bad Request",
+            {},
+            io.BytesIO(b"bad payload"),
+        )
+        delays = []
+        with mock.patch.object(drive_upload.urllib.request, "urlopen", side_effect=bad_request) as urlopen:
+            with self.assertRaisesRegex(RuntimeError, "HTTP 400"):
+                drive_upload.notify(
+                    "https://script.google.com/macros/s/test/exec",
+                    "secret",
+                    "https://example.invalid/artifact.zip",
+                    expected,
+                    sleep_fn=delays.append,
+                )
+        self.assertEqual(urlopen.call_count, 1)
+        self.assertEqual(delays, [])
 
 
 if __name__ == "__main__":
