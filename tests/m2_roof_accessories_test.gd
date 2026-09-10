@@ -33,12 +33,35 @@ func _initialize() -> void:
 
 	scene._open_roof_decor_picker()
 	check(scene._roof_decor_picker_open and scene._roof_decor_picker.visible, "Roof decor opens its own picker")
-	check(scene._roof_decor_buttons.size() == 7, "roof decor offers six accessories plus remove-last")
+	check(scene._roof_decor_buttons.size() == 8, "roof decor offers six accessories, exposed beams, and remove-last")
+	check(scene._joined_roof_beams_button != null and scene._joined_roof_beams_button.text.begins_with("Exposed roof beams"), "roof decor exposes joined-roof beam styling")
 	var assets: Array[String] = []
 	for button in scene._roof_decor_buttons:
 		var asset_id: String = str(button.get_meta("asset_id", ""))
 		if not asset_id.is_empty(): assets.append(asset_id)
 	check("chimney_stone" in assets and "chimney_brick" in assets and "dormer_gable" in assets and "dormer_shed" in assets and "weathervane_arrow" in assets and "weathervane_rooster" in assets, "picker includes chimneys dormers and weathervanes")
+	scene._close_roof_decor_picker(false)
+
+	check(scene._apply_house_shape_preset("l_shape"), "L-shaped roof created for beam styling")
+	await process_frame
+	var visual: Node3D = scene.cottage_visuals.get(scene.selected_building_id, null) as Node3D
+	check(visual != null, "selected cottage visual exists")
+	var legacy_joinery: Node3D = visual.get_node_or_null("EaveJoinery") as Node3D if visual else null
+	check(legacy_joinery != null and not legacy_joinery.visible, "legacy rectangular eave joinery is hidden on joined roof")
+	var beam_history_before: int = scene._history_tags.size()
+	scene._toggle_joined_roof_beams()
+	await process_frame
+	var beam_view: Dictionary = scene.building_world.get_building(scene.selected_building_id)
+	var beam_root: Node3D = visual.get_node_or_null("M2JoinedRoofBeams") as Node3D if visual else null
+	check(bool(beam_view.get("joined_roof_beams", false)), "exposed roof beam choice is authoritative house data")
+	check(beam_root != null and beam_root.get_node_or_null("JoinedRoofEaveBeams") != null, "joined roof generates perimeter timber instead of legacy floating beams")
+	check(scene._history_tags.size() == beam_history_before + 1, "beam toggle records one scene history step")
+	var beam_serialized: String = scene.building_world.serialize_document()
+	var beam_restored = preload("res://scripts/building_world.gd").new()
+	check(beam_restored.load_serialized_document(beam_serialized) and bool(beam_restored.get_building(scene.selected_building_id).get("joined_roof_beams", false)), "joined roof beam style survives save reload")
+	scene._toggle_joined_roof_beams()
+	await process_frame
+	check(not bool(scene.building_world.get_building(scene.selected_building_id).get("joined_roof_beams", false)), "beam style can be turned back off")
 
 	var before_serialized: String = scene.building_world.serialize_document()
 	scene._begin_roof_accessory_placement("chimney_stone")
@@ -48,8 +71,6 @@ func _initialize() -> void:
 	scene.roof_accessory_v = 0.34
 	scene._refresh_roof_accessory_preview()
 	await process_frame
-	var visual: Node3D = scene.cottage_visuals.get(scene.selected_building_id, null) as Node3D
-	check(visual != null, "selected cottage visual exists")
 	var preview_root: Node3D = null
 	if visual: preview_root = visual.get_node_or_null("M2RoofAccessories") as Node3D
 	check(preview_root != null and preview_root.get_child_count() == 1, "roof placement renders one preview accessory")
