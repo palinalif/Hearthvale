@@ -3,6 +3,7 @@ extends SceneTree
 const Massing = preload("res://scripts/m2_house_massing.gd")
 const WallPlacement = preload("res://scripts/wall_attachment_placement.gd")
 const M2World = preload("res://scripts/m2_building_world.gd")
+const JoinedVisual = preload("res://scripts/m2_house_massing_visual.gd")
 
 var scene: Node
 var checks := 0
@@ -56,9 +57,28 @@ func _run() -> void:
 			best_span = span
 			upper_front = support
 	check(not upper_front.is_empty(), "floor 2 has a selectable front facade")
+	if upper_front.is_empty():
+		await _finish()
+		return
 	var upper_id: String = str(upper_front.get("id", ""))
 	check(upper_id in WallPlacement.wall_ids(view), "existing attachment wall cycle includes floor 2")
 	check(WallPlacement.surface_label(view, upper_id).begins_with("Floor 2"), "controller support label identifies the storey")
+
+	# A manual window may replace an automatic one without decreasing the total
+	# wall instance count. Exercise that real player path before isolating a
+	# genuinely new opening on a wall with its generated windows suppressed.
+	await _check_automatic_replacement(view, upper_id)
+	view = scene.building_world.get_building(scene.selected_building_id)
+	var suppressed := 0
+	for value in view.get("details", []):
+		var generated: Dictionary = value
+		if str(generated.get("state", "")) != "automatic" or str(generated.get("kind", "")) != "window": continue
+		if str((generated.get("anchor", {}) as Dictionary).get("surface_id", "")) != upper_id: continue
+		check(scene.building_world.suppress_detail(scene.selected_building_id, str(generated["id"])), "generated upstairs window can be suppressed for the fresh-cut fixture")
+		suppressed += 1
+	check(suppressed > 0, "fresh-cut fixture starts with generated upstairs windows, not a legacy bare floor")
+	await _refresh_visual()
+	view = scene.building_world.get_building(scene.selected_building_id)
 
 	var geometry: Dictionary = WallPlacement.wall_geometry(view, upper_front)
 	var intended := Vector3((float(geometry["tangent_min"]) + float(geometry["tangent_max"])) * 0.5, (float(geometry["bottom"]) + float(geometry["top"])) * 0.5, float(geometry["normal"]))
@@ -68,24 +88,32 @@ func _run() -> void:
 	var placed_position: Vector3 = placement.get("position", Vector3.ZERO)
 	check(placed_position.y > storey, "upstairs placement resolves above the first storey")
 
-	var visual: Node3D = scene.cottage_visuals.get(scene.selected_building_id, null) as Node3D
-	var joined: Node3D = visual.get_node_or_null("M2JoinedMassing") as Node3D if visual else null
+	var joined: Node3D = _joined_visual()
 	var wall_before := _wall_instance_count(joined, "JoinedWall_Front")
+	check(wall_before > 0 and _opening_blockers(joined, placed_position) > 0, "fresh-cut fixture has real wall geometry behind the intended window")
 	var window_id: String = scene.building_world.add_detail(scene.selected_building_id, "window", upper_id, placed_position, "window_wood")
 	check(not window_id.is_empty(), "BuildingWorld accepts a real manual window on floor 2")
 	scene.selected_detail_id = window_id
 	scene.selected_surface_id = upper_id
-	scene._presentation_key = ""
-	scene._update_presentation()
-	await process_frame
+	await _refresh_visual()
 	view = scene.building_world.get_building(scene.selected_building_id)
 	var window: Dictionary = _detail(view, window_id)
 	check(not window.is_empty() and not bool(window.get("needs_placement", true)), "floor-2 window remains valid after authoritative resolution")
 	var resolved: Vector3 = window.get("resolved_position", Vector3.ZERO)
 	check(resolved.y > storey and str((window.get("anchor", {}) as Dictionary).get("surface_id", "")) == upper_id, "saved anchor retains its upper-storey surface and height")
-	joined = visual.get_node_or_null("M2JoinedMassing") as Node3D if visual else null
+	joined = _joined_visual()
 	var wall_after := _wall_instance_count(joined, "JoinedWall_Front")
 	check(wall_after < wall_before, "joined wall mesh recuts immediately for the upstairs window opening")
+	check(_opening_blockers(joined, resolved) == 0, "no rendered front-wall boxes intersect the new upstairs opening")
+
+	check(scene.building_world.undo(), "manual upstairs opening is undoable")
+	await _refresh_visual()
+	check(_wall_instance_count(_joined_visual(), "JoinedWall_Front") == wall_before and _opening_blockers(_joined_visual(), placed_position) > 0, "undo restores solid wall geometry at the removed opening")
+	check(scene.building_world.redo(), "manual upstairs opening is redoable")
+	await _refresh_visual()
+	check(_wall_instance_count(_joined_visual(), "JoinedWall_Front") == wall_after and _opening_blockers(_joined_visual(), resolved) == 0, "redo recuts the same upstairs opening")
+	scene.selected_detail_id = window_id
+	scene.selected_surface_id = upper_id
 
 	scene._open_window_extras()
 	check(scene._window_extras_open, "existing Window extras menu opens for an upstairs window")
@@ -105,6 +133,11 @@ func _run() -> void:
 	var restored_view: Dictionary = restored.get_building(scene.selected_building_id)
 	var restored_window: Dictionary = _detail(restored_view, window_id)
 	check(not restored_window.is_empty() and not bool(restored_window.get("needs_placement", true)) and (restored_window.get("resolved_position", Vector3.ZERO) as Vector3).y > storey, "reload preserves a usable floor-2 window")
+	var rebuilt := JoinedVisual.new()
+	root.add_child(rebuilt)
+	rebuilt.show_view(restored_view, Color.WHITE, [Color.WHITE], Color.WHITE)
+	check(_wall_instance_count(rebuilt, "JoinedWall_Front") == wall_after and _opening_blockers(rebuilt, resolved) == 0, "reload regenerates the same open wall geometry, not only the saved detail record")
+	rebuilt.free()
 
 	# Removing the supporting storey must not silently eat authored facade decor.
 	check(scene._remove_last_portion(), "floor 2 can be removed after decorating it")
@@ -120,6 +153,57 @@ func _run() -> void:
 	check(not bool(window.get("needs_placement", true)) and str((window.get("anchor", {}) as Dictionary).get("surface_id", "")) == upper_id, "undo restores the same upper wall identity and window")
 
 	await _finish()
+
+func _check_automatic_replacement(view: Dictionary, upper_id: String) -> void:
+	var automatic: Dictionary = {}
+	for value in view.get("details", []):
+		var detail: Dictionary = value
+		if str(detail.get("state", "")) != "automatic" or str(detail.get("kind", "")) != "window": continue
+		if not bool(detail.get("visible", false)) or bool(detail.get("needs_placement", true)): continue
+		if str((detail.get("anchor", {}) as Dictionary).get("surface_id", "")) == upper_id:
+			automatic = detail
+			break
+	check(not automatic.is_empty(), "new floor has an active automatic front window to replace")
+	if automatic.is_empty(): return
+	var position: Vector3 = automatic["resolved_position"]
+	var manual_id: String = scene.building_world.add_detail(scene.selected_building_id, "window", upper_id, position, "window_wood")
+	check(not manual_id.is_empty(), "manual upstairs window may occupy an automatic window's position")
+	if manual_id.is_empty(): return
+	await _refresh_visual()
+	var replaced_view: Dictionary = scene.building_world.get_building(scene.selected_building_id)
+	var manual: Dictionary = _detail(replaced_view, manual_id)
+	var displaced: Dictionary = _detail(replaced_view, str(automatic["id"]))
+	check(bool(manual.get("visible", false)) and not bool(manual.get("needs_placement", true)) and not bool(displaced.get("visible", true)), "manual window wins while the overlapping automatic window yields")
+	check(_opening_blockers(_joined_visual(), position) == 0, "replacement opening remains clear even when total wall count does not decrease")
+	check(scene.building_world.undo(), "automatic-to-manual replacement is one undoable edit")
+	await _refresh_visual()
+	var undone: Dictionary = scene.building_world.get_building(scene.selected_building_id)
+	check(undone.get("details", []) == view.get("details", []), "undo exactly restores all automatic window records and visibility")
+
+func _refresh_visual() -> void:
+	scene._presentation_key = ""
+	scene._update_presentation()
+	await process_frame
+
+func _joined_visual() -> Node3D:
+	var visual := scene.cottage_visuals.get(scene.selected_building_id, null) as Node3D
+	return visual.get_node_or_null("M2JoinedMassing") as Node3D if visual else null
+
+func _opening_blockers(joined: Node3D, center: Vector3) -> int:
+	# Inspect actual rendered box extents, independently of the generator's
+	# _opening_at predicate. An absent mesh is an error, not an empty opening.
+	if not joined: return -1
+	var wall := joined.get_node_or_null("JoinedWall_Front") as MultiMeshInstance3D
+	if not wall or not wall.multimesh: return -1
+	var half_opening := Vector3(0.95, 1.35, 0.025)
+	var blockers := 0
+	for index in wall.multimesh.instance_count:
+		var cell: Transform3D = wall.multimesh.get_instance_transform(index)
+		var half_cell: Vector3 = cell.basis.get_scale() * 0.5
+		var delta: Vector3 = (cell.origin - center).abs()
+		if delta.x < half_cell.x + half_opening.x and delta.y < half_cell.y + half_opening.y and delta.z < half_cell.z + half_opening.z:
+			blockers += 1
+	return blockers
 
 func _wall_instance_count(joined: Node3D, node_name: String) -> int:
 	if not joined: return 0
