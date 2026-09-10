@@ -1,0 +1,89 @@
+name: M2 inheritance diagnostic
+on:
+  push:
+    branches: [ci/m2-inheritance-diagnostic]
+    paths: [.github/workflows/m2-inheritance-diagnostic.yml]
+permissions:
+  contents: read
+jobs:
+  exact-source-tests:
+    name: ${{ matrix.label }}
+    runs-on: windows-2025
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: fixed-inheritance
+            source: 3ed1890ae4ced76a42513f392d3b3b13a273cdd0
+            tests: m2_upper_storey_auto_windows_test,m2_upper_storey_detail_test,cottage_handle_resize_test,m1_resize_handles_test,m2_multi_floor_house_test
+          - label: original-catalogue-baseline
+            source: 927c98c73acba13cc96a3a65ed9a764a40471e3e
+            tests: m2_home_catalogue_test
+    steps:
+      - name: Check out the exact production source being tested
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ matrix.source }}
+          persist-credentials: false
+      - name: Install and verify the repository's locked runtime
+        shell: pwsh
+        env:
+          SOURCE_SHA: ${{ matrix.source }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git rev-parse HEAD).Trim() -ne $env:SOURCE_SHA) { throw 'Unexpected source checkout' }
+          $lock = Get-Content dependencies.lock.json -Raw | ConvertFrom-Json
+          $root = Join-Path (Get-Location) '.tools/inheritance-diagnostic'
+          New-Item -ItemType Directory -Force $root | Out-Null
+          Set-Content -LiteralPath (Join-Path (Split-Path $root) '.gdignore') -Value ''
+          Invoke-WebRequest -Uri $lock.engine.editor_url -OutFile (Join-Path $root 'editor.zip')
+          if ((Get-FileHash -LiteralPath (Join-Path $root 'editor.zip') -Algorithm SHA512).Hash.ToLowerInvariant() -ne $lock.engine.editor_sha512.ToLowerInvariant()) { throw 'Editor archive hash mismatch' }
+          Invoke-WebRequest -Uri $lock.voxel.url -OutFile (Join-Path $root 'voxel.zip')
+          if ((Get-FileHash -LiteralPath (Join-Path $root 'voxel.zip') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $lock.voxel.sha256.ToLowerInvariant()) { throw 'Voxel archive hash mismatch' }
+          Expand-Archive -LiteralPath (Join-Path $root 'editor.zip') -DestinationPath $root -Force
+          Expand-Archive -LiteralPath (Join-Path $root 'voxel.zip') -DestinationPath (Get-Location) -Force
+          $editor = Get-ChildItem $root -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $editor) { throw 'Pinned Godot console editor missing' }
+          $version = (& $editor --version | Out-String).Trim()
+          if ($version -ne $lock.engine.version) { throw 'Unexpected Godot version' }
+          @{ source = $env:SOURCE_SHA; engine = $version; voxel_commit = $lock.voxel.commit; diagnostic_only = $true; apk_exported = $false } | ConvertTo-Json | Set-Content (Join-Path $root 'source.json')
+          $output = & $editor --headless --path . --editor --import --quit 2>&1 | ForEach-Object { "$_" }
+          $exitCode = $LASTEXITCODE
+          $output | Set-Content (Join-Path $root 'import.log')
+          if ($exitCode -ne 0 -or ($output -match 'ERROR:|Parse Error:|FAIL:')) { $output | Write-Output; throw 'Godot import failed' }
+      - name: Run isolated tests without bypassing any delivery gates
+        shell: pwsh
+        env:
+          TEST_NAMES: ${{ matrix.tests }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path (Get-Location) '.tools/inheritance-diagnostic'
+          $editor = Get-ChildItem $root -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $results = @()
+          foreach ($test in ($env:TEST_NAMES -split ',')) {
+            $out = Join-Path $root "$test.out.log"
+            $err = Join-Path $root "$test.err.log"
+            $arguments = @('--headless', '--path', '.', '--script', "tests/$test.gd")
+            $process = Start-Process -FilePath $editor -ArgumentList $arguments -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+            $timedOut = -not $process.WaitForExit(90000)
+            if ($timedOut) { $process.Kill(); $process.WaitForExit() }
+            $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
+            Write-Output "TEST: $test"
+            Write-Output $log
+            $receipt = $log -match 'failures=0' -or ($log -match '"failures"\s*:\s*0' -and $log -match '"ok"\s*:\s*true')
+            $passed = -not $timedOut -and $process.ExitCode -eq 0 -and $log -notmatch 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -and $receipt
+            $results += @{ test = $test; passed = $passed; exit_code = $process.ExitCode; timed_out = $timedOut }
+          }
+          $results | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $root 'results.json')
+          if ($results.Where({ -not $_.passed }).Count -gt 0) { throw 'Isolated diagnostic contains failed tests; see retained logs. No delivery gate is waived.' }
+      - name: Retain exact-source test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: inheritance-${{ matrix.label }}-${{ matrix.source }}
+          path: |
+            .tools/inheritance-diagnostic/*.log
+            .tools/inheritance-diagnostic/*.json
+          if-no-files-found: warn
+          retention-days: 14
