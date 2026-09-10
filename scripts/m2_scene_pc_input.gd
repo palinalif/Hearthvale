@@ -1,4 +1,4 @@
-extends "res://scripts/m2_scene_house_palette.gd"
+extends "res://scripts/m2_scene_house_decor.gd"
 ## Desktop input adapter layered over the shared controller-first scene.
 ## Mouse actions are handled after Control nodes so clicking menus never edits
 ## the world behind them.
