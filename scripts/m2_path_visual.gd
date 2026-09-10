@@ -3,13 +3,19 @@ class_name M2PathVisual
 
 ## Disposable composition renderer. Paths are sampled from their saved X/Z
 ## polyline and the current voxel surface every rebuild; no terrain cells are
-## written by this node.
+## written by this node. Road slabs are mostly buried below the sampled surface,
+## leaving only a shallow exposed skin so lanes read as inset rather than stacked
+## on top of the landscape.
 
 const Grid = preload("res://scripts/visual_grid.gd")
 const State = preload("res://scripts/landscape_state.gd")
 const STYLE_ORDER: Array[String] = ["packed_earth", "cobblestone", "stepping_stones"]
 const SAMPLE_SPACING := 0.5
 const PATH_THICKNESS := 0.125
+const PATH_SURFACE_RISE := 0.012
+const PATH_EDGE_RISE := 0.032
+const STONE_SURFACE_RISE := 0.026
+const STONE_EDGE_RISE := 0.040
 const STYLE_COLOURS := {
 	"packed_earth": [Color("#a8784f"), Color("#c29261")],
 	"cobblestone": [Color("#89908b"), Color("#b6b9a5")],
@@ -120,35 +126,59 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 			for index in points.size() - 1:
 				var sample: Dictionary = points[index]
 				var tangent: Vector2 = sample["tangent"]
-				var yaw := atan2(tangent.x, tangent.y)
+				var basis := Basis(Vector3.UP, atan2(tangent.x, tangent.y))
 				var irregular := 1.0 + 0.06 * sin(float(path_id * 17 + index * 13))
-				_append_box(builder, sample["point"] + Vector3.UP * (PATH_THICKNESS * 0.5), Vector3(safe_width * irregular, PATH_THICKNESS, SAMPLE_SPACING + 0.12), Basis(Vector3.UP, yaw), 0)
-				cells += 1
+				var strip_width := safe_width * irregular
+				var strip_length := SAMPLE_SPACING + 0.12
+				var surface_rise := PATH_SURFACE_RISE + 0.003 * sin(float(path_id * 11 + index * 5))
+				_append_box(builder, _embedded_center(sample["point"], PATH_THICKNESS, surface_rise), Vector3(strip_width, PATH_THICKNESS, strip_length), basis, 0)
+				var edge_width := clampf(strip_width * 0.12, 0.07, 0.12)
+				var edge_offset := strip_width * 0.5 - edge_width * 0.5
+				for side in [-1.0, 1.0]:
+					var edge_point: Vector3 = sample["point"] + basis * Vector3(side * edge_offset, 0, 0)
+					_append_box(builder, _embedded_center(edge_point, PATH_THICKNESS, PATH_EDGE_RISE), Vector3(edge_width, PATH_THICKNESS, strip_length * 0.94), basis, 1)
+				cells += 3
 		"cobblestone":
 			var rows := maxi(2, ceili(safe_width / 0.52))
 			for index in points.size() - 1:
 				var sample: Dictionary = points[index]
 				var tangent: Vector2 = sample["tangent"]
-				var basis := Basis(Vector3.UP, atan2(tangent.x, tangent.y))
+				var path_basis := Basis(Vector3.UP, atan2(tangent.x, tangent.y))
 				for row in rows:
 					var across := (float(row) + 0.5) / float(rows) - 0.5
-					var along := 0.035 * sin(float(path_id + row * 5 + index * 3))
+					var along := 0.04 if (row + index) % 2 == 0 else -0.04
 					var local := Vector3(across * safe_width, 0, along)
-					var stone_width := safe_width / float(rows) - 0.075
-					_append_box(builder, sample["point"] + basis * local + Vector3.UP * (PATH_THICKNESS * 0.5), Vector3(maxf(0.20, stone_width), PATH_THICKNESS, 0.42), basis, 0 if row > 0 and row < rows - 1 else 1)
+					var stone_width := safe_width / float(rows) - 0.055
+					var edge_stone := row == 0 or row == rows - 1
+					var rise := STONE_EDGE_RISE if edge_stone else STONE_SURFACE_RISE + 0.004 * sin(float(path_id * 7 + row * 3 + index * 5))
+					var stone_yaw := 0.035 * sin(float(path_id + row * 5 + index * 3))
+					var stone_basis := path_basis * Basis(Vector3.UP, stone_yaw)
+					var material_index := (row + index) % 2
+					_append_box(builder, _embedded_center(sample["point"] + path_basis * local, PATH_THICKNESS, rise), Vector3(maxf(0.20, stone_width), PATH_THICKNESS, 0.46), stone_basis, material_index)
 					cells += 1
 		"stepping_stones":
 			var stride := 2
 			for index in range(0, points.size() - 1, stride):
 				var sample: Dictionary = points[index]
 				var tangent: Vector2 = sample["tangent"]
-				var basis := Basis(Vector3.UP, atan2(tangent.x, tangent.y))
+				var path_basis := Basis(Vector3.UP, atan2(tangent.x, tangent.y))
 				var wobble := 0.12 * sin(float(path_id * 3 + index * 7))
-				var cluster_center: Vector3 = sample["point"] + basis * Vector3(wobble, 0, 0)
-				_append_box(builder, cluster_center + Vector3.UP * (PATH_THICKNESS * 0.5), Vector3(safe_width * 0.58, PATH_THICKNESS, 0.48), basis, 0)
-				_append_box(builder, cluster_center + basis * Vector3(-safe_width * 0.22, 0, 0.11) + Vector3.UP * (PATH_THICKNESS * 1.5), Vector3(safe_width * 0.30, PATH_THICKNESS, 0.27), basis, 1)
+				var cluster_center: Vector3 = sample["point"] + path_basis * Vector3(wobble, 0, 0)
+				var first_basis := path_basis * Basis(Vector3.UP, 0.07 * sin(float(path_id + index * 2)))
+				var second_basis := path_basis * Basis(Vector3.UP, -0.09 * sin(float(path_id * 2 + index * 3 + 1)))
+				var first_rise := 0.032 + 0.004 * sin(float(path_id * 5 + index * 2))
+				var second_rise := 0.024 + 0.003 * sin(float(path_id * 7 + index * 4))
+				_append_box(builder, _embedded_center(cluster_center, PATH_THICKNESS, first_rise), Vector3(safe_width * 0.58, PATH_THICKNESS, 0.48), first_basis, 0)
+				var second_point := cluster_center + path_basis * Vector3(-safe_width * 0.22, 0, 0.11)
+				_append_box(builder, _embedded_center(second_point, PATH_THICKNESS, second_rise), Vector3(safe_width * 0.30, PATH_THICKNESS, 0.30), second_basis, 1)
 				cells += 2
 	return cells
+
+func _embedded_center(point: Vector3, thickness: float, exposed_rise: float) -> Vector3:
+	# Keep the top a hair above the voxel surface to avoid z-fighting while
+	# burying the rest of the slab. Raised edge stones/rims make the central
+	# walking surface read as a shallow recess without mutating terrain authority.
+	return point + Vector3.UP * (exposed_rise - thickness * 0.5)
 
 func _sample_polyline(point_values: Array) -> Array:
 	var result: Array = []
