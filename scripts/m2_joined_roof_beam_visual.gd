@@ -20,7 +20,8 @@ func show_view(view: Dictionary) -> void:
 
 func _serializable_sections(view: Dictionary) -> Array:
 	var result: Array = []
-	for section: Dictionary in Massing.sections_for(view):
+	for section_value in Massing.sections_for(view):
+		var section: Dictionary = section_value
 		var offset: Vector3 = section["offset"]
 		var size: Vector3 = section["size"]
 		result.append({"id": str(section.get("id", "")), "offset": [offset.x, offset.y, offset.z], "size": [size.x, size.y, size.z]})
@@ -28,20 +29,24 @@ func _serializable_sections(view: Dictionary) -> Array:
 
 func _build_eave_beams(view: Dictionary) -> void:
 	var transforms: Array[Transform3D] = []
-	for face: Dictionary in Massing.boundary_faces(view):
+	for face_value in Massing.boundary_faces(view):
+		var face: Dictionary = face_value
 		var orientation: String = str(face.get("orientation", "front"))
 		var position: Vector3 = face.get("position", Vector3.ZERO)
 		var roof_y: float = Massing.roof_height_at(view, position.x, position.z) + BEAM_LIFT
-		var center := Vector3(position.x, roof_y, position.z)
+		var center: Vector3 = Vector3(position.x, roof_y, position.z)
 		transforms.append(_beam_transform(center, Massing.CELL * 1.08, orientation in ["left", "right"]))
 	_add_multimesh("JoinedRoofEaveBeams", transforms)
 
 func _build_ridge_beams(view: Dictionary) -> void:
 	var tiles: Array[Dictionary] = Massing.roof_tiles(view)
 	var by_cell: Dictionary = {}
-	for tile: Dictionary in tiles: by_cell[tile["cell"]] = tile
+	for tile_value in tiles:
+		var tile: Dictionary = tile_value
+		by_cell[tile["cell"]] = tile
 	var transforms: Array[Transform3D] = []
-	for tile: Dictionary in tiles:
+	for tile_value in tiles:
+		var tile: Dictionary = tile_value
 		var key: Vector2i = tile["cell"]
 		var distance: int = int(tile.get("distance", 0))
 		if distance <= 0: continue
@@ -64,7 +69,7 @@ func _distance_at(by_cell: Dictionary, key: Vector2i) -> int:
 	return int(tile.get("distance", 0))
 
 func _beam_transform(center: Vector3, length: float, along_z: bool) -> Transform3D:
-	var rotation := Basis(Vector3.UP, PI * 0.5) if along_z else Basis.IDENTITY
+	var rotation: Basis = Basis(Vector3.UP, PI * 0.5) if along_z else Basis.IDENTITY
 	return Transform3D(rotation.scaled_local(Vector3(length, BEAM_THICKNESS, BEAM_WIDTH)), center)
 
 func _add_multimesh(node_name: String, transforms: Array[Transform3D]) -> void:
@@ -79,7 +84,7 @@ func _add_multimesh(node_name: String, transforms: Array[Transform3D]) -> void:
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
 	multimesh.mesh = mesh
 	multimesh.instance_count = transforms.size()
-	for index: int in transforms.size(): multimesh.set_instance_transform(index, transforms[index])
+	for index in transforms.size(): multimesh.set_instance_transform(index, transforms[index])
 	var node := MultiMeshInstance3D.new()
 	node.name = node_name
 	node.multimesh = multimesh
