@@ -130,3 +130,19 @@ func _refresh_controller_hud() -> void:
 	if not _style_picker_mode.is_empty() or _surface_material_picker_open:
 		if _tool_card: _tool_card.visible = false
 		_set_prompts([["UP/DOWN", "Browse"], ["A", "Apply"], ["B", "Cancel"], ["RS", "Orbit"]])
+
+func _close_surface_material_picker() -> void:
+	super._close_surface_material_picker()
+	_window_overlay_signatures.clear()
+	_window_adventure_signatures.clear()
+	_refresh_custom_window_overlays()
+	_refresh_window_customization()
+
+func _cancel_current_edit(reason: String) -> void:
+	var was_colour_preview := _surface_material_picker_open
+	super._cancel_current_edit(reason)
+	if was_colour_preview:
+		_window_overlay_signatures.clear()
+		_window_adventure_signatures.clear()
+		_refresh_custom_window_overlays()
+		_refresh_window_customization()

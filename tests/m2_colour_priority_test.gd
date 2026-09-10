@@ -93,6 +93,21 @@ func _run() -> void:
 	scene._commit_style_choice("colour", "natural")
 	await _refresh()
 	_check_colour(building_id, "DoorJoinery_" + door_id, scene.ACCENT_COLOURS["ochre"], "House colour resets to inheritance")
+	# Custom window overlays use their own cached materials; cancel must also
+	# restore those, not just the base joinery nodes.
+	scene.selected_detail_id = window_id
+	check(scene._commit_detail_style(window_id, "window_arch_casement", "natural"), "custom inherited window fixture")
+	await _refresh()
+	var custom_path := "M2WindowAdventure_" + window_id + "/ArchCenter"
+	_check_colour(building_id, custom_path, scene.ACCENT_COLOURS["ochre"], "custom joinery inherits house colour")
+	var custom_before: String = scene.building_world.serialize_document()
+	scene._open_accent_colour_picker()
+	scene._preview_surface_material("plum")
+	_check_colour(building_id, custom_path, scene.ACCENT_COLOURS["plum"], "custom joinery follows house preview")
+	scene._cancel_surface_material_picker()
+	await _refresh()
+	_check_colour(building_id, custom_path, scene.ACCENT_COLOURS["ochre"], "cancel restores cached custom joinery colour")
+	check(scene.building_world.serialize_document() == custom_before, "custom colour cancellation keeps authority")
 	await _finish()
 
 func _refresh() -> void:
