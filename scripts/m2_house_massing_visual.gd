@@ -4,8 +4,8 @@ class_name M2HouseMassingVisual
 const Massing = preload("res://scripts/m2_house_massing.gd")
 const FOUNDATION_COLOUR := Color("#9a8876")
 const WALL_THICKNESS := 0.42
-const ROOF_THICKNESS := 0.22
-const EAVE_HEIGHT := 0.16
+const ROOF_THICKNESS := 0.18
+const EAVE_HEIGHT := 0.12
 
 var _signature := ""
 var _highlight_enabled := false
@@ -92,7 +92,7 @@ func _build_eaves(view: Dictionary, colour: Color) -> void:
 		var orientation := str(face["orientation"])
 		var position: Vector3 = face["position"]
 		var center := Vector3(position.x, float(face["height"]) + EAVE_HEIGHT * 0.5, position.z)
-		var size := Vector3(Massing.CELL * 1.08, EAVE_HEIGHT, WALL_THICKNESS * 1.35) if orientation in ["front", "back"] else Vector3(WALL_THICKNESS * 1.35, EAVE_HEIGHT, Massing.CELL * 1.08)
+		var size := Vector3(Massing.CELL * 1.08, EAVE_HEIGHT, WALL_THICKNESS * 1.25) if orientation in ["front", "back"] else Vector3(WALL_THICKNESS * 1.25, EAVE_HEIGHT, Massing.CELL * 1.08)
 		transforms.append(_box_transform(center, size))
 	_add_multimesh("JoinedEaves", transforms, colour, 0.9)
 
@@ -100,17 +100,65 @@ func _build_roof(view: Dictionary, roof_palette: Array, edge_colour: Color) -> v
 	if roof_palette.is_empty(): roof_palette = [Color("#b9654c"), Color("#bf6c50"), Color("#a95445")]
 	var buckets: Array = [[], [], []]
 	var edge_transforms: Array[Transform3D] = []
-	for tile in Massing.roof_tiles(view):
+	var tiles: Array[Dictionary] = Massing.roof_tiles(view)
+	var by_cell: Dictionary = {}
+	for tile_value in tiles:
+		var tile: Dictionary = tile_value
+		by_cell[tile["cell"]] = tile
+	for tile_value in tiles:
+		var tile: Dictionary = tile_value
 		var center: Vector3 = tile["center"]
-		var transform := _box_transform(center, Vector3(Massing.CELL * 1.10, ROOF_THICKNESS, Massing.CELL * 1.10))
+		var slope: Vector2 = _roof_gradient(tile, by_cell)
+		var transform := _roof_tile_transform(center, Vector3(Massing.CELL * 1.14, ROOF_THICKNESS, Massing.CELL * 1.14), slope)
 		var shade := clampi(int(tile.get("shade", 0)), 0, 2)
 		(buckets[shade] as Array).append(transform)
 		if bool(tile.get("edge", false)):
-			edge_transforms.append(_box_transform(center + Vector3(0, -ROOF_THICKNESS * 0.45, 0), Vector3(Massing.CELL * 1.14, ROOF_THICKNESS * 0.45, Massing.CELL * 1.14)))
+			var normal := Vector3(-slope.x, 1.0, -slope.y).normalized()
+			var edge_center := center - normal * ROOF_THICKNESS * 0.44
+			edge_transforms.append(_roof_tile_transform(edge_center, Vector3(Massing.CELL * 1.17, ROOF_THICKNESS * 0.42, Massing.CELL * 1.17), slope))
 	for shade in 3:
 		var colour: Color = roof_palette[mini(shade, roof_palette.size() - 1)] as Color
 		_add_multimesh("JoinedRoof_%d" % shade, buckets[shade], colour, 0.86)
 	_add_multimesh("JoinedRoofEdge", edge_transforms, edge_colour, 0.9)
+
+func _roof_gradient(tile: Dictionary, by_cell: Dictionary) -> Vector2:
+	var key: Vector2i = tile["cell"]
+	var center: Vector3 = tile["center"]
+	var left_key := key + Vector2i.LEFT
+	var right_key := key + Vector2i.RIGHT
+	var front_key := key + Vector2i.UP
+	var back_key := key + Vector2i.DOWN
+	var has_left := by_cell.has(left_key)
+	var has_right := by_cell.has(right_key)
+	var has_front := by_cell.has(front_key)
+	var has_back := by_cell.has(back_key)
+	var left_height := _tile_height(by_cell, left_key, center.y)
+	var right_height := _tile_height(by_cell, right_key, center.y)
+	var front_height := _tile_height(by_cell, front_key, center.y)
+	var back_height := _tile_height(by_cell, back_key, center.y)
+	var slope_x := _axis_gradient(center.y, has_left, left_height, has_right, right_height)
+	var slope_z := _axis_gradient(center.y, has_front, front_height, has_back, back_height)
+	return Vector2(slope_x, slope_z)
+
+func _tile_height(by_cell: Dictionary, key: Vector2i, fallback: float) -> float:
+	if not by_cell.has(key): return fallback
+	var tile: Dictionary = by_cell[key]
+	var center: Vector3 = tile["center"]
+	return center.y
+
+func _axis_gradient(current: float, has_negative: bool, negative: float, has_positive: bool, positive: float) -> float:
+	if has_negative and has_positive: return (positive - negative) / (Massing.CELL * 2.0)
+	if has_positive: return (positive - current) / Massing.CELL
+	if has_negative: return (current - negative) / Massing.CELL
+	return 0.0
+
+func _roof_tile_transform(center: Vector3, size: Vector3, slope: Vector2) -> Transform3D:
+	var x_axis := Vector3(1.0, slope.x, 0.0).normalized()
+	var normal := Vector3(-slope.x, 1.0, -slope.y).normalized()
+	var z_axis := x_axis.cross(normal).normalized()
+	x_axis = normal.cross(z_axis).normalized()
+	var basis := Basis(x_axis, normal, z_axis).scaled_local(size)
+	return Transform3D(basis, center)
 
 func _opening_at(view: Dictionary, orientation: String, face_position: Vector3, y: float, layer_height: float) -> bool:
 	for detail_value in view.get("details", []):
