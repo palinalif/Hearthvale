@@ -4,7 +4,11 @@ class_name M2BuildingWorld
 ## Keep the inherited move/rotate and resize-handle edit contract.
 ## M2 keeps the M1 document schema, but generated massing walls can describe a
 ## bounded facade run instead of implicitly spanning the original rectangle.
-## All legacy surfaces fall straight through to BuildingWorld behaviour.
+## Legacy surface geometry retains BuildingWorld behaviour.
+
+# Vector3 stores clamped positions at lower precision than scalar bounds.
+# Ignore only rounding dust, not actual overhang (0.00001 local units).
+const ATTACHMENT_EDGE_EPSILON := 0.00001
 
 func _surface_geometry(surface: Dictionary, dimensions: Vector3) -> Dictionary:
 	var orientation: String = str(surface.get("orientation", ""))
@@ -77,7 +81,13 @@ func _resolved_details(building: Dictionary) -> Array[Dictionary]:
 			var orientation: String = str(support.get("orientation", "front"))
 			var tangent: float = local.x if orientation in ["front", "back"] else local.z
 			var footprint: Vector2 = _detail_footprint(detail)
-			needs = geometry.is_empty() or tangent - footprint.x < float(geometry.get("tangent_min", 0.0)) or tangent + footprint.x > float(geometry.get("tangent_max", 0.0)) or local.y - footprint.y < float(geometry.get("bottom", 0.0)) or local.y + footprint.y > float(geometry.get("top", dimensions.y))
+			needs = (
+				geometry.is_empty()
+				or tangent - footprint.x < float(geometry.get("tangent_min", 0.0)) - ATTACHMENT_EDGE_EPSILON
+				or tangent + footprint.x > float(geometry.get("tangent_max", 0.0)) + ATTACHMENT_EDGE_EPSILON
+				or local.y - footprint.y < float(geometry.get("bottom", 0.0)) - ATTACHMENT_EDGE_EPSILON
+				or local.y + footprint.y > float(geometry.get("top", dimensions.y)) + ATTACHMENT_EDGE_EPSILON
+			)
 		var position = null
 		if not support.is_empty(): position = _resolve_position(support, anchor, dimensions)
 		detail["resolved_position"] = position
