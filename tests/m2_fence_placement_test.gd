@@ -22,7 +22,7 @@ func _initialize() -> void:
 	await _press(JOY_BUTTON_DPAD_UP)
 	scene._build_catalogue_buttons[3].grab_focus()
 	await _press(JOY_BUTTON_A)
-	_check(scene._hamlet_catalogue_open and scene._hamlet_catalogue_buttons.size() == 5, "Hamlet details includes three gardens, fence, and gate")
+	_check(scene._hamlet_catalogue_open and scene._hamlet_catalogue_buttons.size() == 9, "Hamlet details includes gardens, fences, and street furniture")
 	_check(scene._hamlet_catalogue_buttons[3].text.begins_with("Rustic timber fence") and scene._hamlet_catalogue_buttons[4].text.begins_with("Rustic garden gate"), "both rustic fence choices are visually named")
 	scene._hamlet_catalogue_buttons[3].grab_focus()
 	await _press(JOY_BUTTON_A)
