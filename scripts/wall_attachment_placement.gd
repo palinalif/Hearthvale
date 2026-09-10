@@ -1,6 +1,9 @@
 extends RefCounted
 
 ## Pure wall-placement math. BuildingWorld owns authoritative records.
+## Legacy walls span the original rectangular house. Generated massing walls
+## carry explicit tangent/vertical bounds so the same placement tools work on
+## upper storeys and stepped/joined facades.
 static func wall_ids(view: Dictionary) -> Array[String]:
 	var result: Array[String] = []
 	for surface_value in view.get("surfaces", []):
@@ -15,6 +18,14 @@ static func surface(view: Dictionary, surface_id: String) -> Dictionary:
 		var candidate: Dictionary = surface_value
 		if str(candidate.get("id", "")) == surface_id: return candidate
 	return {}
+
+static func surface_label(view: Dictionary, surface_id: String) -> String:
+	var support: Dictionary = surface(view, surface_id)
+	if support.is_empty(): return surface_id
+	var orientation: String = str(support.get("orientation", "wall")).capitalize()
+	if bool(support.get("massing_wall", false)):
+		return "Floor %d %s" % [int(support.get("massing_level", 0)) + 1, orientation]
+	return orientation
 
 static func footprint(kind: String, asset_id: String = "") -> Vector2:
 	if kind == "flower_box": return Vector2(0.8, 0.2)
@@ -38,56 +49,84 @@ static func footprint_for_detail(detail: Dictionary) -> Vector2:
 	if str(detail.get("asset_id", "")).contains("round"): return size * 0.5 + Vector2(0.3, 0.3)
 	return size * 0.5 + Vector2(0.375, 0.67)
 
+static func wall_geometry(view: Dictionary, support: Dictionary) -> Dictionary:
+	var dimensions = view.get("dimensions", Vector3.ZERO)
+	if not dimensions is Vector3: return {}
+	var dims: Vector3 = dimensions
+	var orientation: String = str(support.get("orientation", ""))
+	if orientation not in ["front", "back", "left", "right"]: return {}
+	if bool(support.get("massing_wall", false)):
+		var tangent_min: float = float(support.get("tangent_min", 0.0))
+		var tangent_max: float = float(support.get("tangent_max", 0.0))
+		var bottom: float = float(support.get("bottom", 0.0))
+		var top: float = float(support.get("top", 0.0))
+		var normal: float = float(support.get("normal", 0.0))
+		if tangent_max <= tangent_min or top <= bottom: return {}
+		return {"orientation": orientation, "tangent_min": tangent_min, "tangent_max": tangent_max, "bottom": bottom, "top": top, "normal": normal}
+	var tangent_extent: float = dims.x if orientation in ["front", "back"] else dims.z
+	var normal: float = 0.0
+	if orientation == "front": normal = -dims.z * 0.5
+	elif orientation == "back": normal = dims.z * 0.5
+	elif orientation == "left": normal = -dims.x * 0.5
+	else: normal = dims.x * 0.5
+	return {"orientation": orientation, "tangent_min": -tangent_extent * 0.5, "tangent_max": tangent_extent * 0.5, "bottom": 0.0, "top": dims.y, "normal": normal}
+
 static func clamp_to_wall(view: Dictionary, surface_id: String, local_position: Vector3, detail_footprint: Vector2) -> Dictionary:
 	if not local_position.is_finite() or not detail_footprint.is_finite(): return {}
 	var support := surface(view, surface_id)
 	if support.is_empty() or str(support.get("kind", "")) != "wall" or bool(support.get("deleted", false)): return {}
-	var dimensions = view.get("dimensions", Vector3.ZERO)
-	if not dimensions is Vector3: return {}
-	var dims: Vector3 = dimensions
-	var orientation := str(support.get("orientation", ""))
-	if orientation not in ["front", "back", "left", "right"]: return {}
-	var tangent_extent := dims.x if orientation in ["front", "back"] else dims.z
-	var tangent_limit := tangent_extent * 0.5 - detail_footprint.x
-	var min_y := detail_footprint.y
-	var max_y := dims.y - detail_footprint.y
-	if tangent_limit < 0.0 or max_y < min_y: return {}
+	var geometry: Dictionary = wall_geometry(view, support)
+	if geometry.is_empty(): return {}
+	var orientation: String = str(geometry["orientation"])
+	var tangent_min: float = float(geometry["tangent_min"]) + detail_footprint.x
+	var tangent_max: float = float(geometry["tangent_max"]) - detail_footprint.x
+	var min_y: float = float(geometry["bottom"]) + detail_footprint.y
+	var max_y: float = float(geometry["top"]) - detail_footprint.y
+	if tangent_max < tangent_min or max_y < min_y: return {}
 	var result := local_position
 	result.y = clampf(result.y, min_y, max_y)
+	var normal: float = float(geometry["normal"])
 	match orientation:
 		"front":
-			result.x = clampf(result.x, -tangent_limit, tangent_limit)
-			result.z = -dims.z * 0.5 - 0.02
+			result.x = clampf(result.x, tangent_min, tangent_max)
+			result.z = normal - 0.02
 		"back":
-			result.x = clampf(result.x, -tangent_limit, tangent_limit)
-			result.z = dims.z * 0.5 + 0.02
+			result.x = clampf(result.x, tangent_min, tangent_max)
+			result.z = normal + 0.02
 		"left":
-			result.z = clampf(result.z, -tangent_limit, tangent_limit)
-			result.x = -dims.x * 0.5 - 0.02
+			result.z = clampf(result.z, tangent_min, tangent_max)
+			result.x = normal - 0.02
 		"right":
-			result.z = clampf(result.z, -tangent_limit, tangent_limit)
-			result.x = dims.x * 0.5 + 0.02
+			result.z = clampf(result.z, tangent_min, tangent_max)
+			result.x = normal + 0.02
 	return {"surface_id": surface_id, "orientation": orientation, "position": result}
 
 static func remap_between_walls(view: Dictionary, from_surface_id: String, to_surface_id: String, local_position: Vector3, detail_footprint: Vector2) -> Dictionary:
 	var from_surface := surface(view, from_surface_id)
 	var to_surface := surface(view, to_surface_id)
 	if from_surface.is_empty() or to_surface.is_empty(): return {}
-	var dimensions = view.get("dimensions", Vector3.ZERO)
-	if not dimensions is Vector3: return {}
-	var dims: Vector3 = dimensions
-	var from_orientation := str(from_surface.get("orientation", ""))
-	var to_orientation := str(to_surface.get("orientation", ""))
-	if from_orientation not in ["front", "back", "left", "right"] or to_orientation not in ["front", "back", "left", "right"]: return {}
-	var old_extent := dims.x if from_orientation in ["front", "back"] else dims.z
-	var new_extent := dims.x if to_orientation in ["front", "back"] else dims.z
-	var old_limit := maxf(0.001, old_extent * 0.5 - detail_footprint.x)
-	var new_limit := maxf(0.0, new_extent * 0.5 - detail_footprint.x)
-	var old_tangent := local_position.x if from_orientation in ["front", "back"] else local_position.z
-	var ratio := clampf(old_tangent / old_limit, -1.0, 1.0)
+	var from_geometry: Dictionary = wall_geometry(view, from_surface)
+	var to_geometry: Dictionary = wall_geometry(view, to_surface)
+	if from_geometry.is_empty() or to_geometry.is_empty(): return {}
+	var from_orientation: String = str(from_geometry["orientation"])
+	var to_orientation: String = str(to_geometry["orientation"])
+	var old_min: float = float(from_geometry["tangent_min"]) + detail_footprint.x
+	var old_max: float = float(from_geometry["tangent_max"]) - detail_footprint.x
+	var new_min: float = float(to_geometry["tangent_min"]) + detail_footprint.x
+	var new_max: float = float(to_geometry["tangent_max"]) - detail_footprint.x
+	var old_y_min: float = float(from_geometry["bottom"]) + detail_footprint.y
+	var old_y_max: float = float(from_geometry["top"]) - detail_footprint.y
+	var new_y_min: float = float(to_geometry["bottom"]) + detail_footprint.y
+	var new_y_max: float = float(to_geometry["top"]) - detail_footprint.y
+	if new_max < new_min or new_y_max < new_y_min: return {}
+	var old_tangent: float = local_position.x if from_orientation in ["front", "back"] else local_position.z
+	var ratio: float = 0.5 if old_max <= old_min else clampf(inverse_lerp(old_min, old_max, old_tangent), 0.0, 1.0)
+	var vertical_ratio: float = 0.5 if old_y_max <= old_y_min else clampf(inverse_lerp(old_y_min, old_y_max, local_position.y), 0.0, 1.0)
 	var remapped := local_position
-	if to_orientation in ["front", "back"]: remapped.x = ratio * new_limit
-	else: remapped.z = ratio * new_limit
+	var new_tangent: float = lerpf(new_min, new_max, ratio)
+	if to_orientation in ["front", "back"]: remapped.x = new_tangent
+	else: remapped.z = new_tangent
+	remapped.y = lerpf(new_y_min, new_y_max, vertical_ratio)
 	return clamp_to_wall(view, to_surface_id, remapped, detail_footprint)
 
 ## Manual details never silently displace one another. Automatic windows yield
