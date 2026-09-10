@@ -1,4 +1,4 @@
-extends "res://scripts/m2_scene_house_massing.gd"
+extends "res://scripts/m2_scene_house_massing_interaction.gd"
 
 ## Joined roofs suppress the old rectangular cottage joinery. Players can opt
 ## back into exposed timber, but those beams are regenerated from the union roof
