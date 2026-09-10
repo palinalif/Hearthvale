@@ -105,7 +105,7 @@ func _build_home_catalogue() -> void:
 		button.focus_mode = Control.FOCUS_ALL
 		button.pressed.connect(_choose_home_design.bind(design_id))
 		row.add_child(button)
-	_home_catalogue_buttons.append(button)
+		_home_catalogue_buttons.append(button)
 		_catalogue_buttons_by_id[design_id] = button
 		_refresh_catalogue_button(design_id)
 
@@ -140,7 +140,7 @@ func _build_global_catalogue() -> void:
 	_add_catalogue_heading(outdoor_box, "OUTDOOR DECORATIONS", "Choose a brush, then paint directly in the world")
 	_add_catalogue_button(outdoor_box, _outdoor_catalogue_buttons, "Foliage brush\nGrass, flowers, ferns, reeds, and mushrooms", _choose_outdoor_tool.bind("foliage"))
 	_add_catalogue_button(outdoor_box, _outdoor_catalogue_buttons, "Tree brush\nPlace varied orchard and riverside trees", _choose_outdoor_tool.bind("tree"))
-	_add_catalogue_button(outdoor_box, _outdoor_catalogue_buttons, "Clear decorations\nRemove planting without changing terrain", _choose_outdoor_tool.bind("clear_planting")
+	_add_catalogue_button(outdoor_box, _outdoor_catalogue_buttons, "Clear decorations\nRemove planting without changing terrain", _choose_outdoor_tool.bind("clear_planting"))
 
 func _make_catalogue_panel(node_name: String, minimum: Vector2) -> PanelContainer:
 	var panel := PanelContainer.new()
@@ -222,7 +222,7 @@ func _input(event: InputEvent) -> void:
 			_close_all_catalogues()
 			super._input(event)
 		elif event.is_action_pressed("m1_accept"):
-			var focus := get_viewport().gui_get_focus_wner()
+			var focus := get_viewport().gui_get_focus_owner()
 			if focus in _outdoor_catalogue_buttons: (focus as Button).pressed.emit()
 		elif event.is_action_pressed("m1_height_up") or event.is_action_pressed("ui_up"):
 			_move_focus(_outdoor_catalogue_buttons, -1)
@@ -237,7 +237,7 @@ func _input(event: InputEvent) -> void:
 			_close_all_catalogues()
 			super._input(event)
 		elif event.is_action_pressed("m1_accept"):
-			var focus := get_viewport().gui_get_focus_wner()
+			var focus := get_viewport().gui_get_focus_owner()
 			if focus in _build_catalogue_buttons: (focus as Button).pressed.emit()
 		elif event.is_action_pressed("m1_height_up") or event.is_action_pressed("ui_up"):
 			_move_focus(_build_catalogue_buttons, -1)
@@ -458,7 +458,7 @@ func _close_surface_material_picker() -> void:
 
 func _cancel_current_edit(reason: String) -> void:
 	if _surface_material_picker_open:
-			_surface_material_picker_open = false
+		_surface_material_picker_open = false
 		_surface_material_picker_kind = ""
 		_surface_material_picker_original = ""
 		_surface_material_picker_preview = ""
