@@ -42,7 +42,7 @@ func _initialize() -> void:
 	scene._begin_duplicate_selected_detail()
 	_check(scene.detail_move_active and not scene._duplicate_source_detail.is_empty(), "Duplicate enters wall placement preview")
 	_check(scene.placement_asset_id == source_asset, "Duplicate preview preserves the selected variation")
-	var ok := scene._commit_detail_move()
+	var ok: bool = scene._commit_detail_move()
 	_check(ok, "Duplicate commits from the placement preview")
 	var after: Dictionary = scene.building_world.get_building(scene.selected_building_id)
 	_check(after.get("details", []).size() == before_count + 1, "Duplicate adds exactly one detail")
