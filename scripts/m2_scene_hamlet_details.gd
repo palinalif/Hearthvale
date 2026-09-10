@@ -1,8 +1,8 @@
 extends "res://scripts/m2_scene_composition.gd"
 
-## Controller-first placement for small composition pieces that turn a set of
-## houses into a hamlet. Gardens and fences share the terrain cursor, preview,
-## undo and save contracts; each remains separate saved authority.
+## Controller-first placement for small hamlet composition pieces. Gardens,
+## fences and the upcoming street furniture all use one preview/rotate/commit
+## transaction; the named aliases below keep tests and UI language explicit.
 
 const DetailState = preload("res://scripts/landscape_state.gd")
 
@@ -22,47 +22,45 @@ var _hamlet_catalogue_open := false
 var _hamlet_catalogue_panel: PanelContainer
 var _hamlet_catalogue_buttons: Array[Button] = []
 
+var detail_placement_active := false
+var detail_kind := ""
+var detail_style_id := ""
+var detail_size := Vector2.ZERO
+var detail_yaw_quarters := 0
+var detail_placement_valid := false
+var detail_placement_reason := ""
+var _detail_before: Dictionary = {}
+var _detail_before_serialized := ""
+var _detail_building_revision := -1
+var _detail_terrain_revision := -1
+var _detail_preview_signature := ""
+var _detail_render_signature := ""
+
+# Explicit aliases used by tests and by feature-specific entry points.
 var garden_placement_active := false
 var garden_style_id := "cottage_flowers"
 var garden_size := Vector2(3.0, 2.0)
 var garden_yaw_quarters := 0
 var garden_placement_valid := false
 var garden_placement_reason := ""
-var _garden_before: Dictionary = {}
-var _garden_before_serialized := ""
-var _garden_building_revision := -1
-var _garden_terrain_revision := -1
-var _garden_preview_signature := ""
-var _garden_render_signature := ""
-
 var fence_placement_active := false
 var fence_style_id := "rustic_fence"
 var fence_size := Vector2(3.0, 0.25)
 var fence_yaw_quarters := 0
 var fence_placement_valid := false
 var fence_placement_reason := ""
-var _fence_before: Dictionary = {}
-var _fence_before_serialized := ""
-var _fence_building_revision := -1
-var _fence_terrain_revision := -1
-var _fence_preview_signature := ""
-var _fence_render_signature := ""
 
 func _ready() -> void:
 	super._ready()
 	_install_hamlet_catalogue()
-	_refresh_garden_visual(true)
-	_refresh_fence_visual(true)
+	_refresh_detail_visual(true)
 
 func _process(delta: float) -> void:
 	super._process(delta)
-	if garden_placement_active and not menu_open:
-		_update_garden_validity()
-		_update_garden_preview()
-		_refresh_controller_hud()
-	elif fence_placement_active and not menu_open:
-		_update_fence_validity()
-		_update_fence_preview()
+	if detail_placement_active and not menu_open:
+		_update_detail_validity()
+		_update_detail_preview()
+		_sync_detail_aliases()
 		_refresh_controller_hud()
 
 func _install_hamlet_catalogue() -> void:
@@ -77,7 +75,7 @@ func _install_hamlet_catalogue() -> void:
 	for style_id in GARDEN_STYLE_ORDER:
 		var style: Dictionary = GARDEN_STYLES[style_id]
 		_add_catalogue_button(box, _hamlet_catalogue_buttons, "%s\n%s" % [style["name"], style["summary"]], _choose_garden_style.bind(style_id))
-	_add_catalogue_heading(box, "FENCES", "Short pieces snap only by their saved footprint")
+	_add_catalogue_heading(box, "FENCES", "Short pieces remain independent and easy to rearrange")
 	for style_id in FENCE_STYLE_ORDER:
 		var style: Dictionary = FENCE_STYLES[style_id]
 		_add_catalogue_button(box, _hamlet_catalogue_buttons, "%s\n%s" % [style["name"], style["summary"]], _choose_fence_style.bind(style_id))
@@ -103,32 +101,29 @@ func _input(event: InputEvent) -> void:
 			_move_focus(_hamlet_catalogue_buttons, 1)
 		get_viewport().set_input_as_handled()
 		return
-	if garden_placement_active:
+	if detail_placement_active:
 		if event.is_action_pressed("m1_accept"):
-			_commit_garden(); get_viewport().set_input_as_handled(); return
+			_commit_detail()
+			get_viewport().set_input_as_handled()
+			return
 		if event.is_action_pressed("m1_cancel") or event.is_action_pressed("m1_tools"):
-			_cancel_garden_placement("Garden cancelled"); get_viewport().set_input_as_handled(); return
+			_cancel_detail_placement("%s cancelled" % _detail_kind_label())
+			get_viewport().set_input_as_handled()
+			return
 		if event.is_action_pressed("m1_cycle_left") or event.is_action_pressed("m1_cycle_right"):
-			_rotate_garden(-1 if event.is_action_pressed("m1_cycle_left") else 1); get_viewport().set_input_as_handled(); return
+			_rotate_detail(-1 if event.is_action_pressed("m1_cycle_left") else 1)
+			get_viewport().set_input_as_handled()
+			return
 		if event.is_action_pressed("m1_pause"):
-			_cancel_garden_placement("Garden cancelled by pause"); super._input(event); return
+			_cancel_detail_placement("%s cancelled by pause" % _detail_kind_label())
+			super._input(event)
+			return
 		if event.is_action_pressed("m1_mode_switch") or event.is_action_pressed("m1_view") or event.is_action_pressed("m1_undo") or event.is_action_pressed("m1_redo") or event.is_action_pressed("m1_height_up") or event.is_action_pressed("m1_height_down"):
-			get_viewport().set_input_as_handled(); return
+			get_viewport().set_input_as_handled()
+			return
 		if event.is_action_released("m1_accept"):
-			get_viewport().set_input_as_handled(); return
-	if fence_placement_active:
-		if event.is_action_pressed("m1_accept"):
-			_commit_fence(); get_viewport().set_input_as_handled(); return
-		if event.is_action_pressed("m1_cancel") or event.is_action_pressed("m1_tools"):
-			_cancel_fence_placement("Fence cancelled"); get_viewport().set_input_as_handled(); return
-		if event.is_action_pressed("m1_cycle_left") or event.is_action_pressed("m1_cycle_right"):
-			_rotate_fence(-1 if event.is_action_pressed("m1_cycle_left") else 1); get_viewport().set_input_as_handled(); return
-		if event.is_action_pressed("m1_pause"):
-			_cancel_fence_placement("Fence cancelled by pause"); super._input(event); return
-		if event.is_action_pressed("m1_mode_switch") or event.is_action_pressed("m1_view") or event.is_action_pressed("m1_undo") or event.is_action_pressed("m1_redo") or event.is_action_pressed("m1_height_up") or event.is_action_pressed("m1_height_down"):
-			get_viewport().set_input_as_handled(); return
-		if event.is_action_released("m1_accept"):
-			get_viewport().set_input_as_handled(); return
+			get_viewport().set_input_as_handled()
+			return
 	super._input(event)
 
 func _open_hamlet_catalogue() -> void:
@@ -153,73 +148,67 @@ func _close_all_catalogues(clear_tools: bool = true) -> void:
 
 func _choose_garden_style(style_id: String) -> void:
 	if not GARDEN_STYLES.has(style_id): return
-	_close_hamlet_for_world()
-	_set_view_context("terrain", "Garden placement selected")
 	garden_style_id = style_id
 	garden_size = GARDEN_STYLES[style_id]["size"]
 	garden_yaw_quarters = 0
-	_begin_garden_placement()
+	_begin_detail_placement("garden", garden_style_id, garden_size, garden_yaw_quarters)
 
 func _choose_fence_style(style_id: String) -> void:
 	if not FENCE_STYLES.has(style_id): return
-	_close_hamlet_for_world()
-	_set_view_context("terrain", "Fence placement selected")
 	fence_style_id = style_id
 	fence_size = FENCE_STYLES[style_id]["size"]
 	fence_yaw_quarters = 0
-	_begin_fence_placement()
+	_begin_detail_placement("fence", fence_style_id, fence_size, fence_yaw_quarters)
+
+func _begin_garden_placement() -> void:
+	_begin_detail_placement("garden", garden_style_id, garden_size, garden_yaw_quarters)
+
+func _begin_fence_placement() -> void:
+	_begin_detail_placement("fence", fence_style_id, fence_size, fence_yaw_quarters)
+
+func _begin_detail_placement(kind: String, style_id: String, size: Vector2, yaw_quarters: int = 0) -> void:
+	if detail_placement_active or bridge_placement_active or path_placement_active or stroke_active or landscape_active or detail_move_active or resize_active or building_placement_active: return
+	if not _detail_definition(kind, style_id).is_empty():
+		_close_hamlet_for_world()
+		if view_context != "terrain": _set_view_context("terrain", "%s placement selected" % kind.capitalize())
+		detail_placement_active = true
+		detail_kind = kind
+		detail_style_id = style_id
+		detail_size = size
+		detail_yaw_quarters = posmod(yaw_quarters, 4)
+		detail_placement_valid = false
+		detail_placement_reason = "Find a terrain surface"
+		_detail_before = landscape_state.document()
+		_detail_before_serialized = JSON.stringify(_detail_before)
+		_detail_building_revision = building_world.get_revision()
+		_detail_terrain_revision = _terrain_revision()
+		_landscape_before.clear()
+		tools_open = false
+		detail_open = false
+		if tools_panel: tools_panel.visible = false
+		if _terrain_panel: _terrain_panel.visible = false
+		get_viewport().gui_release_focus()
+		_preview_key = ""
+		_sync_detail_aliases()
+		_set_status("%s • A place / left-right rotate / B cancel" % _detail_style_name())
+		_update_brush_preview()
+		_update_detail_validity()
+		_update_detail_preview()
+		_sync_detail_aliases()
+		_refresh_controller_hud()
 
 func _close_hamlet_for_world() -> void:
 	_hamlet_catalogue_open = false
-	_hamlet_catalogue_panel.visible = false
+	if _hamlet_catalogue_panel: _hamlet_catalogue_panel.visible = false
 	tools_open = false
 	get_viewport().gui_release_focus()
-
-func _begin_garden_placement() -> void:
-	if garden_placement_active or fence_placement_active or bridge_placement_active or path_placement_active or stroke_active or landscape_active or detail_move_active or resize_active or building_placement_active: return
-	if view_context != "terrain": _set_view_context("terrain", "Garden placement selected")
-	garden_placement_active = true
-	garden_placement_valid = false
-	garden_placement_reason = "Find a terrain surface"
-	_garden_before = landscape_state.document()
-	_garden_before_serialized = JSON.stringify(_garden_before)
-	_garden_building_revision = building_world.get_revision()
-	_garden_terrain_revision = _terrain_revision()
-	_landscape_before.clear()
-	_prepare_detail_world("%s • A place / left-right rotate / B cancel" % _garden_style_name())
-	_update_garden_validity(); _update_garden_preview(); _refresh_controller_hud()
-
-func _begin_fence_placement() -> void:
-	if garden_placement_active or fence_placement_active or bridge_placement_active or path_placement_active or stroke_active or landscape_active or detail_move_active or resize_active or building_placement_active: return
-	if view_context != "terrain": _set_view_context("terrain", "Fence placement selected")
-	fence_placement_active = true
-	fence_placement_valid = false
-	fence_placement_reason = "Find a terrain surface"
-	_fence_before = landscape_state.document()
-	_fence_before_serialized = JSON.stringify(_fence_before)
-	_fence_building_revision = building_world.get_revision()
-	_fence_terrain_revision = _terrain_revision()
-	_landscape_before.clear()
-	_prepare_detail_world("%s • A place / left-right rotate / B cancel" % _fence_style_name())
-	_update_fence_validity(); _update_fence_preview(); _refresh_controller_hud()
-
-func _prepare_detail_world(message: String) -> void:
-	tools_open = false
-	detail_open = false
-	if tools_panel: tools_panel.visible = false
-	if _terrain_panel: _terrain_panel.visible = false
-	get_viewport().gui_release_focus()
-	_preview_key = ""
-	_set_status(message)
-	_update_brush_preview()
 
 func _read_camera_and_cursor(delta: float) -> void:
 	super._read_camera_and_cursor(delta)
-	if garden_placement_active: _update_garden_validity()
-	elif fence_placement_active: _update_fence_validity()
+	if detail_placement_active: _update_detail_validity()
 
 func _update_brush_preview() -> void:
-	if not garden_placement_active and not fence_placement_active:
+	if not detail_placement_active:
 		super._update_brush_preview()
 		return
 	_terrain_target_valid = false
@@ -239,121 +228,169 @@ func _update_brush_preview() -> void:
 		if _terrain_target_valid: cursor_reticle.update_target(_terrain_target_point, _terrain_target_normal, 0.30, "path", camera, true)
 		else: cursor_reticle.set_target_visible(false)
 
-func _update_garden_validity() -> void:
-	garden_placement_valid = false
-	garden_placement_reason = "No terrain surface under cursor"
-	if not garden_placement_active: return
-	if _terrain_revision() != _garden_terrain_revision: garden_placement_reason = "Terrain changed; restart garden"; return
-	if building_world.get_revision() != _garden_building_revision: garden_placement_reason = "Home layout changed; restart garden"; return
+func _update_detail_validity() -> void:
+	detail_placement_valid = false
+	detail_placement_reason = "No terrain surface under cursor"
+	if not detail_placement_active: return
+	if _terrain_revision() != _detail_terrain_revision:
+		detail_placement_reason = "Terrain changed; restart %s" % detail_kind
+		return
+	if building_world.get_revision() != _detail_building_revision:
+		detail_placement_reason = "Home layout changed; restart %s" % detail_kind
+		return
 	var point := _path_cursor_point()
 	if not point.is_finite(): return
-	if not _candidate_detail_fits_limits("garden", garden_style_id, point, garden_size, garden_yaw_quarters): garden_placement_reason = "Garden is outside the editable world or detail limit"; return
-	if _composition_hits_home(point, garden_size, garden_yaw_quarters): garden_placement_reason = "Garden overlaps a home"; return
-	garden_placement_valid = true
-	garden_placement_reason = "Valid garden position"
+	if not _candidate_detail_fits_limits(detail_kind, detail_style_id, point, detail_size, detail_yaw_quarters):
+		detail_placement_reason = "%s is outside the editable world or detail limit" % _detail_kind_label()
+		return
+	if _composition_hits_home(point, detail_size, detail_yaw_quarters):
+		detail_placement_reason = "%s overlaps a home" % _detail_kind_label()
+		return
+	detail_placement_valid = true
+	detail_placement_reason = "Valid %s position" % detail_kind
 
-func _update_fence_validity() -> void:
-	fence_placement_valid = false
-	fence_placement_reason = "No terrain surface under cursor"
-	if not fence_placement_active: return
-	if _terrain_revision() != _fence_terrain_revision: fence_placement_reason = "Terrain changed; restart fence"; return
-	if building_world.get_revision() != _fence_building_revision: fence_placement_reason = "Home layout changed; restart fence"; return
+func _update_detail_preview() -> void:
+	if not composition_visual or not detail_placement_active: return
 	var point := _path_cursor_point()
-	if not point.is_finite(): return
-	if not _candidate_detail_fits_limits("fence", fence_style_id, point, fence_size, fence_yaw_quarters): fence_placement_reason = "Fence is outside the editable world or detail limit"; return
-	if _composition_hits_home(point, fence_size, fence_yaw_quarters): fence_placement_reason = "Fence overlaps a home"; return
-	fence_placement_valid = true
-	fence_placement_reason = "Valid fence position"
+	if not point.is_finite():
+		_hide_detail_preview()
+		return
+	var signature := "%s|%s|%s|%d|%s|%d" % [detail_kind, detail_style_id, point, detail_yaw_quarters, detail_placement_valid, _terrain_revision()]
+	if signature == _detail_preview_signature: return
+	_detail_preview_signature = signature
+	match detail_kind:
+		"garden": composition_visual.show_garden_preview(detail_style_id, point, detail_size, detail_yaw_quarters, detail_placement_valid)
+		"fence": composition_visual.show_fence_preview(detail_style_id, point, detail_size, detail_yaw_quarters, detail_placement_valid)
 
-func _update_garden_preview() -> void:
-	if not composition_visual or not garden_placement_active: return
-	var point := _path_cursor_point()
-	if not point.is_finite(): composition_visual.hide_garden_preview(); return
-	var signature := "%s|%s|%d|%s|%d" % [garden_style_id, point, garden_yaw_quarters, garden_placement_valid, _terrain_revision()]
-	if signature == _garden_preview_signature: return
-	_garden_preview_signature = signature
-	composition_visual.show_garden_preview(garden_style_id, point, garden_size, garden_yaw_quarters, garden_placement_valid)
+func _hide_detail_preview() -> void:
+	if not composition_visual: return
+	composition_visual.hide_garden_preview()
+	composition_visual.hide_fence_preview()
 
-func _update_fence_preview() -> void:
-	if not composition_visual or not fence_placement_active: return
-	var point := _path_cursor_point()
-	if not point.is_finite(): composition_visual.hide_fence_preview(); return
-	var signature := "%s|%s|%d|%s|%d" % [fence_style_id, point, fence_yaw_quarters, fence_placement_valid, _terrain_revision()]
-	if signature == _fence_preview_signature: return
-	_fence_preview_signature = signature
-	composition_visual.show_fence_preview(fence_style_id, point, fence_size, fence_yaw_quarters, fence_placement_valid)
+func _rotate_detail(direction: int) -> void:
+	if not detail_placement_active: return
+	detail_yaw_quarters = posmod(detail_yaw_quarters + direction, 4)
+	_detail_preview_signature = ""
+	_update_detail_validity()
+	_update_detail_preview()
+	_sync_detail_aliases()
+	_set_status("%s • rotated %d° • %s" % [_detail_style_name(), detail_yaw_quarters * 90, detail_placement_reason])
+	_refresh_controller_hud()
 
 func _rotate_garden(direction: int) -> void:
-	if not garden_placement_active: return
-	garden_yaw_quarters = posmod(garden_yaw_quarters + direction, 4)
-	_garden_preview_signature = ""
-	_update_garden_validity(); _update_garden_preview()
-	_set_status("%s • rotated %d° • %s" % [_garden_style_name(), garden_yaw_quarters * 90, garden_placement_reason])
-	_refresh_controller_hud()
+	if detail_placement_active and detail_kind == "garden": _rotate_detail(direction)
 
 func _rotate_fence(direction: int) -> void:
-	if not fence_placement_active: return
-	fence_yaw_quarters = posmod(fence_yaw_quarters + direction, 4)
-	_fence_preview_signature = ""
-	_update_fence_validity(); _update_fence_preview()
-	_set_status("%s • rotated %d° • %s" % [_fence_style_name(), fence_yaw_quarters * 90, fence_placement_reason])
+	if detail_placement_active and detail_kind == "fence": _rotate_detail(direction)
+
+func _commit_detail() -> bool:
+	if not detail_placement_active: return false
+	_update_detail_validity()
+	_sync_detail_aliases()
+	if not detail_placement_valid:
+		_set_status("Cannot place %s: %s" % [detail_kind, detail_placement_reason])
+		return false
+	if JSON.stringify(landscape_state.document()) != _detail_before_serialized:
+		detail_placement_reason = "Landscape changed; restart %s" % detail_kind
+		_sync_detail_aliases()
+		return false
+	if _terrain_revision() != _detail_terrain_revision or building_world.get_revision() != _detail_building_revision:
+		detail_placement_reason = "World changed; restart %s" % detail_kind
+		_sync_detail_aliases()
+		return false
+	var point := _path_cursor_point()
+	if not point.is_finite(): return false
+	_landscape_before = _detail_before.duplicate(true)
+	var placed_kind := detail_kind
+	var placed_name := _detail_style_name()
+	var object_id := landscape_state.add_composition(detail_kind, detail_style_id, point, detail_size, detail_yaw_quarters)
+	if object_id < 1:
+		_landscape_before.clear()
+		detail_placement_reason = "%s limit reached" % _detail_kind_label()
+		_sync_detail_aliases()
+		return false
+	var margin := 0.10 if detail_kind == "garden" else 0.02
+	landscape_state.clear_records_in_footprint(point, detail_size, detail_yaw_quarters, margin)
+	if garden_visual: garden_visual.reset_records(landscape_state.records)
+	_finish_detail_placement()
+	_record_history("landscape")
+	_landscape_before.clear()
+	_refresh_detail_visual(true)
+	_set_status("%s placed • LB undo" % placed_name)
 	_refresh_controller_hud()
+	return placed_kind in ["garden", "fence"]
 
 func _commit_garden() -> bool:
-	if not garden_placement_active: return false
-	_update_garden_validity()
-	if not garden_placement_valid: _set_status("Cannot place garden: %s" % garden_placement_reason); return false
-	if JSON.stringify(landscape_state.document()) != _garden_before_serialized: garden_placement_reason = "Landscape changed; restart garden"; return false
-	if _terrain_revision() != _garden_terrain_revision or building_world.get_revision() != _garden_building_revision: garden_placement_reason = "World changed; restart garden"; return false
-	var point := _path_cursor_point()
-	if not point.is_finite(): return false
-	_landscape_before = _garden_before.duplicate(true)
-	var object_id := landscape_state.add_composition("garden", garden_style_id, point, garden_size, garden_yaw_quarters)
-	if object_id < 1: _landscape_before.clear(); garden_placement_reason = "Garden limit reached"; return false
-	landscape_state.clear_records_in_footprint(point, garden_size, garden_yaw_quarters, 0.10)
-	if garden_visual: garden_visual.reset_records(landscape_state.records)
-	garden_placement_active = false
-	composition_visual.hide_garden_preview()
-	_garden_preview_signature = ""; _garden_before.clear(); _garden_before_serialized = ""
-	_record_history("landscape"); _landscape_before.clear(); _refresh_garden_visual(true)
-	_set_status("%s placed • LB undo" % _garden_style_name()); _refresh_controller_hud()
-	return true
+	return _commit_detail() if detail_placement_active and detail_kind == "garden" else false
 
 func _commit_fence() -> bool:
-	if not fence_placement_active: return false
-	_update_fence_validity()
-	if not fence_placement_valid: _set_status("Cannot place fence: %s" % fence_placement_reason); return false
-	if JSON.stringify(landscape_state.document()) != _fence_before_serialized: fence_placement_reason = "Landscape changed; restart fence"; return false
-	if _terrain_revision() != _fence_terrain_revision or building_world.get_revision() != _fence_building_revision: fence_placement_reason = "World changed; restart fence"; return false
-	var point := _path_cursor_point()
-	if not point.is_finite(): return false
-	_landscape_before = _fence_before.duplicate(true)
-	var object_id := landscape_state.add_composition("fence", fence_style_id, point, fence_size, fence_yaw_quarters)
-	if object_id < 1: _landscape_before.clear(); fence_placement_reason = "Fence limit reached"; return false
-	landscape_state.clear_records_in_footprint(point, fence_size, fence_yaw_quarters, 0.02)
-	if garden_visual: garden_visual.reset_records(landscape_state.records)
-	fence_placement_active = false
-	composition_visual.hide_fence_preview()
-	_fence_preview_signature = ""; _fence_before.clear(); _fence_before_serialized = ""
-	_record_history("landscape"); _landscape_before.clear(); _refresh_fence_visual(true)
-	_set_status("%s placed • LB undo" % _fence_style_name()); _refresh_controller_hud()
-	return true
+	return _commit_detail() if detail_placement_active and detail_kind == "fence" else false
+
+func _cancel_detail_placement(reason: String) -> void:
+	if not detail_placement_active: return
+	if not _detail_before.is_empty():
+		landscape_state.restore(_detail_before)
+		if garden_visual: garden_visual.reset_records(landscape_state.records)
+	_finish_detail_placement()
+	_set_status(reason)
+	_refresh_detail_visual(true)
+	_refresh_controller_hud()
+
+func _finish_detail_placement() -> void:
+	_hide_detail_preview()
+	detail_placement_active = false
+	detail_placement_valid = false
+	detail_placement_reason = ""
+	_detail_preview_signature = ""
+	_detail_before.clear()
+	_detail_before_serialized = ""
+	_sync_detail_aliases()
 
 func _cancel_garden_placement(reason: String = "Garden cancelled") -> void:
-	if not garden_placement_active: return
-	if not _garden_before.is_empty(): landscape_state.restore(_garden_before); if garden_visual: garden_visual.reset_records(landscape_state.records)
-	garden_placement_active = false; garden_placement_valid = false; garden_placement_reason = ""
-	if composition_visual: composition_visual.hide_garden_preview()
-	_garden_preview_signature = ""; _garden_before.clear(); _garden_before_serialized = ""
-	_set_status(reason); _refresh_garden_visual(true); _refresh_controller_hud()
+	if detail_placement_active and detail_kind == "garden": _cancel_detail_placement(reason)
 
 func _cancel_fence_placement(reason: String = "Fence cancelled") -> void:
-	if not fence_placement_active: return
-	if not _fence_before.is_empty(): landscape_state.restore(_fence_before); if garden_visual: garden_visual.reset_records(landscape_state.records)
-	fence_placement_active = false; fence_placement_valid = false; fence_placement_reason = ""
-	if composition_visual: composition_visual.hide_fence_preview()
-	_fence_preview_signature = ""; _fence_before.clear(); _fence_before_serialized = ""
-	_set_status(reason); _refresh_fence_visual(true); _refresh_controller_hud()
+	if detail_placement_active and detail_kind == "fence": _cancel_detail_placement(reason)
+
+func _update_garden_validity() -> void:
+	if detail_placement_active and detail_kind == "garden": _update_detail_validity(); _sync_detail_aliases()
+
+func _update_fence_validity() -> void:
+	if detail_placement_active and detail_kind == "fence": _update_detail_validity(); _sync_detail_aliases()
+
+func _update_garden_preview() -> void:
+	if detail_placement_active and detail_kind == "garden": _update_detail_preview()
+
+func _update_fence_preview() -> void:
+	if detail_placement_active and detail_kind == "fence": _update_detail_preview()
+
+func _sync_detail_aliases() -> void:
+	garden_placement_active = detail_placement_active and detail_kind == "garden"
+	fence_placement_active = detail_placement_active and detail_kind == "fence"
+	if detail_kind == "garden":
+		garden_style_id = detail_style_id
+		garden_size = detail_size
+		garden_yaw_quarters = detail_yaw_quarters
+		garden_placement_valid = detail_placement_valid
+		garden_placement_reason = detail_placement_reason
+	elif detail_kind == "fence":
+		fence_style_id = detail_style_id
+		fence_size = detail_size
+		fence_yaw_quarters = detail_yaw_quarters
+		fence_placement_valid = detail_placement_valid
+		fence_placement_reason = detail_placement_reason
+
+func _detail_definition(kind: String, style_id: String) -> Dictionary:
+	if kind == "garden" and GARDEN_STYLES.has(style_id): return GARDEN_STYLES[style_id]
+	if kind == "fence" and FENCE_STYLES.has(style_id): return FENCE_STYLES[style_id]
+	return {}
+
+func _detail_style_name() -> String:
+	var definition := _detail_definition(detail_kind, detail_style_id)
+	return str(definition.get("name", _detail_kind_label()))
+
+func _detail_kind_label() -> String:
+	return detail_kind.capitalize() if not detail_kind.is_empty() else "Detail"
 
 func _candidate_detail_fits_limits(kind: String, style_id: String, point: Vector2, size: Vector2, yaw_quarters: int) -> bool:
 	var proposed := landscape_state.document()
@@ -384,80 +421,81 @@ func _rectangles_overlap(a: Array, b: Array) -> bool:
 		for index in 2:
 			var edge: Vector2 = polygon[(index + 1) % 4] - polygon[index]
 			var axis := Vector2(-edge.y, edge.x).normalized()
-			var a_min := INF; var a_max := -INF; var b_min := INF; var b_max := -INF
+			var a_min := INF
+			var a_max := -INF
+			var b_min := INF
+			var b_max := -INF
 			for point: Vector2 in a:
-				var amount := point.dot(axis); a_min = minf(a_min, amount); a_max = maxf(a_max, amount)
+				var amount := point.dot(axis)
+				a_min = minf(a_min, amount)
+				a_max = maxf(a_max, amount)
 			for point: Vector2 in b:
-				var amount := point.dot(axis); b_min = minf(b_min, amount); b_max = maxf(b_max, amount)
+				var amount := point.dot(axis)
+				b_min = minf(b_min, amount)
+				b_max = maxf(b_max, amount)
 			if a_max <= b_min + 0.0001 or b_max <= a_min + 0.0001: return false
 	return true
 
 func _cancel_current_edit(reason: String) -> void:
-	if garden_placement_active: _cancel_garden_placement(reason)
-	if fence_placement_active: _cancel_fence_placement(reason)
+	if detail_placement_active: _cancel_detail_placement(reason)
 	super._cancel_current_edit(reason)
 
 func _undo() -> void:
-	super._undo(); _refresh_garden_visual(true); _refresh_fence_visual(true)
+	super._undo()
+	_refresh_detail_visual(true)
 
 func _redo() -> void:
-	super._redo(); _refresh_garden_visual(true); _refresh_fence_visual(true)
+	super._redo()
+	_refresh_detail_visual(true)
 
 func _restore_landscape(document: Dictionary) -> void:
-	super._restore_landscape(document); _refresh_garden_visual(true); _refresh_fence_visual(true)
+	super._restore_landscape(document)
+	_refresh_detail_visual(true)
 
 func _on_backend_changed() -> void:
-	super._on_backend_changed(); _refresh_garden_visual(true); _refresh_fence_visual(true)
+	super._on_backend_changed()
+	_refresh_detail_visual(true)
+
+func _refresh_detail_visual(force: bool = false) -> void:
+	if not composition_visual: return
+	if backend and composition_visual.has_method("attach_backend"): composition_visual.attach_backend(backend)
+	var signature := JSON.stringify(landscape_state.composition) + "|" + str(_terrain_revision())
+	if not force and signature == _detail_render_signature: return
+	_detail_render_signature = signature
+	composition_visual.rebuild_gardens(landscape_state.composition, backend)
+	composition_visual.rebuild_fences(landscape_state.composition, backend)
 
 func _refresh_garden_visual(force: bool = false) -> void:
-	if not composition_visual: return
-	if backend and composition_visual.has_method("attach_backend"): composition_visual.attach_backend(backend)
-	var signature := JSON.stringify(landscape_state.composition) + "|" + str(_terrain_revision())
-	if not force and signature == _garden_render_signature: return
-	_garden_render_signature = signature
-	composition_visual.rebuild_gardens(landscape_state.composition, backend)
+	_refresh_detail_visual(force)
 
 func _refresh_fence_visual(force: bool = false) -> void:
-	if not composition_visual: return
-	if backend and composition_visual.has_method("attach_backend"): composition_visual.attach_backend(backend)
-	var signature := JSON.stringify(landscape_state.composition) + "|" + str(_terrain_revision())
-	if not force and signature == _fence_render_signature: return
-	_fence_render_signature = signature
-	composition_visual.rebuild_fences(landscape_state.composition, backend)
+	_refresh_detail_visual(force)
 
 func _update_presentation() -> void:
 	super._update_presentation()
-	if garden_placement_active and target_label:
-		target_label.text = "%s • %d° • %s\nA place  left/right rotate  B cancel  RS orbit" % [_garden_style_name(), garden_yaw_quarters * 90, garden_placement_reason]
-		_update_garden_preview()
-	elif fence_placement_active and target_label:
-		target_label.text = "%s • %d° • %s\nA place  left/right rotate  B cancel  RS orbit" % [_fence_style_name(), fence_yaw_quarters * 90, fence_placement_reason]
-		_update_fence_preview()
+	if not detail_placement_active or not target_label: return
+	target_label.text = "%s • %d° • %s\nA place  left/right rotate  B cancel  RS orbit" % [_detail_style_name(), detail_yaw_quarters * 90, detail_placement_reason]
+	_update_detail_preview()
 
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
 	if menu_open or not _tool_name or not _prompt_row: return
 	if _hamlet_catalogue_open:
-		_mode_label.text = "BUILD"; _tool_name.text = "Hamlet details"; _tool_meta.text = "Gardens and rustic fences • street furniture next"; _tool_card.visible = true
+		_mode_label.text = "BUILD"
+		_tool_name.text = "Hamlet details"
+		_tool_meta.text = "Gardens and rustic fences • street furniture next"
+		_tool_card.visible = true
 		if _terrain_panel: _terrain_panel.visible = false
 		if _building_panel: _building_panel.visible = false
 		if _world_prompt: _world_prompt.visible = false
-		_set_prompts([["UP/DOWN", "Choose"], ["A", "Place"], ["B", "Categories"]]); return
-	if garden_placement_active:
-		_mode_label.text = "TERRAIN"; _tool_name.text = _garden_style_name(); _tool_meta.text = "%d° • %s" % [garden_yaw_quarters * 90, garden_placement_reason]; _tool_card.visible = true
-		if _terrain_panel: _terrain_panel.visible = false
-		if _building_panel: _building_panel.visible = false
-		if _world_prompt: _world_prompt.visible = false
-		_set_prompts([["A", "Place"], ["LEFT/RIGHT", "Rotate"], ["B", "Cancel"], ["RS", "Orbit"], ["LT/RT", "Zoom"]]); return
-	if fence_placement_active:
-		_mode_label.text = "TERRAIN"; _tool_name.text = _fence_style_name(); _tool_meta.text = "%d° • %s" % [fence_yaw_quarters * 90, fence_placement_reason]; _tool_card.visible = true
-		if _terrain_panel: _terrain_panel.visible = false
-		if _building_panel: _building_panel.visible = false
-		if _world_prompt: _world_prompt.visible = false
-		_set_prompts([["A", "Place"], ["LEFT/RIGHT", "Rotate"], ["B", "Cancel"], ["RS", "Orbit"], ["LT/RT", "Zoom"]])
-
-func _garden_style_name() -> String:
-	return str(GARDEN_STYLES.get(garden_style_id, {"name": "Garden"})["name"])
-
-func _fence_style_name() -> String:
-	return str(FENCE_STYLES.get(fence_style_id, {"name": "Fence"})["name"])
+		_set_prompts([["UP/DOWN", "Choose"], ["A", "Place"], ["B", "Categories"]])
+		return
+	if not detail_placement_active: return
+	_mode_label.text = "TERRAIN"
+	_tool_name.text = _detail_style_name()
+	_tool_meta.text = "%d° • %s" % [detail_yaw_quarters * 90, detail_placement_reason]
+	_tool_card.visible = true
+	if _terrain_panel: _terrain_panel.visible = false
+	if _building_panel: _building_panel.visible = false
+	if _world_prompt: _world_prompt.visible = false
+	_set_prompts([["A", "Place"], ["LEFT/RIGHT", "Rotate"], ["B", "Cancel"], ["RS", "Orbit"], ["LT/RT", "Zoom"]])
