@@ -1,0 +1,31 @@
+name: M2 Mobile performance regression
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-performance:
+    name: mobile-performance
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Run normalized Mobile-renderer performance guard
+        shell: pwsh
+        run: ./tools/test-m2-performance.ps1
+
+      - name: Retain performance diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: m2-mobile-performance-${{ github.sha }}
+          path: .tools/performance/
+          if-no-files-found: error
+          retention-days: 7
