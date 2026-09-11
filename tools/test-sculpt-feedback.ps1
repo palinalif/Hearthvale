@@ -1,5 +1,10 @@
 # Isolated CI workspaces only. Uses existing dependency pins; no exports, MCP,
 # signing keys, user saves, or changes to the project's dependency lock.
+param(
+    [ValidateSet('all','setup')]
+    [string]$Suite = 'all'
+)
+
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
 $lock = Get-Content dependencies.lock.json -Raw | ConvertFrom-Json
@@ -38,6 +43,11 @@ function Invoke-Gate([string]$label, [string[]]$arguments) {
     }
 }
 Invoke-Gate 'import' @('--headless', '--path', '.', '--editor', '--import', '--quit')
+if ($Suite -eq 'setup') {
+    Write-Output 'SCULPT_SUITE_OK suite=setup'
+    return
+}
 foreach ($test in @('sculpt_brush_profile_test','smooth_neighbourhood_test','sculpt_smoothing_test','sculpt_test','m1_scaled_backend_test')) {
     Invoke-Gate $test @('--headless', '--path', '.', '--script', "tests/$test.gd")
 }
+Write-Output 'SCULPT_SUITE_OK suite=all'
