@@ -2,10 +2,15 @@ extends SceneTree
 
 const HouseMassing = preload("res://scripts/m2_house_massing.gd")
 const BASELINE_PATH := "res://tests/performance/m2_mobile_performance_baseline.json"
-const WARMUP_FRAMES := 90
-const SAMPLE_FRAMES := 120
-const CATALOGUE_FRAMES := 90
-const MOVING_SECTION_FRAMES := 60
+# GitHub's Windows runner uses Microsoft Basic Render Driver for this Mobile
+# benchmark. Keep the exact same scenarios/budgets, but render a smaller target
+# and use bounded samples so the guard measures relative cost instead of spending
+# its entire watchdog budget software-rasterizing 1280x720 frames.
+const CI_RENDER_SIZE := Vector2i(640, 360)
+const WARMUP_FRAMES := 30
+const SAMPLE_FRAMES := 48
+const CATALOGUE_FRAMES := 36
+const MOVING_SECTION_FRAMES := 24
 
 var scene: Node
 var checks := 0
@@ -29,6 +34,8 @@ func _run() -> void:
 		check(DisplayServer.get_name() != "headless", "real display server required")
 		check(RenderingServer.get_current_rendering_method() == "mobile", "Mobile renderer required")
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+		DisplayServer.window_set_size(CI_RENDER_SIZE)
+		await process_frame
 
 	var baseline := _load_baseline()
 	check(not baseline.is_empty(), "performance baseline loads")
@@ -61,11 +68,11 @@ func _run() -> void:
 
 	print("PERF_STAGE catalogue")
 	scene._open_build_browser("windows")
-	await _wait_frames(12)
+	await _wait_frames(8)
 	check(scene._browser_open, "build catalogue opens for benchmark")
 	var catalogue := await _sample_frames(CATALOGUE_FRAMES)
 	scene._close_build_browser()
-	await _wait_frames(12)
+	await _wait_frames(8)
 
 	print("PERF_STAGE section-start")
 	scene._begin_portion_placement()
@@ -74,7 +81,7 @@ func _run() -> void:
 		await _finish()
 		return
 	_section_base = scene.portion_offset
-	await _wait_frames(12)
+	await _wait_frames(8)
 
 	print("PERF_STAGE section-stationary")
 	var section_stationary := await _sample_frames(SAMPLE_FRAMES)
@@ -90,7 +97,7 @@ func _run() -> void:
 	var committed: bool = scene._commit_portion_placement()
 	var commit_ms := float(Time.get_ticks_usec() - commit_start) / 1000.0
 	check(committed, "section benchmark commit succeeds")
-	await _wait_frames(12)
+	await _wait_frames(8)
 
 	var idle_p95 := maxf(0.001, float(idle["p95_ms"]))
 	var idle_median := maxf(0.001, float(idle["median_ms"]))
