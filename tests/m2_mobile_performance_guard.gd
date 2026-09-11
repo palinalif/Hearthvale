@@ -33,9 +33,10 @@ func _run() -> void:
 	var baseline := _load_baseline()
 	check(not baseline.is_empty(), "performance baseline loads")
 	if baseline.is_empty():
-		_finish()
+		await _finish()
 		return
 
+	print("PERF_STAGE scene-load")
 	scene = preload("res://scenes/m1.tscn").instantiate()
 	scene.test_mode = true
 	scene.checkpoint_root = "user://m2-mobile-perf-%d" % Time.get_ticks_usec()
@@ -50,11 +51,15 @@ func _run() -> void:
 		return
 
 	scene._set_view_context("building")
+	print("PERF_STAGE warmup")
 	await _wait_frames(WARMUP_FRAMES)
 
+	print("PERF_STAGE idle")
 	var idle := await _sample_frames(SAMPLE_FRAMES)
+	print("PERF_STAGE camera")
 	var camera := await _sample_frames(SAMPLE_FRAMES, Callable(self, "_camera_step"))
 
+	print("PERF_STAGE catalogue")
 	scene._open_build_browser("windows")
 	await _wait_frames(12)
 	check(scene._browser_open, "build catalogue opens for benchmark")
@@ -62,6 +67,7 @@ func _run() -> void:
 	scene._close_build_browser()
 	await _wait_frames(12)
 
+	print("PERF_STAGE section-start")
 	scene._begin_portion_placement()
 	check(scene.portion_placement_active, "section placement starts for benchmark")
 	if not scene.portion_placement_active:
@@ -70,10 +76,13 @@ func _run() -> void:
 	_section_base = scene.portion_offset
 	await _wait_frames(12)
 
+	print("PERF_STAGE section-stationary")
 	var section_stationary := await _sample_frames(SAMPLE_FRAMES)
 	_section_update_cpu_ms.clear()
+	print("PERF_STAGE section-moving")
 	var section_moving := await _sample_frames(MOVING_SECTION_FRAMES, Callable(self, "_section_move_step"))
 
+	print("PERF_STAGE section-commit")
 	scene.portion_offset = _section_base
 	scene._update_portion_preview()
 	check(scene.portion_valid, "baseline section candidate remains valid")
@@ -142,19 +151,23 @@ func _section_move_step(index: int) -> void:
 	scene._update_portion_preview()
 	_section_update_cpu_ms.append(float(Time.get_ticks_usec() - started) / 1000.0)
 
+# Hosted D3D12 runners do not guarantee that frame_post_draw is emitted while a
+# hidden test window is uncapped. process_frame remains bounded and measures the
+# actual main-loop cadence of this real Mobile-renderer process. The benchmark is
+# therefore a same-run relative regression guard, never a claim about Thor FPS.
 func _sample_frames(count: int, before_frame: Callable = Callable()) -> Dictionary:
 	var times: Array[float] = []
 	for i in count:
 		var started := Time.get_ticks_usec()
 		if before_frame.is_valid():
 			before_frame.call(i)
-		await RenderingServer.frame_post_draw
+		await process_frame
 		times.append(float(Time.get_ticks_usec() - started) / 1000.0)
 	return _stats(times)
 
 func _wait_frames(count: int) -> void:
 	for _i in count:
-		await RenderingServer.frame_post_draw
+		await process_frame
 
 func _stats(values: Array[float]) -> Dictionary:
 	var median := _percentile(values, 0.50)
