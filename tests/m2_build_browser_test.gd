@@ -5,6 +5,8 @@ var checks := 0
 var failures := 0
 var captures := 0
 var rendered := false
+var capture_phase := true
+var behavior_phase := true
 const OUTPUT := ".tools/cottage-repair/build-browser"
 
 func check(ok: bool, label: String) -> void:
@@ -33,7 +35,15 @@ func _press(button: JoyButton) -> void:
 	await _settle()
 
 func _run() -> void:
-	rendered = "--require-rendering" in OS.get_cmdline_user_args()
+	var user_args := OS.get_cmdline_user_args()
+	rendered = "--require-rendering" in user_args
+	var requested_capture := "--capture-phase" in user_args
+	var requested_behavior := "--behavior-phase" in user_args
+	check(not (requested_capture and requested_behavior), "catalogue shard phase is unambiguous")
+	if requested_capture:
+		behavior_phase = false
+	elif requested_behavior:
+		capture_phase = false
 	if rendered:
 		check(DisplayServer.get_name() != "headless" and RenderingServer.get_current_rendering_method() == "mobile", "actual Mobile renderer required")
 		DirAccess.make_dir_recursive_absolute(OUTPUT)
@@ -93,7 +103,7 @@ func _run() -> void:
 		await _press(JOY_BUTTON_DPAD_LEFT)
 		check(root.gui_get_focus_owner() == first, "D-pad returns without double stepping")
 		check(scene.building_world.serialize_document() == before and JSON.stringify(scene.landscape_state.document()) == landscape_before, "browsing leaves building and terrain composition unchanged")
-		if rendered:
+		if rendered and capture_phase:
 			var render_deadline := Time.get_ticks_msec() + 30000
 			while not _category_cached(category) and Time.get_ticks_msec() < render_deadline: await process_frame
 			check(_category_cached(category), "every card has an actual rendered thumbnail: " + category)
@@ -105,72 +115,76 @@ func _run() -> void:
 			check(not image.is_empty() and image.save_png(OUTPUT + "/" + category + ".png") == OK, "save actual catalogue screenshot")
 			captures += 1
 		check(JSON.stringify(scene._browser_entries) == registry_before, "rendering preserves the complete catalogue registry")
-	# Controller shoulders select categories, not global undo/redo.
-	browser.select_category("windows")
-	await _settle()
-	await _press(JOY_BUTTON_RIGHT_SHOULDER)
-	check(browser.category == "doors", "RB selects next category")
-	await _press(JOY_BUTTON_LEFT_SHOULDER)
-	check(browser.category == "windows", "LB selects previous category")
-	check(scene.building_world.serialize_document() == before, "category navigation never undoes world edits")
-	for spec in [["windows", "window_round"], ["wall", "flower_box_woven"], ["roof", "chimney_brick"], ["homes", "woodland_lodge"]]:
-		browser.select_category(spec[0])
-		await _settle()
-		var card := _card(spec[1])
-		check(card != null, "specific variant card exists")
-		if not card: continue
-		card.grab_focus()
-		await _press(JOY_BUTTON_A)
-		check(not scene._browser_open and not browser.visible and not scene.tools_open, "A hides browser for full-screen placement")
-		check(scene.camera.v_offset == offset, "placement restores original camera offset")
-		if spec[0] in ["windows", "wall"]:
-			check(scene.detail_move_active and scene.placement_asset_id == spec[1], "selected variant, not family default, enters placement")
-			check(scene.placement_ghost.has_node("FootprintTop"), "normal full-footprint placement preview retained")
-		elif spec[0] == "roof": check(scene.roof_accessory_placement_active and scene.roof_accessory_asset_id == spec[1], "roof card starts existing accessory preview")
-		else: check(scene.building_placement_active and scene.building_placement_design_id == spec[1], "home card starts independent home preview")
-		check(scene.building_world.serialize_document() == before, "item selection has not committed a placement")
-		await _press(JOY_BUTTON_B)
-		check(scene._browser_open and browser.category == spec[0] and root.gui_get_focus_owner() == _card(spec[1]), "cancel returns to remembered category and exact item")
-		check(scene.building_world.serialize_document() == before, "cancel preserves all records and revisions")
-	if rendered:
+
+	if rendered and capture_phase:
 		var count: int = scene._catalogue_thumbnails.rendered_count
 		browser.select_category("windows")
 		for i in 12: await process_frame
 		check(scene._catalogue_thumbnails.rendered_count == count, "cached thumbnails do not keep rendering")
 		check(scene._catalogue_thumbnails.get_child_count() == 1 and scene._catalogue_thumbnails._viewport.own_world_3d, "one private render viewport, not one live renderer per card")
 		check(scene._catalogue_thumbnails.cache.size() <= 64, "thumbnail memory is bounded")
-	# Blank world clicks and held brush actions cannot select or place anything.
-	var click := InputEventMouseButton.new()
-	click.button_index = MOUSE_BUTTON_LEFT
-	click.pressed = true
-	scene._unhandled_input(click)
-	check(scene._browser_open and scene.building_world.serialize_document() == before, "clicking outside catalogue cannot activate a focused card")
-	scene._cancel_current_edit("Controller disconnected")
-	await _settle()
-	check(not scene._browser_open and not scene.tools_open and scene.camera.v_offset == offset, "interrupt closes catalogue and restores camera")
-	check(not scene._catalogue_thumbnails.active, "hidden catalogue does no thumbnail work")
-	check(JSON.stringify(scene._browser_entries) == registry_before, "interrupting a render never clears shared catalogue records")
-	# Confirm through the actual browser route, then retain the placed ID
-	# across history and reload. The first A chooses, the second A commits.
-	var original_buildings: Array = scene.building_world.get_document()["buildings"]
-	scene._open_build_browser("windows")
-	await _settle()
-	_card("window_round").grab_focus()
-	await _press(JOY_BUTTON_A)
-	check(scene.detail_move_active and scene._attachment_preview_valid(), "browser starts a valid confirmation fixture")
-	var revision: int = scene.building_world.get_revision()
-	await _press(JOY_BUTTON_A)
-	check(not scene.detail_move_active and not scene._browser_open, "confirm finishes placement without reopening catalogue")
-	check(scene.building_world.get_revision() == revision + 1, "catalogue placement commits exactly one edit")
-	var placed_id: String = scene.selected_detail_id
-	check(str(scene._selected_detail_record().get("asset_id", "")) == "window_round", "confirmed item retains the chosen variant")
-	check(scene.building_world.undo(), "catalogue placement can be undone")
-	check(scene.building_world.get_document()["buildings"] == original_buildings, "undo restores the original building records")
-	check(scene.building_world.redo(), "catalogue placement can be redone")
-	check(scene.selected_detail_id == placed_id and str(scene._selected_detail_record().get("asset_id", "")) == "window_round", "redo retains the placed identity and variant")
-	var saved: String = scene.building_world.serialize_document()
-	check(scene.building_world.load_serialized_document(saved), "catalogue placement reloads through existing save API")
-	check(str(scene._selected_detail_record().get("id", "")) == placed_id, "reload retains catalogue placement identity")
+
+	if behavior_phase:
+		# Controller shoulders select categories, not global undo/redo.
+		browser.select_category("windows")
+		await _settle()
+		await _press(JOY_BUTTON_RIGHT_SHOULDER)
+		check(browser.category == "doors", "RB selects next category")
+		await _press(JOY_BUTTON_LEFT_SHOULDER)
+		check(browser.category == "windows", "LB selects previous category")
+		check(scene.building_world.serialize_document() == before, "category navigation never undoes world edits")
+		for spec in [["windows", "window_round"], ["wall", "flower_box_woven"], ["roof", "chimney_brick"], ["homes", "woodland_lodge"]]:
+			browser.select_category(spec[0])
+			await _settle()
+			var card := _card(spec[1])
+			check(card != null, "specific variant card exists")
+			if not card: continue
+			card.grab_focus()
+			await _press(JOY_BUTTON_A)
+			check(not scene._browser_open and not browser.visible and not scene.tools_open, "A hides browser for full-screen placement")
+			check(scene.camera.v_offset == offset, "placement restores original camera offset")
+			if spec[0] in ["windows", "wall"]:
+				check(scene.detail_move_active and scene.placement_asset_id == spec[1], "selected variant, not family default, enters placement")
+				check(scene.placement_ghost.has_node("FootprintTop"), "normal full-footprint placement preview retained")
+			elif spec[0] == "roof": check(scene.roof_accessory_placement_active and scene.roof_accessory_asset_id == spec[1], "roof card starts existing accessory preview")
+			else: check(scene.building_placement_active and scene.building_placement_design_id == spec[1], "home card starts independent home preview")
+			check(scene.building_world.serialize_document() == before, "item selection has not committed a placement")
+			await _press(JOY_BUTTON_B)
+			check(scene._browser_open and browser.category == spec[0] and root.gui_get_focus_owner() == _card(spec[1]), "cancel returns to remembered category and exact item")
+			check(scene.building_world.serialize_document() == before, "cancel preserves all records and revisions")
+
+		# Blank world clicks and held brush actions cannot select or place anything.
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		click.pressed = true
+		scene._unhandled_input(click)
+		check(scene._browser_open and scene.building_world.serialize_document() == before, "clicking outside catalogue cannot activate a focused card")
+		scene._cancel_current_edit("Controller disconnected")
+		await _settle()
+		check(not scene._browser_open and not scene.tools_open and scene.camera.v_offset == offset, "interrupt closes catalogue and restores camera")
+		check(not scene._catalogue_thumbnails.active, "hidden catalogue does no thumbnail work")
+		check(JSON.stringify(scene._browser_entries) == registry_before, "interrupting a render never clears shared catalogue records")
+		# Confirm through the actual browser route, then retain the placed ID
+		# across history and reload. The first A chooses, the second A commits.
+		var original_buildings: Array = scene.building_world.get_document()["buildings"]
+		scene._open_build_browser("windows")
+		await _settle()
+		_card("window_round").grab_focus()
+		await _press(JOY_BUTTON_A)
+		check(scene.detail_move_active and scene._attachment_preview_valid(), "browser starts a valid confirmation fixture")
+		var revision: int = scene.building_world.get_revision()
+		await _press(JOY_BUTTON_A)
+		check(not scene.detail_move_active and not scene._browser_open, "confirm finishes placement without reopening catalogue")
+		check(scene.building_world.get_revision() == revision + 1, "catalogue placement commits exactly one edit")
+		var placed_id: String = scene.selected_detail_id
+		check(str(scene._selected_detail_record().get("asset_id", "")) == "window_round", "confirmed item retains the chosen variant")
+		check(scene.building_world.undo(), "catalogue placement can be undone")
+		check(scene.building_world.get_document()["buildings"] == original_buildings, "undo restores the original building records")
+		check(scene.building_world.redo(), "catalogue placement can be redone")
+		check(scene.selected_detail_id == placed_id and str(scene._selected_detail_record().get("asset_id", "")) == "window_round", "redo retains the placed identity and variant")
+		var saved: String = scene.building_world.serialize_document()
+		check(scene.building_world.load_serialized_document(saved), "catalogue placement reloads through existing save API")
+		check(str(scene._selected_detail_record().get("id", "")) == placed_id, "reload retains catalogue placement identity")
 	await _finish()
 
 func _category_cached(category: String) -> bool:
@@ -184,6 +198,11 @@ func _card(id: String) -> Button:
 		if str(card.get_meta("item")["id"]) == id: return card
 	return null
 
+func _phase_name() -> String:
+	if capture_phase and behavior_phase: return "all"
+	if capture_phase: return "capture"
+	return "behavior"
+
 func _finish() -> void:
 	if is_instance_valid(scene):
 		scene._shutting_down = true
@@ -191,6 +210,6 @@ func _finish() -> void:
 		scene.queue_free()
 		await process_frame
 		await process_frame
-	if rendered: check(captures == 5, "all five catalogue categories captured")
-	print("BUILD_BROWSER_RESULT " + JSON.stringify({"checks": checks, "failures": failures, "ok": failures == 0, "captures": captures}))
+	if rendered and capture_phase: check(captures == 5, "all five catalogue categories captured")
+	print("BUILD_BROWSER_RESULT " + JSON.stringify({"checks": checks, "failures": failures, "ok": failures == 0, "captures": captures, "phase": _phase_name()}))
 	quit(1 if failures else 0)
