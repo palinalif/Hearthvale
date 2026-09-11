@@ -40,7 +40,7 @@ func _run() -> void:
 	scene.camera.attributes = CameraAttributesPractical.new()
 	scene.hud.visible = false
 	scene.garden_visual.set_wind_enabled(false)
-	var original := scene.building_world.serialize_document()
+	var original: String = scene.building_world.serialize_document()
 	var cases := [
 		{"id": "front-close", "yaw": 1.20, "distance": 9.0, "fixture": "base"},
 		{"id": "reverse", "yaw": 0.20, "distance": 12.0, "fixture": "base"},
@@ -56,13 +56,13 @@ func _run() -> void:
 		elif spec["fixture"] == "upper":
 			scene._begin_next_storey()
 			check(scene.portion_valid and scene._commit_portion_placement(), "upper comparison uses add-floor API")
-		var buildings_before := scene.building_world.serialize_document()
-		var landscape_before := JSON.stringify(scene.landscape_state.document())
+		var buildings_before: String = scene.building_world.serialize_document()
+		var landscape_before: String = JSON.stringify(scene.landscape_state.document())
 		scene.camera_yaw = PI * float(spec["yaw"])
 		scene.camera_pitch = 0.43
 		scene.camera_distance = float(spec["distance"])
 		scene._update_camera()
-		var camera_transform := scene.camera.global_transform
+		var camera_transform: Transform3D = scene.camera.global_transform
 		var before_hash := 0
 		for enabled in [false, true]:
 			Layout.enabled = enabled
