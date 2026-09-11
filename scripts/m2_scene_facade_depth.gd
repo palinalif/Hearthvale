@@ -3,6 +3,10 @@ extends "res://scripts/m2_scene_joined_roof_courses.gd"
 ## Presentation-only architectural relief. It follows current saved wall/detail
 ## records but never adds authoritative surfaces, openings, anchors or history.
 const FacadeDepth = preload("res://scripts/facade_depth_layout.gd")
+const BRICK_STYLE := "riverside_cottage"
+const BRICK_START_LOCAL := 0.9
+const BRICK_SPACING_LOCAL := 1.5
+const BRICK_TOP_MARGIN_LOCAL := 0.75
 
 var _facade_signatures: Dictionary = {}
 
@@ -43,7 +47,10 @@ func _finish_facade_for_visual(visual: Node3D, view: Dictionary, force: bool = f
 		return
 	_remove_facade_nodes(visual)
 	_facade_signatures[visual_key] = signature
-	if not FacadeDepth.enabled: return
+	if not FacadeDepth.enabled:
+		_set_legacy_quoin_visibility(visual, true)
+		return
+	_set_legacy_quoin_visibility(visual, false)
 	var detail_value = visual.get("_detail_unit")
 	if not detail_value is Vector3: return
 	var detail_unit: Vector3 = detail_value
@@ -60,6 +67,7 @@ func _finish_facade_for_visual(visual: Node3D, view: Dictionary, force: bool = f
 	_add_facade_batch(visual, "M2FacadeWindowSills", sills, palette["trim"])
 	_add_facade_batch(visual, "M2FacadeWindowLintels", lintels, palette["trim"])
 	_add_facade_batch(visual, "M2FacadeDoorThresholds", thresholds, palette["stone"])
+	_add_facade_batch(visual, "M2FacadeBrickQuoins", _brick_corner_pieces(view, runs, detail_unit), palette["brick"])
 	var marker := Node3D.new()
 	marker.name = "M2FacadeDepthMarker"
 	marker.set_meta("facade_depth", true)
@@ -93,9 +101,12 @@ func _append_opening_relief(visual: Node3D, view: Dictionary, detail_unit: Vecto
 			var pane_size: Vector3 = layout.get("pane_size", Vector3(2, 2.8, detail_unit.z))
 			var cell := (basis.inverse() * detail_unit).abs()
 			var half := Vector2(pane_size.x, pane_size.y) * 0.5
-			_append_oriented_piece(sills, basis, anchor, pane_center + Vector3(0, -half.y - cell.y * 1.5, cell.z * 2.0), Vector3(pane_size.x + cell.x * 6.0, cell.y * 2.0, cell.z * 3.0))
+			# The base joinery already owns the visible sill/frame height. Extend
+			# only its outer depth, so this pass reads as relief rather than a
+			# second chunky outline around every opening.
+			_append_oriented_piece(sills, basis, anchor, pane_center + Vector3(0, -half.y - cell.y * 0.5, cell.z * 2.5), Vector3(pane_size.x + cell.x * 2.0, cell.y, cell.z * 2.0))
 			if not asset_id.contains("round"):
-				_append_oriented_piece(lintels, basis, anchor, pane_center + Vector3(0, half.y + cell.y, cell.z * 1.5), Vector3(pane_size.x + cell.x * 4.0, cell.y, cell.z * 2.0))
+				_append_oriented_piece(lintels, basis, anchor, pane_center + Vector3(0, half.y + cell.y * 0.5, cell.z * 2.0), Vector3(pane_size.x + cell.x * 2.0, cell.y, cell.z))
 		else:
 			var layout_value = visual.call("_door_layout", detail, local as Vector3, orientation)
 			if not layout_value is Dictionary: continue
@@ -105,7 +116,69 @@ func _append_opening_relief(visual: Node3D, view: Dictionary, detail_unit: Vecto
 			var leaf_center: Vector3 = layout.get("leaf_center", Vector3.ZERO)
 			var leaf_size: Vector3 = layout.get("leaf_size", Vector3(1.75, 3.7, detail_unit.z))
 			var cell := (basis.inverse() * detail_unit).abs()
-			_append_oriented_piece(thresholds, basis, anchor, leaf_center + Vector3(0, -leaf_size.y * 0.5 - cell.y * 0.5, cell.z * 2.0), Vector3(leaf_size.x + cell.x * 4.0, cell.y, cell.z * 4.0))
+			_append_oriented_piece(thresholds, basis, anchor, leaf_center + Vector3(0, -leaf_size.y * 0.5 - cell.y * 0.5, cell.z * 2.0), Vector3(leaf_size.x + cell.x * 2.0, cell.y, cell.z * 3.0))
+
+func _brick_corner_pieces(view: Dictionary, runs: Array[Dictionary], detail_unit: Vector3) -> Array[Dictionary]:
+	var pieces: Array[Dictionary] = []
+	if str(view.get("style_id", "")) != BRICK_STYLE: return pieces
+	if not detail_unit.is_finite() or detail_unit.x <= 0.0 or detail_unit.y <= 0.0 or detail_unit.z <= 0.0: return pieces
+	var spans := _brick_corner_spans(runs)
+	for span in spans:
+		var point: Vector2 = span["point"]
+		var bottom := float(span["bottom"])
+		var top := float(span["top"])
+		var y := snappedf(bottom + BRICK_START_LOCAL, detail_unit.y)
+		var level := 0
+		while y <= top - BRICK_TOP_MARGIN_LOCAL + 0.001:
+			var long_x := posmod(level + roundi(point.x / detail_unit.x) + roundi(point.y / detail_unit.z), 2) == 0
+			var size := Vector3(detail_unit.x * (3.0 if long_x else 2.0), detail_unit.y * 2.0, detail_unit.z * (2.0 if long_x else 3.0))
+			pieces.append({"center": Vector3(point.x, y, point.y), "size": size, "basis": Basis.IDENTITY})
+			y += BRICK_SPACING_LOCAL
+			level += 1
+	return pieces
+
+func _brick_corner_spans(runs: Array[Dictionary]) -> Array[Dictionary]:
+	var points: Dictionary = {}
+	for run in runs:
+		var orientation := str(run.get("orientation", ""))
+		if orientation not in ["front", "back", "left", "right"]: continue
+		var axis := "x" if orientation in ["front", "back"] else "z"
+		var normal := float(run.get("normal", 0.0))
+		var bottom := float(run.get("bottom", 0.0))
+		var top := float(run.get("top", 0.0))
+		for tangent_value in [float(run.get("tangent_min", 0.0)), float(run.get("tangent_max", 0.0))]:
+			var point := Vector2(tangent_value, normal) if axis == "x" else Vector2(normal, tangent_value)
+			var key := "%.4f|%.4f" % [point.x, point.y]
+			if not points.has(key): points[key] = {"point": point, "x": [], "z": []}
+			(points[key][axis] as Array).append(Vector2(bottom, top))
+	var result: Array[Dictionary] = []
+	for key_value in points.keys():
+		var record: Dictionary = points[key_value]
+		var overlaps: Array[Vector2] = []
+		for x_value in record["x"]:
+			var x_span: Vector2 = x_value
+			for z_value in record["z"]:
+				var z_span: Vector2 = z_value
+				var low := maxf(x_span.x, z_span.x)
+				var high := minf(x_span.y, z_span.y)
+				if high > low + 0.001: overlaps.append(Vector2(low, high))
+		if overlaps.is_empty(): continue
+		overlaps.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x < b.x)
+		var merged: Array[Vector2] = []
+		for overlap in overlaps:
+			if merged.is_empty() or overlap.x > merged[-1].y + 0.001:
+				merged.append(overlap)
+			else:
+				var tail := merged[-1]
+				tail.y = maxf(tail.y, overlap.y)
+				merged[-1] = tail
+		for span in merged:
+			result.append({"point": record["point"], "bottom": span.x, "top": span.y})
+	return result
+
+func _set_legacy_quoin_visibility(visual: Node3D, visible: bool) -> void:
+	var legacy := visual.get_node_or_null("CornerQuoins") as Node3D
+	if legacy: legacy.visible = visible
 
 func _append_oriented_piece(target: Array[Dictionary], basis: Basis, anchor: Vector3, center: Vector3, size: Vector3) -> void:
 	var transformed_center := anchor + basis * center
@@ -126,7 +199,7 @@ func _facade_palette(view: Dictionary) -> Dictionary:
 	var style := str(view.get("style_id", "riverside_cottage"))
 	if style == "woodland_lodge": trim = Color("#78584a")
 	elif style == "village_gable": trim = trim.lightened(0.05)
-	return {"trim": trim, "stone": stone, "shadow": trim.darkened(0.34)}
+	return {"trim": trim, "stone": stone, "brick": Color("#b38f70"), "shadow": trim.darkened(0.34)}
 
 func _add_facade_batch(visual: Node3D, node_name: String, boxes: Array, colour: Color) -> void:
 	if boxes.is_empty(): return
