@@ -198,13 +198,23 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 				# The top face is seated against the highest terrain actually touched by
 				# the stone footprint, with the slab body extending downward. This keeps
 				# the full top visible without bringing back the old raised-puck offset.
-				var primary_width_scale := 0.47 + 0.14 * (sin(float(path_id * 11 + cluster_index * 29 + 3)) * 0.5 + 0.5)
-				var primary_width := clampf(safe_width * primary_width_scale, 0.22, maxf(0.22, safe_width * 0.64))
-				var primary_length := 0.38 + 0.16 * (sin(float(path_id * 7 + cluster_index * 19 + 4)) * 0.5 + 0.5)
+				# Broader/narrower stones share the same centres and cadence. Limit the
+				# visual width input so a wide tool cannot turn them into patio slabs.
+				var stone_width_input := minf(safe_width, 1.35)
+				var hero := (path_id + cluster_index * 5) % 9 == 0
+				var primary_width_scale := 0.38 + 0.29 * (sin(float(path_id * 11 + cluster_index * 29 + 3)) * 0.5 + 0.5)
+				if hero: primary_width_scale += 0.05
+				var primary_width := clampf(stone_width_input * primary_width_scale, 0.22, maxf(0.22, minf(safe_width * 0.74, 0.90)))
+				var primary_length := 0.34 + 0.28 * (sin(float(path_id * 7 + cluster_index * 19 + 4)) * 0.5 + 0.5)
+				if hero: primary_length += 0.02
 				var primary_yaw := 0.24 * sin(float(path_id * 5 + cluster_index * 17 + 5))
 				var primary_material := 1 if sin(float(path_id * 71 + cluster_index * 31 + 14)) > 0.12 else 0
 				var primary_basis := path_basis * Basis(Vector3.UP, primary_yaw)
 				var primary_size := Vector3(primary_width, STEPPING_STONE_THICKNESS, primary_length)
+				var primary_half_across := _stepping_stone_half_across(primary_size, primary_yaw)
+				# A hairline of existing grass separates the silhouettes. No skirt,
+				# extra rim, material change or lower top is needed for ground contact.
+				var grass_gap := 0.025 + 0.020 * (sin(float(path_id * 83 + cluster_index * 11 + 17)) * 0.5 + 0.5)
 				_append_rounded_stone(builder, _stepping_stone_center(cluster_center, primary_size, primary_basis, STEPPING_STONE_TOP_EPSILON), primary_size, primary_basis, primary_material)
 				cells += 1
 
@@ -213,13 +223,17 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 					var side := -1.0 if pattern in [1, 4] else 1.0
 					var companion_across := side * minf(safe_width * (0.18 + 0.07 * (sin(float(path_id * 37 + cluster_index * 11 + 7)) * 0.5 + 0.5)), 0.27)
 					var companion_along := 0.10 + 0.10 * sin(float(path_id * 41 + cluster_index * 5 + 8))
-					var companion_point := cluster_center + path_basis * Vector3(companion_across, 0, companion_along)
-					var companion_width := clampf(safe_width * (0.24 + 0.08 * (sin(float(path_id * 43 + cluster_index * 3 + 9)) * 0.5 + 0.5)), 0.17, maxf(0.17, safe_width * 0.36))
-					var companion_length := 0.25 + 0.10 * (sin(float(path_id * 47 + cluster_index * 7 + 10)) * 0.5 + 0.5)
+					# A broad primary gets a slightly smaller partner, not a fused pair.
+					var companion_scale := 0.90 if primary_width_scale > 0.62 else 1.0
+					var companion_width := clampf(stone_width_input * companion_scale * (0.16 + 0.20 * (sin(float(path_id * 43 + cluster_index * 3 + 9)) * 0.5 + 0.5)), 0.13, maxf(0.13, minf(safe_width * 0.38, 0.44)))
+					var companion_length := companion_scale * (0.18 + 0.20 * (sin(float(path_id * 47 + cluster_index * 7 + 10)) * 0.5 + 0.5))
 					var companion_yaw := -0.32 * sin(float(path_id * 53 + cluster_index * 13 + 11))
 					var companion_material := 1 if sin(float(path_id * 73 + cluster_index * 17 + 15)) > -0.18 else 0
 					var companion_basis := path_basis * Basis(Vector3.UP, companion_yaw)
 					var companion_size := Vector3(companion_width, STEPPING_STONE_THICKNESS * 0.92, companion_length)
+					var companion_clearance := primary_half_across + _stepping_stone_half_across(companion_size, companion_yaw) + grass_gap
+					companion_across = side * maxf(absf(companion_across), companion_clearance)
+					var companion_point := cluster_center + path_basis * Vector3(companion_across, 0, companion_along)
 					_append_rounded_stone(builder, _stepping_stone_center(companion_point, companion_size, companion_basis, STEPPING_STONE_TOP_EPSILON), companion_size, companion_basis, companion_material)
 					cells += 1
 
@@ -227,10 +241,13 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 				# opposite shoulder. It is intentionally sparse: enough to break the
 				# repeated pair silhouette without turning the path into loose gravel.
 				if pattern == 4:
-					var pebble_point := cluster_center + path_basis * Vector3(minf(safe_width * 0.20, 0.20), 0, -0.14)
 					var pebble_yaw := 0.36 * sin(float(path_id * 61 + cluster_index * 19 + 13))
 					var pebble_basis := path_basis * Basis(Vector3.UP, pebble_yaw)
-					var pebble_size := Vector3(clampf(safe_width * 0.18, 0.13, 0.24), STEPPING_STONE_THICKNESS * 0.78, 0.20)
+					var pebble_width := clampf(stone_width_input * (0.10 + 0.12 * (sin(float(path_id * 59 + cluster_index * 17 + 12)) * 0.5 + 0.5)), 0.10, 0.25)
+					var pebble_length := 0.13 + 0.13 * (sin(float(path_id * 67 + cluster_index * 7 + 18)) * 0.5 + 0.5)
+					var pebble_size := Vector3(pebble_width, STEPPING_STONE_THICKNESS * 0.78, pebble_length)
+					var pebble_across := maxf(minf(safe_width * 0.20, 0.20), primary_half_across + _stepping_stone_half_across(pebble_size, pebble_yaw) + grass_gap)
+					var pebble_point := cluster_center + path_basis * Vector3(pebble_across, 0, -0.14)
 					var pebble_material := 1 if sin(float(path_id * 79 + cluster_index * 23 + 16)) > 0.25 else 0
 					_append_rounded_stone(builder, _stepping_stone_center(pebble_point, pebble_size, pebble_basis, STEPPING_STONE_TOP_EPSILON), pebble_size, pebble_basis, pebble_material)
 					cells += 1
@@ -242,6 +259,13 @@ func _embedded_center(point: Vector3, thickness: float, exposed_rise: float) -> 
 	# burying the rest of the slab. Raised edge stones/rims make the central
 	# walking surface read as a shallow recess without mutating terrain authority.
 	return point + Vector3.UP * (exposed_rise - thickness * 0.5)
+
+func _stepping_stone_half_across(size: Vector3, yaw: float) -> float:
+	# Exact support of the clipped octagon along the path's across axis. Using
+	# its rotated footprint keeps a real grass gap without oversized box margins.
+	var projected_x := size.x * absf(cos(yaw))
+	var projected_z := size.z * absf(sin(yaw))
+	return maxf(projected_x * 0.50 + projected_z * 0.28, projected_x * 0.28 + projected_z * 0.50)
 
 func _stepping_stone_center(point: Vector3, size: Vector3, basis: Basis, top_offset: float) -> Vector3:
 	# A centre-only sample can sit below a neighbouring voxel terrace and bury the
@@ -340,7 +364,7 @@ func _append_rounded_stone(builder: Dictionary, center: Vector3, size: Vector3, 
 	var half := size * 0.5
 	var ring: Array[Vector2] = [
 		Vector2(-0.50, -0.28), Vector2(-0.50, 0.28), Vector2(-0.28, 0.50), Vector2(0.28, 0.50),
-		Vector2(0.50, 0.28), Vector2(0.50, -0.28), Vector2(0.28, -0.50), Vector2(-0.28, -0.50),
+		Vector2(0.50, 0.28), Vector2(0.50, -0.28), Vector2(0.50, -0.28), Vector2(0.28, -0.50), Vector2(-0.28, -0.50),
 	]
 	var top_center := vertices.size()
 	vertices.append(center + basis * Vector3(0, half.y, 0))
