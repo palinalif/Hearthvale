@@ -194,14 +194,15 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 				var cluster_center: Vector3 = sample["point"] + path_basis * Vector3(lateral, 0, along)
 
 				# Keep the established irregular walking rhythm and natural footprint,
-				# but seat each slab decisively above the highest terrain under most of
-				# its footprint. The old wider contact skirt is intentionally omitted:
-				# on grass it visually merged with the slab and made the top read buried.
+				# but seat each slab almost fully above the highest terrain under most of
+				# its footprint, leaving a readable vertical edge even at play distance.
+				# The old wider contact skirt is intentionally omitted because on grass
+				# it visually merged with the slab and made the top read buried.
 				var primary_width_scale := 0.47 + 0.14 * (sin(float(path_id * 11 + cluster_index * 29 + 3)) * 0.5 + 0.5)
 				var primary_width := clampf(safe_width * primary_width_scale, 0.22, maxf(0.22, safe_width * 0.64))
 				var primary_length := 0.38 + 0.16 * (sin(float(path_id * 7 + cluster_index * 19 + 4)) * 0.5 + 0.5)
 				var primary_yaw := 0.24 * sin(float(path_id * 5 + cluster_index * 17 + 5))
-				var primary_rise := 0.105 + 0.025 * (sin(float(path_id * 13 + cluster_index * 7 + 6)) * 0.5 + 0.5)
+				var primary_rise := 0.180 + 0.025 * (sin(float(path_id * 13 + cluster_index * 7 + 6)) * 0.5 + 0.5)
 				var primary_material := 1 if sin(float(path_id * 71 + cluster_index * 31 + 14)) > 0.12 else 0
 				var primary_basis := path_basis * Basis(Vector3.UP, primary_yaw)
 				var primary_size := Vector3(primary_width, STEPPING_STONE_THICKNESS, primary_length)
@@ -217,7 +218,7 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 					var companion_width := clampf(safe_width * (0.24 + 0.08 * (sin(float(path_id * 43 + cluster_index * 3 + 9)) * 0.5 + 0.5)), 0.17, maxf(0.17, safe_width * 0.36))
 					var companion_length := 0.25 + 0.10 * (sin(float(path_id * 47 + cluster_index * 7 + 10)) * 0.5 + 0.5)
 					var companion_yaw := -0.32 * sin(float(path_id * 53 + cluster_index * 13 + 11))
-					var companion_rise := 0.095 + 0.020 * (sin(float(path_id * 59 + cluster_index * 17 + 12)) * 0.5 + 0.5)
+					var companion_rise := 0.170 + 0.020 * (sin(float(path_id * 59 + cluster_index * 17 + 12)) * 0.5 + 0.5)
 					var companion_material := 1 if sin(float(path_id * 73 + cluster_index * 17 + 15)) > -0.18 else 0
 					var companion_basis := path_basis * Basis(Vector3.UP, companion_yaw)
 					var companion_size := Vector3(companion_width, STEPPING_STONE_THICKNESS * 0.92, companion_length)
@@ -233,7 +234,7 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 					var pebble_basis := path_basis * Basis(Vector3.UP, pebble_yaw)
 					var pebble_size := Vector3(clampf(safe_width * 0.18, 0.13, 0.24), STEPPING_STONE_THICKNESS * 0.78, 0.20)
 					var pebble_material := 1 if sin(float(path_id * 79 + cluster_index * 23 + 16)) > 0.25 else 0
-					_append_rounded_stone(builder, _stepping_stone_center(pebble_point, pebble_size, pebble_basis, 0.090), pebble_size, pebble_basis, pebble_material)
+					_append_rounded_stone(builder, _stepping_stone_center(pebble_point, pebble_size, pebble_basis, 0.160), pebble_size, pebble_basis, pebble_material)
 					cells += 1
 				cluster_index += 1
 	return cells
