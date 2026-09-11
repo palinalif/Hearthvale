@@ -28,7 +28,7 @@ func _run() -> void:
 	scene.set_process(false)
 	scene._set_view_context("building", "test")
 	var view: Dictionary = scene.building_world.get_building(scene.selected_building_id)
-	var before := scene.building_world.serialize_document()
+	var before: String = scene.building_world.serialize_document()
 	var runs := Layout.wall_runs(view)
 	check(runs.size() == 4, "single-section house exposes four facade runs")
 	check(_orientations(runs).size() == 4, "single-section facade covers every cardinal wall")
@@ -66,7 +66,7 @@ func _run() -> void:
 	shell = Layout.shell_pieces(view, runs, detail_unit)
 	check(shell["eave"].size() == runs.size(), "every exposed wall run receives a roof-contact reveal")
 
-	var fixture := scene.building_world.serialize_document()
+	var fixture: String = scene.building_world.serialize_document()
 	Layout.enabled = false
 	scene._refresh_facade_depth(true)
 	check(not visual.get_node_or_null("M2FacadeDepthMarker"), "facade finish can be disabled without rebuilding authoritative geometry")
