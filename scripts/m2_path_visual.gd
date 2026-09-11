@@ -74,7 +74,7 @@ func show_preview(style_id: String, width: float, point_values: Array, valid: bo
 	var needs_starter_sample := path_points.size() == 1
 	if path_points.size() > 1:
 		var first_point := Vector2(float(path_points[0][0]), float(path_points[0][1]))
-		var last_point := Vector2(float(path_points.back()[0]), float(path_points.back()[0]))
+		var last_point := Vector2(float(path_points.back()[0]), float(path_points.back()[1]))
 		needs_starter_sample = first_point.distance_to(last_point) < 0.001
 	if needs_starter_sample:
 		# A first point still gets a small style sample so the player can see
