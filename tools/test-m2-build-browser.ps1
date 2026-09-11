@@ -5,12 +5,14 @@ New-Item -ItemType Directory -Force $review | Out-Null
 $out = Join-Path $review 'mobile.out.log'
 $err = Join-Path $review 'mobile.err.log'
 $arguments = @('--path','.','--rendering-method','mobile','--rendering-driver','d3d12','--audio-driver','Dummy','--max-fps','30','--script','tests/m2_build_browser_test.gd','--','--require-rendering')
-# m2_build_browser_test.gd intentionally allows 65s for scene restore plus up to
-# 30s for each of five category render waits (215s) before its own assertions
-# can report a rendering/cache failure. The outer watchdog must leave room for
-# process startup, controller/frame settling, five screenshot readbacks, and
-# teardown on the Microsoft Basic Render Driver used by hosted Windows runners.
-$timeoutMs = 300000
+# This is an end-to-end actual-Mobile test: five rendered category captures are
+# followed by controller placement/cancel/history/reload checks. On the same
+# source and windows-2025 image, one Basic Render Driver host finished in ~172s,
+# while a clean slower host needed ~220s just to reach the fifth capture; the
+# prior green run then needed another 68s for the preserved post-capture checks.
+# Keep the enclosing watchdog above that observed slow-host envelope. The test's
+# own 65s scene-ready and 30s-per-category cache deadlines remain unchanged.
+$timeoutMs = 420000
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $process = Start-Process -FilePath $Editor -ArgumentList $arguments -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
 if (-not $process.WaitForExit($timeoutMs)) {
