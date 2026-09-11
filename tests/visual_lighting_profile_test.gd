@@ -26,12 +26,12 @@ func _initialize() -> void:
 		check(profile.apply_to(sun, world), "valid lighting profile applies")
 		check(world.environment != source, "application uses a private environment")
 		check(source.sky == null and source.ambient_light_source == Environment.AMBIENT_SOURCE_BG, "source environment is unchanged")
-		check(world.environment.tonemap_exposure == 0.85 and world.environment.background_color == source.background_color, "exposure and background remain unchanged")
+		check(world.environment.tonemap_exposure == source.tonemap_exposure and world.environment.background_color == source.background_color, "exposure and background remain unchanged")
 		check(sun.shadow_enabled, "lighting selection does not disable cast shadows")
 		check(not world.environment.fog_enabled and not world.environment.glow_enabled, "comparison does not hide detail with post effects")
 		if profile.use_sky_fill:
 			var material := world.environment.sky.sky_material as ProceduralSkyMaterial
-			check(material.sky_energy_multiplier == profile.sky_energy and material.ground_energy_multiplier == profile.sky_energy, "sky fill uses effective radiance controls")
+			check(is_equal_approx(material.sky_energy_multiplier, profile.sky_energy) and is_equal_approx(material.ground_energy_multiplier, profile.sky_energy), "sky fill uses effective radiance controls")
 		else:
 			check(world.environment.sky == null and world.environment.ambient_light_source == Environment.AMBIENT_SOURCE_COLOR, "baseline restores constant fill")
 	var first := world.environment
