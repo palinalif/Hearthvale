@@ -361,7 +361,7 @@ func _append_rounded_stone(builder: Dictionary, center: Vector3, size: Vector3, 
 		var a: Vector2 = ring[index]
 		var b: Vector2 = ring[next]
 		var edge := b - a
-		var side_normal_local := Vector3(edge.y / maxf(size.x, 0.001), 0, -edge.x / maxf(size.z, 0.001)).normalized()
+		var side_normal_local := Vector3(-edge.y / maxf(size.x, 0.001), 0, edge.x / maxf(size.z, 0.001)).normalized()
 		var side_normal := basis * side_normal_local
 		var side_base := vertices.size()
 		vertices.append(center + basis * Vector3(a.x * size.x, -half.y, a.y * size.z))
