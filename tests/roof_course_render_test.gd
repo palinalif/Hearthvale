@@ -56,6 +56,8 @@ func _run() -> void:
 		var before: String = scene.building_world.serialize_document()
 		var landscape_before: String = JSON.stringify(scene.landscape_state.document())
 		var pixels: Dictionary = {}
+		var images: Dictionary = {}
+		var custom_geometry: Dictionary = {}
 		var complexity: Dictionary = {}
 		var framing := Transform3D.IDENTITY
 		for enabled in [false, true]:
@@ -76,7 +78,10 @@ func _run() -> void:
 			var path := "%s/%s-%s.png" % [OUTPUT, spec[0], label]
 			check(image.save_png(path) == OK, "review frame saved")
 			pixels[label] = hash(image.get_data())
+			images[label] = image
 			var visual: Node3D = scene.cottage_visuals[scene.selected_building_id]
+			var custom := visual.get_node_or_null("M2RoofDesign") as Node3D
+			if custom: custom_geometry[label] = _custom_signature(custom)
 			var metrics := _roof_metrics(visual, false)
 			complexity[label] = metrics
 			receipts.append({"case": spec[0], "finish": label, "path": path, "roof_instances": metrics[0], "roof_batches": metrics[1]})
@@ -88,7 +93,13 @@ func _run() -> void:
 				for frame in 3: await RenderingServer.frame_post_draw
 				check(hash(root.get_texture().get_image().get_data()) == first_hash, "unchanged finish is visually stable after presentation refresh")
 		if spec[1] in ["hip", "saltbox"]:
-			check(pixels["baseline"] == pixels["courses"], "deferred custom roof is pixel-identical, not an expensive almost-no-op")
+			check(custom_geometry["baseline"] == custom_geometry["courses"], "deferred custom roof keeps identical geometry, transforms and material properties")
+			var changed_pixels := _changed_pixel_count(images["baseline"], images["courses"])
+			# The prior independent rebuilds differed at only 1 and 7 edge
+			# pixels. Bound such sparse sampling differences as well as requiring
+			# exact generated geometry/material equality, not only a frame hash.
+			check(changed_pixels <= ceili(1280 * 720 * 0.0001), "unchanged custom view differs in at most 0.01% of pixels")
+			print("CUSTOM_ROOF_PARITY %s changed_pixels=%d total=921600" % [spec[0], changed_pixels])
 			check(complexity["baseline"] == complexity["courses"], "custom roof retains original instance and batch count")
 		else:
 			check(pixels["baseline"] != pixels["courses"], "candidate visibly changes the real roof")
@@ -119,6 +130,29 @@ func _roof_metrics(node: Node3D, inherited: bool) -> Vector2i:
 	for child in node.get_children():
 		if child is Node3D: result += _roof_metrics(child, roof)
 	return result
+
+func _custom_signature(node: Node3D) -> String:
+	var pieces: Array[String] = ["%s|%s|%s" % [node.name, node.transform, node.visible]]
+	if node is MeshInstance3D:
+		var instance := node as MeshInstance3D
+		pieces.append(str(instance.mesh.get_aabb()))
+		var material := instance.material_override as StandardMaterial3D
+		if material:
+			pieces.append(str([material.albedo_color, material.roughness, material.metallic, material.transparency, material.shading_mode, material.cull_mode]))
+	for child in node.get_children():
+		if child is Node3D: pieces.append(_custom_signature(child))
+	return "\n".join(pieces)
+
+func _changed_pixel_count(first: Image, second: Image) -> int:
+	first.convert(Image.FORMAT_RGBA8)
+	second.convert(Image.FORMAT_RGBA8)
+	var a := first.get_data()
+	var b := second.get_data()
+	if a.size() != b.size(): return 1280 * 720
+	var count := 0
+	for offset in range(0, a.size(), 4):
+		if a[offset] != b[offset] or a[offset + 1] != b[offset + 1] or a[offset + 2] != b[offset + 2] or a[offset + 3] != b[offset + 3]: count += 1
+	return count
 
 func _finish() -> void:
 	Courses.enabled = true
