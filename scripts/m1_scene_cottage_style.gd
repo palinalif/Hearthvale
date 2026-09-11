@@ -194,7 +194,9 @@ func _preview_style_choice(mode: String, value: String) -> void:
 		_style_preview_asset = value
 	else:
 		_style_preview_colour = value
-	_apply_style_preview()
+	# Route the changed preview through the complete presentation stack once so
+	# roof/facade finishers are applied before the preview is considered stable.
+	_update_presentation()
 
 func _commit_style_choice(mode: String, value: String) -> void:
 	if _style_picker_mode != mode:
