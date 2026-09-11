@@ -1,0 +1,59 @@
+name: Facade depth finish
+on:
+  push:
+    branches: [feat/m2-facade-depth]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-and-mobile:
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install pinned Godot and voxel extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $lock = Get-Content dependencies.lock.json -Raw | ConvertFrom-Json
+          $root = Join-Path (Get-Location) '.tools/facade-depth'
+          New-Item -ItemType Directory -Force $root | Out-Null
+          Set-Content -LiteralPath (Join-Path $root '../.gdignore') -Value ''
+          Invoke-WebRequest -Uri $lock.engine.editor_url -OutFile (Join-Path $root 'editor.zip')
+          if ((Get-FileHash -LiteralPath (Join-Path $root 'editor.zip') -Algorithm SHA512).Hash.ToLowerInvariant() -ne $lock.engine.editor_sha512.ToLowerInvariant()) { throw 'Editor archive hash mismatch' }
+          Invoke-WebRequest -Uri $lock.voxel.url -OutFile (Join-Path $root 'voxel.zip')
+          if ((Get-FileHash -LiteralPath (Join-Path $root 'voxel.zip') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $lock.voxel.sha256.ToLowerInvariant()) { throw 'Voxel archive hash mismatch' }
+          Expand-Archive -LiteralPath (Join-Path $root 'editor.zip') -DestinationPath $root -Force
+          Expand-Archive -LiteralPath (Join-Path $root 'voxel.zip') -DestinationPath (Get-Location) -Force
+          $editor = Get-ChildItem $root -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $editor) { throw 'Pinned Godot console editor missing' }
+          if ((& $editor --version | Out-String).Trim() -ne $lock.engine.version) { throw 'Unexpected Godot version' }
+          & $editor --headless --path . --editor --import --quit
+          if ($LASTEXITCODE -ne 0) { throw 'Godot import failed' }
+      - name: Verify facade layout and inherited editing contracts
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/facade-depth' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          foreach ($test in @('facade_depth_layout_test','joined_roof_course_test','m2_window_alignment_test','m2_window_customization_test','m2_house_edit_ux_test','m2_house_massing_edit_test')) {
+            $log = & $editor --headless --path . --script "tests/$test.gd" 2>&1 | Out-String
+            $exitCode = $LASTEXITCODE
+            $log | Tee-Object -FilePath ".tools/facade-depth/$test.log"
+            if ($exitCode -ne 0 -or $log -match 'SCRIPT ERROR|ERROR:|Parse Error:|FAIL:' -or $log -notmatch 'failures=0|"failures"\s*:\s*0') { throw "Facade test failed: $test" }
+          }
+      - name: Capture facade depth on actual Mobile
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/facade-depth' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          & ./tools/test-facade-depth.ps1 -Editor $editor
+      - name: Retain facade evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: facade-depth-${{ github.sha }}
+          path: |
+            .tools/facade-depth/*.log
+            .tools/cottage-repair/facade-depth/
+          if-no-files-found: warn
+          retention-days: 14
