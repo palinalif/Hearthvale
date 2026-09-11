@@ -55,27 +55,6 @@ static func gable(dimensions: Vector3, unit: Vector3, rise_ratio: float, seed: i
 				buckets[int(strip["shade"])].append(piece(Vector3(x, height + unit.y * 0.5, side * z), Vector3(float(strip["count"]) * unit.x, unit.y, unit.z)))
 	return buckets
 
-static func box_pieces(center: Vector3, size: Vector3, unit: Vector3, seed: int) -> Array[Dictionary]:
-	# Custom roofs already consist of stepped slabs. Partition, don't stack
-	# coplanar geometry on them; the solid union and silhouette stay identical.
-	var quantized := Grid.quantized_box(center, size, unit)
-	var actual_center: Vector3 = quantized["center"]
-	var actual_size: Vector3 = quantized["size"]
-	var low := actual_center - actual_size * 0.5
-	var first_x := roundi(low.x / unit.x)
-	var first_z := roundi(low.z / unit.z)
-	var count_x := roundi(actual_size.x / unit.x)
-	var count_z := roundi(actual_size.z / unit.z)
-	var result: Array[Dictionary] = []
-	var row := first_z
-	while row < first_z + count_z:
-		var rows := mini(COURSE_ROWS - posmod(row, COURSE_ROWS), first_z + count_z - row)
-		for strip in spans(first_x, count_x, row, seed):
-			var tint: float = 0.88 if strip["seam"] else float(strip["tint"])
-			result.append(piece(Vector3((float(strip["first"]) + float(strip["count"]) * 0.5) * unit.x, actual_center.y, (row + rows * 0.5) * unit.z), Vector3(float(strip["count"]) * unit.x, actual_size.y, rows * unit.z), tint))
-		row += rows
-	return result
-
 static func make_batch(node_name: String, pieces: Array[Dictionary], colour: Color) -> MultiMeshInstance3D:
 	var cube := BoxMesh.new()
 	cube.size = Vector3.ONE

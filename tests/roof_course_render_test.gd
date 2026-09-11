@@ -56,6 +56,7 @@ func _run() -> void:
 		var before: String = scene.building_world.serialize_document()
 		var landscape_before: String = JSON.stringify(scene.landscape_state.document())
 		var pixels: Dictionary = {}
+		var complexity: Dictionary = {}
 		var framing := Transform3D.IDENTITY
 		for enabled in [false, true]:
 			Courses.enabled = enabled
@@ -77,6 +78,7 @@ func _run() -> void:
 			pixels[label] = hash(image.get_data())
 			var visual: Node3D = scene.cottage_visuals[scene.selected_building_id]
 			var metrics := _roof_metrics(visual, false)
+			complexity[label] = metrics
 			receipts.append({"case": spec[0], "finish": label, "path": path, "roof_instances": metrics[0], "roof_batches": metrics[1]})
 			captures += 1
 			check(scene.building_world.serialize_document() == before and JSON.stringify(scene.landscape_state.document()) == landscape_before, "roof presentation leaves every authoritative record unchanged")
@@ -85,7 +87,14 @@ func _run() -> void:
 				scene._update_presentation()
 				for frame in 3: await RenderingServer.frame_post_draw
 				check(hash(root.get_texture().get_image().get_data()) == first_hash, "unchanged finish is visually stable after presentation refresh")
-		check(pixels.get("baseline") != pixels.get("courses"), "candidate visibly changes the real roof")
+		if spec[1] in ["hip", "saltbox"]:
+			check(pixels["baseline"] == pixels["courses"], "deferred custom roof is pixel-identical, not an expensive almost-no-op")
+			check(complexity["baseline"] == complexity["courses"], "custom roof retains original instance and batch count")
+		else:
+			check(pixels["baseline"] != pixels["courses"], "candidate visibly changes the real roof")
+			var original: Vector2i = complexity["baseline"]
+			var candidate: Vector2i = complexity["courses"]
+			check(candidate.x <= original.x and candidate.y <= original.y + 1, "course finish does not inflate tile instances and adds at most one fascia batch")
 	var manifest := FileAccess.open(OUTPUT + "/manifest.json", FileAccess.WRITE)
 	check(manifest != null, "review manifest writable")
 	if manifest: manifest.store_string(JSON.stringify({"source": OS.get_environment("GITHUB_SHA"), "engine": Engine.get_version_info(), "renderer": RenderingServer.get_current_rendering_method(), "frames": receipts}, "\t"))

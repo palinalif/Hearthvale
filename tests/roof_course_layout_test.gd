@@ -31,22 +31,6 @@ func _initialize() -> void:
 		for dimensions in [Vector3(18, 7, 14), Vector3(23, 8, 12)]:
 			for ratio in [0.30, 0.42, 0.62]:
 				_check_gable(dimensions, unit, ratio)
-		for size in [Vector3(19, unit.y, 0.5), Vector3(17, unit.y * 2, 13), Vector3(1, unit.y, 1)]:
-			var centre := Vector3(-1, 10, -0.5)
-			var parts := Courses.box_pieces(centre, size, unit, 73)
-			var q := Grid.quantized_box(centre, size, unit)
-			var expected := AABB(q["center"] - q["size"] * 0.5, q["size"])
-			var volume := 0.0
-			var all_on_grid := true
-			var all_inside := true
-			for part in parts:
-				var box := AABB(part["center"] - part["size"] * 0.5, part["size"])
-				volume += box.get_volume()
-				all_on_grid = all_on_grid and _on_grid(part, unit)
-				all_inside = all_inside and expected.grow(0.00001).encloses(box)
-			check(all_inside and all_on_grid, "custom roof pieces remain inside the exact original grid envelope")
-			check(is_equal_approx(volume, expected.get_volume()), "custom roof partition retains the complete solid volume")
-			check(parts == Courses.box_pieces(centre, size, unit, 73), "custom roof subdivision is stable")
 	print("roof_course_layout_test checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures else 0)
 

@@ -49,10 +49,9 @@ func _finish_roof(visual: Node3D, view: Dictionary) -> void:
 		if joined: _finish_joined_roof(joined, view)
 		return
 	var custom := visual.get_node_or_null("M2RoofDesign") as Node3D
-	if custom:
-		_finish_custom_roof(custom, visual, view)
-	else:
-		_finish_gable_roof(visual, view)
+	# Custom profiles keep their original slabs. The first tessellated tint
+	# study added thousands of boxes without enough visible improvement.
+	if not custom: _finish_gable_roof(visual, view)
 	# New geometry keeps StandardMaterial3D, including the existing metal/
 	# shake finish contract and the player's live colour picker.
 	_apply_extra_roof_material_to_visual(visual, material_id)
@@ -96,28 +95,6 @@ func _finish_gable_roof(visual: Node3D, view: Dictionary) -> void:
 		for side in [-1.0, 1.0]:
 			fascia.append(RoofCourses.piece(Vector3(left + width * 0.5, height - unit.y * 1.5, side * z), Vector3(width, unit.y, unit.z)))
 		edge.add_child(RoofCourses.make_batch("CourseFascia", fascia, Color.WHITE))
-
-func _finish_custom_roof(root: Node3D, visual: Node3D, view: Dictionary) -> void:
-	var unit: Vector3 = visual.get("_detail_unit")
-	for child in root.get_children():
-		if not child is MeshInstance3D or not child.mesh is BoxMesh: continue
-		var name_value := str(child.name)
-		if name_value.contains("Fill") or name_value.contains("Ridge"): continue
-		var material := child.material_override as StandardMaterial3D
-		if not material: continue
-		var pieces := RoofCourses.box_pieces(child.position, child.mesh.size, unit, int(view.get("seed", 0)))
-		_set_roof_scope_highlight(false)
-		_roof_pick_key = ""
-		var replacement := RoofCourses.make_batch(name_value, pieces, material.albedo_color)
-		var copy := material.duplicate() as StandardMaterial3D
-		copy.vertex_color_use_as_albedo = true
-		copy.roughness = 0.9
-		replacement.material_override = copy
-		replacement.visible = child.visible
-		replacement.material_overlay = child.material_overlay
-		root.remove_child(child)
-		child.queue_free()
-		root.add_child(replacement)
 
 func _finish_joined_roof(root: Node3D, view: Dictionary) -> void:
 	var first := root.get_node_or_null("JoinedRoof_0")
