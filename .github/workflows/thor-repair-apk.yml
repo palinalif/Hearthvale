@@ -7,7 +7,8 @@ permissions:
   contents: read
 
 jobs:
-  build-thor-apk:
+  build-android:
+    name: build-thor-apk
     runs-on: windows-2025
     timeout-minutes: 20
     steps:
@@ -60,7 +61,7 @@ jobs:
           }
           [IO.File]::WriteAllText($settings.FullName, $text, (New-Object Text.UTF8Encoding($false)))
 
-      - name: Set isolated candidate identity without changing the original app
+      - name: Set isolated candidate identity
         shell: pwsh
         run: |
           $short = $env:GITHUB_SHA.Substring(0, 8)
@@ -93,6 +94,41 @@ jobs:
           python ./tools/verify-repair-apk.py
           if ($LASTEXITCODE -ne 0) { throw 'Isolated repair APK verification failed' }
 
+      - name: Upload verified repair APK and receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: hearthvale-m1-repair-${{ github.sha }}
+          path: |
+            builds/hearthvale-m1-repair-*.apk
+            builds/hearthvale-m1-repair-*.verification.json
+          if-no-files-found: error
+          retention-days: 14
+
+  build-windows:
+    name: build-windows-playtest
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Bootstrap pinned Godot and native dependencies
+        shell: pwsh
+        run: ./tools/bootstrap.ps1
+
+      - name: Set isolated candidate identity
+        shell: pwsh
+        run: |
+          $short = $env:GITHUB_SHA.Substring(0, 8)
+          $file = Join-Path (Get-Location) 'export_presets.cfg'
+          $text = Get-Content $file -Raw
+          $text = $text.Replace('package/unique_name="org.hearthvale.game"', ('package/unique_name="org.hearthvale.game.repair.c' + $short + '"'))
+          $text = $text.Replace('package/name="Hearthvale M1"', ('package/name="Hearthvale Test ' + $short + '"'))
+          $text = [regex]::Replace($text, '(?m)^version/code=\d+', 'version/code=6')
+          $text = [regex]::Replace($text, '(?m)^version/name="[^"]+"', ('version/name="0.1.3-repair-' + $short + '"'))
+          [IO.File]::WriteAllText($file, $text, (New-Object Text.UTF8Encoding($false)))
+
       - name: Export, launch and verify Windows PC playtest
         shell: pwsh
         run: |
@@ -107,16 +143,6 @@ jobs:
           Move-Item -LiteralPath 'builds/Hearthvale-M2-PC.zip' -Destination "builds/Hearthvale-M2-PC-$short.zip"
           python ./tools/verify-pc-build.py
           if ($LASTEXITCODE -ne 0) { throw 'Windows playtest verification failed' }
-
-      - name: Upload verified repair APK and receipt
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: hearthvale-m1-repair-${{ github.sha }}
-          path: |
-            builds/hearthvale-m1-repair-*.apk
-            builds/hearthvale-m1-repair-*.verification.json
-          if-no-files-found: error
-          retention-days: 14
 
       - name: Upload verified Windows playtest and receipt
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
