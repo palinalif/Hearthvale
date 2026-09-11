@@ -39,10 +39,10 @@ static func quads(cells: Dictionary) -> Array[Dictionary]:
 		var value: Vector3i = cells[key]
 		_add_face(groups, Vector4i(1, 1, value.y, value.z), Vector2i(key.y, key.x))
 		_add_face(groups, Vector4i(1, -1, value.x, 0), Vector2i(key.y, key.x))
-		for direction in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+		for direction: Vector2i in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
 			var neighbour: Vector3i = cells.get(key + direction, Vector3i.ZERO)
 			var axis := 0 if direction.x != 0 else 2
-			var sign_value := direction.x if axis == 0 else direction.y
+			var sign_value: int = direction.x if axis == 0 else direction.y
 			var plane := (key.x if axis == 0 else key.y) + (1 if sign_value > 0 else 0)
 			for y in range(value.x, value.y):
 				if y >= neighbour.x and y < neighbour.y: continue
