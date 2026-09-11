@@ -469,7 +469,7 @@ func _build_wall(orientation: String, dimensions: Vector3, view: Dictionary, col
 				var bottom := center.y - size.y * 0.5
 				var height := minf(course_height, bottom + size.y - (bottom + course * course_height))
 				if height <= 0.001: continue
-				courses[course % 2].append(_piece(Vector3(center.x, bottom + course * course_height + height * 0.5, -0.47), Vector3(size.x, height * 0.78, _detail_unit.z)))
+				courses[course % 2].append(_piece(Vector3(center.x, bottom + course * course_height + height * 0.5, _detail_unit.z * 0.5), Vector3(size.x, height * 0.78, _detail_unit.z)))
 		for shade in 2:
 			var log_face := _add_detail_boxes("LogCourses%s%d" % [orientation.capitalize(), shade], courses[shade], color.lightened(0.04 + shade * 0.07))
 			log_face.transform = Transform3D(basis, origin)
