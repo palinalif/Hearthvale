@@ -359,8 +359,11 @@ func _append_rounded_stone(builder: Dictionary, center: Vector3, size: Vector3, 
 		normals.append(basis * Vector3.DOWN)
 	for index in ring.size():
 		var next := (index + 1) % ring.size()
-		indices.append_array([top_center, top_ring[index], top_ring[next]])
-		indices.append_array([bottom_center, bottom_ring[next], bottom_ring[index]])
+		# Godot treats CLOCKWISE triangles as front-facing. The ring runs the
+		# opposite way viewed from above; reverse the fan, not the lighting normal.
+		# Inward winding hides the top and exposes the buried underside instead.
+		indices.append_array([top_center, top_ring[next], top_ring[index]])
+		indices.append_array([bottom_center, bottom_ring[index], bottom_ring[next]])
 		var a: Vector2 = ring[index]
 		var b: Vector2 = ring[next]
 		var edge := b - a
@@ -372,7 +375,7 @@ func _append_rounded_stone(builder: Dictionary, center: Vector3, size: Vector3, 
 		vertices.append(center + basis * Vector3(b.x * size.x, half.y, b.y * size.z))
 		vertices.append(center + basis * Vector3(a.x * size.x, half.y, a.y * size.z))
 		for unused in 4: normals.append(side_normal)
-		indices.append_array([side_base, side_base + 1, side_base + 2, side_base, side_base + 2, side_base + 3])
+		indices.append_array([side_base, side_base + 2, side_base + 1, side_base, side_base + 3, side_base + 2])
 	surface["vertices"] = vertices
 	surface["normals"] = normals
 	surface["indices"] = indices
