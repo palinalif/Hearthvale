@@ -38,11 +38,14 @@ func _run() -> void:
 	scene._set_view_context("building", "test")
 	scene.edit_pointer = Vector2(12, 12)
 	scene.garden_visual.set_wind_enabled(false)
-	# The river shader intentionally animates from TIME. It is unrelated to roof
-	# presentation and makes full-frame refresh parity depend on capture timing.
-	# Hide only that animated background surface; the roof geometry/material
-	# checks and exact-pixel stability contract remain unchanged.
+	# Exact roof parity must not be polluted by unrelated time-varying or
+	# renderer-order-dependent pixels. The river intentionally animates from
+	# TIME and Mobile shadow maps can differ by a handful of contact-edge pixels
+	# after otherwise identical presentation rebuilds. Remove only those two
+	# external sources of frame noise; geometry, materials, direct lighting and
+	# the zero-pixel roof stability requirement remain intact.
 	if scene.river_water: scene.river_water.visible = false
+	_disable_shadow_maps(scene)
 	scene.camera.attributes = CameraAttributesPractical.new()
 	var cases := [
 		["gable-normal", "gentle_gable", 16.0, false],
@@ -107,10 +110,9 @@ func _run() -> void:
 		if spec[1] in ["hip", "saltbox"]:
 			check(custom_geometry["baseline"] == custom_geometry["courses"], "deferred custom roof keeps identical geometry, transforms and material properties")
 			var changed_pixels := _changed_pixel_count(images["baseline"], images["courses"])
-			# The prior independent rebuilds differed at only 1 and 7 edge
-			# pixels. Bound such sparse sampling differences as well as requiring
-			# exact generated geometry/material equality, not only a frame hash.
-			check(changed_pixels <= ceili(1280 * 720 * 0.0001), "unchanged custom view differs in at most 0.01% of pixels")
+			# Custom profiles are not tessellated by this finish, so after
+			# removing unrelated frame noise they must be pixel-identical too.
+			check(changed_pixels == 0, "unchanged custom view is pixel-identical")
 			print("CUSTOM_ROOF_PARITY %s changed_pixels=%d total=921600" % [spec[0], changed_pixels])
 			check(complexity["baseline"] == complexity["courses"], "custom roof retains original instance and batch count")
 		else:
@@ -122,6 +124,12 @@ func _run() -> void:
 	check(manifest != null, "review manifest writable")
 	if manifest: manifest.store_string(JSON.stringify({"source": OS.get_environment("GITHUB_SHA"), "engine": Engine.get_version_info(), "renderer": RenderingServer.get_current_rendering_method(), "frames": receipts}, "\t"))
 	await _finish()
+
+func _disable_shadow_maps(node: Node) -> void:
+	if node is Light3D:
+		(node as Light3D).shadow_enabled = false
+	for child in node.get_children():
+		_disable_shadow_maps(child)
 
 func _force_rebuild() -> void:
 	for visual in scene.cottage_visuals.values(): visual._applied_view = {}
