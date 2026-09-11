@@ -6,10 +6,20 @@ permissions:
   contents: read
 jobs:
   native-regressions:
-    runs-on: windows-latest
-    timeout-minutes: 15
+    name: sculpt-${{ matrix.suite }}
+    runs-on: windows-2025
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - brush
+          - smoothing
+          - backend
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Install locked editor and native voxel extension; run headless tests
+        with:
+          persist-credentials: false
+      - name: Install locked editor and native voxel extension; run ${{ matrix.suite }} tests
         shell: pwsh
-        run: ./tools/test-sculpt-feedback.ps1
+        run: ./tools/test-sculpt-feedback.ps1 -Suite '${{ matrix.suite }}'

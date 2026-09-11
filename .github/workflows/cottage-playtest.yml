@@ -1,173 +1,63 @@
 name: Cottage playtest regressions
+
 on:
   workflow_call:
     inputs:
       skip-core-placement:
-        description: Placement is already an independent prerequisite in the caller.
+        description: Compatibility input; core placement is already an independent caller prerequisite.
         required: false
         type: boolean
         default: false
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
-  cottage-playtest:
+  cottage-shards:
+    name: cottage-${{ matrix.shard }}
     runs-on: windows-2025
-    timeout-minutes: 30
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - native-interaction
+          - native-resize
+          - native-visual
+          - upper-openings
+          - ui-style
+          - detail-grid
+          - fine-prop
+          - foliage-halfsize
+          - cottage-detail
+          - home-variants
+          - decoration-variants
+          - paths
+          - hamlet
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Archive exact tracked source
+
+      - name: Archive exact tracked source once
+        if: matrix.shard == 'native-interaction'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force .tools/cottage-repair | Out-Null
           Set-Content .tools/.gdignore ''
           git archive --format=zip --output=.tools/cottage-repair/source.zip HEAD
           if ($LASTEXITCODE -ne 0) { throw 'Source archive failed' }
-      - name: Run existing M1 integration gates
-        if: inputs.skip-core-placement != true
+
+      - name: Run ${{ matrix.shard }} cottage shard
         shell: pwsh
-        run: ./tools/test-m1-placement.ps1
-      - name: Test exported scene against Thor failures
-        shell: pwsh
-        run: |
-          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $editor) { throw 'Pinned editor missing' }
-          foreach ($test in @('m1_cottage_targeting_playtest_test','m1_playtest_repair_test','m1_terrain_settings_input_test','cottage_render_stability_test','cottage_detail_visual_test','m1_recovery_dpad_test','m1_terrain_navigation_test','cottage_handle_resize_test','m1_resize_handles_test','m1_house_actions_test')) {
-            $output = & $editor --headless --max-fps 60 --quit-after 7200 --path . --script "tests/$test.gd" 2>&1 | ForEach-Object { "$_" }
-            $exitCode = $LASTEXITCODE
-            $output | Tee-Object -FilePath ".tools/cottage-repair/$test.log"
-            $joined = $output -join "`n"
-            $plain = $joined -match 'failures=0'
-            $json = $joined -match '"failures"\s*:\s*0' -and $joined -match '"ok"\s*:\s*true'
-            if ($exitCode -ne 0 -or ($output -match 'ERROR:|Parse Error:|FAIL:') -or -not ($plain -or $json)) { throw "Cottage regression failed: $test" }
-          }
-      - name: Verify upstairs window cuts on actual Mobile renderer
-        shell: pwsh
-        run: |
-          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          $out = Join-Path (Get-Location) '.tools/cottage-repair/upper-openings.out.log'
-          $err = Join-Path (Get-Location) '.tools/cottage-repair/upper-openings.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_upper_storey_detail_test.gd', '--', '--require-rendering')
-          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
-          if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'Upper-storey Mobile geometry validation timed out' }
-          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
-          Write-Output $log
-          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'UPPER_STOREY_GEOMETRY checked=[1-9][0-9]* unverified=0' -or $log -notmatch 'm2_upper_storey_detail_test checks=[1-9][0-9]* failures=0') { throw 'Upper-storey openings must pass actual Mobile geometry checks before export' }
-      - name: Capture actual Mobile UI and style restoration
-        shell: pwsh
-        run: |
-          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          $out = Join-Path (Get-Location) '.tools/cottage-repair/render.out.log'
-          $err = Join-Path (Get-Location) '.tools/cottage-repair/render.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_placement_rotation_render_test.gd')
-          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
-          if (-not $process.WaitForExit(300000)) { $process.Kill(); $process.WaitForExit(); throw 'Mobile render capture timed out' }
-          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
-          Write-Output $log
-          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'COTTAGE_RENDER_START' -or $log -notmatch 'failures=0') { throw 'Mobile rendering or assertions failed; inspect captures and logs' }
-      - name: Validate actual Mobile cottage detail grid
-        shell: pwsh
-        run: |
-          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          $out = Join-Path (Get-Location) '.tools/cottage-repair/detail-grid.out.log'
-          $err = Join-Path (Get-Location) '.tools/cottage-repair/detail-grid.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/visual_grid_test.gd', '--', '--require-rendering')
-          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
-          if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'Mobile detail-grid validation timed out' }
-          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
-          Write-Output $log
-          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch '"ok"\s*:\s*true' -or $log -notmatch '"unverified_headless_instances"\s*:\s*0') { throw 'Mobile detail-grid validation failed' }
-      - name: Capture actual Mobile fine prop grid
-        shell: pwsh
-        run: |
-          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          $out = Join-Path (Get-Location) '.tools/cottage-repair/fine-prop.out.log'
-          $err = Join-Path (Get-Location) '.tools/cottage-repair/fine-prop.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/fine_prop_render_test.gd')
-          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
-          if (-not $process.WaitForExit(120000)) { $process.Kill(); $process.WaitForExit(); throw 'Fine prop Mobile render timed out' }
-          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
-          Write-Output $log
-          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch '"ok"\s*:\s*true') { throw 'Fine prop Mobile rendering failed' }
-      - name: Capture actual Mobile half-size foliage
-        shell: pwsh
-        run: |
-          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          $out = Join-Path (Get-Location) '.tools/cottage-repair/foliage-halfsize.out.log'
-          $err = Join-Path (Get-Location) '.tools/cottage-repair/foliage-halfsize.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/foliage_halfsize_render_test.gd')
-          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
-          if (-not $process.WaitForExit(120000)) { $process.Kill(); $process.WaitForExit(); throw 'Half-size foliage Mobile render timed out' }
-          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
-          Write-Output $log
-          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch '"ok"\s*:\s*true') { throw 'Half-size foliage Mobile rendering failed' }
-      - name: Capture actual Mobile cottage details
-        shell: pwsh
-        run: |
-          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          $out = Join-Path (Get-Location) '.tools/cottage-repair/detail-render.out.log'
-          $err = Join-Path (Get-Location) '.tools/cottage-repair/detail-render.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/cottage_detail_render_test.gd')
-          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
-          if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'Mobile cottage-detail capture timed out' }
-          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
-          Write-Output $log
-          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'COTTAGE_DETAIL_RENDER_RESULT' -or $log -notmatch '"failures"\s*:\s*0') { throw 'Mobile cottage-detail capture failed' }
-      - name: Capture actual Mobile M2 home variants
-        shell: pwsh
-        run: |
-          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          $out = Join-Path (Get-Location) '.tools/cottage-repair/m2-home-variants.out.log'
-          $err = Join-Path (Get-Location) '.tools/cottage-repair/m2-home-variants.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_home_variants_render_test.gd')
-          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
-          if (-not $process.WaitForExit(120000)) { $process.Kill(); $process.WaitForExit(); throw 'M2 home variants Mobile render timed out' }
-          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
-          Write-Output $log
-          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch '"ok"\s*:\s*true') { throw 'M2 home variants Mobile rendering failed' }
-      - name: Capture actual Mobile building-decoration variants
-        shell: pwsh
-        run: |
-          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          $out = Join-Path (Get-Location) '.tools/cottage-repair/m2-decoration-variants.out.log'
-          $err = Join-Path (Get-Location) '.tools/cottage-repair/m2-decoration-variants.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_decoration_variants_render_test.gd')
-          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
-          if (-not $process.WaitForExit(120000)) { $process.Kill(); $process.WaitForExit(); throw 'M2 decoration-variants Mobile render timed out' }
-          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
-          Write-Output $log
-          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'M2_DECORATION_RENDER_RESULT' -or $log -notmatch '"ok"\s*:\s*true') { throw 'M2 decoration-variants Mobile rendering failed' }
-      - name: Capture actual Mobile Roads and Paths slice
-        shell: pwsh
-        run: |
-          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          $out = Join-Path (Get-Location) '.tools/cottage-repair/m2-paths.out.log'
-          $err = Join-Path (Get-Location) '.tools/cottage-repair/m2-paths.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_path_render_test.gd')
-          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
-          if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'M2 paths Mobile render timed out' }
-          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
-          Write-Output $log
-          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch '"ok"\s*:\s*true' -or $log -notmatch '"capture"') { throw 'M2 paths Mobile rendering failed' }
-      - name: Capture full M2 hamlet composition
-        shell: pwsh
-        run: |
-          $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          $out = Join-Path (Get-Location) '.tools/cottage-repair/m2-hamlet.out.log'
-          $err = Join-Path (Get-Location) '.tools/cottage-repair/m2-hamlet.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/m2_hamlet_composition_render_test.gd')
-          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
-          if (-not $process.WaitForExit(180000)) { $process.Kill(); $process.WaitForExit(); throw 'M2 full hamlet Mobile render timed out' }
-          $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
-          Write-Output $log
-          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'M2_HAMLET_RENDER_RESULT' -or $log -notmatch '"ok"\s*:\s*true') { throw 'M2 full hamlet Mobile rendering failed' }
-      - name: Retain source and diagnostics
+        run: ./tools/test-cottage-shard.ps1 -Shard '${{ matrix.shard }}'
+
+      - name: Retain shard diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: cottage-repair-${{ github.sha }}
+          name: cottage-${{ matrix.shard }}-${{ github.sha }}
           path: |
             .tools/cottage-repair/
             reports/screenshots/m1-cottage-detail/
@@ -179,7 +69,9 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Packaging is speculative: Android and Windows exports run beside the test
+  # shards. The caller still gates Drive delivery on the entire reusable workflow,
+  # so no build can be delivered unless every cottage shard also succeeds.
   build-repair-apk:
     if: github.event_name != 'pull_request'
-    needs: cottage-playtest
     uses: ./.github/workflows/thor-repair-apk.yml
