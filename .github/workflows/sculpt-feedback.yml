@@ -1,16 +1,6 @@
 name: Sculpt feedback regressions
 on:
   workflow_call:
-  push:
-    branches: [fix/m1-sculpt-feedback]
-  pull_request:
-    paths:
-      - scripts/terrain_backend.gd
-      - scripts/smooth_neighbourhood.gd
-      - tests/*sculpt*
-      - tests/smooth_neighbourhood_test.gd
-      - tools/test-sculpt-feedback.ps1
-      - .github/workflows/sculpt-feedback.yml
   workflow_dispatch:
 permissions:
   contents: read

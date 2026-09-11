@@ -1,19 +1,6 @@
 name: M1 attachment placement regressions
 on:
   workflow_call:
-  push:
-    branches: [fix/m1-sculpt-feedback, fix/m1-building-edit-camera, fix/m1-window-layout, feat/m1-cottage-edit-ux, feat/m1-ui-ux-overhaul]
-    paths:
-      - scenes/m1.tscn
-      - scripts/**
-      - assets/ui/**
-      - tests/**
-      - tools/test-m1-placement.ps1
-      - tools/test-roof-courses.ps1
-      - tools/test-joined-roof-courses.ps1
-      - tools/test-facade-depth.ps1
-      - tools/test-m2-build-browser.ps1
-      - .github/workflows/m1-placement.yml
   workflow_dispatch:
 
 permissions:
