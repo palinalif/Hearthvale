@@ -17,7 +17,7 @@ const PATH_EDGE_RISE := 0.032
 const PACKED_EARTH_TEXTURE_RISE := 0.017
 const STONE_SURFACE_RISE := 0.026
 const STONE_EDGE_RISE := 0.040
-const STEPPING_STONE_THICKNESS := 0.20
+const STEPPING_STONE_THICKNESS := 0.16
 const STYLE_COLOURS := {
 	"packed_earth": [Color("#a8784f"), Color("#8f6244")],
 	"cobblestone": [Color("#89908b"), Color("#b6b9a5")],
