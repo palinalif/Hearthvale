@@ -69,6 +69,10 @@ func _set_native_shell_visible(visual: Node3D, visible: bool) -> void:
 
 func _refresh_massing_shell_for_visual(visual: Node3D, view: Dictionary) -> void:
 	super._refresh_massing_shell_for_visual(visual, view)
+	# The shell refresh restores native nodes. Reapply the active single-roof
+	# choice afterward, so it cannot resurrect a gable over a custom preview.
+	if HouseMassing.sections_for(view).size() == 1:
+		_refresh_roof_overlay_for_visual(visual, view)
 	_refresh_joined_roof_beams_for_visual(visual, view)
 
 func _refresh_joined_roof_beams_for_visual(visual: Node3D, view: Dictionary) -> void:

@@ -5,12 +5,22 @@ const Massing = preload("res://scripts/m2_house_massing.gd")
 const SURFACE_LIMIT := 64
 const EPSILON := 0.051
 
-## Returns one bounded selectable wall per contiguous exposed run on floors 2+.
-## Ground-floor authored surfaces remain untouched so existing attachment IDs
-## and automatic-window behaviour keep their M1 semantics.
+## Generate missing ground-floor facades as well as upper-floor runs. Keep
+## the four original supports as stable anchors, but restrict them to exposed
+## geometry; an old rectangle is not an editable courtyard wall.
 static func desired_upper_surfaces(view: Dictionary) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	var sections: Array[Dictionary] = Massing.sections_for(view)
+	var ground := Massing.sections_on_level(sections, 0)
+	if ground.size() > 1:
+		var runs: Array[Dictionary] = []
+		_append_level_runs(runs, ground, 0)
+		for run in runs:
+			var covered := false
+			for support in view.get("surfaces", []):
+				if str(support.get("kind", "")) != "wall" or bool(support.get("massing_wall", false)) or bool(support.get("deleted", false)): continue
+				if _legacy_covers_run(view, support, run): covered = true; break
+			if not covered: result.append(run)
 	var top_level: int = Massing.max_level(sections)
 	for level in range(1, top_level + 1):
 		var level_sections: Array[Dictionary] = Massing.sections_on_level(sections, level)
@@ -28,6 +38,23 @@ static func sync_building(world: RefCounted, building: Dictionary) -> bool:
 		var support: Dictionary = value
 		if bool(support.get("massing_wall", false)): old_generated.append(support.duplicate(true))
 		else: base_surfaces.append(support.duplicate(true))
+
+	var ground_runs: Array[Dictionary] = []
+	var ground := Massing.sections_on_level(Massing.sections_for(building), 0)
+	if ground.size() > 1: _append_level_runs(ground_runs, ground, 0)
+	for support in base_surfaces:
+		if str(support.get("kind", "")) != "wall": continue
+		support.erase("exposed_wall_runs")
+		if ground.size() <= 1: continue
+		var exposure: Array[Dictionary] = []
+		var original := _legacy_geometry(building, support)
+		for run in ground_runs:
+			if not _same_plane(original, run): continue
+			var piece: Dictionary = run.duplicate(true)
+			piece["tangent_min"] = maxf(float(original["tangent_min"]), float(run["tangent_min"]))
+			piece["tangent_max"] = minf(float(original["tangent_max"]), float(run["tangent_max"]))
+			if float(piece["tangent_max"]) > float(piece["tangent_min"]): exposure.append(piece)
+		support["exposed_wall_runs"] = exposure
 
 	var anchored_ids: Dictionary = {}
 	for detail_value in building.get("details", []):
@@ -142,6 +169,7 @@ static func _append_level_runs(result: Array[Dictionary], sections: Array[Dictio
 				"deleted": false,
 				"massing_wall": true,
 				"massing_level": level,
+				"edge_owners": _edge_owners(sections, run),
 				"massing_key": "%s|run:%d" % [group_key, run_index],
 				"tangent_min": float(run["start"]),
 				"tangent_max": float(run["end"]),
@@ -185,4 +213,44 @@ static func _matching_surface(existing: Array[Dictionary], used_ids: Dictionary,
 		if overlap > best_overlap:
 			best_overlap = overlap
 			best = support
+	if not best.is_empty(): return best
+	# When a simple facade moves with its section, keep its identity. Do not
+	# guess across a split/merged wall with multiple possible owners.
+	var owners: Array = desired.get("edge_owners", [])
+	if owners.size() == 1:
+		for support in existing:
+			if used_ids.has(str(support.get("id", ""))): continue
+			if int(support.get("massing_level", -1)) != int(desired.get("massing_level", -2)): continue
+			if str(support.get("orientation", "")) != str(desired.get("orientation", "")): continue
+			if support.get("edge_owners", []) == owners: return support
 	return best
+
+static func _edge_owners(sections: Array[Dictionary], run: Dictionary) -> Array[String]:
+	var owners: Array[String] = []
+	var orientation := str(run["orientation"])
+	for section in sections:
+		var rect := Massing.section_rect(section)
+		var normal: float = rect.position.y if orientation == "front" else rect.end.y if orientation == "back" else rect.position.x if orientation == "left" else rect.end.x
+		if absf(normal - float(run["normal"])) > 0.001: continue
+		var low: float = rect.position.x if orientation in ["front", "back"] else rect.position.y
+		var high: float = rect.end.x if orientation in ["front", "back"] else rect.end.y
+		if minf(high, float(run["end"])) <= maxf(low, float(run["start"])): continue
+		owners.append(str(section["id"]))
+	owners.sort()
+	return owners
+
+static func _legacy_geometry(view: Dictionary, support: Dictionary) -> Dictionary:
+	var size := Massing.storey_height(view)
+	var dimensions: Vector3 = Massing.core_section(view)["size"]
+	var orientation := str(support.get("orientation", ""))
+	var front := orientation in ["front", "back"]
+	var tangent := dimensions.x if front else dimensions.z
+	var normal := (dimensions.z if front else dimensions.x) * (-0.5 if orientation in ["front", "left"] else 0.5)
+	return {"orientation": orientation, "normal": normal, "tangent_min": -tangent * 0.5, "tangent_max": tangent * 0.5, "bottom": 0.0, "top": size}
+
+static func _same_plane(a: Dictionary, b: Dictionary) -> bool:
+	return str(a.get("orientation", "")) == str(b.get("orientation", "")) and absf(float(a.get("normal", INF)) - float(b.get("normal", -INF))) < 0.001
+
+static func _legacy_covers_run(view: Dictionary, support: Dictionary, run: Dictionary) -> bool:
+	var geometry := _legacy_geometry(view, support)
+	return _same_plane(geometry, run) and float(geometry["tangent_min"]) <= float(run["tangent_min"]) + 0.001 and float(geometry["tangent_max"]) >= float(run["tangent_max"]) - 0.001 and float(geometry["top"]) >= float(run["top"]) - 0.001
