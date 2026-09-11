@@ -54,13 +54,16 @@ func request(items: Array[Dictionary]) -> void:
 	for item in items:
 		var id := str(item["id"])
 		if cache.has(id): thumbnail_ready.emit(id, cache[id])
-		elif str(_current.get("id", "")) != id: _queue.append(item)
+		elif str(_current.get("id", "")) != id:
+			# The queue owns its records; completing/cancelling a render must
+			# never clear the caller's shared catalogue Dictionary.
+			_queue.append(item.duplicate(true))
 	set_process(_viewport != null)
 
 func stop() -> void:
 	active = false
 	_queue.clear()
-	_current.clear()
+	_current = {}
 	if _model:
 		_model.queue_free()
 		_model = null
@@ -82,7 +85,7 @@ func _process(_delta: float) -> void:
 		_stage.remove_child(_model)
 		_model.queue_free()
 		_model = null
-		_current.clear()
+		_current = {}
 	if _queue.is_empty():
 		_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 		set_process(false)

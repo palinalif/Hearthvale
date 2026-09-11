@@ -53,6 +53,7 @@ func _run() -> void:
 	scene.edit_pointer = Vector2(12, 12)
 	var before: String = scene.building_world.serialize_document()
 	var landscape_before: String = JSON.stringify(scene.landscape_state.document())
+	var registry_before: String = JSON.stringify(scene._browser_entries)
 	var offset: float = scene.camera.v_offset
 	await _press(JOY_BUTTON_X)
 	var browser = scene._build_browser
@@ -62,6 +63,8 @@ func _run() -> void:
 	check(browser.tabs.size() == 5, "five construction categories available")
 	var ids: Dictionary = {}
 	for item in scene._browser_entries:
+		check(item.has("id"), "thumbnail queue retains catalogue record identity")
+		if not item.has("id"): continue
 		check(not ids.has(item["id"]), "one card per asset or home")
 		ids[item["id"]] = true
 	for id in ["window_round", "window_awning", "window_bay", "door_tudor_arch", "flower_box_woven", "shutter_braced", "chimney_brick", "dormer_gable", "village_gable"]:
@@ -94,6 +97,7 @@ func _run() -> void:
 			var image := root.get_texture().get_image()
 			check(not image.is_empty() and image.save_png(OUTPUT + "/" + category + ".png") == OK, "save actual catalogue screenshot")
 			captures += 1
+		check(JSON.stringify(scene._browser_entries) == registry_before, "rendering preserves the complete catalogue registry")
 	# Controller shoulders select categories, not global undo/redo.
 	browser.select_category("windows")
 	await _settle()
@@ -138,10 +142,12 @@ func _run() -> void:
 	await _settle()
 	check(not scene._browser_open and not scene.tools_open and scene.camera.v_offset == offset, "interrupt closes catalogue and restores camera")
 	check(not scene._catalogue_thumbnails.active, "hidden catalogue does no thumbnail work")
+	check(JSON.stringify(scene._browser_entries) == registry_before, "interrupting a render never clears shared catalogue records")
 	await _finish()
 
 func _category_cached(category: String) -> bool:
 	for item in scene._browser_entries:
+		if not item.has("category") or not item.has("id"): return false
 		if item["category"] == category and not scene._catalogue_thumbnails.cache.has(item["id"]): return false
 	return true
 
