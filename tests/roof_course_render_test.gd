@@ -38,6 +38,11 @@ func _run() -> void:
 	scene._set_view_context("building", "test")
 	scene.edit_pointer = Vector2(12, 12)
 	scene.garden_visual.set_wind_enabled(false)
+	# The river shader intentionally animates from TIME. It is unrelated to roof
+	# presentation and makes full-frame refresh parity depend on capture timing.
+	# Hide only that animated background surface; the roof geometry/material
+	# checks and exact-pixel stability contract remain unchanged.
+	if scene.river_water: scene.river_water.visible = false
 	scene.camera.attributes = CameraAttributesPractical.new()
 	var cases := [
 		["gable-normal", "gentle_gable", 16.0, false],
