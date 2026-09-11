@@ -90,8 +90,15 @@ func _run() -> void:
 			if enabled:
 				var first_hash: int = hash(image.get_data())
 				scene._update_presentation()
-				for frame in 3: await RenderingServer.frame_post_draw
-				check(hash(root.get_texture().get_image().get_data()) == first_hash, "unchanged finish is visually stable after presentation refresh")
+				# The façade layer adds presentation-only batches and its own Mobile
+				# review already settles for seven post-draw frames. Give the full
+				# presentation stack the same render-server settling window while
+				# retaining exact pixel equality as the contract.
+				for frame in 7: await RenderingServer.frame_post_draw
+				var refreshed := root.get_texture().get_image()
+				var refresh_changed := _changed_pixel_count(image.duplicate(), refreshed.duplicate())
+				print("REFRESH_PARITY %s changed_pixels=%d total=921600" % [spec[0], refresh_changed])
+				check(hash(refreshed.get_data()) == first_hash and refresh_changed == 0, "unchanged finish is visually stable after presentation refresh")
 		if spec[1] in ["hip", "saltbox"]:
 			check(custom_geometry["baseline"] == custom_geometry["courses"], "deferred custom roof keeps identical geometry, transforms and material properties")
 			var changed_pixels := _changed_pixel_count(images["baseline"], images["courses"])
