@@ -7,14 +7,28 @@ $review = Join-Path (Get-Location) '.tools/cottage-repair/build-browser'
 New-Item -ItemType Directory -Force $review | Out-Null
 $out = Join-Path $review "$Phase.out.log"
 $err = Join-Path $review "$Phase.err.log"
-$extra = @('--require-rendering')
-if ($Phase -eq 'capture') { $extra += '--capture-phase' }
-elseif ($Phase -eq 'behavior') { $extra += '--behavior-phase' }
-$arguments = @('--path','.','--rendering-method','mobile','--rendering-driver','d3d12','--audio-driver','Dummy','--max-fps','30','--script','tests/m2_build_browser_test.gd','--') + $extra
+$extra = @()
+if ($Phase -eq 'capture') {
+    $extra += @('--require-rendering','--capture-phase')
+} elseif ($Phase -eq 'behavior') {
+    $extra += '--behavior-phase'
+} else {
+    $extra += '--require-rendering'
+}
+
+# Only the capture/all phases need the actual Mobile renderer. The behavior
+# shard contains controller/state/history assertions only, so keep it headless
+# instead of spending minutes on Microsoft's software D3D12 rasterizer.
+if ($Phase -eq 'behavior') {
+    $arguments = @('--headless','--path','.','--audio-driver','Dummy','--script','tests/m2_build_browser_test.gd','--') + $extra
+} else {
+    $arguments = @('--path','.','--rendering-method','mobile','--rendering-driver','d3d12','--audio-driver','Dummy','--max-fps','30','--script','tests/m2_build_browser_test.gd','--') + $extra
+}
+
 # The full local phase keeps the historical slow-host watchdog. CI fans capture
 # and behavior into separate runners, preserving every assertion while removing
 # the serial post-capture tail from the critical path.
-$timeoutMs = if ($Phase -eq 'behavior') { 240000 } else { 420000 }
+$timeoutMs = if ($Phase -eq 'behavior') { 120000 } else { 420000 }
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $process = Start-Process -FilePath $Editor -ArgumentList $arguments -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
 if (-not $process.WaitForExit($timeoutMs)) {
