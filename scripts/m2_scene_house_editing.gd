@@ -33,6 +33,7 @@ var _section_amount := 0.0
 var _section_step := 0.0
 var _addition_raw := Vector3.ZERO
 var _addition_was_active := false
+var _direct_attachment_surface := ""
 
 func _build_world() -> void:
 	super._build_world()
@@ -254,7 +255,9 @@ func _choose_part_action(action: String) -> void:
 		"window", "door":
 			selected_surface_id = str(target.get("surface_id", ""))
 			selected_detail_id = ""
+			_direct_attachment_surface = selected_surface_id
 			_begin_new_attachment(action)
+			_direct_attachment_surface = ""
 			if detail_move_active:
 				var view: Dictionary = building_world.get_building(selected_building_id)
 				var placed := WallPlacement.nearest_available(view, "", selected_surface_id, target["position"], _attachment_preview_half(_attachment_preview_detail()))
@@ -531,3 +534,13 @@ func _set_roof_scope_highlight(enabled: bool) -> void:
 		elif _roof_overlay_backup.has(id):
 			if node.material_overlay == _roof_scope_highlight: node.material_overlay = _roof_overlay_backup[id]
 			_roof_overlay_backup.erase(id)
+
+func _camera_facing_wall() -> String:
+	# Only the scoped direct action overrides the legacy catalogue's fallback.
+	# The inherited initializer otherwise replaces selected_surface_id before
+	# the attachment tools see it, losing courtyard and upper-floor targets.
+	if not _direct_attachment_surface.is_empty():
+		var view: Dictionary = building_world.get_building(selected_building_id)
+		if _direct_attachment_surface in WallPlacement.wall_ids(view):
+			return _direct_attachment_surface
+	return super._camera_facing_wall()

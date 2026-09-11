@@ -13,6 +13,8 @@ static func walls(view: Dictionary) -> Array[Dictionary]:
 			if run.is_empty(): continue
 			var item: Dictionary = run.duplicate(true)
 			item["surface_id"] = str(support["id"])
+			item["massing_level"] = int(support.get("massing_level", item.get("massing_level", 0)))
+			item["edge_owners"] = support.get("edge_owners", item.get("edge_owners", []))
 			result.append(item)
 	return result
 
