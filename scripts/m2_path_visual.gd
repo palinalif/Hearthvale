@@ -194,11 +194,10 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 				var along := 0.14 * sin(float(path_id * 31 + cluster_index * 13 + 2))
 				var cluster_center: Vector3 = sample["point"] + path_basis * Vector3(lateral, 0, along)
 
-				# Keep the established irregular walking rhythm and natural footprint,
-				# but reset the vertical treatment: the stone top belongs to the local
-				# terrain surface and the entire slab body extends downward into the
-				# ground. A tiny epsilon avoids z-fighting without creating a visible
-				# raised sidewall. The old wider contact skirt stays omitted.
+				# Keep the established irregular walking rhythm and natural footprint.
+				# The top face is seated against the highest terrain actually touched by
+				# the stone footprint, with the slab body extending downward. This keeps
+				# the full top visible without bringing back the old raised-puck offset.
 				var primary_width_scale := 0.47 + 0.14 * (sin(float(path_id * 11 + cluster_index * 29 + 3)) * 0.5 + 0.5)
 				var primary_width := clampf(safe_width * primary_width_scale, 0.22, maxf(0.22, safe_width * 0.64))
 				var primary_length := 0.38 + 0.16 * (sin(float(path_id * 7 + cluster_index * 19 + 4)) * 0.5 + 0.5)
@@ -244,12 +243,22 @@ func _embedded_center(point: Vector3, thickness: float, exposed_rise: float) -> 
 	# walking surface read as a shallow recess without mutating terrain authority.
 	return point + Vector3.UP * (exposed_rise - thickness * 0.5)
 
-func _stepping_stone_center(point: Vector3, size: Vector3, _basis: Basis, top_offset: float) -> Vector3:
-	# Seat the top face at the terrain directly beneath the actual stone centre.
-	# The slab body extends downward from that surface, like a stone dropped into
-	# a shallow socket. Do not chase the highest neighbouring terrace here: that
-	# was what turned the stones into raised pucks/cliffs in close gameplay views.
+func _stepping_stone_center(point: Vector3, size: Vector3, basis: Basis, top_offset: float) -> Vector3:
+	# A centre-only sample can sit below a neighbouring voxel terrace and bury the
+	# entire stone except for a tiny notch. Sample inside the actual rotated slab
+	# footprint instead, then place the flat top only epsilon above the highest
+	# touched terrain. Unlike the old treatment, there is no extra exposed rise.
+	var half_x := size.x * 0.42
+	var half_z := size.z * 0.42
 	var surface_y := _surface_height(Vector2(point.x, point.z))
+	for local_offset in [
+		Vector2(-half_x, -half_z),
+		Vector2(half_x, -half_z),
+		Vector2(half_x, half_z),
+		Vector2(-half_x, half_z),
+	]:
+		var world_offset := basis * Vector3(local_offset.x, 0, local_offset.y)
+		surface_y = maxf(surface_y, _surface_height(Vector2(point.x + world_offset.x, point.z + world_offset.z)))
 	return Vector3(point.x, surface_y + top_offset - size.y * 0.5, point.z)
 
 func _sample_polyline(point_values: Array) -> Array:
