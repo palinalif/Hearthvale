@@ -31,15 +31,25 @@ jobs:
   terrain-ux:
     uses: ./.github/workflows/terrain-ux.yml
 
+  # The old placement gate ran native + every Mobile visual suite serially.
+  # m1-placement.yml now fans those exact checks out across independent runners.
   placement:
     uses: ./.github/workflows/m1-placement.yml
 
+  # Hosted-runner performance is a normalized regression signal, not a Thor FPS claim.
+  # It runs the real Mobile renderer and compares busy scenarios against same-run idle.
+  performance:
+    uses: ./.github/workflows/m2-performance.yml
+
+  # Cottage still owns its Thor-specific regressions and packaging. Its historical
+  # no-argument placement bootstrap now installs/imports only; the full placement
+  # coverage above runs concurrently instead of being repeated here.
   cottage-and-apk:
     uses: ./.github/workflows/cottage-playtest.yml
 
   drive-delivery:
     name: Upload verified builds to private Google Drive
-    needs: [delivery-contract, sculpt-feedback, terrain-ux, placement, cottage-and-apk]
+    needs: [delivery-contract, sculpt-feedback, terrain-ux, placement, performance, cottage-and-apk]
     if: vars.GOOGLE_DRIVE_UPLOAD_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10

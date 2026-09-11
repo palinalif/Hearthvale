@@ -51,7 +51,9 @@ func _run() -> void:
 	scene.edit_pointer = Vector2(10, 10)
 	await process_frame
 	await _press(JOY_BUTTON_X)
-	check(scene._building_panel.visible and _focus_text() == "Place new home", "physical X opens home options on Place new home")
+	check(scene._browser_open and scene._build_browser.visible, "physical X opens the build browser")
+	await _press(JOY_BUTTON_Y)
+	check(scene._building_panel.visible and _focus_text() == "Place new home", "physical Y opens house management from the browser")
 	await _press(JOY_BUTTON_DPAD_DOWN)
 	check(_focus_text().begins_with("Duplicate"), "first Down follows displayed Duplicate row")
 	await _press(JOY_BUTTON_DPAD_DOWN)

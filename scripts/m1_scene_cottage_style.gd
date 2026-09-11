@@ -47,6 +47,7 @@ var _style_picker_original_asset := ""
 var _style_picker_original_colour := "natural"
 var _style_preview_asset := ""
 var _style_preview_colour := "natural"
+var _style_preview_signature := ""
 var _style_buttons: Dictionary = {}
 var _style_button_specs: Dictionary = {}
 var _detail_colour_button: Button
@@ -145,6 +146,7 @@ func _begin_style_picker(mode: String) -> void:
 	_style_picker_original_colour = str((detail.get("override", {}) as Dictionary).get("color_id", "natural"))
 	_style_preview_asset = _style_picker_original_asset
 	_style_preview_colour = _style_picker_original_colour
+	_style_preview_signature = ""
 	if tools_panel:
 		_style_picker_original_panel_position = tools_panel.position
 		_style_picker_original_panel_size = tools_panel.size
@@ -192,7 +194,9 @@ func _preview_style_choice(mode: String, value: String) -> void:
 		_style_preview_asset = value
 	else:
 		_style_preview_colour = value
-	_apply_style_preview()
+	# Route the changed preview through the complete presentation stack once so
+	# roof/facade finishers are applied before the preview is considered stable.
+	_update_presentation()
 
 func _commit_style_choice(mode: String, value: String) -> void:
 	if _style_picker_mode != mode:
@@ -291,6 +295,7 @@ func _end_style_picker() -> void:
 	_style_picker_detail_id = ""
 	_style_picker_original_asset = ""
 	_style_preview_asset = ""
+	_style_preview_signature = ""
 	tools_open = false
 	detail_open = false
 	if tools_panel:
@@ -338,9 +343,14 @@ func _highlighted_detail_geometry_count() -> int:
 func _apply_style_preview() -> void:
 	if _style_picker_detail_id.is_empty():
 		return
+	var revision: int = building_world.get_revision()
+	var signature := "%s|%s|%s|%s|%d" % [selected_building_id, _style_picker_detail_id, _style_preview_asset, _style_preview_colour, revision]
+	if signature == _style_preview_signature:
+		return
 	var presentation: Dictionary = building_world.get_building(selected_building_id)
 	if presentation.is_empty():
 		return
+	_style_preview_signature = signature
 	var details: Array = presentation.get("details", [])
 	for index in details.size():
 		var detail: Dictionary = details[index]
@@ -352,7 +362,6 @@ func _apply_style_preview() -> void:
 		detail["override"] = overrides
 		details[index] = detail
 	presentation["details"] = details
-	var revision: int = building_world.get_revision()
 	for visual in _selected_visual_roots():
 		if visual and visual.has_method("request_revision"):
 			visual.request_revision(revision)

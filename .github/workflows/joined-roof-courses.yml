@@ -1,0 +1,59 @@
+name: Joined roof course finish
+on:
+  push:
+    branches: [feat/m2-joined-roof-courses]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-and-mobile:
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install pinned Godot and voxel extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $lock = Get-Content dependencies.lock.json -Raw | ConvertFrom-Json
+          $root = Join-Path (Get-Location) '.tools/joined-roof-courses'
+          New-Item -ItemType Directory -Force $root | Out-Null
+          Set-Content -LiteralPath (Join-Path $root '../.gdignore') -Value ''
+          Invoke-WebRequest -Uri $lock.engine.editor_url -OutFile (Join-Path $root 'editor.zip')
+          if ((Get-FileHash -LiteralPath (Join-Path $root 'editor.zip') -Algorithm SHA512).Hash.ToLowerInvariant() -ne $lock.engine.editor_sha512.ToLowerInvariant()) { throw 'Editor archive hash mismatch' }
+          Invoke-WebRequest -Uri $lock.voxel.url -OutFile (Join-Path $root 'voxel.zip')
+          if ((Get-FileHash -LiteralPath (Join-Path $root 'voxel.zip') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $lock.voxel.sha256.ToLowerInvariant()) { throw 'Voxel archive hash mismatch' }
+          Expand-Archive -LiteralPath (Join-Path $root 'editor.zip') -DestinationPath $root -Force
+          Expand-Archive -LiteralPath (Join-Path $root 'voxel.zip') -DestinationPath (Get-Location) -Force
+          $editor = Get-ChildItem $root -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $editor) { throw 'Pinned Godot console editor missing' }
+          if ((& $editor --version | Out-String).Trim() -ne $lock.engine.version) { throw 'Unexpected Godot version' }
+          & $editor --headless --path . --editor --import --quit
+          if ($LASTEXITCODE -ne 0) { throw 'Godot import failed' }
+      - name: Check roof layout, profile controls and retained section edits
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/joined-roof-courses' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          foreach ($test in @('joined_roof_course_test','roof_course_layout_test','m2_roof_design_test','m2_roof_accessories_test','m2_house_edit_ux_test')) {
+            $log = & $editor --headless --path . --script "tests/$test.gd" 2>&1 | Out-String
+            $exitCode = $LASTEXITCODE
+            $log | Tee-Object -FilePath ".tools/joined-roof-courses/$test.log"
+            if ($exitCode -ne 0 -or $log -match 'SCRIPT ERROR|ERROR:|Parse Error:|FAIL:' -or $log -notmatch 'failures=0|"failures"\s*:\s*0') { throw "Roof test failed: $test" }
+          }
+      - name: Capture matched before and after roofs on Mobile
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/joined-roof-courses' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          & ./tools/test-joined-roof-courses.ps1 -Editor $editor
+      - name: Retain roof evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: joined-roof-courses-${{ github.sha }}
+          path: |
+            .tools/joined-roof-courses/*.log
+            .tools/cottage-repair/joined-roof-courses/
+          if-no-files-found: warn
+          retention-days: 14
