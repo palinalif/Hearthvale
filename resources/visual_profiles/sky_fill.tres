@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="VisualLightingProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/visual_lighting_profile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+profile_id = &"sky_fill"
+use_sky_fill = true
+sky_energy = 1.0
+sky_contribution = 0.5
