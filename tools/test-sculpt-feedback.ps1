@@ -1,7 +1,7 @@
 # Isolated CI workspaces only. Uses existing dependency pins; no exports, MCP,
 # signing keys, user saves, or changes to the project's dependency lock.
 param(
-    [ValidateSet('all','setup')]
+    [ValidateSet('all','setup','brush','smoothing','backend')]
     [string]$Suite = 'all'
 )
 
@@ -47,7 +47,15 @@ if ($Suite -eq 'setup') {
     Write-Output 'SCULPT_SUITE_OK suite=setup'
     return
 }
-foreach ($test in @('sculpt_brush_profile_test','smooth_neighbourhood_test','sculpt_smoothing_test','sculpt_test','m1_scaled_backend_test')) {
-    Invoke-Gate $test @('--headless', '--path', '.', '--script', "tests/$test.gd")
+$groups = @{
+    brush = @('sculpt_brush_profile_test','smooth_neighbourhood_test')
+    smoothing = @('sculpt_smoothing_test','sculpt_test')
+    backend = @('m1_scaled_backend_test')
 }
-Write-Output 'SCULPT_SUITE_OK suite=all'
+$selected = if ($Suite -eq 'all') { @('brush','smoothing','backend') } else { @($Suite) }
+foreach ($group in $selected) {
+    foreach ($test in $groups[$group]) {
+        Invoke-Gate $test @('--headless', '--path', '.', '--script', "tests/$test.gd")
+    }
+}
+Write-Output "SCULPT_SUITE_OK suite=$Suite"
