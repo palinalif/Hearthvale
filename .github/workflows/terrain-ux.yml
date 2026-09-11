@@ -9,32 +9,40 @@ permissions:
 
 jobs:
   terrain-native:
-    name: terrain-native
+    name: terrain-${{ matrix.suite }}
     runs-on: windows-2025
-    timeout-minutes: 12
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - sculpt-core
+          - preview-jobs
+          - preview-live
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Archive exact tracked source for reproducible diagnostics
+      - name: Archive exact tracked source once
+        if: matrix.suite == 'sculpt-core'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force .tools/terrain-ux | Out-Null
           Set-Content .tools/.gdignore ''
           git archive --format=zip --output=.tools/terrain-ux/source.zip HEAD
           if ($LASTEXITCODE -ne 0) { throw 'Source archive failed' }
-      - name: Run terrain UX gates
+      - name: Run ${{ matrix.suite }} terrain gates
         shell: pwsh
-        run: ./tools/test-terrain-ux.ps1
+        run: ./tools/test-terrain-ux.ps1 -Suite '${{ matrix.suite }}'
       - name: Retain native terrain diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: terrain-ux-native-${{ github.sha }}
+          name: terrain-ux-${{ matrix.suite }}-${{ github.sha }}
           path: |
             .tools/terrain-ux/source.zip
             .tools/sculpt-ci/*.log
-          if-no-files-found: error
+          if-no-files-found: ignore
           retention-days: 14
 
   terrain-mobile:
