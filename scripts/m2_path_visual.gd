@@ -195,14 +195,16 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 				# Each cluster gets its own footprint and yaw. The old renderer used
 				# the same large/small pair every metre, which made the style read as
 				# a dotted prefab strip. Keep the variation deterministic from path ID
-				# and cluster index so saves and previews remain stable.
+				# and cluster index so saves and previews remain stable. The slabs use
+				# chamfered octagonal footprints so they read as rounded natural stones
+				# rather than rotated rectangles.
 				var primary_width_scale := 0.43 + 0.18 * (sin(float(path_id * 11 + cluster_index * 29 + 3)) * 0.5 + 0.5)
 				var primary_width := clampf(safe_width * primary_width_scale, 0.20, maxf(0.20, safe_width * 0.66))
 				var primary_length := 0.34 + 0.20 * (sin(float(path_id * 7 + cluster_index * 19 + 4)) * 0.5 + 0.5)
 				var primary_yaw := 0.24 * sin(float(path_id * 5 + cluster_index * 17 + 5))
 				var primary_rise := 0.025 + 0.012 * (sin(float(path_id * 13 + cluster_index * 7 + 6)) * 0.5 + 0.5)
 				var primary_material := (path_id + cluster_index) % 2
-				_append_box(builder, _embedded_center(cluster_center, PATH_THICKNESS, primary_rise), Vector3(primary_width, PATH_THICKNESS, primary_length), path_basis * Basis(Vector3.UP, primary_yaw), primary_material)
+				_append_rounded_stone(builder, _embedded_center(cluster_center, PATH_THICKNESS, primary_rise), Vector3(primary_width, PATH_THICKNESS, primary_length), path_basis * Basis(Vector3.UP, primary_yaw), primary_material)
 				cells += 1
 
 				var pattern := (path_id + cluster_index * 2) % 5
@@ -215,7 +217,7 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 					var companion_length := 0.22 + 0.13 * (sin(float(path_id * 47 + cluster_index * 7 + 10)) * 0.5 + 0.5)
 					var companion_yaw := -0.32 * sin(float(path_id * 53 + cluster_index * 13 + 11))
 					var companion_rise := 0.021 + 0.009 * (sin(float(path_id * 59 + cluster_index * 17 + 12)) * 0.5 + 0.5)
-					_append_box(builder, _embedded_center(companion_point, PATH_THICKNESS, companion_rise), Vector3(companion_width, PATH_THICKNESS, companion_length), path_basis * Basis(Vector3.UP, companion_yaw), 1 - primary_material)
+					_append_rounded_stone(builder, _embedded_center(companion_point, PATH_THICKNESS, companion_rise), Vector3(companion_width, PATH_THICKNESS, companion_length), path_basis * Basis(Vector3.UP, companion_yaw), 1 - primary_material)
 					cells += 1
 
 				# Roughly one cluster in five receives a tiny third stone on the
@@ -224,7 +226,7 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 				if pattern == 4:
 					var pebble_point := cluster_center + path_basis * Vector3(minf(safe_width * 0.20, 0.20), 0, -0.14)
 					var pebble_yaw := 0.36 * sin(float(path_id * 61 + cluster_index * 19 + 13))
-					_append_box(builder, _embedded_center(pebble_point, PATH_THICKNESS, 0.021), Vector3(clampf(safe_width * 0.18, 0.13, 0.24), PATH_THICKNESS, 0.20), path_basis * Basis(Vector3.UP, pebble_yaw), primary_material)
+					_append_rounded_stone(builder, _embedded_center(pebble_point, PATH_THICKNESS, 0.021), Vector3(clampf(safe_width * 0.18, 0.13, 0.24), PATH_THICKNESS, 0.20), path_basis * Basis(Vector3.UP, pebble_yaw), primary_material)
 					cells += 1
 				cluster_index += 1
 	return cells
@@ -298,6 +300,55 @@ func _append_box(builder: Dictionary, center: Vector3, size: Vector3, basis: Bas
 			vertices.append(center + basis * (corner as Vector3))
 			normals.append(normal)
 		indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
+	surface["vertices"] = vertices
+	surface["normals"] = normals
+	surface["indices"] = indices
+	builder["surfaces"][material_index] = surface
+	builder["cells"] = int(builder["cells"]) + 1
+
+func _append_rounded_stone(builder: Dictionary, center: Vector3, size: Vector3, basis: Basis, material_index: int) -> void:
+	# Eight-sided slab: still crisp/voxel-compatible, but the clipped corners
+	# read as a naturally rounded stepping stone at play distance.
+	var surface: Dictionary = builder["surfaces"][material_index]
+	var vertices: Array = surface["vertices"]
+	var normals: Array = surface["normals"]
+	var indices: Array = surface["indices"]
+	var half := size * 0.5
+	var ring: Array[Vector2] = [
+		Vector2(-0.50, -0.28), Vector2(-0.50, 0.28), Vector2(-0.28, 0.50), Vector2(0.28, 0.50),
+		Vector2(0.50, 0.28), Vector2(0.50, -0.28), Vector2(0.28, -0.50), Vector2(-0.28, -0.50),
+	]
+	var top_center := vertices.size()
+	vertices.append(center + basis * Vector3(0, half.y, 0))
+	normals.append(basis * Vector3.UP)
+	var bottom_center := vertices.size()
+	vertices.append(center + basis * Vector3(0, -half.y, 0))
+	normals.append(basis * Vector3.DOWN)
+	var top_ring: Array[int] = []
+	var bottom_ring: Array[int] = []
+	for point in ring:
+		top_ring.append(vertices.size())
+		vertices.append(center + basis * Vector3(point.x * size.x, half.y, point.y * size.z))
+		normals.append(basis * Vector3.UP)
+		bottom_ring.append(vertices.size())
+		vertices.append(center + basis * Vector3(point.x * size.x, -half.y, point.y * size.z))
+		normals.append(basis * Vector3.DOWN)
+	for index in ring.size():
+		var next := (index + 1) % ring.size()
+		indices.append_array([top_center, top_ring[index], top_ring[next]])
+		indices.append_array([bottom_center, bottom_ring[next], bottom_ring[index]])
+		var a: Vector2 = ring[index]
+		var b: Vector2 = ring[next]
+		var edge := b - a
+		var side_normal_local := Vector3(edge.y / maxf(size.x, 0.001), 0, -edge.x / maxf(size.z, 0.001)).normalized()
+		var side_normal := basis * side_normal_local
+		var side_base := vertices.size()
+		vertices.append(center + basis * Vector3(a.x * size.x, -half.y, a.y * size.z))
+		vertices.append(center + basis * Vector3(b.x * size.x, -half.y, b.y * size.z))
+		vertices.append(center + basis * Vector3(b.x * size.x, half.y, b.y * size.z))
+		vertices.append(center + basis * Vector3(a.x * size.x, half.y, a.y * size.z))
+		for unused in 4: normals.append(side_normal)
+		indices.append_array([side_base, side_base + 1, side_base + 2, side_base, side_base + 2, side_base + 3])
 	surface["vertices"] = vertices
 	surface["normals"] = normals
 	surface["indices"] = indices
