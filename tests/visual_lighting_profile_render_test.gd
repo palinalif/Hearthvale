@@ -58,8 +58,6 @@ func _run() -> void:
 	if not sun or not world or not grass:
 		await _finish()
 		return
-	# M1PatchGenerator.build_library creates these materials per scene, not
-	# from imported resources. Only this disposable fixture is recoloured.
 	check(grass.resource_path.is_empty(), "ground palette experiment is scene-private")
 	var grass_before := grass.albedo_color
 	var environment_before: Environment = world.environment
@@ -76,7 +74,6 @@ func _run() -> void:
 	]
 	for camera_spec in cameras:
 		if camera_spec["id"] == "edited":
-			# Use the actual new-floor pipeline, not a prettier fixed model.
 			scene._begin_next_storey()
 			check(scene.portion_valid and scene._commit_portion_placement(), "edited view contains a real editable upper floor")
 			scene._presentation_key = ""
@@ -102,15 +99,18 @@ func _run() -> void:
 			check([environment_before.sky, environment_before.ambient_light_source, environment_before.ambient_light_energy, environment_before.tonemap_exposure] == environment_snapshot, "original environment is untouched")
 			check(world.environment.tonemap_exposure == environment_before.tonemap_exposure and world.environment.tonemap_mode == environment_before.tonemap_mode, "exposure and tonemapper are fixed")
 			check(scene.camera.global_transform.is_equal_approx(camera_transform), "camera framing is identical across looks")
-			for frame in 24: await RenderingServer.frame_post_draw
-			var image := root.get_texture().get_image()
+			print("LOOK_CAPTURE_BEGIN %s/%s" % [camera_spec["id"], look["id"]])
+			var started := Time.get_ticks_msec()
+			var capture: Dictionary = await _settled_image()
+			var image: Image = capture["image"]
 			check(not image.is_empty() and image.get_size() == Vector2i(1280, 720), "actual Mobile image exists")
 			var path := "%s/%s-%s.png" % [CAPTURE_DIR, camera_spec["id"], look["id"]]
 			check(image.save_png(path) == OK, "capture saved")
 			var pixel_hash := hash(image.get_data())
 			pixel_hashes[look["id"]] = pixel_hash
-			receipts.append({"view": camera_spec["id"], "look": look["id"], "path": path, "pixel_hash": pixel_hash, "sun": str(sun.rotation_degrees), "sky_energy": profile.sky_energy, "grass": grass.albedo_color.to_html(), "exposure": world.environment.tonemap_exposure})
+			receipts.append({"view": camera_spec["id"], "look": look["id"], "path": path, "pixel_hash": pixel_hash, "sun": str(sun.rotation_degrees), "sky_energy": profile.sky_energy, "sky_contribution": profile.sky_contribution if profile.use_sky_fill else 0.0, "grass": grass.albedo_color.to_html(), "exposure": world.environment.tonemap_exposure, "settled_frames": capture["frames"], "capture_ms": Time.get_ticks_msec() - started})
 			captures += 1
+			print("LOOK_CAPTURE_SAVED %s frames=%d" % [path, capture["frames"]])
 			check(scene.building_world.serialize_document() == buildings_before, "look does not change building records")
 			check(JSON.stringify(scene.landscape_state.document()) == landscape_before, "look does not change planting/path records")
 		check(pixel_hashes.get("warm_daylight") != pixel_hashes.get("warm_meadow"), "ground colour experiment changes rendered pixels")
@@ -126,6 +126,24 @@ func _run() -> void:
 		receipt.store_string(JSON.stringify({"source": OS.get_environment("GITHUB_SHA"), "engine": Engine.get_version_info(), "renderer": RenderingServer.get_current_rendering_method(), "captures": receipts}, "\t"))
 		receipt.close()
 	await _finish()
+
+func _settled_image() -> Dictionary:
+	# Keep the original 24-frame maximum, but require actual convergence
+	# rather than burn every frame after a static view has already settled.
+	var previous := PackedByteArray()
+	var image := Image.new()
+	var stable := 0
+	for frame in 24:
+		await RenderingServer.frame_post_draw
+		image = root.get_texture().get_image()
+		var pixels := image.get_data()
+		stable = stable + 1 if not pixels.is_empty() and pixels == previous else 0
+		previous = pixels
+		if frame >= 5 and stable >= 2:
+			check(true, "three consecutive complete frames agree after warmup")
+			return {"image": image, "frames": frame + 1}
+	check(false, "static lighting view did not converge within 24 rendered frames")
+	return {"image": image, "frames": 24}
 
 func _finish() -> void:
 	if scene and is_instance_valid(scene):

@@ -32,6 +32,7 @@ func _initialize() -> void:
 		if profile.use_sky_fill:
 			var material := world.environment.sky.sky_material as ProceduralSkyMaterial
 			check(is_equal_approx(material.sky_energy_multiplier, profile.sky_energy) and is_equal_approx(material.ground_energy_multiplier, profile.sky_energy), "sky fill uses effective radiance controls")
+			check(is_equal_approx(world.environment.ambient_light_sky_contribution, profile.sky_contribution), "sky and constant fill use the requested blend")
 		else:
 			check(world.environment.sky == null and world.environment.ambient_light_source == Environment.AMBIENT_SOURCE_COLOR, "baseline restores constant fill")
 	var first := world.environment
@@ -45,6 +46,9 @@ func _initialize() -> void:
 	invalid.sky_energy = 0.5
 	invalid.sun_colour = Color(NAN, 1, 1)
 	check(not invalid.apply_to(sun, world), "nonfinite colour is rejected")
+	invalid.sun_colour = Color.WHITE
+	invalid.sky_contribution = 1.1
+	check(not invalid.apply_to(sun, world) and world.environment == before, "out-of-range sky blend is atomically rejected")
 	check(not baseline.apply_to(null, world), "missing light is rejected")
 	check(baseline.apply_to(sun, world) and world.environment.sky == null, "switching back removes the candidate sky")
 	sun.free()

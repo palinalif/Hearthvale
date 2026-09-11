@@ -10,7 +10,8 @@ class_name VisualLightingProfile
 @export var ambient_colour := Color("#c2d5e0")
 @export_range(0.0, 2.0, 0.01) var ambient_energy := 0.55
 @export var use_sky_fill := false
-@export_range(0.0, 4.0, 0.01) var sky_energy := 0.65
+@export_range(0.0, 4.0, 0.01) var sky_energy := 1.0
+@export_range(0.0, 1.0, 0.01) var sky_contribution := 0.5
 @export var sky_top := Color("#7895b1")
 @export var sky_horizon := Color("#c4d1d5")
 @export var ground_bottom := Color("#505847")
@@ -21,6 +22,7 @@ func apply_to(sun: DirectionalLight3D, world: WorldEnvironment) -> bool:
 	if not sun_rotation_degrees.is_finite(): return false
 	for energy in [sun_energy, ambient_energy, sky_energy]:
 		if not is_finite(energy) or energy < 0.0: return false
+	if not is_finite(sky_contribution) or sky_contribution < 0.0 or sky_contribution > 1.0: return false
 	for colour in [sun_colour, ambient_colour, sky_top, sky_horizon, ground_bottom, ground_horizon]:
 		if not _colour_finite(colour): return false
 	var environment: Environment = world.environment.duplicate(true) if world.environment else Environment.new()
@@ -35,15 +37,15 @@ func apply_to(sun: DirectionalLight3D, world: WorldEnvironment) -> bool:
 		sky_material.sky_horizon_color = sky_horizon
 		sky_material.ground_bottom_color = ground_bottom
 		sky_material.ground_horizon_color = ground_horizon
-		# With 100% sky contribution Environment.ambient_light_energy does
-		# not dim the sky. Control the actual sky/ground radiance instead.
+		# Radiance and blend are separate controls. Retain a little constant
+		# fill so canopy interiors and shaded facades remain readable.
 		sky_material.sky_energy_multiplier = sky_energy
 		sky_material.ground_energy_multiplier = sky_energy
 		var sky := Sky.new()
 		sky.sky_material = sky_material
 		environment.sky = sky
 		environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-		environment.ambient_light_sky_contribution = 1.0
+		environment.ambient_light_sky_contribution = sky_contribution
 		environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	else:
 		environment.sky = null
