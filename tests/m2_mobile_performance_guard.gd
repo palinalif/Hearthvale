@@ -3,14 +3,14 @@ extends SceneTree
 const HouseMassing = preload("res://scripts/m2_house_massing.gd")
 const BASELINE_PATH := "res://tests/performance/m2_mobile_performance_baseline.json"
 # GitHub's Windows runner uses Microsoft Basic Render Driver for this Mobile
-# benchmark. Keep the exact same scenarios/budgets, but render a smaller target
-# and use bounded samples so the guard measures relative cost instead of spending
-# its entire watchdog budget software-rasterizing 1280x720 frames.
+# benchmark. Keep the same scenarios/budgets, but render a smaller target and
+# allow independent scenario groups so hosted CI can measure them concurrently.
 const CI_RENDER_SIZE := Vector2i(640, 360)
 const WARMUP_FRAMES := 30
 const SAMPLE_FRAMES := 48
 const CATALOGUE_FRAMES := 36
 const MOVING_SECTION_FRAMES := 24
+const GROUPS := ["all", "camera-catalogue", "section-preview", "section-commit"]
 
 var scene: Node
 var checks := 0
@@ -27,8 +27,20 @@ func check(ok: bool, label: String) -> void:
 func _initialize() -> void:
 	_run.call_deferred()
 
+func _scenario_group() -> String:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--scenario-group="):
+			return arg.trim_prefix("--scenario-group=")
+	return "all"
+
 func _run() -> void:
-	var rendering := "--require-rendering" in OS.get_cmdline_user_args()
+	var user_args := OS.get_cmdline_user_args()
+	var rendering := "--require-rendering" in user_args
+	var group := _scenario_group()
+	check(group in GROUPS, "known performance scenario group")
+	if not group in GROUPS:
+		await _finish()
+		return
 	check(rendering, "performance guard requires explicit rendering mode")
 	if rendering:
 		check(DisplayServer.get_name() != "headless", "real display server required")
@@ -43,10 +55,10 @@ func _run() -> void:
 		await _finish()
 		return
 
-	print("PERF_STAGE scene-load")
+	print("PERF_STAGE scene-load group=" + group)
 	scene = preload("res://scenes/m1.tscn").instantiate()
 	scene.test_mode = true
-	scene.checkpoint_root = "user://m2-mobile-perf-%d" % Time.get_ticks_usec()
+	scene.checkpoint_root = "user://m2-mobile-perf-%s-%d" % [group, Time.get_ticks_usec()]
 	root.add_child(scene)
 
 	var deadline := Time.get_ticks_msec() + 120000
@@ -58,71 +70,80 @@ func _run() -> void:
 		return
 
 	scene._set_view_context("building")
-	print("PERF_STAGE warmup")
+	print("PERF_STAGE warmup group=" + group)
 	await _wait_frames(WARMUP_FRAMES)
 
-	print("PERF_STAGE idle")
+	print("PERF_STAGE idle group=" + group)
 	var idle := await _sample_frames(SAMPLE_FRAMES)
-	print("PERF_STAGE camera")
-	var camera := await _sample_frames(SAMPLE_FRAMES, Callable(self, "_camera_step"))
-
-	print("PERF_STAGE catalogue")
-	scene._open_build_browser("windows")
-	await _wait_frames(8)
-	check(scene._browser_open, "build catalogue opens for benchmark")
-	var catalogue := await _sample_frames(CATALOGUE_FRAMES)
-	scene._close_build_browser()
-	await _wait_frames(8)
-
-	print("PERF_STAGE section-start")
-	scene._begin_portion_placement()
-	check(scene.portion_placement_active, "section placement starts for benchmark")
-	if not scene.portion_placement_active:
-		await _finish()
-		return
-	_section_base = scene.portion_offset
-	await _wait_frames(8)
-
-	print("PERF_STAGE section-stationary")
-	var section_stationary := await _sample_frames(SAMPLE_FRAMES)
-	_section_update_cpu_ms.clear()
-	print("PERF_STAGE section-moving")
-	var section_moving := await _sample_frames(MOVING_SECTION_FRAMES, Callable(self, "_section_move_step"))
-
-	print("PERF_STAGE section-commit")
-	scene.portion_offset = _section_base
-	scene._update_portion_preview()
-	check(scene.portion_valid, "baseline section candidate remains valid")
-	var commit_start := Time.get_ticks_usec()
-	var committed: bool = scene._commit_portion_placement()
-	var commit_ms := float(Time.get_ticks_usec() - commit_start) / 1000.0
-	check(committed, "section benchmark commit succeeds")
-	await _wait_frames(8)
-
 	var idle_p95 := maxf(0.001, float(idle["p95_ms"]))
 	var idle_median := maxf(0.001, float(idle["median_ms"]))
-	var metrics := {
-		"idle": idle,
-		"camera": camera,
-		"catalogue": catalogue,
-		"section_stationary": section_stationary,
-		"section_moving": section_moving,
-		"section_update_cpu_p95_ms": _percentile(_section_update_cpu_ms, 0.95),
-		"section_commit_ms": commit_ms,
-	}
-	var normalized := {
-		"camera_p95_vs_idle": float(camera["p95_ms"]) / idle_p95,
-		"catalogue_p95_vs_idle": float(catalogue["p95_ms"]) / idle_p95,
-		"section_stationary_p95_vs_idle": float(section_stationary["p95_ms"]) / idle_p95,
-		"section_moving_p95_vs_idle": float(section_moving["p95_ms"]) / idle_p95,
-		"section_update_cpu_p95_vs_idle_median": _percentile(_section_update_cpu_ms, 0.95) / idle_median,
-		"section_commit_vs_idle_median": commit_ms / idle_median,
-	}
+	var metrics := {"idle": idle}
+	var normalized := {}
+
+	var run_camera_catalogue := group in ["all", "camera-catalogue"]
+	var run_section_preview := group in ["all", "section-preview"]
+	var run_section_commit := group in ["all", "section-commit"]
+
+	if run_camera_catalogue:
+		print("PERF_STAGE camera group=" + group)
+		var camera := await _sample_frames(SAMPLE_FRAMES, Callable(self, "_camera_step"))
+		metrics["camera"] = camera
+		normalized["camera_p95_vs_idle"] = float(camera["p95_ms"]) / idle_p95
+
+		print("PERF_STAGE catalogue group=" + group)
+		scene._open_build_browser("windows")
+		await _wait_frames(8)
+		check(scene._browser_open, "build catalogue opens for benchmark")
+		var catalogue := await _sample_frames(CATALOGUE_FRAMES)
+		scene._close_build_browser()
+		await _wait_frames(8)
+		metrics["catalogue"] = catalogue
+		normalized["catalogue_p95_vs_idle"] = float(catalogue["p95_ms"]) / idle_p95
+
+	if run_section_preview or run_section_commit:
+		print("PERF_STAGE section-start group=" + group)
+		scene._begin_portion_placement()
+		check(scene.portion_placement_active, "section placement starts for benchmark")
+		if not scene.portion_placement_active:
+			await _finish()
+			return
+		_section_base = scene.portion_offset
+		await _wait_frames(8)
+
+	if run_section_preview:
+		print("PERF_STAGE section-stationary group=" + group)
+		var section_stationary := await _sample_frames(SAMPLE_FRAMES)
+		_section_update_cpu_ms.clear()
+		print("PERF_STAGE section-moving group=" + group)
+		var section_moving := await _sample_frames(MOVING_SECTION_FRAMES, Callable(self, "_section_move_step"))
+		var update_p95 := _percentile(_section_update_cpu_ms, 0.95)
+		metrics["section_stationary"] = section_stationary
+		metrics["section_moving"] = section_moving
+		metrics["section_update_cpu_p95_ms"] = update_p95
+		normalized["section_stationary_p95_vs_idle"] = float(section_stationary["p95_ms"]) / idle_p95
+		normalized["section_moving_p95_vs_idle"] = float(section_moving["p95_ms"]) / idle_p95
+		normalized["section_update_cpu_p95_vs_idle_median"] = update_p95 / idle_median
+
+	if run_section_commit:
+		print("PERF_STAGE section-commit group=" + group)
+		scene.portion_offset = _section_base
+		scene._update_portion_preview()
+		check(scene.portion_valid, "baseline section candidate remains valid")
+		var commit_start := Time.get_ticks_usec()
+		var committed: bool = scene._commit_portion_placement()
+		var commit_ms := float(Time.get_ticks_usec() - commit_start) / 1000.0
+		check(committed, "section benchmark commit succeeds")
+		await _wait_frames(8)
+		metrics["section_commit_ms"] = commit_ms
+		normalized["section_commit_vs_idle_median"] = commit_ms / idle_median
 
 	var allowed := float(baseline.get("allowed_regression_fraction", 0.20))
 	var budgets: Dictionary = baseline.get("normalized_budgets", {})
-	for key in budgets:
-		var observed := float(normalized.get(key, INF))
+	for key in normalized:
+		check(budgets.has(key), "baseline contains budget for " + str(key))
+		if not budgets.has(key):
+			continue
+		var observed := float(normalized[key])
 		var expected := float(budgets[key])
 		var limit := expected * (1.0 + allowed)
 		check(observed <= limit, "%s %.3fx <= %.3fx normalized budget" % [key, observed, limit])
@@ -131,6 +152,7 @@ func _run() -> void:
 		"ok": failures == 0,
 		"checks": checks,
 		"failures": failures,
+		"scenario_group": group,
 		"renderer": RenderingServer.get_current_rendering_method(),
 		"display": DisplayServer.get_name(),
 		"resolution": root.get_visible_rect().size,
@@ -140,7 +162,7 @@ func _run() -> void:
 		"normalized_budgets": budgets,
 	}
 	DirAccess.make_dir_recursive_absolute(".tools/performance")
-	var receipt := FileAccess.open(".tools/performance/m2-mobile-performance.json", FileAccess.WRITE)
+	var receipt := FileAccess.open(".tools/performance/m2-mobile-performance-%s.json" % group, FileAccess.WRITE)
 	if receipt:
 		receipt.store_string(JSON.stringify(result, "\t"))
 		receipt.close()
