@@ -172,6 +172,10 @@ func apply_thumbnail(id: String, texture: Texture2D) -> void:
 		picture.texture = texture
 
 func fit(viewport_size: Vector2, prompt_top: float) -> void:
+	var width := viewport_size.x - 32
+	# Reduce the content minimum before assigning the narrower panel size.
+	# Otherwise eight old columns clamp size.x and prevent a smaller window
+	# from ever switching down to the six columns it actually needs.
+	grid.columns = maxi(1, floori((width - 32) / 134.0))
 	position = Vector2(16, viewport_size.y * 0.5)
-	size = Vector2(viewport_size.x - 32, maxf(0, minf(viewport_size.y - 12, prompt_top - 8) - position.y))
-	grid.columns = maxi(1, floori((size.x - 32) / 134.0))
+	size = Vector2(width, maxf(0, minf(viewport_size.y - 12, prompt_top - 8) - position.y))
