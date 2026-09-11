@@ -138,7 +138,7 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 				var lateral_shift := (right_extent - left_extent) * 0.5
 				var strip_length := SAMPLE_SPACING + 0.15 + 0.04 * sin(float(path_id * 5 + index * 11))
 				var surface_rise := PATH_SURFACE_RISE + 0.003 * sin(float(path_id * 11 + index * 5))
-				var strip_center: Vector3 = sample["point"] + basis * Vector3(lateral_shift, 0, 0)
+				var strip_center: Vector3 = sample["point"] + path_basis * Vector3(lateral_shift, 0, 0)
 				_append_box(builder, _embedded_center(strip_center, PATH_THICKNESS, surface_rise), Vector3(strip_width, PATH_THICKNESS, strip_length), basis, 0)
 
 				# Broken shoulder fragments make the silhouette less uniform without
@@ -364,7 +364,7 @@ func _append_rounded_stone(builder: Dictionary, center: Vector3, size: Vector3, 
 	var half := size * 0.5
 	var ring: Array[Vector2] = [
 		Vector2(-0.50, -0.28), Vector2(-0.50, 0.28), Vector2(-0.28, 0.50), Vector2(0.28, 0.50),
-		Vector2(0.50, 0.28), Vector2(0.50, -0.28), Vector2(0.50, -0.28), Vector2(0.28, -0.50), Vector2(-0.28, -0.50),
+		Vector2(0.50, 0.28), Vector2(0.50, -0.28), Vector2(0.28, -0.50), Vector2(-0.28, -0.50),
 	]
 	var top_center := vertices.size()
 	vertices.append(center + basis * Vector3(0, half.y, 0))
