@@ -69,7 +69,9 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Packaging is speculative: Android and Windows exports run beside the test
+  # shards. The caller still gates Drive delivery on the entire reusable workflow,
+  # so no build can be delivered unless every cottage shard also succeeds.
   build-repair-apk:
     if: github.event_name != 'pull_request'
-    needs: cottage-shards
     uses: ./.github/workflows/thor-repair-apk.yml
