@@ -2,9 +2,9 @@ extends SceneTree
 
 const Profile = preload("res://scripts/visual_lighting_profile.gd")
 const LOOKS := [
-	{"id": "current", "profile": ""},
 	{"id": "sky_fill", "profile": "sky_fill"},
-	{"id": "warm_daylight", "profile": "warm_daylight"},
+	{"id": "sky_depth", "profile": "sky_depth"},
+	{"id": "sky_soft", "profile": "sky_soft"},
 ]
 const CAPTURE_DIR := ".tools/lighting-polish/captures"
 var scene: Node
@@ -95,14 +95,11 @@ func _run() -> void:
 			sun.light_color = sun_colour_before
 			sun.light_energy = sun_energy_before
 			var profile_id := str(look["profile"])
-			if not profile_id.is_empty():
-				var profile := load("res://resources/visual_profiles/%s.tres" % profile_id) as Profile
-				check(profile != null, "candidate profile loads")
-				if profile:
-					check(profile.apply_to(sun, world), "apply %s" % str(look["id"]))
-					check(world.environment != environment_before and world.environment.sky != null, "candidate owns private sky environment")
-			else:
-				check(world.environment == environment_before and sun.transform == sun_transform_before, "current look is exact gameplay source")
+			var profile := load("res://resources/visual_profiles/%s.tres" % profile_id) as Profile
+			check(profile != null, "%s profile loads" % str(look["id"]))
+			if not profile: continue
+			check(profile.apply_to(sun, world), "apply %s" % str(look["id"]))
+			check(world.environment != environment_before and world.environment.sky != null, "candidate owns private sky environment")
 			check([environment_before.sky, environment_before.ambient_light_source, environment_before.ambient_light_energy, environment_before.tonemap_exposure, environment_before.tonemap_mode, environment_before.background_mode, environment_before.background_color] == source_environment_snapshot, "source environment remains untouched")
 			check(scene.camera.global_transform.is_equal_approx(camera_transform), "camera framing is identical across looks")
 			# This is visual evidence, not a byte-perfect renderer determinism gate.
@@ -114,7 +111,7 @@ func _run() -> void:
 			var path := "%s/%s-%s.png" % [CAPTURE_DIR, spec["id"], look["id"]]
 			check(image.save_png(path) == OK, "capture saved")
 			captures += 1
-			receipts.append({"view": spec["id"], "look": look["id"], "path": path, "sun": str(sun.rotation_degrees), "sun_energy": sun.light_energy, "ambient_source": world.environment.ambient_light_source, "sky_contribution": world.environment.ambient_light_sky_contribution, "exposure": world.environment.tonemap_exposure})
+			receipts.append({"view": spec["id"], "look": look["id"], "path": path, "sun": str(sun.rotation_degrees), "sun_energy": sun.light_energy, "ambient_energy": world.environment.ambient_light_energy, "ambient_source": world.environment.ambient_light_source, "sky_contribution": world.environment.ambient_light_sky_contribution, "exposure": world.environment.tonemap_exposure})
 			check(scene.building_world.serialize_document() == buildings_before, "look does not change building records")
 			check(JSON.stringify(scene.landscape_state.document()) == landscape_before, "look does not change landscape records")
 	world.environment = environment_before
@@ -135,6 +132,6 @@ func _finish() -> void:
 		scene.queue_free()
 		await process_frame
 		await process_frame
-	check(captures == 15, "current/sky/warm looks cover cottage L T U and upper-floor views")
+	check(captures == 15, "sky-fill control/depth/soft looks cover cottage L T U and upper-floor views")
 	print("LIGHTING_POLISH_RENDER " + JSON.stringify({"ok": failures == 0, "checks": checks, "failures": failures, "captures": captures, "capture_directory": CAPTURE_DIR, "renderer": RenderingServer.get_current_rendering_method()}))
 	quit(1 if failures else 0)

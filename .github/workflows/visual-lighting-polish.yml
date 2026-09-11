@@ -42,7 +42,7 @@ jobs:
           $code = $LASTEXITCODE
           $log | Tee-Object -FilePath '.tools/lighting-polish/profile.log'
           if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'failures=0') { throw 'Profile regression failed' }
-      - name: Capture current vs candidate lighting on actual Mobile
+      - name: Capture sky-fill tuning candidates on actual Mobile
         shell: pwsh
         run: |
           $editor = Get-ChildItem '.tools/lighting-polish' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName

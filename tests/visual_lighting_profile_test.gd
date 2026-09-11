@@ -20,8 +20,15 @@ func _initialize() -> void:
 	sun.shadow_enabled = true
 	var baseline := load("res://resources/visual_profiles/baseline.tres") as Profile
 	var sky_fill := load("res://resources/visual_profiles/sky_fill.tres") as Profile
+	var sky_depth := load("res://resources/visual_profiles/sky_depth.tres") as Profile
+	var sky_soft := load("res://resources/visual_profiles/sky_soft.tres") as Profile
 	var warm := load("res://resources/visual_profiles/warm_daylight.tres") as Profile
-	for profile in [baseline, sky_fill, warm]:
+	check(sky_fill != null and sky_depth != null and sky_soft != null, "sky-fill tuning profiles load")
+	if sky_fill and sky_depth and sky_soft:
+		check(sky_depth.sun_rotation_degrees == sky_fill.sun_rotation_degrees and sky_soft.sun_rotation_degrees == sky_fill.sun_rotation_degrees, "tuning candidates keep the approved sky-fill sun direction")
+		check(sky_depth.ambient_energy < sky_fill.ambient_energy and sky_depth.sun_energy > sky_fill.sun_energy, "depth candidate makes only a restrained contrast adjustment")
+		check(sky_soft.ambient_energy > sky_fill.ambient_energy and sky_soft.sun_energy < sky_fill.sun_energy, "soft candidate increases shaded-side fill without moving the sun")
+	for profile in [baseline, sky_fill, sky_depth, sky_soft, warm]:
 		world.environment = source
 		check(profile != null and profile.apply_to(sun, world), "valid lighting profile applies")
 		check(world.environment != source, "application uses a private environment")
