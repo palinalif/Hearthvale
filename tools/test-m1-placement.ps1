@@ -3,7 +3,8 @@
 param(
     [ValidateSet(
         'auto','setup','native','native-structure','native-assets','native-placement','native-ui',
-        'mobile-core','roof','joined-roof','facade','catalogue','catalogue-capture','catalogue-behavior','all'
+        'mobile-core','mobile-window','mobile-house-ux','roof','joined-roof','facade',
+        'catalogue','catalogue-capture','catalogue-behavior','all'
     )]
     [string]$Suite = 'auto'
 )
@@ -124,11 +125,12 @@ if ($Suite -in @('native-assets', 'native', 'all')) {
 if ($Suite -in @('native-placement', 'native', 'all')) { Invoke-NativeGroup $nativePlacement }
 if ($Suite -in @('native-ui', 'native', 'all')) { Invoke-NativeGroup $nativeUi }
 
-if ($Suite -in @('mobile-core', 'all')) {
+if ($Suite -in @('mobile-window', 'mobile-core', 'all')) {
     Invoke-MobileReview 'window-alignment' 'tests/m2_window_alignment_test.gd' 180000 @(
         'WINDOW_ALIGNMENT_RESULT', '"ok"\s*:\s*true', '"captures"\s*:\s*6'
     ) @('--', '--require-rendering')
-
+}
+if ($Suite -in @('mobile-house-ux', 'mobile-core', 'all')) {
     Invoke-MobileReview 'house-ux' 'tests/m2_house_edit_ux_test.gd' 240000 @(
         '"ok"\s*:\s*true', '"captures"\s*:\s*4'
     ) @('--', '--require-rendering')
