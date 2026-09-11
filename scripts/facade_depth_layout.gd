@@ -68,14 +68,14 @@ static func shell_pieces(view: Dictionary, runs: Array[Dictionary], detail_unit:
 		for cut_value in door_cuts.get(str(run.get("surface_id", "")), []):
 			if cut_value is Vector2: cuts.append(cut_value)
 		var segments := subtract_intervals(low, high, cuts)
-		# Existing structural foundations project 0.25 local units. Put this
-		# fine facing just outside them so it never z-fights with the shell.
+		# Keep the fine facing outside the structural foundation, but only two
+		# detail cells tall so it reads as masonry contact instead of a stripe.
 		var depth := normal_cell
 		var face_normal := normal + outward * (0.25 + depth * 0.5)
 		for segment in segments:
 			var span := segment.y - segment.x
 			if span < tangent_cell * 0.5: continue
-			plinth.append(_axis_piece(orientation, (segment.x + segment.y) * 0.5, detail_unit.y * 1.5, face_normal, span, detail_unit.y * 3.0, depth))
+			plinth.append(_axis_piece(orientation, (segment.x + segment.y) * 0.5, detail_unit.y, face_normal, span, detail_unit.y * 2.0, depth))
 	return {"plinth": plinth, "eave": eave_reveals}
 
 static func subtract_intervals(low: float, high: float, cuts: Array[Vector2]) -> Array[Vector2]:
