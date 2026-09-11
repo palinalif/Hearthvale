@@ -29,7 +29,8 @@ void vertex() {
 
 void fragment() {
 	ALBEDO = base_color.rgb * COLOR.rgb;
-	ALPHA = base_color.a * COLOR.a;
+	// Solid voxel surfaces must stay in the opaque pipeline. Writing ALPHA,
+	// even as 1.0, opts into transparency and changes depth/shadow behaviour.
 	ROUGHNESS = 1.0;
 	METALLIC = 0.0;
 	SPECULAR = 0.5;

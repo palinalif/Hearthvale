@@ -23,7 +23,8 @@ render_mode diffuse_burley, specular_disabled;
 uniform vec4 base_color : source_color;
 void fragment() {
 	ALBEDO = base_color.rgb * COLOR.rgb;
-	ALPHA = base_color.a * COLOR.a;
+	// Solid voxel surfaces must stay in the opaque pipeline. Writing ALPHA,
+	// even as 1.0, opts into transparency and changes depth/shadow behaviour.
 	METALLIC = 0.0;
 	ROUGHNESS = 1.0;
 }
