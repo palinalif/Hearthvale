@@ -61,6 +61,10 @@ func _run() -> void:
 	check(not scene._building_panel.visible and not scene.tools_panel.visible, "no old placement action list behind catalogue")
 	check(browser.get_rect().position.y == 360 and browser.get_rect().end.y < scene._prompt_bar.position.y, "catalogue occupies lower half above prompts")
 	check(browser.tabs.size() == 5, "five construction categories available")
+	scene._blocked_until_accept_release = true
+	await _press(JOY_BUTTON_A)
+	check(scene._browser_open and not scene.detail_move_active, "held accept cannot activate a card after interruption")
+	check(not scene._blocked_until_accept_release, "releasing accept clears the guard even inside the browser")
 	var ids: Dictionary = {}
 	for item in scene._browser_entries:
 		check(item.has("id"), "thumbnail queue retains catalogue record identity")
@@ -80,6 +84,9 @@ func _run() -> void:
 		browser.select_category(category)
 		await _settle()
 		check(not browser.cards.is_empty(), "category has real choices: " + category)
+		if category == "homes":
+			for id in scene._catalogue_designs:
+				check(scene._catalogue_accent_choices.has(id), "fresh browser prepares home palettes without old menu")
 		var first := root.gui_get_focus_owner()
 		await _press(JOY_BUTTON_DPAD_RIGHT)
 		check(root.gui_get_focus_owner() != first, "D-pad moves between cards")
@@ -143,6 +150,27 @@ func _run() -> void:
 	check(not scene._browser_open and not scene.tools_open and scene.camera.v_offset == offset, "interrupt closes catalogue and restores camera")
 	check(not scene._catalogue_thumbnails.active, "hidden catalogue does no thumbnail work")
 	check(JSON.stringify(scene._browser_entries) == registry_before, "interrupting a render never clears shared catalogue records")
+	# Confirm through the actual browser route, then retain the placed ID
+	# across history and reload. The first A chooses, the second A commits.
+	var original_buildings: Array = scene.building_world.get_document()["buildings"]
+	scene._open_build_browser("windows")
+	await _settle()
+	_card("window_round").grab_focus()
+	await _press(JOY_BUTTON_A)
+	check(scene.detail_move_active and scene._attachment_preview_valid(), "browser starts a valid confirmation fixture")
+	var revision: int = scene.building_world.get_revision()
+	await _press(JOY_BUTTON_A)
+	check(not scene.detail_move_active and not scene._browser_open, "confirm finishes placement without reopening catalogue")
+	check(scene.building_world.get_revision() == revision + 1, "catalogue placement commits exactly one edit")
+	var placed_id: String = scene.selected_detail_id
+	check(str(scene._selected_detail_record().get("asset_id", "")) == "window_round", "confirmed item retains the chosen variant")
+	check(scene.building_world.undo(), "catalogue placement can be undone")
+	check(scene.building_world.get_document()["buildings"] == original_buildings, "undo restores the original building records")
+	check(scene.building_world.redo(), "catalogue placement can be redone")
+	check(scene.selected_detail_id == placed_id and str(scene._selected_detail_record().get("asset_id", "")) == "window_round", "redo retains the placed identity and variant")
+	var saved: String = scene.building_world.serialize_document()
+	check(scene.building_world.load_serialized_document(saved), "catalogue placement reloads through existing save API")
+	check(str(scene._selected_detail_record().get("id", "")) == placed_id, "reload retains catalogue placement identity")
 	await _finish()
 
 func _category_cached(category: String) -> bool:

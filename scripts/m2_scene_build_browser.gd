@@ -14,6 +14,7 @@ var _browser_placement := ""
 var _browser_suppress_return := false
 var _browser_camera_offset := 0.0
 var _browser_building_id := ""
+var _browser_home_palette_key := ""
 
 func _ready() -> void:
 	super._ready()
@@ -51,6 +52,15 @@ func _build_browser_entries() -> Array[Dictionary]:
 
 func _input(event: InputEvent) -> void:
 	if _browser_open and not _shutting_down:
+		# A cancelled operation can require an accept release. Consume it here
+		# without letting a held press activate a catalogue card or stay stuck.
+		if event.is_action_released("m1_accept"):
+			_blocked_until_accept_release = false
+			get_viewport().set_input_as_handled()
+			return
+		if _blocked_until_accept_release and event.is_action_pressed("m1_accept"):
+			get_viewport().set_input_as_handled()
+			return
 		if event is InputEventKey or event is InputEventMouseButton: InputGlyph.set_keyboard_mouse_mode(true)
 		elif event is InputEventJoypadButton: InputGlyph.set_keyboard_mouse_mode(false)
 		if event.is_action_pressed("m1_pause"):
@@ -132,6 +142,16 @@ func _fit_build_browser() -> void:
 
 func _request_browser_thumbnails(category: String) -> void:
 	if not _browser_open or not _catalogue_thumbnails: return
+	if category == "homes":
+		# The old home catalogue prepared these lazily. This route must work
+		# without visiting it, and the thumbnail must match the next placement.
+		var next_id := int(building_world.get_document().get("next_id", 1))
+		if _catalogue_palette_key != next_id: _prepare_catalogue_palettes()
+		var palette_key := str([_next_home_seed(), _catalogue_wall_choices, _catalogue_roof_choices, _catalogue_accent_choices])
+		if palette_key != _browser_home_palette_key:
+			_catalogue_thumbnails.stop()
+			for id in _catalogue_designs: _catalogue_thumbnails.cache.erase(id)
+			_browser_home_palette_key = palette_key
 	var entries: Array[Dictionary] = []
 	for item in _browser_entries:
 		if str(item["category"]) == category: entries.append(item)
@@ -265,7 +285,9 @@ func _make_catalogue_model(item: Dictionary) -> Node3D:
 	var target := Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * 0.25), Vector3.ZERO)
 	var view: Dictionary
 	if kind == "home":
-		view = _preview_styled_home(id, target, _catalogue_wall_choices[id], _catalogue_roof_choices[id], _catalogue_accent_choices[id], 1042)
+		var seed := _next_home_seed()
+		var palette := _palette_for_seed(seed, id)
+		view = _preview_styled_home(id, target, str(_catalogue_wall_choices.get(id, palette["wall"])), str(_catalogue_roof_choices.get(id, palette["roof"])), str(_catalogue_accent_choices.get(id, palette["accent"])), seed)
 		visual.apply_building(view, 0)
 		visual.rotate_y(PI)
 	elif kind == "roof_accessory":
