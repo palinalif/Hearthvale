@@ -19,7 +19,8 @@ jobs:
           - native-assets
           - native-placement
           - native-ui
-          - mobile-core
+          - mobile-window
+          - mobile-house-ux
           - roof
           - joined-roof
           - facade
