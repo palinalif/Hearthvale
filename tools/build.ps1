@@ -63,13 +63,16 @@ function Export-AndroidCompatibility {
 $releaseVars = @('GODOT_ANDROID_KEYSTORE_RELEASE_PATH','GODOT_ANDROID_KEYSTORE_RELEASE_USER','GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD')
 $savedRelease = @{}
 foreach ($name in $releaseVars) { $savedRelease[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
-$debugKeystore = Join-Path ([Environment]::GetEnvironmentVariable('APPDATA')) 'Godot\keystores\debug.keystore'
-if (-not (Test-Path -LiteralPath $debugKeystore)) { $debugKeystore = Join-Path ([Environment]::GetEnvironmentVariable('USERPROFILE')) '.android\debug.keystore' }
-if ([string]::IsNullOrWhiteSpace($savedRelease['GODOT_ANDROID_KEYSTORE_RELEASE_PATH'])) {
-    if (-not (Test-Path -LiteralPath $debugKeystore)) { throw "No release keystore configured. Set GODOT_ANDROID_KEYSTORE_RELEASE_* or provide local Android debug.keystore." }
-    [Environment]::SetEnvironmentVariable('GODOT_ANDROID_KEYSTORE_RELEASE_PATH', $debugKeystore, 'Process')
-    [Environment]::SetEnvironmentVariable('GODOT_ANDROID_KEYSTORE_RELEASE_USER', 'androiddebugkey', 'Process')
-    [Environment]::SetEnvironmentVariable('GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD', 'android', 'Process')
+$needsAndroidKeystore = (-not $WindowsOnly) -or $Compatibility -or $CompatibilityOnly
+if ($needsAndroidKeystore) {
+    $debugKeystore = Join-Path ([Environment]::GetEnvironmentVariable('APPDATA')) 'Godot\keystores\debug.keystore'
+    if (-not (Test-Path -LiteralPath $debugKeystore)) { $debugKeystore = Join-Path ([Environment]::GetEnvironmentVariable('USERPROFILE')) '.android\debug.keystore' }
+    if ([string]::IsNullOrWhiteSpace($savedRelease['GODOT_ANDROID_KEYSTORE_RELEASE_PATH'])) {
+        if (-not (Test-Path -LiteralPath $debugKeystore)) { throw "No release keystore configured. Set GODOT_ANDROID_KEYSTORE_RELEASE_* or provide local Android debug.keystore." }
+        [Environment]::SetEnvironmentVariable('GODOT_ANDROID_KEYSTORE_RELEASE_PATH', $debugKeystore, 'Process')
+        [Environment]::SetEnvironmentVariable('GODOT_ANDROID_KEYSTORE_RELEASE_USER', 'androiddebugkey', 'Process')
+        [Environment]::SetEnvironmentVariable('GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD', 'android', 'Process')
+    }
 }
 try {
     if (-not $CompatibilityOnly -and -not $WindowsOnly) {
