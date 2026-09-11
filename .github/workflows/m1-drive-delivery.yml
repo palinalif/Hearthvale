@@ -31,15 +31,15 @@ jobs:
   terrain-ux:
     uses: ./.github/workflows/terrain-ux.yml
 
-  placement:
-    uses: ./.github/workflows/m1-placement.yml
-
+  # cottage-playtest already runs the complete placement suite before its
+  # cottage/Mobile checks. Do not launch a second identical placement runner in
+  # this delivery workflow; that duplicated the slowest gate on every push.
   cottage-and-apk:
     uses: ./.github/workflows/cottage-playtest.yml
 
   drive-delivery:
     name: Upload verified builds to private Google Drive
-    needs: [delivery-contract, sculpt-feedback, terrain-ux, placement, cottage-and-apk]
+    needs: [delivery-contract, sculpt-feedback, terrain-ux, cottage-and-apk]
     if: vars.GOOGLE_DRIVE_UPLOAD_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
