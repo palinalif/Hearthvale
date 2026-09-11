@@ -182,21 +182,51 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 					_append_box(builder, _embedded_center(sample["point"] + path_basis * local, PATH_THICKNESS, rise), Vector3(maxf(0.20, stone_width), PATH_THICKNESS, 0.46), stone_basis, material_index)
 					cells += 1
 		"stepping_stones":
-			var stride := 2
-			for index in range(0, points.size() - 1, stride):
+			var cluster_index := 0
+			for index in range(0, points.size() - 1, 2):
 				var sample: Dictionary = points[index]
 				var tangent: Vector2 = sample["tangent"]
 				var path_basis := Basis(Vector3.UP, atan2(tangent.x, tangent.y))
-				var wobble := 0.12 * sin(float(path_id * 3 + index * 7))
-				var cluster_center: Vector3 = sample["point"] + path_basis * Vector3(wobble, 0, 0)
-				var first_basis := path_basis * Basis(Vector3.UP, 0.07 * sin(float(path_id + index * 2)))
-				var second_basis := path_basis * Basis(Vector3.UP, -0.09 * sin(float(path_id * 2 + index * 3 + 1)))
-				var first_rise := 0.032 + 0.004 * sin(float(path_id * 5 + index * 2))
-				var second_rise := 0.024 + 0.003 * sin(float(path_id * 7 + index * 4))
-				_append_box(builder, _embedded_center(cluster_center, PATH_THICKNESS, first_rise), Vector3(safe_width * 0.58, PATH_THICKNESS, 0.48), first_basis, 0)
-				var second_point := cluster_center + path_basis * Vector3(-safe_width * 0.22, 0, 0.11)
-				_append_box(builder, _embedded_center(second_point, PATH_THICKNESS, second_rise), Vector3(safe_width * 0.30, PATH_THICKNESS, 0.30), second_basis, 1)
-				cells += 2
+				var lateral_limit := minf(safe_width * 0.22, 0.22)
+				var lateral := lateral_limit * sin(float(path_id * 17 + cluster_index * 23 + 1))
+				var along := 0.14 * sin(float(path_id * 31 + cluster_index * 13 + 2))
+				var cluster_center: Vector3 = sample["point"] + path_basis * Vector3(lateral, 0, along)
+
+				# Each cluster gets its own footprint and yaw. The old renderer used
+				# the same large/small pair every metre, which made the style read as
+				# a dotted prefab strip. Keep the variation deterministic from path ID
+				# and cluster index so saves and previews remain stable.
+				var primary_width_scale := 0.43 + 0.18 * (sin(float(path_id * 11 + cluster_index * 29 + 3)) * 0.5 + 0.5)
+				var primary_width := clampf(safe_width * primary_width_scale, 0.20, maxf(0.20, safe_width * 0.66))
+				var primary_length := 0.34 + 0.20 * (sin(float(path_id * 7 + cluster_index * 19 + 4)) * 0.5 + 0.5)
+				var primary_yaw := 0.24 * sin(float(path_id * 5 + cluster_index * 17 + 5))
+				var primary_rise := 0.025 + 0.012 * (sin(float(path_id * 13 + cluster_index * 7 + 6)) * 0.5 + 0.5)
+				var primary_material := (path_id + cluster_index) % 2
+				_append_box(builder, _embedded_center(cluster_center, PATH_THICKNESS, primary_rise), Vector3(primary_width, PATH_THICKNESS, primary_length), path_basis * Basis(Vector3.UP, primary_yaw), primary_material)
+				cells += 1
+
+				var pattern := (path_id + cluster_index * 2) % 5
+				if pattern in [1, 3, 4]:
+					var side := -1.0 if pattern in [1, 4] else 1.0
+					var companion_across := side * minf(safe_width * (0.18 + 0.07 * (sin(float(path_id * 37 + cluster_index * 11 + 7)) * 0.5 + 0.5)), 0.27)
+					var companion_along := 0.10 + 0.10 * sin(float(path_id * 41 + cluster_index * 5 + 8))
+					var companion_point := cluster_center + path_basis * Vector3(companion_across, 0, companion_along)
+					var companion_width := clampf(safe_width * (0.22 + 0.10 * (sin(float(path_id * 43 + cluster_index * 3 + 9)) * 0.5 + 0.5)), 0.16, maxf(0.16, safe_width * 0.38))
+					var companion_length := 0.22 + 0.13 * (sin(float(path_id * 47 + cluster_index * 7 + 10)) * 0.5 + 0.5)
+					var companion_yaw := -0.32 * sin(float(path_id * 53 + cluster_index * 13 + 11))
+					var companion_rise := 0.021 + 0.009 * (sin(float(path_id * 59 + cluster_index * 17 + 12)) * 0.5 + 0.5)
+					_append_box(builder, _embedded_center(companion_point, PATH_THICKNESS, companion_rise), Vector3(companion_width, PATH_THICKNESS, companion_length), path_basis * Basis(Vector3.UP, companion_yaw), 1 - primary_material)
+					cells += 1
+
+				# Roughly one cluster in five receives a tiny third stone on the
+				# opposite shoulder. It is intentionally sparse: enough to break the
+				# repeated pair silhouette without turning the path into loose gravel.
+				if pattern == 4:
+					var pebble_point := cluster_center + path_basis * Vector3(minf(safe_width * 0.20, 0.20), 0, -0.14)
+					var pebble_yaw := 0.36 * sin(float(path_id * 61 + cluster_index * 19 + 13))
+					_append_box(builder, _embedded_center(pebble_point, PATH_THICKNESS, 0.021), Vector3(clampf(safe_width * 0.18, 0.13, 0.24), PATH_THICKNESS, 0.20), path_basis * Basis(Vector3.UP, pebble_yaw), primary_material)
+					cells += 1
+				cluster_index += 1
 	return cells
 
 func _embedded_center(point: Vector3, thickness: float, exposed_rise: float) -> Vector3:
