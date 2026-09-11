@@ -15,12 +15,16 @@ jobs:
       fail-fast: false
       matrix:
         suite:
-          - native
+          - native-structure
+          - native-assets
+          - native-placement
+          - native-ui
           - mobile-core
           - roof
           - joined-roof
           - facade
-          - catalogue
+          - catalogue-capture
+          - catalogue-behavior
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
