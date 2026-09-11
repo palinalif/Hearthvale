@@ -1,7 +1,10 @@
 # Isolated CI workspace. Uses the same pinned Godot editor and voxel extension
 # as the existing M1/sculpt gates; no signing keys, exports, or user saves.
 param(
-    [ValidateSet('auto','setup','native','mobile-core','roof','joined-roof','facade','catalogue','all')]
+    [ValidateSet(
+        'auto','setup','native','native-structure','native-assets','native-placement','native-ui',
+        'mobile-core','roof','joined-roof','facade','catalogue','catalogue-capture','catalogue-behavior','all'
+    )]
     [string]$Suite = 'auto'
 )
 
@@ -11,7 +14,7 @@ Set-Location (Split-Path -Parent $PSScriptRoot)
 # Keep the historical no-argument cottage call lightweight while preserving
 # `./tools/test-m1-placement.ps1` as the full local/manual suite.
 if ($Suite -eq 'auto') {
-    $Suite = if ($env:GITHUB_JOB -eq 'cottage-playtest') { 'setup' } else { 'all' }
+    $Suite = if ($env:GITHUB_JOB -like 'cottage-*') { 'setup' } else { 'all' }
 }
 
 $lock = Get-Content dependencies.lock.json -Raw | ConvertFrom-Json
@@ -81,31 +84,45 @@ function Invoke-MobileReview(
 # Every shard imports independently so it can run on a clean hosted runner.
 Invoke-Gate 'import' @('--headless', '--path', '.', '--editor', '--import', '--quit')
 
-if ($Suite -in @('native', 'all')) {
-    foreach ($test in @(
-        'facade_depth_layout_test','m2_build_browser_test','joined_roof_course_test','roof_course_layout_test',
-        'm2_ground_wall_test','m2_section_edit_test','m2_house_edit_ux_test','wall_attachment_placement_test',
-        'building_world_test','magicavoxel_asset_test','foliage_asset_test','meadow_expansion_asset_test',
-        'woodland_asset_test','size_variation_asset_test','vegetation_integration_test','m1_landscape_test',
-        'm1_attachment_placement_test','m1_building_placement_test','m2_placement_rotation_test','m2_home_catalogue_test',
-        'm2_home_options_layout_test','m2_pc_input_test','m2_path_state_test','m2_path_placement_test',
-        'm2_path_cancel_feedback_test','m2_bridge_state_test','m2_bridge_placement_test','m2_hamlet_detail_state_test',
-        'm2_garden_placement_test','m2_fence_placement_test','m2_furniture_placement_test','m2_duplicate_detail_test',
-        'm2_surface_material_picker_test','m2_decor_colour_test','m2_compact_colour_test','m2_attachment_preview_test',
-        'm2_attachment_boundary_test','m2_window_style_expansion_test','m2_window_customization_test','m2_window_alignment_test',
-        'm2_window_alignment_minimum_test','m2_roof_design_test','m2_roof_accessories_test','m2_terrain_house_outline_test',
-        'm2_house_massing_test','m2_house_massing_edit_test','m2_multi_floor_house_test','m2_upper_storey_detail_test',
-        'm2_upper_storey_auto_windows_test','m2_riverside_quoin_resize_test','m2_path_render_test','m1_controller_test',
-        'm1_building_camera_test','m1_window_layout_test','m1_cottage_edit_ux_test','m1_ui_overhaul_test',
-        'm1_tool_ui_test','m1_full_ui_test'
-    )) {
+$nativeStructure = @(
+    'facade_depth_layout_test','joined_roof_course_test','roof_course_layout_test','m2_ground_wall_test',
+    'm2_section_edit_test','m2_house_edit_ux_test','building_world_test','m2_roof_design_test',
+    'm2_roof_accessories_test','m2_terrain_house_outline_test','m2_house_massing_test','m2_house_massing_edit_test',
+    'm2_multi_floor_house_test','m2_upper_storey_detail_test','m2_upper_storey_auto_windows_test','m2_riverside_quoin_resize_test'
+)
+$nativeAssets = @(
+    'magicavoxel_asset_test','foliage_asset_test','meadow_expansion_asset_test','woodland_asset_test',
+    'size_variation_asset_test','vegetation_integration_test','m1_landscape_test'
+)
+$nativePlacement = @(
+    'wall_attachment_placement_test','m1_attachment_placement_test','m1_building_placement_test','m2_placement_rotation_test',
+    'm2_path_state_test','m2_path_placement_test','m2_path_cancel_feedback_test','m2_bridge_state_test',
+    'm2_bridge_placement_test','m2_hamlet_detail_state_test','m2_garden_placement_test','m2_fence_placement_test',
+    'm2_furniture_placement_test','m2_duplicate_detail_test','m2_attachment_preview_test','m2_attachment_boundary_test'
+)
+$nativeUi = @(
+    'm2_build_browser_test','m2_home_catalogue_test','m2_home_options_layout_test','m2_pc_input_test',
+    'm2_surface_material_picker_test','m2_decor_colour_test','m2_compact_colour_test','m2_window_style_expansion_test',
+    'm2_window_customization_test','m2_window_alignment_test','m2_window_alignment_minimum_test','m2_path_render_test',
+    'm1_controller_test','m1_building_camera_test','m1_window_layout_test','m1_cottage_edit_ux_test',
+    'm1_ui_overhaul_test','m1_tool_ui_test','m1_full_ui_test'
+)
+
+function Invoke-NativeGroup([string[]]$tests) {
+    foreach ($test in $tests) {
         Invoke-Gate $test @('--headless', '--path', '.', '--script', "tests/$test.gd")
     }
+}
 
+if ($Suite -in @('native-structure', 'native', 'all')) { Invoke-NativeGroup $nativeStructure }
+if ($Suite -in @('native-assets', 'native', 'all')) {
+    Invoke-NativeGroup $nativeAssets
     $meshingOutput = & python tests/magicavoxel_converter_test.py 2>&1 | ForEach-Object { "$_" }
     $meshingOutput | ForEach-Object { Write-Output $_ }
     if ($LASTEXITCODE -ne 0) { throw 'MagicaVoxel converter regression failed' }
 }
+if ($Suite -in @('native-placement', 'native', 'all')) { Invoke-NativeGroup $nativePlacement }
+if ($Suite -in @('native-ui', 'native', 'all')) { Invoke-NativeGroup $nativeUi }
 
 if ($Suite -in @('mobile-core', 'all')) {
     Invoke-MobileReview 'window-alignment' 'tests/m2_window_alignment_test.gd' 180000 @(
@@ -130,7 +147,13 @@ if ($Suite -in @('facade', 'all')) {
 }
 
 if ($Suite -in @('catalogue', 'all')) {
-    & ./tools/test-m2-build-browser.ps1 -Editor $editor
+    & ./tools/test-m2-build-browser.ps1 -Editor $editor -Phase all
+}
+if ($Suite -eq 'catalogue-capture') {
+    & ./tools/test-m2-build-browser.ps1 -Editor $editor -Phase capture
+}
+if ($Suite -eq 'catalogue-behavior') {
+    & ./tools/test-m2-build-browser.ps1 -Editor $editor -Phase behavior
 }
 
 Write-Output "PLACEMENT_SUITE_OK suite=$Suite"
