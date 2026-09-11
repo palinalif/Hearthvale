@@ -74,7 +74,10 @@ func _run() -> void:
 
 	var serialized: String = scene.building_world.serialize_document()
 	var restored = preload("res://scripts/building_world.gd").new()
-	check(restored.load_serialized_document(serialized), "multi-portion house save reloads through BuildingWorld")
+	var loaded: bool = restored.load_serialized_document(serialized)
+	if not loaded:
+		print("MASSING_SAVE_DIAGNOSTIC " + JSON.stringify({"bytes": serialized.to_utf8_buffer().size(), "source_valid": scene.building_world._validate_document(scene.building_world.get_document()), "parsed_valid": restored._validate_document(JSON.parse_string(serialized)), "document": scene.building_world.get_document()}))
+	check(loaded, "multi-portion house save reloads through BuildingWorld")
 	var restored_view: Dictionary = restored.get_building(scene.selected_building_id)
 	check(Massing.sections_for(restored_view).size() == section_count_before + 1, "custom portions survive save and reload")
 

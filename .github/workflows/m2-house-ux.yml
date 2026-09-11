@@ -36,7 +36,7 @@ jobs:
         shell: pwsh
         run: |
           $editor = Get-ChildItem '.tools/m2-house-ux' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          foreach ($test in @('m2_ground_wall_test','m2_section_edit_test','m2_house_edit_ux_test')) {
+          foreach ($test in @('m2_house_massing_edit_test','m2_ground_wall_test','m2_section_edit_test','m2_house_edit_ux_test')) {
             $log = & $editor --headless --path . --script "tests/$test.gd" 2>&1 | Out-String
             $exitCode = $LASTEXITCODE
             $log | Tee-Object -FilePath ".tools/m2-house-ux/$test.log"
