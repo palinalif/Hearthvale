@@ -4,7 +4,13 @@ class_name M2BuildingWorld
 ## Keep the inherited move/rotate and resize-handle edit contract.
 ## M2 keeps the M1 document schema, but generated massing walls can describe a
 ## bounded facade run instead of implicitly spanning the original rectangle.
-## All legacy surfaces fall straight through to BuildingWorld behaviour.
+## Legacy surface geometry retains BuildingWorld behaviour.
+
+# Vector3 stores clamped positions at lower precision than scalar bounds.
+# Ignore only rounding dust, not actual overhang (0.00001 local units).
+const ATTACHMENT_EDGE_EPSILON := 0.00001
+const JoinedPlacement = preload("res://scripts/wall_attachment_placement.gd")
+var _overlap_orientations: Dictionary = {}
 
 func _surface_geometry(surface: Dictionary, dimensions: Vector3) -> Dictionary:
 	var orientation: String = str(surface.get("orientation", ""))
@@ -64,12 +70,15 @@ func _surface_fits(building: Dictionary, surface: Dictionary, dimensions: Vector
 	return float(geometry["tangent_max"]) - float(geometry["tangent_min"]) >= float(surface.get("min_extent", 0.0))
 
 func _resolved_details(building: Dictionary) -> Array[Dictionary]:
+	_overlap_orientations = {}
+	for wall in building.get("surfaces", []): _overlap_orientations[str(wall.get("id", ""))] = str(wall.get("orientation", ""))
 	var result: Array[Dictionary] = []
 	var dimensions: Vector3 = _as_vec(building.get("dimensions", [0, 0, 0]))
 	for detail_value in building.get("details", []):
 		var detail: Dictionary = _copy(detail_value)
 		var anchor: Dictionary = detail.get("anchor", {})
 		var support: Dictionary = _surface(building, str(anchor.get("surface_id", "")))
+		var inside_covered_wall := false
 		var needs: bool = str(detail.get("state", "")) != "suppressed" and (support.is_empty() or bool(support.get("deleted", false)) or not _surface_fits(building, support, dimensions))
 		if not needs and str(detail.get("state", "")) != "suppressed":
 			var local: Vector3 = _resolve_position(support, anchor, dimensions)
@@ -77,12 +86,24 @@ func _resolved_details(building: Dictionary) -> Array[Dictionary]:
 			var orientation: String = str(support.get("orientation", "front"))
 			var tangent: float = local.x if orientation in ["front", "back"] else local.z
 			var footprint: Vector2 = _detail_footprint(detail)
-			needs = geometry.is_empty() or tangent - footprint.x < float(geometry.get("tangent_min", 0.0)) or tangent + footprint.x > float(geometry.get("tangent_max", 0.0)) or local.y - footprint.y < float(geometry.get("bottom", 0.0)) or local.y + footprint.y > float(geometry.get("top", dimensions.y))
+			needs = (
+				geometry.is_empty()
+				or tangent - footprint.x < float(geometry.get("tangent_min", 0.0)) - ATTACHMENT_EDGE_EPSILON
+				or tangent + footprint.x > float(geometry.get("tangent_max", 0.0)) + ATTACHMENT_EDGE_EPSILON
+				or local.y - footprint.y < float(geometry.get("bottom", 0.0)) - ATTACHMENT_EDGE_EPSILON
+				or local.y + footprint.y > float(geometry.get("top", dimensions.y)) + ATTACHMENT_EDGE_EPSILON
+			)
+		if not needs and support.has("exposed_wall_runs") and str(detail.get("state", "")) != "suppressed":
+			var position_view := {"dimensions": dimensions, "surfaces": [support]}
+			var local: Vector3 = _resolve_position(support, anchor, dimensions)
+			var allowed := JoinedPlacement.clamp_to_wall(position_view, str(support["id"]), local, _detail_footprint(detail))
+			inside_covered_wall = allowed.is_empty() or not (allowed["position"] as Vector3).is_equal_approx(local)
+			needs = inside_covered_wall
 		var position = null
 		if not support.is_empty(): position = _resolve_position(support, anchor, dimensions)
 		detail["resolved_position"] = position
 		detail["needs_placement"] = needs
-		var dormant: bool = str(detail.get("state", "")) == "automatic" and not bool(detail.get("layout_active", true))
+		var dormant: bool = str(detail.get("state", "")) == "automatic" and (not bool(detail.get("layout_active", true)) or inside_covered_wall)
 		if dormant: detail["needs_placement"] = false
 		detail["visible"] = str(detail.get("state", "")) != "suppressed" and not dormant
 		detail["show_shutters"] = false
@@ -223,3 +244,19 @@ func _upper_window_asset(building: Dictionary) -> String:
 	if style_id == "woodland_lodge": return "window_lodge"
 	if style_id == "village_gable": return "window_tudor"
 	return "window_wood"
+
+func _details_overlap(left: Dictionary, right: Dictionary, gap: float, reserve_suppression: bool = false) -> bool:
+	if str(left.get("anchor", {}).get("surface_id", "")) == str(right.get("anchor", {}).get("surface_id", "")):
+		return super._details_overlap(left, right, gap, reserve_suppression)
+	var orientation := str(_overlap_orientations.get(str(left.get("anchor", {}).get("surface_id", "")), ""))
+	if orientation.is_empty() or orientation != str(_overlap_orientations.get(str(right.get("anchor", {}).get("surface_id", "")), "")): return false
+	var reserved := reserve_suppression and str(right.get("state", "")) == "suppressed" and str(right.get("kind", "")) == "window" and right.get("resolved_position") is Vector3
+	if not _placed_visible(left) or not (_placed_visible(right) or reserved): return false
+	var a: Vector3 = left["resolved_position"]
+	var b: Vector3 = right["resolved_position"]
+	var normal_axis := 2 if orientation in ["front", "back"] else 0
+	if absf(a[normal_axis] - b[normal_axis]) > 0.001: return false
+	var tangent_axis := 0 if normal_axis == 2 else 2
+	var a_half := _detail_footprint(left)
+	var b_half := _detail_footprint(right)
+	return absf(a[tangent_axis] - b[tangent_axis]) < a_half.x + b_half.x + gap and absf(a.y - b.y) < a_half.y + b_half.y

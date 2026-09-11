@@ -1,15 +1,24 @@
-# Visual lighting study — opt-in, not a gameplay default
+# Visual finish resumes — lighting and palette comparison
 
-The player approved continuing visual work while the gameplay APK builds. This isolated branch adds a reusable lighting profile Resource and a three-profile, three-camera Mobile comparison on the actual exported gameplay scene. It does not change either live `_build_world()` override, the main scene, palettes, meshes, terrain, saved data, or controls. It is not part of gameplay PR #3.
+2026-09-11: the player authorizes moving from UX into visual polish. Bring the parked PR #4 study onto verified master 461a5da4 without reverting any house/section/window/shutter controls. The bottom-half catalogue remains separate in PR #10: its focused Mobile tests passed, but delivery run 34553496813 still has a failed placement-render timeout even though the parallel cottage job succeeded. Do not merge or call that build delivered as part of this art task.
 
-Profiles: `baseline` reproduces the current sun/constant ambient settings; `sky_fill` changes the ambient/reflection source to a procedural sky; `warm_daylight` additionally lowers the sun and reduces ambient energy. Exposure, tonemapping, framing, scenery and wind state are held fixed within each camera comparison. Fog/glow are off. These are proposed starting points, not Town to City settings or an approved final look.
+## First visual slice
 
-The separate `visual-lighting-study.yml` workflow uses pinned dependency hashes and actual Mobile/D3D12 rendering. It saves nine images and checks environment-resource isolation, fixed exposure/framing and unchanged building/planting/path/composition records. The existing delivery workflow remains intact; this branch does not cancel a run on the gameplay or opaque-material branches. Run success confirms execution, not aesthetic approval or physical Thor performance.
+Compare four looks on the actual current gameplay scene: baseline, directional sky fill with the existing sun, lower warm-daylight sun/sky, and that same warm look with the quieter meadow albedo #82935e (current ground is #7d9957). Normal, close, reverse and genuinely edited upper-floor views yield sixteen images. Each look uses identical camera framing, geometry, exposure, tonemapper and frozen wind. No bloom, fog, blur, remeshed assets, external assets or scene-size expansion.
 
-At commit creation: source/API review only. Godot runtime checks, comparison images and APK for this commit are pending CI; physical Thor checks are not run. Do not present the new profiles as active in an exported test build: only the explicit comparison script applies them.
+The reusable VisualLightingProfile applies a private Environment. Its sky mode controls ProceduralSkyMaterial sky/ground energy: Environment.ambient_light_energy cannot dim a 100% sky contribution. The ground-colour variant only changes the runtime-created grass material in the disposable comparison scene, then restores it. It does not change terrain cells or the generator's default palette. Baseline is retained as the comparison and restore path.
 
-Primary API references checked 2026-09-10:
-- https://docs.godotengine.org/en/stable/classes/class_environment.html (sky ambient independent of background, reflection-source enums)
-- https://docs.godotengine.org/en/stable/classes/class_proceduralskymaterial.html (sky and ground colour controls)
+The rendered test checks actual 1280x720 Mobile output, fixed framing/exposure, unchanged building/landscape records for every look, effective ground-colour pixel differences, and source restoration. The edited fixture uses the existing add-floor API; an unchanged static cottage is not substituted. A manifest identifies exact source, engine and capture parameters. Separate profile tests check resource isolation and atomic invalid-input rejection.
 
-After review, the preferred profile can replace the duplicated gameplay setup through one shared rig in a separately verified change. Until then retain the current playable baseline.
+## Delivery boundary
+
+Review-only: no live gameplay default or scene rewiring yet. Do not claim that an automatically exported APK enables a candidate profile. The existing full delivery workflow is untouched; the dedicated study requires all sixteen images. Pick an art direction using those comparisons, then enable the accepted profile in a separately verified gameplay change. Next art priorities remain architectural relief/roof courses, contact shading, ground/path/bank integration and restrained water. The miniature scales, personal colours and controller editing are non-negotiable.
+
+At source preparation, source/API inspection only; there is no local Godot executable and a live git network probe failed DNS. Exact-head native and Mobile evidence is pending. Exposed lead is GPT-6 Astra Pro, not the repository's requested Sol; no model switch or subagent is used. No physical Thor result, aesthetic approval, new playtest package or master merge is claimed by this report.
+
+Primary API references checked 2026-09-11:
+- https://docs.godotengine.org/en/stable/classes/class_environment.html — sky contribution and ambient energy scope.
+- https://docs.godotengine.org/en/stable/classes/class_proceduralskymaterial.html — effective sky and ground energy multipliers.
+- https://voxel-tools.readthedocs.io/en/latest/api/VoxelBlockyLibrary/ and https://voxel-tools.readthedocs.io/en/latest/api/VoxelBlockyModel/ — native scene-library material access.
+
+Reference direction: the player's Town to City images (especially the normal gameplay overview) and docs/design.md section 3. Reference pixels are not copied into albedos or redistributed as game assets.

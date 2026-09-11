@@ -1,0 +1,11 @@
+# Window hinges and shutter seating
+
+Player request: correct twisting open windows and closed shutters floating away from the frame. Based on contextual-editing head 32793f4c; kept on a separate repair branch so the preceding UX candidate is not restarted.
+
+Presentation changes only: casement sashes rotate about their right frame edge and awnings about their top frame edge. Sashes are quantized in their closed facade coordinates before rebasing the pivot, retain cubic 0.0625-world-unit detail dimensions, and occupy disjoint portions of the original opening. Closed-pane joinery is hidden only while open. Closed shutters (including the closed leaf in half-open mode) seat their actual panel back on the fixed reveal face instead of an offset from pane quantization padding. Open shutter transforms, slider/bay geometry, authoritative anchors, sizes, placement bounds, colours and saved data are unchanged.
+
+A closed exterior shutter blocks outward sash motion: the pane rests in its closed position behind it until the obstructing shutter is reopened. The saved open-window preference is retained. Half-open shutters leave the right casement free; awnings need both shutters open. No new history entries or save migration result from this presentation constraint.
+
+New regression: actual MeshInstance3D/BoxMesh transforms, stationary complete hinge edges, fixed/moving frame adjacency, detail-grid dimensions, three scales, default/resized geometry, four facade orientations under rotated/upstairs transforms, closed and half-open shutter styles, and actual upper-floor preview/cancel/commit/undo/redo/reload. The same script runs on Mobile and captures six front/side views before export. Existing regressions and delivery gates remain.
+
+At source preparation: local float/matrix checks pass for hinge preservation and outward free-edge movement; these are not Godot tests. No Godot executable is installed, and a current GitHub-host network probe fails DNS. Native Godot 4.7.2/voxel, Mobile captures, verified APK and physical Thor checks are pending. The exposed lead is GPT-6 Astra Pro, not the repository's preferred Sol; no model switch or subagents were used. Keep the new PR draft pending evidence. Do not claim the broader U-house/section-edit UX is completed by this repair.

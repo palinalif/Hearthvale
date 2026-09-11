@@ -8,4 +8,4 @@ profile_id = &"warm_daylight"
 use_sky_fill = true
 sun_rotation_degrees = Vector3(-36, -28, 0)
 sun_energy = 1.25
-ambient_energy = 0.45
+sky_energy = 0.5

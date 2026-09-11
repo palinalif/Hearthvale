@@ -1,5 +1,6 @@
 extends "res://tests/m1_resize_handles_test.gd"
-## Real controller input through the exported scene, not callbacks with preset focus.
+## Real controller input through the exported scene, including the new
+## surface -> House route to the preserved whole-house operations.
 
 func aim_shell() -> bool:
 	var view: Dictionary = scene.building_world.get_building(scene.selected_building_id)
@@ -18,6 +19,17 @@ func aim_shell() -> bool:
 				return true
 	return false
 
+
+func choose_whole_house() -> void:
+	check(scene._part_menu_open, "bare surface opens contextual actions first")
+	for step in scene._part_buttons.size():
+		var focus := root.gui_get_focus_owner() as Button
+		if focus and str(focus.get_meta("part_action", "")) == "house":
+			await press(JOY_BUTTON_A)
+			return
+		await press(JOY_BUTTON_DPAD_RIGHT)
+	check(false, "House action is controller reachable")
+
 func _run() -> void:
 	scene = preload("res://scenes/m1.tscn").instantiate()
 	scene.test_mode = true
@@ -34,7 +46,8 @@ func _run() -> void:
 	check(aim_shell(), "bare wall is targetable")
 	var before: String = scene.building_world.serialize_document()
 	await press(JOY_BUTTON_A)
-	check(scene._house_actions_open and scene.tools_open and not scene.resize_active and not scene.detail_move_active, "shell A opens only Move/Resize chooser")
+	await choose_whole_house()
+	check(scene._house_actions_open and scene.tools_open and not scene.resize_active and not scene.detail_move_active, "House action opens only Move/Resize chooser")
 	check(scene._house_actions_panel.visible and not scene._building_panel.visible, "no competing legacy panel")
 	check(scene._house_action_buttons.size() == 2 and root.gui_get_focus_owner() == scene._house_action_buttons[0], "two choices with initial Move focus")
 	var id: String = scene.selected_building_id
@@ -78,6 +91,7 @@ func _run() -> void:
 	check(aim_shell(), "shell selected before Move")
 	var camera_before: Transform3D = scene.camera.global_transform
 	await press(JOY_BUTTON_A)
+	await choose_whole_house()
 	await press(JOY_BUTTON_A)
 	check(scene._moving_house and scene.building_placement_active, "A chooses Move house")
 	check(scene.building_placement_target.is_equal_approx(transform_value.origin), "move begins at original location, not duplicate offset")
@@ -93,6 +107,7 @@ func _run() -> void:
 	check(scene.camera.global_transform.is_equal_approx(camera_before), "cancel restores source orbit")
 	check(aim_shell(), "shell available after move cancel")
 	await press(JOY_BUTTON_A)
+	await choose_whole_house()
 	await press(JOY_BUTTON_A)
 	drag(Vector2.RIGHT, 60)
 	var destination: Vector3 = scene.building_placement_target

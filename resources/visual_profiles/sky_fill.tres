@@ -6,3 +6,4 @@
 script = ExtResource("1_profile")
 profile_id = &"sky_fill"
 use_sky_fill = true
+sky_energy = 0.65

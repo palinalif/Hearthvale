@@ -9,6 +9,7 @@ static func wall_ids(view: Dictionary) -> Array[String]:
 	for surface_value in view.get("surfaces", []):
 		var candidate: Dictionary = surface_value
 		if str(candidate.get("kind", "")) != "wall" or bool(candidate.get("deleted", false)): continue
+		if candidate.has("exposed_wall_runs") and (candidate["exposed_wall_runs"] as Array).is_empty(): continue
 		var id := str(candidate.get("id", ""))
 		if not id.is_empty(): result.append(id)
 	return result
@@ -75,7 +76,18 @@ static func clamp_to_wall(view: Dictionary, surface_id: String, local_position: 
 	if not local_position.is_finite() or not detail_footprint.is_finite(): return {}
 	var support := surface(view, surface_id)
 	if support.is_empty() or str(support.get("kind", "")) != "wall" or bool(support.get("deleted", false)): return {}
-	var geometry: Dictionary = wall_geometry(view, support)
+	if support.has("exposed_wall_runs"):
+		var nearest: Dictionary = {}
+		var distance := INF
+		for run in support["exposed_wall_runs"]:
+			var candidate := _clamp_geometry(run, surface_id, local_position, detail_footprint)
+			if candidate.is_empty(): continue
+			var next_distance := (candidate["position"] as Vector3).distance_squared_to(local_position)
+			if next_distance < distance: nearest = candidate; distance = next_distance
+		return nearest
+	return _clamp_geometry(wall_geometry(view, support), surface_id, local_position, detail_footprint)
+
+static func _clamp_geometry(geometry: Dictionary, surface_id: String, local_position: Vector3, detail_footprint: Vector2) -> Dictionary:
 	if geometry.is_empty(): return {}
 	var orientation: String = str(geometry["orientation"])
 	var tangent_min: float = float(geometry["tangent_min"]) + detail_footprint.x
@@ -139,7 +151,7 @@ static func position_available(view: Dictionary, detail_id: String, surface_id: 
 	for other in view.get("details", []):
 		if str(other.get("id", "")) == detail_id or str(other.get("state", "")) in ["automatic", "suppressed"]: continue
 		if not bool(other.get("visible", true)) or bool(other.get("needs_placement", false)): continue
-		if str(other.get("anchor", {}).get("surface_id", "")) != surface_id: continue
+		if not same_wall_plane(view, surface_id, str(other.get("anchor", {}).get("surface_id", ""))): continue
 		var other_position = other.get("resolved_position")
 		if not other_position is Vector3: continue
 		var other_half := footprint_for_detail(other)
@@ -170,3 +182,11 @@ static func nearest_available(view: Dictionary, detail_id: String, surface_id: S
 				best = clamped
 		if not best.is_empty(): return best
 	return {}
+
+## A joined wall and a retained legacy anchor may describe the same plane.
+## Different surface IDs must not allow authored details to overlap there.
+static func same_wall_plane(view: Dictionary, a_id: String, b_id: String) -> bool:
+	if a_id == b_id: return true
+	var a := wall_geometry(view, surface(view, a_id))
+	var b := wall_geometry(view, surface(view, b_id))
+	return not a.is_empty() and not b.is_empty() and str(a["orientation"]) == str(b["orientation"]) and absf(float(a["normal"]) - float(b["normal"])) < 0.001

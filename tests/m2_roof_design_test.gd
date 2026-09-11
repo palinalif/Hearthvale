@@ -47,9 +47,18 @@ func _initialize() -> void:
 	var visual := scene.cottage_visuals.get(scene.selected_building_id, null) as Node3D
 	check(visual != null and visual.get_node_or_null("M2RoofDesign") != null, "hip preview builds custom roof geometry")
 	check(_base_roof_hidden(visual), "custom roof preview hides generic gable geometry")
+	# Direct roof/material controls refresh the massing shell after preview.
+	# That refresh may restore native walls, but not an obsolete gable.
+	for repeat in 3:
+		scene._refresh_massing_shells()
+		await process_frame
+		var custom := visual.get_node_or_null("M2RoofDesign") as Node3D
+		check(_base_roof_hidden(visual) and custom != null and custom.visible, "repeated shell refresh keeps exactly the preview roof visible")
+		check(scene.building_world.serialize_document() == before_serialized, "roof refresh does not commit its preview")
 	scene._cancel_roof_design_picker()
 	await process_frame
 	check(scene.building_world.serialize_document() == before_serialized and str(scene.building_world.get_building(scene.selected_building_id).get("roof_profile", "")) == original_profile, "B cancel restores authored roof without history")
+	check(not _base_roof_hidden(visual) and visual.get_node_or_null("M2RoofDesign") == null, "cancel restores the original gable without a custom overlay")
 
 	var history_before: int = scene._history_tags.size()
 	scene._open_roof_design_picker()
@@ -59,6 +68,8 @@ func _initialize() -> void:
 	check(str(changed.get("roof_profile", "")) == "saltbox", "A apply saves the selected roof design")
 	check(scene._history_tags.size() == history_before + 1, "roof design apply records one scene history step")
 	check(visual != null and visual.get_node_or_null("M2RoofDesign") != null, "saved saltbox renders through custom roof layer")
+	scene._refresh_massing_shells()
+	check(_base_roof_hidden(visual) and (visual.get_node("M2RoofDesign") as Node3D).visible, "saved custom roof survives a standalone shell refresh")
 	check(scene.building_world.undo() and str(scene.building_world.get_building(scene.selected_building_id).get("roof_profile", "")) == original_profile, "roof design is one BuildingWorld undo transaction")
 	check(scene.building_world.redo() and str(scene.building_world.get_building(scene.selected_building_id).get("roof_profile", "")) == "saltbox", "roof design redo restores silhouette")
 

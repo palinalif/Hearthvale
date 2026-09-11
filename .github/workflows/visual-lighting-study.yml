@@ -30,20 +30,30 @@ jobs:
           $editor = Get-ChildItem $root -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           if (-not $editor) { throw 'Pinned Godot console editor missing' }
           if ((& $editor --version | Out-String).Trim() -ne $lock.engine.version) { throw 'Unexpected Godot version' }
-          & $editor --headless --path . --editor --import --quit
-          if ($LASTEXITCODE -ne 0) { throw 'Godot import failed' }
-      - name: Capture fixed-camera lighting profiles on actual Mobile
+          $log = & $editor --headless --path . --editor --import --quit 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          $log | Tee-Object -FilePath "$root/import.log"
+          if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:') { throw 'Godot import failed' }
+      - name: Verify profile isolation and effective sky controls
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/visual-lighting-study' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $log = & $editor --headless --path . --script tests/visual_lighting_profile_test.gd 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          $log | Tee-Object -FilePath '.tools/visual-lighting-study/profile.log'
+          if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'failures=0') { throw 'Profile regression failed' }
+      - name: Capture fixed-camera lighting and meadow comparisons on actual Mobile
         shell: pwsh
         run: |
           $editor = Get-ChildItem '.tools/visual-lighting-study' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           $out = Join-Path (Get-Location) '.tools/visual-lighting-study/render.out.log'
           $err = Join-Path (Get-Location) '.tools/visual-lighting-study/render.err.log'
-          $args = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/visual_lighting_profile_render_test.gd')
-          $process = Start-Process -FilePath $editor -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+          $arguments = @('--path', '.', '--rendering-method', 'mobile', '--rendering-driver', 'd3d12', '--audio-driver', 'Dummy', '--max-fps', '30', '--script', 'tests/visual_lighting_profile_render_test.gd')
+          $process = Start-Process -FilePath $editor -ArgumentList $arguments -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
           if (-not $process.WaitForExit(300000)) { $process.Kill(); $process.WaitForExit(); throw 'Lighting profile Mobile study timed out' }
           $log = (Get-Content $out -Raw) + (Get-Content $err -Raw)
           Write-Output $log
-          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'LIGHTING_PROFILE_RENDER' -or $log -notmatch '"ok"\s*:\s*true') { throw 'Lighting comparison failed; no visual approval implied' }
+          if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'LIGHTING_PROFILE_RENDER' -or $log -notmatch '"ok"\s*:\s*true' -or $log -notmatch '"captures"\s*:\s*16') { throw 'Lighting comparison failed; no visual approval implied' }
       - name: Retain source-specific comparison images and logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
