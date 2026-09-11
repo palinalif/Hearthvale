@@ -49,16 +49,27 @@ func _finish_facade_for_visual(visual: Node3D, view: Dictionary, force: bool = f
 	_facade_signatures[visual_key] = signature
 	if not FacadeDepth.enabled:
 		_set_legacy_quoin_visibility(visual, true)
+		_set_legacy_foundation_courses_visibility(visual, true)
 		return
 	_set_legacy_quoin_visibility(visual, false)
 	var detail_value = visual.get("_detail_unit")
-	if not detail_value is Vector3: return
+	if not detail_value is Vector3:
+		_set_legacy_foundation_courses_visibility(visual, true)
+		return
 	var detail_unit: Vector3 = detail_value
 	var runs := FacadeDepth.wall_runs(view)
-	if runs.is_empty(): return
+	if runs.is_empty():
+		_set_legacy_foundation_courses_visibility(visual, true)
+		return
 	var shell := FacadeDepth.shell_pieces(view, runs, detail_unit)
+	var plinth: Array = shell.get("plinth", [])
+	# FoundationCourses and M2FacadePlinth occupy the same lower foundation band.
+	# Showing both creates overlapping top/side surfaces and visible z-fighting.
+	# Keep exactly one presentation layer: the fine plinth wins when it exists,
+	# otherwise fall back to the coarse legacy course.
+	_set_legacy_foundation_courses_visibility(visual, plinth.is_empty())
 	var palette := _facade_palette(view)
-	_add_facade_batch(visual, "M2FacadePlinth", shell["plinth"], palette["stone"])
+	_add_facade_batch(visual, "M2FacadePlinth", plinth, palette["stone"])
 	_add_facade_batch(visual, "M2FacadeEaveReveal", shell["eave"], palette["shadow"])
 	var sills: Array[Dictionary] = []
 	var lintels: Array[Dictionary] = []
@@ -178,6 +189,10 @@ func _brick_corner_spans(runs: Array[Dictionary]) -> Array[Dictionary]:
 
 func _set_legacy_quoin_visibility(visual: Node3D, visible: bool) -> void:
 	var legacy := visual.get_node_or_null("CornerQuoins") as Node3D
+	if legacy: legacy.visible = visible
+
+func _set_legacy_foundation_courses_visibility(visual: Node3D, visible: bool) -> void:
+	var legacy := visual.get_node_or_null("FoundationCourses") as Node3D
 	if legacy: legacy.visible = visible
 
 func _append_oriented_piece(target: Array[Dictionary], basis: Basis, anchor: Vector3, center: Vector3, size: Vector3) -> void:

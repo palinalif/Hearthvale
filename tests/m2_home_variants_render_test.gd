@@ -32,7 +32,19 @@ func _run() -> void:
 		var label := Label3D.new(); label.text = str(view["name"]); label.position = spec[1] + Vector3(0, 0.15, 3.4); label.font_size = 38; label.modulate = Color("#33483d"); stage.add_child(label)
 	check(visuals[0].get_node_or_null("CornerQuoins") != null, "riverside recipe renders masonry corner language")
 	check(visuals[1].get_node_or_null("LodgeLogEnds") != null and visuals[1].get_node_or_null("LogCoursesFront0") != null and visuals[1].get_node_or_null("CornerQuoins") == null, "woodland lodge renders opening-aware stacked-log walls")
+	var front_logs = visuals[1].get_node_or_null("LogCoursesFront0")
+	var lodge_logs_exposed := front_logs is MultiMeshInstance3D
+	if lodge_logs_exposed:
+		var multi: MultiMesh = (front_logs as MultiMeshInstance3D).multimesh
+		lodge_logs_exposed = multi != null and multi.instance_count > 0
+		if lodge_logs_exposed:
+			for instance_index in multi.instance_count:
+				if multi.get_instance_transform(instance_index).origin.z <= 0.0:
+					lodge_logs_exposed = false
+					break
+	check(lodge_logs_exposed, "woodland lodge log courses project beyond the structural wall face")
 	check(visuals[2].get_node_or_null("GableFinials") != null and visuals[2].get_node_or_null("TudorWallFrame") != null, "village gable renders distinct Tudor framing and steep-roof accents")
+	check(visuals[0].get_node_or_null("EaveJoinery") == null and visuals[1].get_node_or_null("EaveJoinery") == null and visuals[2].get_node_or_null("EaveJoinery") != null, "Tudor eave joinery remains scoped to the village gable")
 	check(visuals[1].get_node_or_null("Joinery_" + str(world.preview_home_design("woodland_lodge", Transform3D.IDENTITY)["details"][0]["id"])) != null, "lodge window joinery renders")
 	var sun := DirectionalLight3D.new(); sun.rotation_degrees = Vector3(-50, -30, 0); sun.shadow_enabled = true; stage.add_child(sun)
 	var environment_node := WorldEnvironment.new(); var environment := Environment.new(); environment.background_mode = Environment.BG_COLOR; environment.background_color = Color("#c3d2c5"); environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR; environment.ambient_light_color = Color("#c2d5e0"); environment.ambient_light_energy = 0.58; environment_node.environment = environment; stage.add_child(environment_node)

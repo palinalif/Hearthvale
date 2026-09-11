@@ -63,6 +63,9 @@ func _run() -> void:
 	check((scene._brick_corner_pieces(tall_view, tall_runs, detail_unit) as Array).size() > base_bricks.size(), "taller riverside walls extend the brick rhythm upward")
 	var legacy_quoins := visual.get_node_or_null("CornerQuoins") as Node3D
 	check(not legacy_quoins or not legacy_quoins.visible, "fine facade bricks replace the old coarse rectangle-only quoins")
+	var legacy_foundation_courses := visual.get_node_or_null("FoundationCourses") as Node3D
+	var facade_plinth := visual.get_node_or_null("M2FacadePlinth") as Node3D
+	check(facade_plinth != null and (legacy_foundation_courses == null or not legacy_foundation_courses.visible), "fine facade plinth replaces overlapping legacy foundation courses")
 
 	check(scene._apply_house_shape_preset("u_shape"), "U-house fixture uses normal shape API")
 	view = scene.building_world.get_building(scene.selected_building_id)
@@ -98,9 +101,13 @@ func _run() -> void:
 	Layout.enabled = false
 	scene._refresh_facade_depth(true)
 	check(not visual.get_node_or_null("M2FacadeDepthMarker"), "facade finish can be disabled without rebuilding authoritative geometry")
+	legacy_foundation_courses = visual.get_node_or_null("FoundationCourses") as Node3D
+	check(legacy_foundation_courses == null or legacy_foundation_courses.visible, "disabling facade finish restores legacy foundation courses")
 	Layout.enabled = true
 	scene._refresh_facade_depth(true)
 	check(visual.get_node_or_null("M2FacadeDepthMarker") != null, "facade finish regenerates from the current recipe")
+	legacy_foundation_courses = visual.get_node_or_null("FoundationCourses") as Node3D
+	check(legacy_foundation_courses == null or not legacy_foundation_courses.visible, "regenerated facade plinth keeps legacy foundation courses hidden")
 	check(_facade_instances(visual) > 0, "generated facade contains actual fine-grid relief instances")
 	check(scene.building_world.serialize_document() == fixture, "facade generation changes no saved building records")
 	await _finish()

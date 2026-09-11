@@ -46,8 +46,27 @@ func _initialize() -> void:
 	await process_frame
 	var visual: Node3D = scene.cottage_visuals.get(scene.selected_building_id, null) as Node3D
 	check(visual != null, "selected cottage visual exists")
+	var house_style := str(scene.building_world.get_building(scene.selected_building_id).get("style_id", ""))
 	var legacy_joinery: Node3D = visual.get_node_or_null("EaveJoinery") as Node3D if visual else null
-	check(legacy_joinery != null and not legacy_joinery.visible, "legacy rectangular eave joinery is hidden on joined roof")
+	check(house_style != "village_gable" and legacy_joinery == null, "non-Tudor joined roof omits Tudor eave joinery")
+
+	# Eave joinery is a Tudor/Village Gable style treatment, not a generic
+	# joined-roof requirement. Probe all three house styles directly so a future
+	# visual change cannot leak Tudor roof details back onto the cottage/lodge.
+	var style_probe := preload("res://scripts/cottage_visual.gd").new()
+	root.add_child(style_probe)
+	var probe_view: Dictionary = scene.building_world.get_building(scene.selected_building_id).duplicate(true)
+	probe_view["id"] = "roof-style-probe"
+	var probe_revision := 1
+	for style_id in ["riverside_cottage", "woodland_lodge", "village_gable"]:
+		probe_view["style_id"] = style_id
+		style_probe.request_revision(probe_revision)
+		check(style_probe.apply_building(probe_view, probe_revision), "%s roof style probe renders" % style_id)
+		var style_joinery := style_probe.get_node_or_null("EaveJoinery") as Node3D
+		check((style_joinery != null) == (style_id == "village_gable"), "%s receives only its intended eave joinery" % style_id)
+		probe_revision += 1
+	style_probe.queue_free()
+
 	var beam_history_before: int = scene._history_tags.size()
 	scene._toggle_joined_roof_beams()
 	await process_frame

@@ -17,10 +17,12 @@ const PATH_EDGE_RISE := 0.032
 const PACKED_EARTH_TEXTURE_RISE := 0.017
 const STONE_SURFACE_RISE := 0.026
 const STONE_EDGE_RISE := 0.040
+const STEPPING_STONE_THICKNESS := 0.16
+const STEPPING_STONE_TOP_EPSILON := 0.004
 const STYLE_COLOURS := {
 	"packed_earth": [Color("#a8784f"), Color("#8f6244")],
 	"cobblestone": [Color("#89908b"), Color("#b6b9a5")],
-	"stepping_stones": [Color("#a5a398"), Color("#d0c4a4")],
+	"stepping_stones": [Color("#97958c"), Color("#c8b996")],
 }
 
 var backend: Node
@@ -182,21 +184,74 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 					_append_box(builder, _embedded_center(sample["point"] + path_basis * local, PATH_THICKNESS, rise), Vector3(maxf(0.20, stone_width), PATH_THICKNESS, 0.46), stone_basis, material_index)
 					cells += 1
 		"stepping_stones":
-			var stride := 2
-			for index in range(0, points.size() - 1, stride):
+			var cluster_index := 0
+			for index in range(0, points.size() - 1, 2):
 				var sample: Dictionary = points[index]
 				var tangent: Vector2 = sample["tangent"]
 				var path_basis := Basis(Vector3.UP, atan2(tangent.x, tangent.y))
-				var wobble := 0.12 * sin(float(path_id * 3 + index * 7))
-				var cluster_center: Vector3 = sample["point"] + path_basis * Vector3(wobble, 0, 0)
-				var first_basis := path_basis * Basis(Vector3.UP, 0.07 * sin(float(path_id + index * 2)))
-				var second_basis := path_basis * Basis(Vector3.UP, -0.09 * sin(float(path_id * 2 + index * 3 + 1)))
-				var first_rise := 0.032 + 0.004 * sin(float(path_id * 5 + index * 2))
-				var second_rise := 0.024 + 0.003 * sin(float(path_id * 7 + index * 4))
-				_append_box(builder, _embedded_center(cluster_center, PATH_THICKNESS, first_rise), Vector3(safe_width * 0.58, PATH_THICKNESS, 0.48), first_basis, 0)
-				var second_point := cluster_center + path_basis * Vector3(-safe_width * 0.22, 0, 0.11)
-				_append_box(builder, _embedded_center(second_point, PATH_THICKNESS, second_rise), Vector3(safe_width * 0.30, PATH_THICKNESS, 0.30), second_basis, 1)
-				cells += 2
+				var lateral_limit := minf(safe_width * 0.22, 0.22)
+				var lateral := lateral_limit * sin(float(path_id * 17 + cluster_index * 23 + 1))
+				var along := 0.14 * sin(float(path_id * 31 + cluster_index * 13 + 2))
+				var cluster_center: Vector3 = sample["point"] + path_basis * Vector3(lateral, 0, along)
+
+				# Keep the established irregular walking rhythm and natural footprint.
+				# The top face is seated against the highest terrain actually touched by
+				# the stone footprint, with the slab body extending downward. This keeps
+				# the full top visible without bringing back the old raised-puck offset.
+				# Broader/narrower stones share the same centres and cadence. Limit the
+				# visual width input so a wide tool cannot turn them into patio slabs.
+				var stone_width_input := minf(safe_width, 1.35)
+				var hero := (path_id + cluster_index * 5) % 9 == 0
+				var primary_width_scale := 0.38 + 0.29 * (sin(float(path_id * 11 + cluster_index * 29 + 3)) * 0.5 + 0.5)
+				if hero: primary_width_scale += 0.05
+				var primary_width := clampf(stone_width_input * primary_width_scale, 0.22, maxf(0.22, minf(safe_width * 0.74, 0.90)))
+				var primary_length := 0.34 + 0.28 * (sin(float(path_id * 7 + cluster_index * 19 + 4)) * 0.5 + 0.5)
+				if hero: primary_length += 0.02
+				var primary_yaw := 0.24 * sin(float(path_id * 5 + cluster_index * 17 + 5))
+				var primary_material := 1 if sin(float(path_id * 71 + cluster_index * 31 + 14)) > 0.12 else 0
+				var primary_basis := path_basis * Basis(Vector3.UP, primary_yaw)
+				var primary_size := Vector3(primary_width, STEPPING_STONE_THICKNESS, primary_length)
+				var primary_half_across := _stepping_stone_half_across(primary_size, primary_yaw)
+				# A hairline of existing grass separates the silhouettes. No skirt,
+				# extra rim, material change or lower top is needed for ground contact.
+				var grass_gap := 0.025 + 0.020 * (sin(float(path_id * 83 + cluster_index * 11 + 17)) * 0.5 + 0.5)
+				_append_rounded_stone(builder, _stepping_stone_center(cluster_center, primary_size, primary_basis, STEPPING_STONE_TOP_EPSILON), primary_size, primary_basis, primary_material)
+				cells += 1
+
+				var pattern := (path_id + cluster_index * 2) % 5
+				if pattern in [1, 3, 4]:
+					var side := -1.0 if pattern in [1, 4] else 1.0
+					var companion_across := side * minf(safe_width * (0.18 + 0.07 * (sin(float(path_id * 37 + cluster_index * 11 + 7)) * 0.5 + 0.5)), 0.27)
+					var companion_along := 0.10 + 0.10 * sin(float(path_id * 41 + cluster_index * 5 + 8))
+					# A broad primary gets a slightly smaller partner, not a fused pair.
+					var companion_scale := 0.90 if primary_width_scale > 0.62 else 1.0
+					var companion_width := clampf(stone_width_input * companion_scale * (0.16 + 0.20 * (sin(float(path_id * 43 + cluster_index * 3 + 9)) * 0.5 + 0.5)), 0.13, maxf(0.13, minf(safe_width * 0.38, 0.44)))
+					var companion_length := companion_scale * (0.18 + 0.20 * (sin(float(path_id * 47 + cluster_index * 7 + 10)) * 0.5 + 0.5))
+					var companion_yaw := -0.32 * sin(float(path_id * 53 + cluster_index * 13 + 11))
+					var companion_material := 1 if sin(float(path_id * 73 + cluster_index * 17 + 15)) > -0.18 else 0
+					var companion_basis := path_basis * Basis(Vector3.UP, companion_yaw)
+					var companion_size := Vector3(companion_width, STEPPING_STONE_THICKNESS * 0.92, companion_length)
+					var companion_clearance := primary_half_across + _stepping_stone_half_across(companion_size, companion_yaw) + grass_gap
+					companion_across = side * maxf(absf(companion_across), companion_clearance)
+					var companion_point := cluster_center + path_basis * Vector3(companion_across, 0, companion_along)
+					_append_rounded_stone(builder, _stepping_stone_center(companion_point, companion_size, companion_basis, STEPPING_STONE_TOP_EPSILON), companion_size, companion_basis, companion_material)
+					cells += 1
+
+				# Roughly one cluster in five receives a tiny third stone on the
+				# opposite shoulder. It is intentionally sparse: enough to break the
+				# repeated pair silhouette without turning the path into loose gravel.
+				if pattern == 4:
+					var pebble_yaw := 0.36 * sin(float(path_id * 61 + cluster_index * 19 + 13))
+					var pebble_basis := path_basis * Basis(Vector3.UP, pebble_yaw)
+					var pebble_width := clampf(stone_width_input * (0.10 + 0.12 * (sin(float(path_id * 59 + cluster_index * 17 + 12)) * 0.5 + 0.5)), 0.10, 0.25)
+					var pebble_length := 0.13 + 0.13 * (sin(float(path_id * 67 + cluster_index * 7 + 18)) * 0.5 + 0.5)
+					var pebble_size := Vector3(pebble_width, STEPPING_STONE_THICKNESS * 0.78, pebble_length)
+					var pebble_across := maxf(minf(safe_width * 0.20, 0.20), primary_half_across + _stepping_stone_half_across(pebble_size, pebble_yaw) + grass_gap)
+					var pebble_point := cluster_center + path_basis * Vector3(pebble_across, 0, -0.14)
+					var pebble_material := 1 if sin(float(path_id * 79 + cluster_index * 23 + 16)) > 0.25 else 0
+					_append_rounded_stone(builder, _stepping_stone_center(pebble_point, pebble_size, pebble_basis, STEPPING_STONE_TOP_EPSILON), pebble_size, pebble_basis, pebble_material)
+					cells += 1
+				cluster_index += 1
 	return cells
 
 func _embedded_center(point: Vector3, thickness: float, exposed_rise: float) -> Vector3:
@@ -204,6 +259,31 @@ func _embedded_center(point: Vector3, thickness: float, exposed_rise: float) -> 
 	# burying the rest of the slab. Raised edge stones/rims make the central
 	# walking surface read as a shallow recess without mutating terrain authority.
 	return point + Vector3.UP * (exposed_rise - thickness * 0.5)
+
+func _stepping_stone_half_across(size: Vector3, yaw: float) -> float:
+	# Exact support of the clipped octagon along the path's across axis. Using
+	# its rotated footprint keeps a real grass gap without oversized box margins.
+	var projected_x := size.x * absf(cos(yaw))
+	var projected_z := size.z * absf(sin(yaw))
+	return maxf(projected_x * 0.50 + projected_z * 0.28, projected_x * 0.28 + projected_z * 0.50)
+
+func _stepping_stone_center(point: Vector3, size: Vector3, basis: Basis, top_offset: float) -> Vector3:
+	# A centre-only sample can sit below a neighbouring voxel terrace and bury the
+	# entire stone except for a tiny notch. Sample inside the actual rotated slab
+	# footprint instead, then place the flat top only epsilon above the highest
+	# touched terrain. Unlike the old treatment, there is no extra exposed rise.
+	var half_x := size.x * 0.42
+	var half_z := size.z * 0.42
+	var surface_y := _surface_height(Vector2(point.x, point.z))
+	for local_offset in [
+		Vector2(-half_x, -half_z),
+		Vector2(half_x, -half_z),
+		Vector2(half_x, half_z),
+		Vector2(-half_x, half_z),
+	]:
+		var world_offset := basis * Vector3(local_offset.x, 0, local_offset.y)
+		surface_y = maxf(surface_y, _surface_height(Vector2(point.x + world_offset.x, point.z + world_offset.z)))
+	return Vector3(point.x, surface_y + top_offset - size.y * 0.5, point.z)
 
 func _sample_polyline(point_values: Array) -> Array:
 	var result: Array = []
@@ -268,6 +348,58 @@ func _append_box(builder: Dictionary, center: Vector3, size: Vector3, basis: Bas
 			vertices.append(center + basis * (corner as Vector3))
 			normals.append(normal)
 		indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
+	surface["vertices"] = vertices
+	surface["normals"] = normals
+	surface["indices"] = indices
+	builder["surfaces"][material_index] = surface
+	builder["cells"] = int(builder["cells"]) + 1
+
+func _append_rounded_stone(builder: Dictionary, center: Vector3, size: Vector3, basis: Basis, material_index: int) -> void:
+	# Eight-sided slab: still crisp/voxel-compatible, but the clipped corners
+	# read as a naturally rounded stepping stone at play distance.
+	var surface: Dictionary = builder["surfaces"][material_index]
+	var vertices: Array = surface["vertices"]
+	var normals: Array = surface["normals"]
+	var indices: Array = surface["indices"]
+	var half := size * 0.5
+	var ring: Array[Vector2] = [
+		Vector2(-0.50, -0.28), Vector2(-0.50, 0.28), Vector2(-0.28, 0.50), Vector2(0.28, 0.50),
+		Vector2(0.50, 0.28), Vector2(0.50, -0.28), Vector2(0.28, -0.50), Vector2(-0.28, -0.50),
+	]
+	var top_center := vertices.size()
+	vertices.append(center + basis * Vector3(0, half.y, 0))
+	normals.append(basis * Vector3.UP)
+	var bottom_center := vertices.size()
+	vertices.append(center + basis * Vector3(0, -half.y, 0))
+	normals.append(basis * Vector3.DOWN)
+	var top_ring: Array[int] = []
+	var bottom_ring: Array[int] = []
+	for point in ring:
+		top_ring.append(vertices.size())
+		vertices.append(center + basis * Vector3(point.x * size.x, half.y, point.y * size.z))
+		normals.append(basis * Vector3.UP)
+		bottom_ring.append(vertices.size())
+		vertices.append(center + basis * Vector3(point.x * size.x, -half.y, point.y * size.z))
+		normals.append(basis * Vector3.DOWN)
+	for index in ring.size():
+		var next := (index + 1) % ring.size()
+		# Godot treats CLOCKWISE triangles as front-facing. The ring runs the
+		# opposite way viewed from above; reverse the fan, not the lighting normal.
+		# Inward winding hides the top and exposes the buried underside instead.
+		indices.append_array([top_center, top_ring[next], top_ring[index]])
+		indices.append_array([bottom_center, bottom_ring[index], bottom_ring[next]])
+		var a: Vector2 = ring[index]
+		var b: Vector2 = ring[next]
+		var edge := b - a
+		var side_normal_local := Vector3(-edge.y / maxf(size.x, 0.001), 0, edge.x / maxf(size.z, 0.001)).normalized()
+		var side_normal := basis * side_normal_local
+		var side_base := vertices.size()
+		vertices.append(center + basis * Vector3(a.x * size.x, -half.y, a.y * size.z))
+		vertices.append(center + basis * Vector3(b.x * size.x, -half.y, b.y * size.z))
+		vertices.append(center + basis * Vector3(b.x * size.x, half.y, b.y * size.z))
+		vertices.append(center + basis * Vector3(a.x * size.x, half.y, a.y * size.z))
+		for unused in 4: normals.append(side_normal)
+		indices.append_array([side_base, side_base + 2, side_base + 1, side_base, side_base + 3, side_base + 2])
 	surface["vertices"] = vertices
 	surface["normals"] = normals
 	surface["indices"] = indices
