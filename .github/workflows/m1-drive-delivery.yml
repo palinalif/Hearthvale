@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - run: python -m unittest tests/upload_google_drive_test.py
+      - run: python -m unittest tests/upload_google_drive_test.py tests/ci_performance_dependency_test.py
 
   sculpt-feedback:
     uses: ./.github/workflows/sculpt-feedback.yml
