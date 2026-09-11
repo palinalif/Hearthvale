@@ -31,20 +31,21 @@ jobs:
   terrain-ux:
     uses: ./.github/workflows/terrain-ux.yml
 
-  # The old placement gate ran native + every Mobile visual suite serially.
-  # m1-placement.yml now fans those exact checks out across independent runners.
   placement:
     uses: ./.github/workflows/m1-placement.yml
 
-  # Cottage still owns its Thor-specific regressions and packaging. Its historical
-  # no-argument placement bootstrap now installs/imports only; the full placement
-  # coverage above runs concurrently instead of being repeated here.
+  performance:
+    uses: ./.github/workflows/m2-performance.yml
+
+  # Cottage regressions now fan out across independent Windows runners. The
+  # reusable workflow packages Android and Windows in parallel only after all
+  # cottage shards pass.
   cottage-and-apk:
     uses: ./.github/workflows/cottage-playtest.yml
 
-  drive-delivery:
-    name: Upload verified builds to private Google Drive
-    needs: [delivery-contract, sculpt-feedback, terrain-ux, placement, cottage-and-apk]
+  drive-apk:
+    name: Upload verified Android build to private Google Drive
+    needs: [delivery-contract, sculpt-feedback, terrain-ux, placement, performance, cottage-and-apk]
     if: vars.GOOGLE_DRIVE_UPLOAD_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -53,50 +54,83 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download verified APK and PC receipts
+      - name: Download verified APK and receipt
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          pattern: hearthvale-*-${{ github.sha }}
+          name: hearthvale-m1-repair-${{ github.sha }}
           path: delivery
-          merge-multiple: true
 
-      - name: Revalidate artifact receipts
+      - name: Revalidate APK receipt
         shell: pwsh
         run: |
           $short = $env:GITHUB_SHA.Substring(0, 8)
           $apk = Get-Item "delivery/hearthvale-m1-repair-$short.apk"
-          $apkReceipt = Get-Item "delivery/hearthvale-m1-repair-$short.verification.json"
-          $apkRecord = Get-Content $apkReceipt.FullName -Raw | ConvertFrom-Json
-          $apkHash = (Get-FileHash $apk.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          if (-not $apkRecord.ok -or $apkRecord.commit -ne $env:GITHUB_SHA -or $apkRecord.sha256 -ne $apkHash -or [int64]$apkRecord.bytes -ne $apk.Length) {
+          $receipt = Get-Item "delivery/hearthvale-m1-repair-$short.verification.json"
+          $record = Get-Content $receipt.FullName -Raw | ConvertFrom-Json
+          $hash = (Get-FileHash $apk.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (-not $record.ok -or $record.commit -ne $env:GITHUB_SHA -or $record.sha256 -ne $hash -or [int64]$record.bytes -ne $apk.Length) {
             throw 'Downloaded APK does not match its successful verification receipt'
           }
 
-          $pc = Get-Item "delivery/Hearthvale-M2-PC-$short.zip"
-          $pcReceipt = Get-Item "delivery/Hearthvale-M2-PC-$short.verification.json"
-          $pcRecord = Get-Content $pcReceipt.FullName -Raw | ConvertFrom-Json
-          $pcHash = (Get-FileHash $pc.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          if (-not $pcRecord.ok -or $pcRecord.commit -ne $env:GITHUB_SHA -or $pcRecord.sha256 -ne $pcHash -or [int64]$pcRecord.bytes -ne $pc.Length -or $pcRecord.platform -ne 'windows' -or $pcRecord.architecture -ne 'x86_64') {
-            throw 'Downloaded PC build does not match its successful verification receipt'
-          }
-
-      - name: Ask Apps Script to copy verified artifacts to Drive
+      - name: Copy verified APK to Drive
         env:
           APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
           APPS_SCRIPT_WEBHOOK_SECRET: ${{ secrets.APPS_SCRIPT_WEBHOOK_SECRET }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          python tools/upload-google-drive.py --artifact-kind apk --output delivery/drive-apk-delivery.json
-          python tools/upload-google-drive.py --artifact-kind pc --output delivery/drive-pc-delivery.json
+        run: python tools/upload-google-drive.py --artifact-kind apk --output delivery/drive-apk-delivery.json
 
-      - name: Record private Drive links
+      - name: Record private APK Drive links
         shell: pwsh
         run: |
-          "### Private Google Drive delivery" | Out-File $env:GITHUB_STEP_SUMMARY -Append
-          foreach ($receipt in @('delivery/drive-apk-delivery.json', 'delivery/drive-pc-delivery.json')) {
-            $result = Get-Content $receipt -Raw | ConvertFrom-Json
-            foreach ($file in $result.files) {
-              "- [$($file.name)]($($file.url))" | Out-File $env:GITHUB_STEP_SUMMARY -Append
-            }
+          "### Private Google Drive Android delivery" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+          $result = Get-Content 'delivery/drive-apk-delivery.json' -Raw | ConvertFrom-Json
+          foreach ($file in $result.files) {
+            "- [$($file.name)]($($file.url))" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+          }
+          "- Commit: ``$env:GITHUB_SHA``" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+
+  drive-pc:
+    name: Upload verified Windows build to private Google Drive
+    needs: [delivery-contract, sculpt-feedback, terrain-ux, placement, performance, cottage-and-apk]
+    if: vars.GOOGLE_DRIVE_UPLOAD_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Download verified PC build and receipt
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: hearthvale-m2-pc-${{ github.sha }}
+          path: delivery
+
+      - name: Revalidate PC receipt
+        shell: pwsh
+        run: |
+          $short = $env:GITHUB_SHA.Substring(0, 8)
+          $pc = Get-Item "delivery/Hearthvale-M2-PC-$short.zip"
+          $receipt = Get-Item "delivery/Hearthvale-M2-PC-$short.verification.json"
+          $record = Get-Content $receipt.FullName -Raw | ConvertFrom-Json
+          $hash = (Get-FileHash $pc.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (-not $record.ok -or $record.commit -ne $env:GITHUB_SHA -or $record.sha256 -ne $hash -or [int64]$record.bytes -ne $pc.Length -or $record.platform -ne 'windows' -or $record.architecture -ne 'x86_64') {
+            throw 'Downloaded PC build does not match its successful verification receipt'
+          }
+
+      - name: Copy verified PC build to Drive
+        env:
+          APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
+          APPS_SCRIPT_WEBHOOK_SECRET: ${{ secrets.APPS_SCRIPT_WEBHOOK_SECRET }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/upload-google-drive.py --artifact-kind pc --output delivery/drive-pc-delivery.json
+
+      - name: Record private PC Drive links
+        shell: pwsh
+        run: |
+          "### Private Google Drive Windows delivery" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+          $result = Get-Content 'delivery/drive-pc-delivery.json' -Raw | ConvertFrom-Json
+          foreach ($file in $result.files) {
+            "- [$($file.name)]($($file.url))" | Out-File $env:GITHUB_STEP_SUMMARY -Append
           }
           "- Commit: ``$env:GITHUB_SHA``" | Out-File $env:GITHUB_STEP_SUMMARY -Append
