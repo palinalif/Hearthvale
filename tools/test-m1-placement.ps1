@@ -101,8 +101,10 @@ $nativePlacement = @(
     'm2_bridge_placement_test','m2_hamlet_detail_state_test','m2_garden_placement_test','m2_fence_placement_test',
     'm2_furniture_placement_test','m2_duplicate_detail_test','m2_attachment_preview_test','m2_attachment_boundary_test'
 )
+# m2_build_browser_test lives in the dedicated catalogue-behavior shard so its
+# controller/state assertions are not duplicated here.
 $nativeUi = @(
-    'm2_build_browser_test','m2_home_catalogue_test','m2_home_options_layout_test','m2_pc_input_test',
+    'm2_home_catalogue_test','m2_home_options_layout_test','m2_pc_input_test',
     'm2_surface_material_picker_test','m2_decor_colour_test','m2_compact_colour_test','m2_window_style_expansion_test',
     'm2_window_customization_test','m2_window_alignment_test','m2_window_alignment_minimum_test','m2_path_render_test',
     'm1_controller_test','m1_building_camera_test','m1_window_layout_test','m1_cottage_edit_ux_test',
