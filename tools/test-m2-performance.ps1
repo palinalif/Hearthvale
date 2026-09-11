@@ -3,7 +3,9 @@
 # relative regressions on GitHub's Windows Mobile-renderer runner but never claims
 # to emulate the Ayn Thor's Android/Adreno absolute FPS.
 param(
-    [int]$TimeoutMs = 300000
+    [ValidateSet('all','camera-catalogue','section-preview','section-commit')]
+    [string]$Group = 'all',
+    [int]$TimeoutMs = 240000
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,8 +25,8 @@ if (-not $editor) { throw 'Pinned Godot console editor missing after setup' }
 
 $review = Join-Path (Get-Location) '.tools/performance'
 New-Item -ItemType Directory -Force $review | Out-Null
-$out = Join-Path $review 'm2-mobile-performance.out.log'
-$err = Join-Path $review 'm2-mobile-performance.err.log'
+$out = Join-Path $review "m2-mobile-performance-$Group.out.log"
+$err = Join-Path $review "m2-mobile-performance-$Group.err.log"
 
 $arguments = @(
     '--path', '.',
@@ -33,7 +35,8 @@ $arguments = @(
     '--audio-driver', 'Dummy',
     '--script', 'tests/m2_mobile_performance_guard.gd',
     '--',
-    '--require-rendering'
+    '--require-rendering',
+    "--scenario-group=$Group"
 )
 
 $process = Start-Process -FilePath $editor -ArgumentList $arguments -WindowStyle Hidden `
@@ -42,7 +45,7 @@ $process = Start-Process -FilePath $editor -ArgumentList $arguments -WindowStyle
 if (-not $process.WaitForExit($TimeoutMs)) {
     $process.Kill()
     $process.WaitForExit()
-    throw 'M2 Mobile performance guard timed out'
+    throw "M2 Mobile performance guard timed out: $Group"
 }
 
 $log = ''
@@ -51,10 +54,10 @@ if (Test-Path $err) { $log += Get-Content $err -Raw }
 Write-Output $log
 
 if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|FAIL:') {
-    throw "M2 Mobile performance guard failed (exit=$($process.ExitCode))"
+    throw "M2 Mobile performance guard failed for $Group (exit=$($process.ExitCode))"
 }
-if ($log -notmatch 'M2_PERFORMANCE_RESULT' -or $log -notmatch '"ok"\s*:\s*true') {
-    throw 'M2 Mobile performance guard missing successful receipt'
+if ($log -notmatch 'M2_PERFORMANCE_RESULT' -or $log -notmatch '"ok"\s*:\s*true' -or $log -notmatch ('"scenario_group"\s*:\s*"' + [regex]::Escape($Group) + '"')) {
+    throw "M2 Mobile performance guard missing successful $Group receipt"
 }
 
-Write-Output 'M2_PERFORMANCE_GUARD_OK'
+Write-Output "M2_PERFORMANCE_GUARD_OK group=$Group"
