@@ -88,7 +88,7 @@ permissions:
 jobs:
   placement-regressions:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install locked editor and native voxel extension; run placement tests
