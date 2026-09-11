@@ -118,7 +118,7 @@ func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 		_add_box("GableLeft_%d" % step, Vector3(0.22, row_height, span), Vector3(-dimensions.x * 0.5, level, 0), wall_color)
 		_add_box("GableRight_%d" % step, Vector3(0.22, row_height, span), Vector3(dimensions.x * 0.5, level, 0), wall_color)
 	if str(view.get("style_id", "riverside_cottage")) != "woodland_lodge": _build_corner_quoin_batch(dimensions)
-	_build_crafted_shell(dimensions, wall_color)
+	_build_crafted_shell(dimensions, wall_color, str(view.get("style_id", "riverside_cottage")))
 	_build_gable_vent(dimensions, deleted)
 	_build_style_accents(dimensions, str(view.get("style_id", "riverside_cottage")))
 
@@ -540,7 +540,7 @@ func _build_door(detail: Dictionary, local: Vector3, orientation: String) -> voi
 	_add_detail_boxes("DoorJoinery_%s" % id, wood, TRIM_COLOR, basis, anchor)
 	if not lodge and not tudor: _build_entrance_canopy(id, width, height, basis, anchor)
 
-func _build_crafted_shell(dimensions: Vector3, _color: Color) -> void:
+func _build_crafted_shell(dimensions: Vector3, _color: Color, style_id: String) -> void:
 	var stone: Array = []
 	var timber: Array = []
 	var eave := snappedf(dimensions.y, _unit.y)
@@ -559,7 +559,7 @@ func _build_crafted_shell(dimensions: Vector3, _color: Color) -> void:
 		timber.append(_piece(Vector3(end_x, eave + _unit.y * 0.5, 0), Vector3(_unit.x, _unit.y, dimensions.z)))
 		timber.append(_piece(Vector3(end_x, eave + dimensions.y * _roof_rise_ratio * 0.5, 0), Vector3(_unit.x, dimensions.y * _roof_rise_ratio, _unit.z)))
 	_add_batched_boxes("FoundationCourses", stone, QUOIN_COLOR)
-	_add_detail_boxes("EaveJoinery", timber, TRIM_COLOR)
+	if style_id == "village_gable": _add_detail_boxes("EaveJoinery", timber, TRIM_COLOR)
 	# A single crest begins above the actual highest roof top, replacing three
 	# separately rounded ridge layers with conflicting colours at identical depth.
 	var run := dimensions.z * 0.5 + 0.5
