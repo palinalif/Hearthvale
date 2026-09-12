@@ -417,7 +417,7 @@ func _cells_hit_home_interior(values: Array) -> bool:
 		var centre := PathRegion.cell_center(cell)
 		var half := PathGrid.UNIT * 0.49
 		for offset in [Vector2.ZERO, Vector2(-half, -half), Vector2(half, -half), Vector2(half, half), Vector2(-half, half)]:
-			var point := centre + offset
+			var point: Vector2 = centre + offset
 			if _segment_hits_home_interior(point, point): return true
 	return false
 
