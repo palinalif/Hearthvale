@@ -32,8 +32,6 @@ static func brush_cells(center: Vector2, radius: float, world_size: float = DEFA
 			var cell := Vector2i(x, z)
 			if cell_center(cell).distance_to(center) <= safe_radius + 0.000001:
 				result.append(cell)
-	# A tiny brush at a grid corner can miss every cell centre. Painting must
-	# still be continuous, so fall back to the containing structural cell.
 	if result.is_empty() and center.x >= 0.0 and center.y >= 0.0 and center.x < world_size and center.y < world_size:
 		result.append(Vector2i(
 			clampi(floori(center.x / Grid.UNIT), 0, cell_limit - 1),
@@ -41,11 +39,6 @@ static func brush_cells(center: Vector2, radius: float, world_size: float = DEFA
 		))
 	return _sorted(result)
 
-## Rasterize a continuous brush sweep between two world-space X/Z samples.
-## Cursor/controller input is frame based, so painting only the endpoints can
-## leave holes when the cursor moves several cells in one frame. Sampling at a
-## half-cell cadence guarantees overlapping circular stamps without making the
-## saved representation depend on frame rate.
 static func stroke_cells(from: Vector2, to: Vector2, radius: float, world_size: float = DEFAULT_WORLD_SIZE) -> Array:
 	if not from.is_finite() or not to.is_finite(): return []
 	var distance := from.distance_to(to)
@@ -65,9 +58,13 @@ static func normalize_cells(values: Array, world_size: float = DEFAULT_WORLD_SIZ
 		if value is Vector2i:
 			cell = value
 		elif value is Vector2:
+			if not value.is_finite(): continue
 			cell = Vector2i(roundi(value.x), roundi(value.y))
 		elif value is Array and value.size() >= 2:
-			cell = Vector2i(int(value[0]), int(value[1]))
+			var x = _integer_coordinate(value[0])
+			var y = _integer_coordinate(value[1])
+			if x == null or y == null: continue
+			cell = Vector2i(int(x), int(y))
 		if cell.x < 0 or cell.y < 0 or cell.x >= cell_limit or cell.y >= cell_limit:
 			continue
 		unique[cell] = true
@@ -113,8 +110,6 @@ static func distance_field(values: Array, ring_cap: int = PROFILE_RING_CAP) -> D
 	return result
 
 static func packed_earth_depth_steps(edge_distance: int) -> int:
-	# The edge stays level with the lawn. Normal paths sink one voxel through the
-	# middle; only broad roads/plazas acquire a two-voxel packed-down interior.
 	if edge_distance <= 0: return 0
 	if edge_distance >= 3: return 2
 	return 1
@@ -128,6 +123,12 @@ static func packed_earth_profile(values: Array) -> Dictionary:
 	for cell in field:
 		result[cell] = packed_earth_depth_steps(int(field[cell]))
 	return result
+
+static func _integer_coordinate(value: Variant) -> Variant:
+	if not (value is int or value is float): return null
+	var number := float(value)
+	if not is_finite(number) or number != floorf(number): return null
+	return int(number)
 
 static func _sorted(values: Array) -> Array:
 	var result := values.duplicate()
