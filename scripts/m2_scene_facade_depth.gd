@@ -117,7 +117,9 @@ func _append_opening_relief(visual: Node3D, view: Dictionary, detail_unit: Vecto
 			# second chunky outline around every opening.
 			_append_oriented_piece(sills, basis, anchor, pane_center + Vector3(0, -half.y - cell.y * 0.5, cell.z * 2.5), Vector3(pane_size.x + cell.x * 2.0, cell.y, cell.z * 2.0))
 			if not asset_id.contains("round"):
-				_append_oriented_piece(lintels, basis, anchor, pane_center + Vector3(0, half.y + cell.y * 0.5, cell.z * 2.0), Vector3(pane_size.x + cell.x * 2.0, cell.y, cell.z))
+				# Start immediately at the outer face of the base top frame. The old
+				# 2.0-cell center left half a detail voxel of air under the lintel.
+				_append_oriented_piece(lintels, basis, anchor, pane_center + Vector3(0, half.y + cell.y * 0.5, cell.z * 1.5), Vector3(pane_size.x + cell.x * 2.0, cell.y, cell.z))
 		else:
 			var layout_value = visual.call("_door_layout", detail, local as Vector3, orientation)
 			if not layout_value is Dictionary: continue
