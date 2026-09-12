@@ -10,28 +10,38 @@ seams, shoulder rails and rectangle patches were gone; native grounding and
 centre continuity improved. However, the boundary still read too cleanly as
 a brown strip. Technical success alone was not treated as visual acceptance.
 
-This follow-up changes only the soil vertex-colour field and the matched
-packed-earth close/reverse cameras. The existing earthy centre is slightly
-more subdued. The outer band transitions unequally into the native terrain's
-`#7d9957` grass colour using a continuous, stable path-ID/position field.
-The central 64% stays soil-only except the restrained end termination.
-There is no alpha blending, terrain mask, raised shoulder, extra surface,
-new geometry, increased grass density or changed terrain/path record.
-Both before/after cameras move identically to reduce roof occlusion.
-A new assertion checks finite, fully opaque vertex colours in each audit.
-All earlier tests, source locks and budgets remain intact.
+The second candidate, `32520145106030e5e4d35f7ebe77e5327d0b2b21`, changed
+only the soil vertex-colour field and matched packed-earth close/reverse
+cameras. Run `34681757787`, artifact `10294315726`, passed all 196 path checks
+with zero errors. Android and Windows package receipts for that head were
+also downloaded and their bytes/SHA256/commit independently revalidated.
+The colour-only transition improved contact but still left a too-uniform
+visible boundary, so one final packed-earth-only adjustment follows.
 
-First-candidate committed dirt cost including its grass: 432 vertices and
-216 triangles, versus baseline 63 boxes / 1512 vertices / 756 triangles.
+The existing five across-route stations and outer footprint are retained.
+The inner soil/grass boundary now moves coherently along the route, using
+stable path ID, distance and independent side phases. Its position stays
+between 76% and 96% of each local half-width. The outer edge meets the native
+terrain's `#7d9957` grass colour fully, rather than retaining a straight brown
+outline. The same opaque soil surface provides the unequal transition depth;
+there is no overlay, alpha blending, terrain mask or raised shoulder.
+The centre stays clear, and sparse tuft placement/density are unchanged.
+The saved centreline, width, records, terrain heights and outer geometry
+bounds are unchanged. No stations, materials or per-frame work are added.
+Both before/after cameras remain exactly matched and avoid roof occlusion.
+
+First- and second-candidate committed dirt cost including grass: 432 vertices
+and 216 triangles, versus baseline 63 boxes / 1512 vertices / 756 triangles.
 Two tufts contain six cubes total. Dirt retains two material surfaces and
 the three-style scene retains seven opaque surface draws including accepted
 stepping-stone grass. With the additional terrace route the dirt totals were
 992 vertices / 496 triangles and five tufts across two paths, spanning three
-native surface heights. The colour follow-up leaves geometry unchanged, but
-these figures must still be rechecked against the exact new-head CI receipt.
+native surface heights. The final transition uses the same station count,
+but exact geometry/cost must be read from its own CI audit, not inferred.
 
-The unchanged full verification, Mobile performance, Android/Windows package
-validation and gated private Drive workflow must pass for the follow-up head.
-No first-candidate success is a substitute for that verification. Final task
+All prior assertions, source locks, width/geometry/performance budgets and
+workflows remain intact. The unchanged full verification, Mobile performance,
+Android/Windows package validation and gated private Drive workflow must pass
+for the final head. Earlier candidate success is not a substitute. Final task
 evidence contains the final SHA, run, matched screenshots and delivery receipt.
 Hosted D3D12 Forward Mobile evidence is not physical AYN Thor testing.

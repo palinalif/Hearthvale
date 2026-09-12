@@ -38,9 +38,12 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 		var normal := Vector2(tangent.y, -tangent.x)
 		var left := extent(safe_width, distance, path_id, -1)
 		var right := extent(safe_width, distance, path_id, 1)
+		var left_core := left * _core_fraction(distance, path_id, -1)
+		var right_core := right * _core_fraction(distance, path_id, 1)
 		var section := PackedVector2Array()
 		for across: float in ACROSS:
 			var offset := across * (left if across < 0.0 else right)
+			if is_equal_approx(absf(across), 0.64): offset = -left_core if across < 0.0 else right_core
 			# Shallow, unequal clipped ends; the saved endpoint itself stays put.
 			var end_shift := 0.0
 			if index == 0 or index == samples.size() - 1:
@@ -50,7 +53,7 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 				if index != 0: end_shift = -end_shift
 			section.append(centre + normal * offset + tangent * end_shift)
 		sections.append(section)
-		stations.append({"path_id": path_id, "index": index, "distance": distance, "centre": centre, "normal": normal, "tangent": tangent, "left": left, "right": right, "width": safe_width, "first": index == 0, "last": index == samples.size() - 1})
+		stations.append({"path_id": path_id, "index": index, "distance": distance, "centre": centre, "normal": normal, "tangent": tangent, "left": left, "right": right, "left_core": left_core, "right_core": right_core, "width": safe_width, "first": index == 0, "last": index == samples.size() - 1})
 	var before := int(builder["cells"])
 	for index in range(1, sections.size()):
 		var a: PackedVector2Array = sections[index - 1]
@@ -68,6 +71,13 @@ static func extent(width: float, distance: float, path_id: int, side: int) -> fl
 	var slow := sin(distance * 1.17 + phase) * 0.5 + 0.5
 	var small := pow(maxf(0.0, sin(distance * 3.1 + phase * 1.7)), 6.0)
 	return width * 0.5 - minf(width * 0.030, 0.032) * (0.65 * slow + 0.35 * small)
+
+static func _core_fraction(distance: float, path_id: int, side: int) -> float:
+	# Move the soil/grass transition within the existing footprint, not the
+	# route. Asymmetric broad pockets leave the central 76% entirely calm.
+	var phase := float(Contact._seed(path_id, 0, 82 + side) % 6283) / 1000.0
+	var pocket := clampf(0.5 + 0.5 * (sin(distance * 1.41 + phase) * 0.65 + sin(distance * 0.71 + phase * 1.31) * 0.35), 0.0, 1.0)
+	return 0.96 - 0.20 * pow(pocket, 1.5)
 
 static func _height(renderer: Node, data: Dictionary, cell: Vector2i, scale_value: float) -> float:
 	var heights: Dictionary = data["heights"]
@@ -133,12 +143,20 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		var shade := Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.08 + pow(edge, 3.0) * 0.10)
 		# Worn grass/soil at the outer band, not a separate raised shoulder.
 		# A continuous asymmetric field varies the transition's visible depth;
-		# the central 64% stays soil-only. Native grass colour, fully opaque.
+		# the central 76% stays soil-only. Native grass colour, fully opaque.
 		var normal: Vector2 = station_a["normal"]
 		var side := -1 if (point - closest).dot(normal) < 0.0 else 1
 		var edge_phase := float(Contact._seed(path_id, 0, 82 + side) % 6283) / 1000.0
 		var pocket := smoothstep(-0.3, 0.6, sin(point.x * 0.81 + point.y * 0.57 + edge_phase) * 0.65 + sin(point.x * 2.2 - point.y * 0.73 + edge_phase * 1.31) * 0.35)
-		var boundary := smoothstep(0.64, 0.99, edge) * (0.30 + 0.70 * pocket)
+		var segment := centre_b - centre_a
+		var along := clampf((closest - centre_a).dot(segment) / maxf(segment.length_squared(), 0.0000001), 0.0, 1.0)
+		var side_key := "left" if side < 0 else "right"
+		var core_key := side_key + "_core"
+		var core_extent := lerpf(float(station_a[core_key]), float(station_b[core_key]), along)
+		var edge_extent := lerpf(float(station_a[side_key]), float(station_b[side_key]), along)
+		# The same opaque surface meets native grass at its outer boundary.
+		# Only transition depth varies: no rectangular overlays or extra tufts.
+		var boundary := smoothstep(core_extent, edge_extent, point.distance_to(closest))
 		var direction := (centre_b - centre_a).normalized()
 		if bool(station_a["first"]): boundary = maxf(boundary, (1.0 - smoothstep(0.0, 0.18, (point - centre_a).dot(direction))) * (0.75 + 0.25 * pocket))
 		if bool(station_b["last"]): boundary = maxf(boundary, (1.0 - smoothstep(0.0, 0.18, (centre_b - point).dot(direction))) * (0.75 + 0.25 * pocket))
