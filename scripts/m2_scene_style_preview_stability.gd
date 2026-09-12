@@ -37,7 +37,7 @@ func _input(event: InputEvent) -> void:
 	# idle-building handler interpret them as cottage cycling.
 	if building_placement_active and event is InputEventJoypadButton:
 		var button := event as InputEventJoypadButton
-		if button.pressed and not button.echo and button.button_index in [JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_RIGHT]:
+		if button.pressed and button.button_index in [JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_RIGHT]:
 			_rotate_building_preview(-1 if button.button_index == JOY_BUTTON_DPAD_LEFT else 1)
 			get_viewport().set_input_as_handled()
 			return
