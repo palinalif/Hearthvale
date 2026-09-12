@@ -48,6 +48,21 @@ func _initialize() -> void:
 		{"id": 2, "style_id": "packed_earth", "cells": [[2, 1]]},
 	]
 	_check(not Authority.validate(duplicate_style), "saved authority rejects fragmented records for one style")
+	_check(not Authority.validate([{"id": 1, "style_id": "packed_earth", "cells": [["oops", 1]]}]), "malformed string coordinates are rejected without a cast error")
+	_check(not Authority.validate([{"id": 1, "style_id": "packed_earth", "cells": [[1.5, 1]]}]), "fractional saved coordinates are rejected")
+	_check(not Authority.validate([{"id": 1, "style_id": "packed_earth", "cells": [[NAN, 1]]}]), "non-finite saved coordinates are rejected")
+
+	var full: Array = []
+	for z in 63:
+		for x in 384:
+			full.append([x, z])
+			if full.size() == Authority.MAX_CELLS: break
+		if full.size() == Authority.MAX_CELLS: break
+	var at_budget := Authority.paint([], 41, "packed_earth", full)
+	_check(bool(at_budget.changed) and int(at_budget.next_id) == 42 and Authority.total_cells(at_budget.paths) == Authority.MAX_CELLS, "exact cell budget is accepted")
+	var over_budget := Authority.paint(at_budget.paths, at_budget.next_id, "cobblestone", [[383, 383]])
+	_check(not bool(over_budget.changed) and int(over_budget.next_id) == 42 and int(over_budget.path_id) == -1, "over-budget new style restores the exact original next_id")
+	_check(JSON.stringify(over_budget.paths) == JSON.stringify(at_budget.paths), "over-budget paint leaves authority byte-for-byte unchanged")
 
 	print(JSON.stringify({"ok": failures == 0, "checks": checks, "failures": failures, "paths": erased.paths.size(), "cells": Authority.total_cells(erased.paths)}))
 	quit(1 if failures else 0)
