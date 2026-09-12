@@ -159,6 +159,8 @@ static func build(renderer: Node, stones: Dictionary) -> Dictionary:
 	if _material == null:
 		_material = StandardMaterial3D.new()
 		_material.vertex_color_use_as_albedo = true
+		# Vegetation palette values are authored in sRGB, like albedo colours.
+		_material.vertex_color_is_srgb = true
 		_material.roughness = 1.0
 		_material.metallic_specular = 0.0
 	mesh.surface_set_material(0, _material)

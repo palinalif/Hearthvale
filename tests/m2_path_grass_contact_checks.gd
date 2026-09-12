@@ -68,7 +68,7 @@ static func inspect(checker: SceneTree, scene: Node, phase: String) -> void:
 	var arrays: Array = node.mesh.surface_get_arrays(0)
 	checker._check((arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() == int(data["cells"]) * 24 and (arrays[Mesh.ARRAY_INDEX] as PackedInt32Array).size() == int(data["cells"]) * 36, "reported grass geometry matches runtime arrays: " + phase)
 	var material := node.mesh.surface_get_material(0) as StandardMaterial3D
-	checker._check(material != null and material.vertex_color_use_as_albedo and material.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED and material.cull_mode == BaseMaterial3D.CULL_BACK, "grass keeps opaque voxel shading and normal culling: " + phase)
+	checker._check(material != null and material.vertex_color_use_as_albedo and material.vertex_color_is_srgb and material.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED and material.cull_mode == BaseMaterial3D.CULL_BACK, "grass keeps sRGB palette, opaque voxel shading and normal culling: " + phase)
 	var builder: Dictionary = visual._new_builder()
 	for path: Dictionary in scene.landscape_state.paths:
 		if str(path["style_id"]) == "stepping_stones":
