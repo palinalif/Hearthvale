@@ -40,9 +40,9 @@ func _run_scene_checks(capture: bool) -> void:
 	var dirt := Region.stroke_cells(Vector2(14.0, 14.0), Vector2(22.0, 16.0), 0.375)
 	var stone := Region.stroke_cells(Vector2(27.0, 12.0), Vector2(36.0, 15.0), 0.75)
 	var steps := Region.stroke_cells(Vector2(14.0, 28.0), Vector2(27.0, 29.0), 0.50)
-	var first := scene.landscape_state.paint_path_cells("packed_earth", dirt)
-	var second := scene.landscape_state.paint_path_cells("cobblestone", stone)
-	var third := scene.landscape_state.paint_path_cells("stepping_stones", steps)
+	var first: int = scene.landscape_state.paint_path_cells("packed_earth", dirt)
+	var second: int = scene.landscape_state.paint_path_cells("cobblestone", stone)
+	var third: int = scene.landscape_state.paint_path_cells("stepping_stones", steps)
 	_check(first == first_id and second == first_id + 1 and third == first_id + 2, "all three painted materials receive stable region IDs")
 	_check(scene.landscape_state.paths.size() == 3 and State.validate(scene.landscape_state.document()), "three-style painted render fixture validates")
 	for path_value in scene.landscape_state.paths:

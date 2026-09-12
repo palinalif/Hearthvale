@@ -68,6 +68,7 @@ func _initialize() -> void:
 	_check(scene._reload_all(), "painted path reload succeeds")
 	_check(JSON.stringify(scene.landscape_state.document()) == saved, "save/reload preserves exact painted cells and region ID")
 
+	scene._begin_path_placement()
 	var cancel_before := JSON.stringify(scene.landscape_state.document())
 	var history_after_reload: int = scene._history_tags.size()
 	_aim(Vector2(30.0, 35.0))
