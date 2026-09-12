@@ -137,14 +137,14 @@ static func width_cases(checker: SceneTree, scene: Node) -> void:
 				var edge_extent := Earth.extent(width, distance, 719, side)
 				min_extent = minf(min_extent, edge_extent)
 				max_extent = maxf(max_extent, edge_extent)
-				bounded = bounded and edge_extent >= width * 0.47 - 0.000001 and edge_extent <= width * 0.5
+				bounded = bounded and edge_extent >= width * 0.415 - 0.000001 and edge_extent <= width * 0.5
 				continuous = continuous and absf(edge_extent - Earth.extent(width, distance + 0.025, 719, side)) < 0.003
 			var wear := Earth._interior_wear(719, distance, 0.0, width)
 			centre_min = minf(centre_min, wear.x)
 			centre_max = maxf(centre_max, wear.x)
 			if wear.y > 0.35: patch_hits += 1
-		checker._check(bounded and continuous, "coherent edges preserve at least 94 percent width without sample jumps: " + str(width))
-		checker._check(max_extent - min_extent >= width * 0.018 and asymmetric, "edge wear has visible but bounded coherent left/right variation: " + str(width))
+		checker._check(bounded and continuous, "coherent edges stay inside the saved footprint and preserve at least 83 percent width without sample jumps: " + str(width))
+		checker._check(min_extent <= width * 0.445 and max_extent >= width * 0.485 and max_extent - min_extent >= width * 0.055 and asymmetric, "edge wear contains both near-full tongues and materially visible bounded incursions: " + str(width))
 		checker._check(centre_min < 0.05 and centre_max > 0.80 and patch_hits > 0 and patch_hits < 180, "internal centre wear breaks up and directional patches stay sparse: " + str(width))
 
 static func lifecycle(checker: SceneTree, scene: Node) -> void:
