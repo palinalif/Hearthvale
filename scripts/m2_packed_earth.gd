@@ -74,21 +74,21 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 	return int(builder["cells"]) - before
 
 static func extent(width: float, distance: float, path_id: int, side: int) -> float:
-	# A shared slow pocket changes the route's actual width enough to survive
-	# Mobile distance, while a much smaller side field keeps the two edges from
-	# mirroring one another. Avoid clamped/saturated fields: they can freeze one
-	# side into a ruler-straight edge for an entire short path.
+	# Broad shared wear changes the route's overall width, while a stronger
+	# side-local pocket produces occasional one-sided grass incursions. The
+	# fourth-power side field makes those bites localized instead of turning the
+	# whole edge into a procedural sine wave.
 	var broad_phase := float(Contact._seed(path_id, 0, 200) % 6283) / 1000.0
 	var drift_phase := float(Contact._seed(path_id, 0, 240) % 6283) / 1000.0
 	var side_phase := float(Contact._seed(path_id, 0, 223 + side) % 6283) / 1000.0
-	var broad_wave := 0.5 + 0.5 * sin(distance * 0.50 + broad_phase)
+	var broad_wave := 0.5 + 0.5 * sin(distance * 0.38 + broad_phase)
 	var broad_pocket := pow(broad_wave, 3.0)
-	var drift_wave := 0.5 + 0.5 * sin(distance * 0.25 + drift_phase)
-	var side_wave := 0.5 + 0.5 * sin(distance * 0.31 + side_phase)
-	# The shared field creates long shallow incursions and near-full-width
-	# tongues. Maximum inset still leaves >83% of nominal full path width and
-	# stays wholly inside the saved footprint.
-	var inset := width * (0.004 + 0.058 * broad_pocket + 0.014 * pow(drift_wave, 2.0) + 0.007 * side_wave)
+	var drift_wave := 0.5 + 0.5 * sin(distance * 0.22 + drift_phase)
+	var side_wave := 0.5 + 0.5 * sin(distance * 0.62 + side_phase)
+	var side_pocket := pow(side_wave, 4.0)
+	# Even the deepest combined bite leaves more than 83% of nominal full width
+	# and never expands beyond the saved footprint.
+	var inset := width * (0.004 + 0.045 * broad_pocket + 0.006 * pow(drift_wave, 2.0) + 0.028 * side_pocket)
 	return width * 0.5 - inset
 
 static func _interior_wear(path_id: int, distance: float, signed_offset: float, width: float) -> Vector2:
@@ -96,10 +96,14 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	# directional patches. They only drive vertex colour; they add no geometry.
 	var half_width := maxf(width * 0.5, 0.0001)
 	var across := signed_offset / half_width
-	var centre_profile := 1.0 - smoothstep(0.08, 0.60, absf(across))
 	var centre_phase := float(Contact._seed(path_id, 0, 131) % 6283) / 1000.0
-	var centre_signal := sin(distance * 0.63 + centre_phase) * 0.66 + sin(distance * 1.47 + centre_phase * 1.73) * 0.34
-	var centre_breaks := smoothstep(-0.10, 0.52, centre_signal)
+	# The compacted route wanders slightly and completes roughly one broad wear
+	# cycle over the review path. That guarantees readable quiet/worn stretches
+	# without turning into repeated footprints or a permanent centre stripe.
+	var centre_offset := sin(distance * 0.19 + centre_phase * 0.73) * 0.09
+	var centre_profile := 1.0 - smoothstep(0.06, 0.52, absf(across - centre_offset))
+	var centre_signal := sin(distance * 0.72 + centre_phase)
+	var centre_breaks := smoothstep(-0.35, 0.35, centre_signal)
 	var centre_wear := centre_profile * centre_breaks
 
 	var patch_phase := float(Contact._seed(path_id, 0, 173) % 6283) / 1000.0
@@ -185,10 +189,11 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		var shade := Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.10 + pow(edge, 3.0) * 0.09)
 		var route_distance := lerpf(float(station_a["distance"]), float(station_b["distance"]), along)
 		var wear := _interior_wear(path_id, route_distance, signed_offset, float(station_a["width"]))
-		# Broken compacted centre wear is broad enough to read at Mobile distance.
-		# The second field stays softer and route-aligned so neither becomes a stripe.
-		shade = shade.lerp(Color("#765947"), wear.x * 0.40)
-		shade = shade.lerp(Color("#7a5a43"), wear.y * 0.20)
+		# Compacted soil is slightly lighter/desaturated than the base earth, which
+		# survives Mobile distance without becoming a dark painted stripe. Sparse
+		# offset patches pull some stretches back toward deeper earth.
+		shade = shade.lerp(Color("#b98a60"), wear.x * 0.55)
+		shade = shade.lerp(Color("#835f49"), wear.y * 0.26)
 		# Worn grass/soil at the outer band, not a separate raised shoulder.
 		# A continuous asymmetric field varies the transition's visible depth;
 		# a broad central dirt core remains clear. Native grass colour, fully opaque.
