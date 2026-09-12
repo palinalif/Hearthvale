@@ -108,7 +108,9 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	var along_profile := 1.0 - smoothstep(radius * 0.16, radius, absf(delta))
 	var centre_offset := (float(Contact._seed(path_id, cell, 443) % 25) - 12.0) / 100.0
 	centre_offset += sin(distance * 0.23 + float(Contact._seed(path_id, 0, 449) % 6283) / 1000.0) * 0.045
-	var across_profile := 1.0 - smoothstep(0.08, 0.62, absf(across - centre_offset))
+	# Keep the dusty wear broad enough to survive gameplay distance, but still
+	# leave quiet soil along both edges instead of turning into a full-width stripe.
+	var across_profile := 1.0 - smoothstep(0.05, 0.72, absf(across - centre_offset))
 	var centre_wear := along_profile * across_profile
 
 	# A second, sparser field creates occasional broad deeper scuffs offset from
@@ -121,7 +123,7 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	var patch_along := 1.0 - smoothstep(patch_radius * 0.18, patch_radius, absf(patch_local - patch_centre_distance))
 	var patch_side := -1.0 if Contact._seed(path_id, patch_cell, 467) % 2 == 0 else 1.0
 	var patch_offset := patch_side * (0.10 + float(Contact._seed(path_id, patch_cell, 479) % 10) / 100.0)
-	var patch_across := 1.0 - smoothstep(0.08, 0.46, absf(across - patch_offset))
+	var patch_across := 1.0 - smoothstep(0.06, 0.54, absf(across - patch_offset))
 	var patch_presence := 1.0 if Contact._seed(path_id, patch_cell, 487) % 4 != 0 else 0.0
 	var patch_wear := patch_along * patch_across * patch_presence
 	return Vector2(clampf(centre_wear, 0.0, 1.0), clampf(patch_wear, 0.0, 1.0))
@@ -220,14 +222,16 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		if not outer_band:
 			var phase := float(Contact._seed(path_id, 0, 31) % 6283) / 1000.0
 			var quiet := sin(point.x * 0.71 + point.y * 0.39 + phase) * 0.5 + 0.5
-			# The inner two bands are the actual worn-soil route. Keeping the outer
-			# bands at native grass colour makes the moving core boundary a real,
-			# readable silhouette instead of a wide interpolated brown/green fringe.
-			shade = Color("#9f7352").lerp(Color("#886047"), 0.16 + quiet * 0.08 + pow(edge, 3.0) * 0.07)
+			# The inner two bands are the actual worn-soil route. The base is muted
+			# enough that dusty compacted areas read at Mobile distance without making
+			# the whole path orange or producing segment-by-segment colour blocks.
+			shade = Color("#9a7357").lerp(Color("#86634e"), 0.12 + quiet * 0.10 + pow(edge, 3.0) * 0.06)
 			var route_distance := lerpf(float(station_a["distance"]), float(station_b["distance"]), along)
 			var wear := _interior_wear(path_id, route_distance, signed_offset, float(station_a["width"]))
-			shade = shade.lerp(Color("#b79270"), wear.x * 0.52)
-			shade = shade.lerp(Color("#7f5a46"), wear.y * 0.24)
+			# Broad compacted patches are lighter and less saturated; deeper scuffs are
+			# deliberately restrained so they cannot collapse back into dark stains.
+			shade = shade.lerp(Color("#bda17f"), wear.x * 0.66)
+			shade = shade.lerp(Color("#7a5f4f"), wear.y * 0.16)
 
 			# Preserve the accepted worn-out endpoint treatment without softening the
 			# long-side silhouette. Only the first/last short run fades back to grass.
