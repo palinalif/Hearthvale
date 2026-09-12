@@ -121,6 +121,9 @@ func _input(event: InputEvent) -> void:
 			else: _cancel_path_placement("Path painting closed")
 			get_viewport().set_input_as_handled()
 			return
+		if event.is_action_released("m1_cancel"):
+			get_viewport().set_input_as_handled()
+			return
 		if event.is_action_pressed("m1_undo"):
 			if path_painting:
 				_cancel_path_stroke("Stroke cancelled")
