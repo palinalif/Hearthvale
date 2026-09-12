@@ -115,24 +115,28 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	return Vector2(clampf(centre_wear, 0.0, 1.0), clampf(patch_wear, 0.0, 1.0))
 
 static func _core_fraction(distance: float, path_id: int, side: int) -> float:
-	# Visible soil width changes in a few broad one-sided movements instead of
-	# wobbling both edges at once. A shared slow field alternates which side the
-	# grass reaches into; the zero crossings leave near-full-width worn tongues.
-	var shared_phase := float(Contact._seed(path_id, 0, 89) % 6283) / 1000.0
-	var local_phase := float(Contact._seed(path_id, 0, 149 + side) % 6283) / 1000.0
-	# One broad cycle spans about 8.3 m, so ordinary path-length review fixtures
-	# cannot accidentally miss the feature because of their deterministic phase.
-	# Positive and negative halves alternate which side grass reclaims.
-	var alternating := sin(distance * 0.76 + shared_phase) * float(side)
-	var broad_bite := pow(maxf(0.0, alternating), 2.2)
-	# A smaller unrelated field keeps successive incursions from becoming mirror
-	# images while remaining smooth and deterministic at station spacing.
-	var local_wave := maxf(0.0, sin(distance * 1.07 + local_phase))
-	var local_bite := pow(local_wave, 4.0)
-	# The explicit grass bands let us use a strong soil silhouette without
-	# changing the saved footprint. Deep bites stay broad rather than pinched,
-	# while the zero crossings return to an almost full-width worn tongue.
-	return clampf(0.98 - 0.46 * broad_bite - 0.04 * local_bite, 0.48, 0.98)
+	# Localized route cells produce a few broad grass incursions separated by long
+	# calm stretches. This avoids the manufactured look of continuously varying
+	# sine-wave width while remaining deterministic and independent of frame time.
+	const CELL_LENGTH := 4.4
+	var cell := floori(distance / CELL_LENGTH)
+	var local := distance - float(cell) * CELL_LENGTH
+	var path_parity := Contact._seed(path_id, 0, 311) % 2
+	var bite_side := -1 if posmod(cell + path_parity, 2) == 0 else 1
+	if side != bite_side:
+		return 0.98
+
+	# Each cell moves the bite centre and gives the two shoulders unequal reach.
+	# Centres/radii are bounded so every pulse dies out before its cell boundary;
+	# adjacent cells therefore join at the same calm full-width value.
+	var centre := 1.55 + float(Contact._seed(path_id, cell, 317) % 126) / 100.0
+	var before_radius := 0.72 + float(Contact._seed(path_id, cell, 331) % 31) / 100.0
+	var after_radius := 0.82 + float(Contact._seed(path_id, cell, 347) % 31) / 100.0
+	var delta := local - centre
+	var radius := before_radius if delta < 0.0 else after_radius
+	var bite := 1.0 - smoothstep(radius * 0.12, radius, absf(delta))
+	var depth := 0.42 + float(Contact._seed(path_id, cell, 359) % 7) / 100.0
+	return clampf(0.98 - bite * depth, 0.50, 0.98)
 
 static func _height(renderer: Node, data: Dictionary, cell: Vector2i, scale_value: float) -> float:
 	var heights: Dictionary = data["heights"]
