@@ -292,10 +292,10 @@ static func _soil_shade_class(path_id: int, route_distance: float, signed_offset
 
 static func _soil_colour(shade_class: int) -> Color:
 	match shade_class:
-		1: return Color("#896852")
-		2: return Color("#a48769")
-		3: return Color("#b69a79")
-		4: return Color("#80624f")
+		1: return Color("#906b55")
+		2: return Color("#9c775d")
+		3: return Color("#a58165")
+		4: return Color("#896751")
 		_: return Color("#957058")
 
 static func _emit_raster_rect(builder: Dictionary, low_cell: Vector2i, high_cell: Vector2i, scale_value: float, height: float, shade_class: int) -> void:
