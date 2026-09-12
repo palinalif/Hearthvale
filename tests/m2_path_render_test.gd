@@ -1,5 +1,6 @@
 extends SceneTree
 
+const EarthChecks = preload("res://tests/m2_packed_earth_checks.gd")
 const ContactChecks = preload("res://tests/m2_path_grass_contact_checks.gd")
 
 var scene: Node
@@ -63,6 +64,8 @@ func _run_scene_checks(capture: bool) -> void:
 	_check_stepping_faces(stone_node.mesh as ArrayMesh, "committed")
 	_check_surface_reference(stone_node.mesh as ArrayMesh, "committed")
 	ContactChecks.inspect(self, scene, "committed")
+	EarthChecks.inspect(self, scene, "committed")
+	EarthChecks.width_cases(self, scene)
 	if capture:
 		scene.cursor = Vector3(24.0, 8.0, 24.0)
 		scene.camera_yaw = -1.1
@@ -77,7 +80,9 @@ func _run_scene_checks(capture: bool) -> void:
 		_check(image.save_png(screenshot_dir.path_join("all-styles.png")) == OK, "path review capture saved")
 		captures += 1
 		await _capture_stepping_close_views()
+		await EarthChecks.review(self, scene, screenshot_dir)
 	await _check_dig_reseat()
+	await EarthChecks.lifecycle(self, scene)
 	await ContactChecks.lifecycle(self, scene)
 	await _finish_scene()
 

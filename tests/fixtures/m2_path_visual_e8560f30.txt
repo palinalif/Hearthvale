@@ -7,7 +7,6 @@ class_name M2PathVisual
 ## leaving only a shallow exposed skin so lanes read as inset rather than stacked
 ## on top of the landscape.
 
-const Earth = preload("res://scripts/m2_packed_earth.gd")
 const Contact = preload("res://scripts/m2_path_grass_contact.gd")
 const Grid = preload("res://scripts/visual_grid.gd")
 const State = preload("res://scripts/landscape_state.gd")
@@ -44,7 +43,6 @@ func rebuild(path_values: Array, terrain_backend: Node = null) -> void:
 	var builders := {}
 	for style_id in STYLE_ORDER: builders[style_id] = _new_builder()
 	var geometry_cells := 0
-	var packed_paths: Array = []
 	for path_value in path_values:
 		if not path_value is Dictionary: continue
 		var path: Dictionary = path_value
@@ -52,23 +50,13 @@ func rebuild(path_values: Array, terrain_backend: Node = null) -> void:
 		if not builders.has(style_id): continue
 		var points: Array = path.get("points", [])
 		if points.size() < 2: continue
-		if style_id == "packed_earth":
-			packed_paths.append(path)
-		else:
-			geometry_cells += _append_path(builders[style_id], style_id, float(path.get("width", 0.0)), points, int(path.get("id", 0)))
-	# Canonical dirt order bounds grass globally without reordering either stone batch.
-	packed_paths.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.get("id", 0)) < int(b.get("id", 0)))
-	for path: Dictionary in packed_paths:
-		geometry_cells += Earth.append_path(self, builders["packed_earth"], float(path.get("width", 0.0)), path["points"], int(path.get("id", 0)))
+		geometry_cells += _append_path(builders[style_id], style_id, float(path.get("width", 0.0)), points, int(path.get("id", 0)))
 	for style_id in STYLE_ORDER:
-		var mesh: ArrayMesh = Earth.mesh_from_builder(builders[style_id]) if style_id == "packed_earth" else _mesh_from_builder(builders[style_id], STYLE_COLOURS[style_id])
+		var mesh := _mesh_from_builder(builders[style_id], STYLE_COLOURS[style_id])
 		if mesh == null: continue
 		var node := MeshInstance3D.new()
 		node.name = "PathBatch_" + style_id
 		node.mesh = mesh
-		if style_id == "packed_earth":
-			node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			_stats["packed_earth"] = Earth.stats(builders[style_id])
 		add_child(node)
 		_style_nodes[style_id] = node
 		_stats["styles"][style_id] = {"geometry": true, "surfaces": mesh.get_surface_count(), "cells": _builder_cell_count(builders[style_id])}
@@ -103,11 +91,8 @@ func show_preview(style_id: String, width: float, point_values: Array, valid: bo
 		# which tool is active before adding the first bend.
 		var p := Vector2(float(path_points[0][0]), float(path_points[0][1]))
 		path_points.append([p.x + 0.25, p.y])
-	if style_id == "packed_earth":
-		Earth.append_path(self, builders[style_id], width, path_points, 0, false)
-	else:
-		_append_path(builders[style_id], style_id, width, path_points, 0)
-	var mesh: ArrayMesh = Earth.mesh_from_builder(builders[style_id]) if style_id == "packed_earth" else _mesh_from_builder(builders[style_id], _preview_colours(style_id, valid))
+	_append_path(builders[style_id], style_id, width, path_points, 0)
+	var mesh := _mesh_from_builder(builders[style_id], _preview_colours(style_id, valid))
 	if mesh != null:
 		_preview_node = MeshInstance3D.new()
 		_preview_node.name = "PathPreview"
