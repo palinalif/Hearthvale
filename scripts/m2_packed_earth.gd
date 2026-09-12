@@ -222,8 +222,8 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		# so the silhouette change survives gameplay distance. Calm/full-width
 		# stretches keep the core brown and therefore remain broad.
 		var visible_fraction := core_extent / maxf(edge_extent, 0.0001)
-		var incursion_strength := 1.0 - smoothstep(0.60, 0.90, visible_fraction)
-		var inner_boundary := smoothstep(core_extent * 0.52, core_extent, radial_distance) * incursion_strength * 0.78
+		var incursion_strength := 1.0 - smoothstep(0.68, 0.90, visible_fraction)
+		var inner_boundary := smoothstep(core_extent * 0.78, core_extent, radial_distance) * incursion_strength
 		boundary = maxf(boundary, inner_boundary)
 		var direction := (centre_b - centre_a).normalized()
 		if bool(station_a["first"]): boundary = maxf(boundary, (1.0 - smoothstep(0.0, 0.18, (point - centre_a).dot(direction))) * (0.75 + 0.25 * pocket))
