@@ -175,10 +175,10 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		var shade := Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.11 + pow(edge, 3.0) * 0.09)
 		var route_distance := lerpf(float(station_a["distance"]), float(station_b["distance"]), along)
 		var wear := _interior_wear(path_id, route_distance, signed_offset, float(station_a["width"]))
-		# Broken compacted centre wear is now deliberately readable at Mobile
-		# distance. Sparse route-aligned patches remain broad and lower contrast.
-		shade = shade.lerp(Color("#765743"), wear.x * 0.24)
-		shade = shade.lerp(Color("#805b45"), wear.y * 0.16)
+		# Broken compacted centre wear is readable at Mobile distance. The second
+		# field stays broader, softer and route-aligned so neither becomes a stripe.
+		shade = shade.lerp(Color("#6e5140"), wear.x * 0.40)
+		shade = shade.lerp(Color("#765440"), wear.y * 0.24)
 		# Worn grass/soil at the outer band, not a separate raised shoulder.
 		# A continuous asymmetric field varies the transition's visible depth;
 		# the central 70% stays soil-only. Native grass colour, fully opaque.
@@ -189,9 +189,10 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		var core_key := side_key + "_core"
 		var core_extent := lerpf(float(station_a[core_key]), float(station_b[core_key]), along)
 		var edge_extent := lerpf(float(station_a[side_key]), float(station_b[side_key]), along)
-		# The same opaque surface meets native grass at its outer boundary.
-		# Only transition depth varies: no rectangular overlays or extra tufts.
-		var boundary := smoothstep(core_extent, edge_extent, point.distance_to(closest))
+		# Reach native-grass colour before the geometry edge. That makes selected
+		# core pockets read as shallow incursions without adding masks or slabs.
+		var transition_end := lerpf(core_extent, edge_extent, 0.58)
+		var boundary := smoothstep(core_extent, transition_end, point.distance_to(closest))
 		var direction := (centre_b - centre_a).normalized()
 		if bool(station_a["first"]): boundary = maxf(boundary, (1.0 - smoothstep(0.0, 0.18, (point - centre_a).dot(direction))) * (0.75 + 0.25 * pocket))
 		if bool(station_b["last"]): boundary = maxf(boundary, (1.0 - smoothstep(0.0, 0.18, (centre_b - point).dot(direction))) * (0.75 + 0.25 * pocket))
