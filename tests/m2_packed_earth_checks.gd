@@ -7,6 +7,9 @@ const State = preload("res://scripts/landscape_state.gd")
 const BASELINE := "e8560f30e2466854ab359459463659e0c9cd5b9e"
 const BASELINE_FILE := "res://tests/fixtures/m2_path_visual_e8560f30.txt"
 const BASELINE_SHA256 := "1ff5bcb9841fc25d6a2566ecdb43a974afc66d2d75f6428df48792e38ee03713"
+const PACKED_BASELINE := "3ff78a2fd6de8cdbed1e274e047525ebe9e96584"
+const PACKED_BASELINE_FILE := "res://tests/fixtures/m2_packed_earth_3ff78a2f.txt"
+const PACKED_BASELINE_SHA256 := "436ec62adf9a80bdcf27bd93319750e440e46f5e92e888376503250fe4b60495"
 
 static func _baseline(checker: SceneTree, scene: Node) -> Node3D:
 	var source := FileAccess.get_file_as_string(BASELINE_FILE).replace("\r\n", "\n")
@@ -19,6 +22,24 @@ static func _baseline(checker: SceneTree, scene: Node) -> Node3D:
 	scene.add_child(visual)
 	visual.rebuild(scene.landscape_state.paths, scene.backend)
 	return visual
+
+static func _packed_baseline(checker: SceneTree) -> GDScript:
+	var source := FileAccess.get_file_as_string(PACKED_BASELINE_FILE).replace("\r\n", "\n")
+	checker._check(source.sha256_text() == PACKED_BASELINE_SHA256, "packed-earth before helper is the exact 3ff78a2f source")
+	var script := GDScript.new()
+	script.source_code = source
+	checker._check(script.reload() == OK, "exact 3ff78a2f packed-earth helper compiles")
+	return script
+
+static func _packed_result(visual: Node, helper: GDScript, paths: Array, decorate: bool = true) -> Dictionary:
+	var builder: Dictionary = visual._new_builder()
+	var packed: Array = []
+	for path: Dictionary in paths:
+		if str(path["style_id"]) == "packed_earth": packed.append(path)
+	packed.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["id"]) < int(b["id"]))
+	for path: Dictionary in packed:
+		helper.call("append_path", visual, builder, float(path["width"]), path["points"], int(path["id"]), decorate)
+	return {"mesh": helper.call("mesh_from_builder", builder), "stats": helper.call("stats", builder), "builder": builder}
 
 static func _distance(point: Vector2, points: Array) -> float:
 	var result := INF
@@ -89,7 +110,7 @@ static func inspect(checker: SceneTree, scene: Node, phase: String) -> void:
 			roots_ok = roots_ok and _distance(Vector2(root.x, root.z), path["points"]) >= float(path["width"]) * 0.30
 	checker._check(roots_ok, "grass roots follow native terrain and leave the centre clear: " + phase)
 	checker._check(JSON.stringify(scene.landscape_state.document()) == document, "packed-earth generation changes no path/save authority: " + phase)
-	print("PACKED_EARTH_AUDIT " + JSON.stringify({"phase": phase, "baseline": BASELINE, "geometry": stats, "height_levels": terrain_heights.size(), "opaque_surface_draws": visual.stats().opaque_surface_draws}))
+	print("PACKED_EARTH_AUDIT " + JSON.stringify({"phase": phase, "baseline": PACKED_BASELINE, "geometry": stats, "height_levels": terrain_heights.size(), "opaque_surface_draws": visual.stats().opaque_surface_draws}))
 
 static func width_cases(checker: SceneTree, scene: Node) -> void:
 	for width: float in [0.25, 0.75, 3.0]:
@@ -101,13 +122,30 @@ static func width_cases(checker: SceneTree, scene: Node) -> void:
 		checker._check(mesh != null and int(stat["triangles"]) <= State._estimated_render_cells({"style_id": "packed_earth", "width": width, "points": values}) * 12, "width/bend/native-terrace case obeys unchanged geometry budget: " + str(width))
 		var bounded := true
 		var continuous := true
+		var min_extent := INF
+		var max_extent := -INF
+		var asymmetric := false
+		var centre_min := INF
+		var centre_max := -INF
+		var patch_hits := 0
 		for distance_index in 400:
 			var distance := float(distance_index) / 40.0
+			var left := Earth.extent(width, distance, 719, -1)
+			var right := Earth.extent(width, distance, 719, 1)
+			asymmetric = asymmetric or absf(left - right) > width * 0.003
 			for side: int in [-1, 1]:
-				var extent := Earth.extent(width, distance, 719, side)
-				bounded = bounded and extent >= width * 0.47 - 0.000001 and extent <= width * 0.5
-				continuous = continuous and absf(extent - Earth.extent(width, distance + 0.025, 719, side)) < 0.003
+				var edge_extent := Earth.extent(width, distance, 719, side)
+				min_extent = minf(min_extent, edge_extent)
+				max_extent = maxf(max_extent, edge_extent)
+				bounded = bounded and edge_extent >= width * 0.47 - 0.000001 and edge_extent <= width * 0.5
+				continuous = continuous and absf(edge_extent - Earth.extent(width, distance + 0.025, 719, side)) < 0.003
+			var wear := Earth._interior_wear(719, distance, 0.0, width)
+			centre_min = minf(centre_min, wear.x)
+			centre_max = maxf(centre_max, wear.x)
+			if wear.y > 0.35: patch_hits += 1
 		checker._check(bounded and continuous, "coherent edges preserve at least 94 percent width without sample jumps: " + str(width))
+		checker._check(max_extent - min_extent >= width * 0.018 and asymmetric, "edge wear has visible but bounded coherent left/right variation: " + str(width))
+		checker._check(centre_min < 0.05 and centre_max > 0.80 and patch_hits > 0 and patch_hits < 180, "internal centre wear breaks up and directional patches stay sparse: " + str(width))
 
 static func lifecycle(checker: SceneTree, scene: Node) -> void:
 	var visual: Node = scene.path_visual
@@ -157,48 +195,51 @@ static func lifecycle(checker: SceneTree, scene: Node) -> void:
 
 static func review(checker: SceneTree, scene: Node, directory: String) -> void:
 	var candidate: Node3D = scene.path_visual
-	var before := _baseline(checker, scene)
+	var locked := _baseline(checker, scene)
+	var packed_before := _packed_baseline(checker)
 	var saved: Dictionary = scene.landscape_state.document().duplicate(true)
 	for style: String in ["stepping_stones", "cobblestone"]:
-		checker._check(ContactChecks.mesh_digest(before._style_nodes[style].mesh) == ContactChecks.mesh_digest(candidate._style_nodes[style].mesh), "runtime " + style + " output is byte-identical to exact baseline")
-	checker._check(ContactChecks.digest(before._contact_data) == ContactChecks.digest(candidate._contact_data), "accepted stepping-stone grass output is byte-identical to baseline")
-	print("PACKED_EARTH_BEFORE_COST " + JSON.stringify(before.stats()))
+		checker._check(ContactChecks.mesh_digest(locked._style_nodes[style].mesh) == ContactChecks.mesh_digest(candidate._style_nodes[style].mesh), "runtime " + style + " output is byte-identical to locked pre-dirt baseline")
+	checker._check(ContactChecks.digest(locked._contact_data) == ContactChecks.digest(candidate._contact_data), "accepted stepping-stone grass output is byte-identical to locked baseline")
+	var before_result := _packed_result(candidate, packed_before, scene.landscape_state.paths)
+	print("PACKED_EARTH_BEFORE_COST " + JSON.stringify({"baseline": PACKED_BASELINE, "geometry": before_result["stats"], "opaque_surface_draws": candidate.stats().opaque_surface_draws}))
 	var before_dir := directory.path_join("before")
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(before_dir))
+	var packed_node: MeshInstance3D = candidate._style_nodes["packed_earth"]
+	var candidate_mesh: ArrayMesh = packed_node.mesh
 	for variant in 2:
-		var visual: Node3D = before if variant == 0 else candidate
-		before.visible = variant == 0
-		candidate.visible = variant == 1
-		scene.path_visual = visual
-		var target_dir := before_dir if variant == 0 else directory
-		await _views(checker, scene, target_dir)
+		packed_node.mesh = before_result["mesh"] if variant == 0 else candidate_mesh
+		await _views(checker, scene, before_dir if variant == 0 else directory)
+	packed_node.mesh = candidate_mesh
+
 	# An additional normal saved path crosses unmodified native terraces. It is
-	# created once, then both runtime renderers consume EXACTLY the same records.
+	# created once, then both dirt helpers consume EXACTLY the same records.
 	var id: int = scene.landscape_state.add_path("packed_earth", 0.75, [[7.0, 17.0], [11.0, 17.0], [14.0, 19.0]])
 	checker._check(id > 0, "terrace review uses a valid native path record")
 	for path: Dictionary in scene.landscape_state.paths:
 		scene.landscape_state.clear_records_along_path(path["points"], float(path["width"]))
 	scene.garden_visual.reset_records(scene.landscape_state.records)
-	before.rebuild(scene.landscape_state.paths)
 	candidate.rebuild(scene.landscape_state.paths)
 	var reference := JSON.stringify(scene.landscape_state.document())
+	packed_node = candidate._style_nodes["packed_earth"]
+	candidate_mesh = packed_node.mesh
+	before_result = _packed_result(candidate, packed_before, scene.landscape_state.paths)
 	for variant in 2:
-		before.visible = variant == 0
-		candidate.visible = variant == 1
-		scene.path_visual = before if variant == 0 else candidate
+		packed_node.mesh = before_result["mesh"] if variant == 0 else candidate_mesh
 		var target_dir := before_dir if variant == 0 else directory
 		var target := Vector3(10.5, float(candidate._surface_height(Vector2(10.5, 17.5))), 17.5)
 		scene.camera.position = target + Vector3(1.5, 5.7, 7.5)
 		scene.camera.look_at(target, Vector3.UP)
 		await _capture(checker, scene, target_dir.path_join("packed-earth-terrace.png"))
 		checker._check(JSON.stringify(scene.landscape_state.document()) == reference, "before/after terrace captures leave terrain/path authority matched")
+	packed_node.mesh = candidate_mesh
 	inspect(checker, scene, "terrace-review")
 	scene.landscape_state.restore(saved)
 	scene.garden_visual.reset_records(scene.landscape_state.records)
 	scene.path_visual = candidate
 	candidate.visible = true
-	before.visible = false
-	before.queue_free()
+	locked.visible = false
+	locked.queue_free()
 	candidate.rebuild(scene.landscape_state.paths)
 
 static func _views(checker: SceneTree, scene: Node, directory: String) -> void:

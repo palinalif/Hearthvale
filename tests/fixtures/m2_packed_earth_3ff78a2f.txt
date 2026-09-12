@@ -44,17 +44,12 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 		for across: float in ACROSS:
 			var offset := across * (left if across < 0.0 else right)
 			if is_equal_approx(absf(across), 0.64): offset = -left_core if across < 0.0 else right_core
-			# Taper only the visual end section. The centreline endpoint remains exact,
-			# while unequal shoulders stop the route reading as a square brush stroke.
+			# Shallow, unequal clipped ends; the saved endpoint itself stays put.
 			var end_shift := 0.0
 			if index == 0 or index == samples.size() - 1:
-				var end_key := 101 if index == 0 else 107
-				var side_key := end_key + (-3 if across < 0.0 else 5)
-				var taper := 0.82 + float(Contact._seed(path_id, 0, side_key) % 9) * 0.01
-				offset *= lerpf(1.0, taper, pow(absf(across), 1.25))
 				var neighbour: Vector3 = samples[1 if index == 0 else index - 1]["point"]
 				var end_length := centre.distance_to(Vector2(neighbour.x, neighbour.z))
-				end_shift = minf(end_length * 0.18, minf(0.10, safe_width * 0.14)) * pow(absf(across), 1.15) * (0.88 + 0.12 * across)
+				end_shift = minf(end_length * 0.20, minf(0.12, safe_width * 0.16)) * absf(across) * (0.85 + 0.15 * across)
 				if index != 0: end_shift = -end_shift
 			section.append(centre + normal * offset + tangent * end_shift)
 		sections.append(section)
@@ -70,35 +65,12 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 	return int(builder["cells"]) - before
 
 static func extent(width: float, distance: float, path_id: int, side: int) -> float:
-	# Most of the edge sits close to nominal width. Broad deterministic pockets
-	# occasionally cut farther inward, so full-width stretches read as worn-soil
-	# tongues rather than a periodic wobble. Both sides use unrelated phases.
-	var phase_a := float(Contact._seed(path_id, 0, 11 + side) % 6283) / 1000.0
-	var phase_b := float(Contact._seed(path_id, 0, 47 + side) % 6283) / 1000.0
-	var broad := sin(distance * 0.53 + phase_a) * 0.68 + sin(distance * 1.21 + phase_b) * 0.32
-	var pocket := smoothstep(0.18, 0.86, broad)
-	var drift := smoothstep(-0.75, 0.55, sin(distance * 0.27 + phase_b * 0.73))
-	var inset := width * 0.030 * clampf(0.06 + pocket * 0.70 + drift * 0.24, 0.0, 1.0)
-	return width * 0.5 - inset
-
-static func _interior_wear(path_id: int, distance: float, signed_offset: float, width: float) -> Vector2:
-	# Two smooth route-local fields: a broken compacted centre and sparse broad
-	# directional patches. They only drive vertex colour; they add no geometry.
-	var half_width := maxf(width * 0.5, 0.0001)
-	var across := signed_offset / half_width
-	var centre_profile := 1.0 - smoothstep(0.10, 0.46, absf(across))
-	var centre_phase := float(Contact._seed(path_id, 0, 131) % 6283) / 1000.0
-	var centre_signal := sin(distance * 0.63 + centre_phase) * 0.66 + sin(distance * 1.47 + centre_phase * 1.73) * 0.34
-	var centre_breaks := smoothstep(-0.10, 0.52, centre_signal)
-	var centre_wear := centre_profile * centre_breaks
-
-	var patch_phase := float(Contact._seed(path_id, 0, 173) % 6283) / 1000.0
-	var patch_signal := sin(distance * 0.91 + patch_phase) * 0.72 + sin(distance * 2.03 + patch_phase * 0.61) * 0.28
-	var patch_presence := smoothstep(0.36, 0.82, patch_signal)
-	var patch_centre := sin(distance * 0.31 + patch_phase * 1.29) * 0.20
-	var patch_profile := 1.0 - smoothstep(0.13, 0.43, absf(across - patch_centre))
-	var patch_wear := patch_presence * patch_profile
-	return Vector2(clampf(centre_wear, 0.0, 1.0), clampf(patch_wear, 0.0, 1.0))
+	# Continuous distance, not unrelated segment random numbers. Never exceeds
+	# nominal half-width; less than 6% total width loss even at narrow settings.
+	var phase := float(Contact._seed(path_id, 0, 11 + side) % 6283) / 1000.0
+	var slow := sin(distance * 1.17 + phase) * 0.5 + 0.5
+	var small := pow(maxf(0.0, sin(distance * 3.1 + phase * 1.7)), 6.0)
+	return width * 0.5 - minf(width * 0.030, 0.032) * (0.65 * slow + 0.35 * small)
 
 static func _core_fraction(distance: float, path_id: int, side: int) -> float:
 	# Move the soil/grass transition within the existing footprint, not the
@@ -164,27 +136,20 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		surface["vertices"].append(Vector3(point.x, height + TOP_EPSILON, point.y))
 		surface["normals"].append(Vector3.UP)
 		var closest := Geometry2D.get_closest_point_to_segment(point, centre_a, centre_b)
-		var segment := centre_b - centre_a
-		var along := clampf((closest - centre_a).dot(segment) / maxf(segment.length_squared(), 0.0000001), 0.0, 1.0)
-		var normal: Vector2 = station_a["normal"]
-		var signed_offset := (point - closest).dot(normal)
-		var edge := clampf(absf(signed_offset) / (float(station_a["width"]) * 0.5), 0.0, 1.0)
+		var edge := clampf(point.distance_to(closest) / (float(station_a["width"]) * 0.5), 0.0, 1.0)
 		var phase := float(Contact._seed(path_id, 0, 31) % 6283) / 1000.0
 		var quiet := sin(point.x * 0.71 + point.y * 0.39 + phase) * 0.5 + 0.5
-		# Same low-contrast field across every native rectangle: no alternating tiles.
-		var shade := Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.07 + pow(edge, 3.0) * 0.09)
-		var route_distance := lerpf(float(station_a["distance"]), float(station_b["distance"]), along)
-		var wear := _interior_wear(path_id, route_distance, signed_offset, float(station_a["width"]))
-		# Centre wear is broader and calmer; the second field appears only in
-		# occasional elongated route-aligned patches. Both remain subordinate.
-		shade = shade.lerp(Color("#8f684d"), wear.x * 0.105)
-		shade = shade.lerp(Color("#855f48"), wear.y * 0.075)
+		# Same field across every native rectangle: no alternating coloured tiles.
+		var shade := Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.08 + pow(edge, 3.0) * 0.10)
 		# Worn grass/soil at the outer band, not a separate raised shoulder.
 		# A continuous asymmetric field varies the transition's visible depth;
 		# the central 76% stays soil-only. Native grass colour, fully opaque.
-		var side := -1 if signed_offset < 0.0 else 1
+		var normal: Vector2 = station_a["normal"]
+		var side := -1 if (point - closest).dot(normal) < 0.0 else 1
 		var edge_phase := float(Contact._seed(path_id, 0, 82 + side) % 6283) / 1000.0
 		var pocket := smoothstep(-0.3, 0.6, sin(point.x * 0.81 + point.y * 0.57 + edge_phase) * 0.65 + sin(point.x * 2.2 - point.y * 0.73 + edge_phase * 1.31) * 0.35)
+		var segment := centre_b - centre_a
+		var along := clampf((closest - centre_a).dot(segment) / maxf(segment.length_squared(), 0.0000001), 0.0, 1.0)
 		var side_key := "left" if side < 0 else "right"
 		var core_key := side_key + "_core"
 		var core_extent := lerpf(float(station_a[core_key]), float(station_b[core_key]), along)
