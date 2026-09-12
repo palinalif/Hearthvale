@@ -12,6 +12,9 @@ class FakeBackend:
 		return int(values.get(pos, 0))
 	func fill_column(x: int, z: int, top_y: int, material: int = 7) -> void:
 		for y in range(top_y + 1): values[Vector3i(x, y, z)] = material
+	func apply_plan(plan: Dictionary) -> void:
+		for item: Dictionary in plan.removals:
+			values[item.position] = int(item.after)
 
 var checks := 0
 var failures := 0
@@ -48,6 +51,29 @@ func _initialize() -> void:
 	_check(plan.min != Vector3i.ZERO and plan.max.x > plan.min.x and plan.max.y > plan.min.y and plan.max.z > plan.min.z, "plan returns a bounded native edit region")
 	var original_count := backend.values.size()
 	_check(backend.values.size() == original_count, "planning is read-only and does not mutate terrain")
+
+	var transition_backend := FakeBackend.new()
+	var small: Array = []
+	for z in range(60, 65):
+		for x in range(60, 65):
+			small.append(Vector2i(x, z))
+			transition_backend.fill_column(x, z, 14, 8)
+	var first_cut := Excavation.plan_packed_earth(transition_backend, small)
+	transition_backend.apply_plan(first_cut)
+	var expanded := small.duplicate()
+	for z in range(59, 66):
+		for x in range(59, 66):
+			var cell := Vector2i(x, z)
+			if not expanded.has(cell):
+				expanded.append(cell)
+				transition_backend.fill_column(x, z, 14, 8)
+	var transition := Excavation.plan_packed_earth_transition(transition_backend, small, expanded)
+	_check(bool(transition.ok) and int(transition.changed_count) > 0, "growing a packed-earth mask plans only its additional excavation")
+	var centre_delta := 0
+	for item: Dictionary in transition.removals:
+		var p: Vector3i = item.position
+		if p.x == 62 and p.z == 62: centre_delta += 1
+	_check(centre_delta <= 1, "transition planning does not re-dig the already lowered centre from scratch")
 
 	var cave := FakeBackend.new()
 	for z in range(40, 48):

@@ -199,6 +199,74 @@ func apply_sphere(center: Vector3, radius: float, remove: bool) -> bool:
 	changed.emit()
 	return true
 
+## Apply an exact set of native-grid voxel replacements as one ordinary terrain
+## history command. Each change must provide position, before and after. The
+## optimistic before check prevents a stale path plan from overwriting terrain
+## that changed between planning and commit.
+func apply_voxel_changes(changes: Array) -> bool:
+	if _stroke_active or not _backend_ready or voxels == null or changes.is_empty():
+		return false
+	var unique := {}
+	var min_pos := patch_size
+	var max_pos := Vector3i.ZERO
+	for value in changes:
+		if not value is Dictionary:
+			_error = "invalid voxel change"
+			return false
+		var change: Dictionary = value
+		if not change.get("position", null) is Vector3i:
+			_error = "voxel change position missing"
+			return false
+		var position: Vector3i = change["position"]
+		if position.x < 0 or position.y < 0 or position.z < 0 or position.x >= patch_size.x or position.y >= patch_size.y or position.z >= patch_size.z:
+			_error = "voxel change outside terrain bounds"
+			return false
+		var key := "%d:%d:%d" % [position.x, position.y, position.z]
+		if unique.has(key):
+			_error = "duplicate voxel change"
+			return false
+		var before := int(change.get("before", -1))
+		var after := int(change.get("after", -1))
+		if before < 0 or after < 0 or before > 65535 or after > 65535 or voxel_at(position) != before:
+			_error = "stale or invalid voxel change"
+			return false
+		unique[key] = {"position": position, "before": before, "after": after}
+		min_pos = min_pos.min(position)
+		max_pos = max_pos.max(position + Vector3i.ONE)
+	var region_size := max_pos - min_pos
+	if region_size.x <= 0 or region_size.y <= 0 or region_size.z <= 0: return false
+	var command_bytes := region_size.x * region_size.y * region_size.z * VOXEL_BYTES * 2
+	var redo_bytes := _stack_bytes(_redo)
+	var projected_bytes := _history_bytes - redo_bytes + command_bytes
+	if _undo.size() >= MAX_HISTORY:
+		projected_bytes -= _command_bytes(_undo[0])
+	if projected_bytes > MAX_HISTORY_BYTES:
+		_error = "terrain history budget exceeded"
+		return false
+	var before_region: Object = _clone_region(voxels, min_pos, max_pos)
+	var after_region: Object = _clone_region(voxels, min_pos, max_pos)
+	for change: Dictionary in unique.values():
+		var position: Vector3i = change["position"]
+		after_region.set_voxel(int(change["after"]), position.x - min_pos.x, position.y - min_pos.y, position.z - min_pos.z, PatchGenerator.CHANNEL_TYPE)
+	var terrain_tool = terrain.get_voxel_tool()
+	terrain_tool.paste(min_pos, after_region, 1)
+	for change: Dictionary in unique.values():
+		var position: Vector3i = change["position"]
+		voxels.set_voxel(int(change["after"]), position.x, position.y, position.z, PatchGenerator.CHANNEL_TYPE)
+	_redo.clear()
+	_history_bytes -= redo_bytes
+	_undo.append({"min": min_pos, "size": region_size, "before": before_region, "after": after_region})
+	_last_edit_command = _undo.back()
+	_history_bytes += command_bytes
+	if _undo.size() > MAX_HISTORY:
+		_history_bytes -= _command_bytes(_undo.pop_front())
+	_revision += 1
+	_dirty = true
+	_last_edit_submitted_at_ms = Time.get_ticks_msec()
+	_error = ""
+	changed.emit()
+	return true
+
 ## Public coordinates are world units; returned positions are authoritative
 ## native grid cells (the same cells apply_sphere would write).
 func preview_sphere(center: Vector3, radius: float, remove: bool) -> Array[Vector3i]:

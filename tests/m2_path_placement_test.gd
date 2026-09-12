@@ -1,6 +1,7 @@
 extends SceneTree
 
 const State = preload("res://scripts/landscape_state.gd")
+const Excavation = preload("res://scripts/m2_path_terrain_excavation.gd")
 
 var checks := 0
 var failures := 0
@@ -46,8 +47,15 @@ func _initialize() -> void:
 	_check(JSON.stringify(scene.landscape_state.document()) == preview_before and scene.path_visual.stats().preview_cells > 0, "live painted preview has geometry without mutating authority")
 	_aim(Vector2(44.0, fixture_z))
 	_check(scene._sample_path_stroke() and scene.path_cells.size() > 20, "moving while A is held continuously extends the stroke")
+	var expected_cut: Dictionary = Excavation.plan_packed_earth_transition(scene.backend, scene.landscape_state.path_cells("packed_earth"), scene.path_cells)
+	_check(bool(expected_cut.ok) and int(expected_cut.changed_count) > 0, "packed-earth stroke plans a real terrain cut before commit")
+	var cut_position: Vector3i = expected_cut.removals[0].position
+	var cut_material: int = int(expected_cut.removals[0].before)
+	var terrain_revision_before: int = int(scene.backend.stats().revision)
 	await _button_up(JOY_BUTTON_A)
 	_check(not scene.path_painting and scene.path_placement_active and scene.landscape_state.paths.size() == 1, "A release commits the stroke and keeps the paint tool active")
+	_check(scene.backend.voxel_at(cut_position) == 0 and int(scene.backend.stats().revision) == terrain_revision_before + 1, "packed-earth commit excavates native terrain exactly once")
+	_check(scene._history_tags.back() == "path", "terrain cut and painted authority share one path history transaction")
 	_check(scene._history_tags.size() == history_before + 1, "one painted stroke records one landscape history entry")
 	var after: Dictionary = scene.landscape_state.document()
 	_check(after.paths[0].has("cells") and not after.paths[0].has("points") and not after.paths[0].has("width"), "committed path stores only painted-cell authority")
@@ -55,6 +63,7 @@ func _initialize() -> void:
 
 	await _press(JOY_BUTTON_LEFT_SHOULDER)
 	_check(scene.landscape_state.document() == before, "LB undo while painting tool is open restores path and planting together")
+	_check(scene.backend.voxel_at(cut_position) == cut_material, "LB undo restores the terrain removed by the same path transaction")
 	_check(scene.path_placement_active, "undo keeps the path paint tool active")
 	# Repaint after undo so save/reload exercises canonical painted authority.
 	_aim(Vector2(36.0, fixture_z))

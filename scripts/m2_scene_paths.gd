@@ -8,6 +8,7 @@ const PathState = preload("res://scripts/landscape_state.gd")
 const PathGrid = preload("res://scripts/visual_grid.gd")
 const PathRegion = preload("res://scripts/m2_painted_path_region.gd")
 const PathAuthority = preload("res://scripts/m2_painted_path_authority.gd")
+const PathExcavation = preload("res://scripts/m2_path_terrain_excavation.gd")
 
 const PATH_STYLES := {
 	"packed_earth": {"name": "Packed-earth footpath", "width": 0.75, "summary": "Paint compacted dirt from footpaths to broad commons"},
@@ -283,11 +284,28 @@ func _commit_path_stroke() -> bool:
 		_cancel_path_stroke("Invalid stroke cancelled")
 		return false
 	_landscape_before = _path_before.duplicate(true)
+	var packed_before: Array = landscape_state.path_cells("packed_earth")
 	var path_id := landscape_state.paint_path_cells(path_style_id, path_cells)
 	if path_id < 1:
 		_landscape_before.clear()
 		_cancel_path_stroke("Path limit reached")
 		return false
+	var terrain_changed := false
+	if path_style_id == "packed_earth":
+		var packed_after: Array = landscape_state.path_cells("packed_earth")
+		var excavation: Dictionary = PathExcavation.plan_packed_earth_transition(backend, packed_before, packed_after)
+		if not bool(excavation.get("ok", false)):
+			landscape_state.restore(_path_before)
+			_landscape_before.clear()
+			_cancel_path_stroke("Terrain excavation unavailable")
+			return false
+		if int(excavation.get("changed_count", 0)) > 0:
+			if not backend or not backend.has_method("apply_voxel_changes") or not backend.apply_voxel_changes(excavation["removals"]):
+				landscape_state.restore(_path_before)
+				_landscape_before.clear()
+				_cancel_path_stroke("Terrain changed; stroke cancelled")
+				return false
+			terrain_changed = true
 	landscape_state.clear_records_in_path_cells(path_cells)
 	if garden_visual: garden_visual.reset_records(landscape_state.records)
 	path_painting = false
@@ -296,7 +314,7 @@ func _commit_path_stroke() -> bool:
 	_path_last_sample = Vector2(NAN, NAN)
 	path_visual.hide_preview()
 	_path_preview_signature = ""
-	_record_history("landscape")
+	_record_history("path" if terrain_changed else "landscape")
 	_landscape_before.clear()
 	_refresh_path_visual(true)
 	_reset_path_baseline()
