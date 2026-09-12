@@ -1,5 +1,6 @@
 extends RefCounted
 
+const ContourChecks = preload("res://tests/m2_packed_earth_contour_checks.gd")
 const Earth = preload("res://scripts/m2_packed_earth.gd")
 const PathVisual = preload("res://scripts/m2_path_visual.gd")
 const ContactChecks = preload("res://tests/m2_path_grass_contact_checks.gd")
@@ -7,9 +8,9 @@ const State = preload("res://scripts/landscape_state.gd")
 const BASELINE := "e8560f30e2466854ab359459463659e0c9cd5b9e"
 const BASELINE_FILE := "res://tests/fixtures/m2_path_visual_e8560f30.txt"
 const BASELINE_SHA256 := "1ff5bcb9841fc25d6a2566ecdb43a974afc66d2d75f6428df48792e38ee03713"
-const PACKED_BASELINE := "3ff78a2fd6de8cdbed1e274e047525ebe9e96584"
-const PACKED_BASELINE_FILE := "res://tests/fixtures/m2_packed_earth_3ff78a2f.txt"
-const PACKED_BASELINE_SHA256 := "436ec62adf9a80bdcf27bd93319750e440e46f5e92e888376503250fe4b60495"
+const PACKED_BASELINE := "8e384a13bc2fdbb4775f48bcb5917beb4db7076b"
+const PACKED_BASELINE_FILE := "res://tests/fixtures/m2_packed_earth_8e384a13.txt"
+const PACKED_BASELINE_SHA256 := "dd463b622e654c7049530be2e2bf68313b26e8b074d01053161916c3eeb5cf36"
 
 static func _baseline(checker: SceneTree, scene: Node) -> Node3D:
 	var source := FileAccess.get_file_as_string(BASELINE_FILE).replace("\r\n", "\n")
@@ -25,10 +26,10 @@ static func _baseline(checker: SceneTree, scene: Node) -> Node3D:
 
 static func _packed_baseline(checker: SceneTree) -> GDScript:
 	var source := FileAccess.get_file_as_string(PACKED_BASELINE_FILE).replace("\r\n", "\n")
-	checker._check(source.sha256_text() == PACKED_BASELINE_SHA256, "packed-earth before helper is the exact 3ff78a2f source")
+	checker._check(source.sha256_text() == PACKED_BASELINE_SHA256, "packed-earth before helper is the exact 8e384a13 source")
 	var script := GDScript.new()
 	script.source_code = source
-	checker._check(script.reload() == OK, "exact 3ff78a2f packed-earth helper compiles")
+	checker._check(script.reload() == OK, "exact 8e384a13 packed-earth helper compiles")
 	return script
 
 static func _packed_result(visual: Node, helper: GDScript, paths: Array, decorate: bool = true) -> Dictionary:
@@ -93,8 +94,8 @@ static func inspect(checker: SceneTree, scene: Node, phase: String) -> void:
 		var a := vertices[indices[index]]
 		var b := vertices[indices[index + 1]]
 		var c := vertices[indices[index + 2]]
-		winding = winding and (b - a).cross(c - a).dot(normals[indices[index]]) < -0.0000000001
 		var centre := (a + b + c) / 3.0
+		winding = winding and (b - a).cross(c - a).dot(normals[indices[index]]) < -0.0000000001
 		var scale_value := float(scene.backend.voxel_scale)
 		var hit: Dictionary = scene.backend.sample_surface_plane(centre + Vector3.UP * scale_value * 0.5, Vector3.UP, scale_value * 2.0)
 		var ground: Vector3 = hit.get("point", Vector3.INF)
@@ -113,6 +114,7 @@ static func inspect(checker: SceneTree, scene: Node, phase: String) -> void:
 	print("PACKED_EARTH_AUDIT " + JSON.stringify({"phase": phase, "baseline": PACKED_BASELINE, "geometry": stats, "height_levels": terrain_heights.size(), "opaque_surface_draws": visual.stats().opaque_surface_draws}))
 
 static func width_cases(checker: SceneTree, scene: Node) -> void:
+	ContourChecks.run(checker, scene)
 	for width: float in [0.25, 0.75, 3.0]:
 		var builder: Dictionary = scene.path_visual._new_builder()
 		var values: Array = [[7.0, 17.0], [11.0, 17.0], [14.0, 19.0]]

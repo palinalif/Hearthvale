@@ -15,12 +15,7 @@ const MAX_CELLS_PER_TUFT := 4
 const FACET_ROUTE_STEP := 0.5
 const FACET_LATERAL_UNIT := 0.0625
 const FACET_MIN_UNIT := 0.015625
-const ACROSS := [-1.0, -0.64, -0.32, 0.0, 0.32, 0.64, 1.0]
-const SOIL_BASE := Color("#957058")
-const SOIL_WORN := Color("#a58165")
-const SOIL_SCUFF := Color("#896751")
-const WORN_THRESHOLD := 0.32
-const SCUFF_THRESHOLD := 0.55
+const ACROSS := [-1.0, -0.64, 0.0, 0.64, 1.0]
 static var _soil_material: StandardMaterial3D
 static var _grass_material: StandardMaterial3D
 
@@ -54,9 +49,7 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 		var end_influence := 1.0 - smoothstep(0.0, 3.0, float(end_station_distance))
 		for across: float in ACROSS:
 			var offset := across * (left if across < 0.0 else right)
-			if absf(across) <= 0.64:
-				offset = across / 0.64 * (left_core if across < 0.0 else right_core)
-			var edge_weight := clampf(absf(across) / 0.64, 0.0, 1.0)
+			if is_equal_approx(absf(across), 0.64): offset = -left_core if across < 0.0 else right_core
 			# Taper across several stations so the route wears out gradually instead
 			# of ending in one clipped section. The centreline endpoint remains exact.
 			var end_shift := 0.0
@@ -64,25 +57,25 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 				var near_start := index <= samples.size() / 2
 				var end_key := 101 if near_start else 107
 				var side_key := end_key + (-3 if across < 0.0 else 5)
-				var taper := 0.48 + float(Contact._seed(path_id, 0, side_key) % 9) * 0.018
-				offset *= lerpf(1.0, taper, end_influence * pow(edge_weight, 1.25))
+				var taper := 0.64 + float(Contact._seed(path_id, 0, side_key) % 9) * 0.012
+				offset *= lerpf(1.0, taper, end_influence * pow(absf(across), 1.25))
 				if index == 0 or index == samples.size() - 1:
 					var neighbour: Vector3 = samples[1 if index == 0 else index - 1]["point"]
 					var end_length := centre.distance_to(Vector2(neighbour.x, neighbour.z))
-					end_shift = minf(end_length * 0.20, minf(0.12, safe_width * 0.16)) * pow(edge_weight, 1.15) * (0.88 + 0.12 * across)
+					end_shift = minf(end_length * 0.20, minf(0.12, safe_width * 0.16)) * pow(absf(across), 1.15) * (0.88 + 0.12 * across)
 					if index != 0: end_shift = -end_shift
 			section.append(centre + normal * offset + tangent * end_shift)
 		sections.append(section)
 		# Contact follows the visible boundary, including the geometric end taper.
 		left_core = (centre - section[1]).dot(normal)
-		right_core = (section[ACROSS.size() - 2] - centre).dot(normal)
+		right_core = (section[3] - centre).dot(normal)
 		stations.append({"path_id": path_id, "index": index, "distance": distance, "centre": centre, "normal": normal, "tangent": tangent, "left": left, "right": right, "left_core": left_core, "right_core": right_core, "width": safe_width, "first": index == 0, "last": index == samples.size() - 1})
 	var before := int(builder["cells"])
 	for index in range(1, sections.size()):
 		var a: PackedVector2Array = sections[index - 1]
 		var b: PackedVector2Array = sections[index]
-		# Interior samples catch off-centre scuffs. The outer safety envelope
-		# stays unpainted: its appearance belongs to the native terrain.
+		# Emit the two soil bands only. The outer safety envelope is not a green
+		# overlay: its grass/soil/terrace appearance belongs to the native terrain.
 		for across in range(1, ACROSS.size() - 2):
 			_ground_polygon(renderer, builder, PackedVector2Array([a[across], a[across + 1], b[across + 1], b[across]]), path_id, stations[index - 1], stations[index], across)
 	data["stations"].append_array(stations)
@@ -122,25 +115,8 @@ static func _visible_core_extent(width: float, edge_extent: float, distance: flo
 	var stepped_distance := snappedf(distance, FACET_ROUTE_STEP)
 	var lateral_unit := minf(FACET_LATERAL_UNIT, maxf(FACET_MIN_UNIT, width * 0.08))
 	var raw := edge_extent * _core_fraction(stepped_distance, path_id, side)
-	# Small, clustered grass incursions interrupt the long parallel runs. The
-	# seed is route-relative and side-independent; never jitter every vertex.
-	raw -= _edge_bite(width, stepped_distance, path_id, side)
 	var faceted := snappedf(raw, lateral_unit)
 	return clampf(faceted, width * 0.34, edge_extent * 0.995)
-
-static func _edge_bite(width: float, distance: float, path_id: int, side: int) -> float:
-	const CLUSTER_LENGTH := 2.75
-	var phase := float(Contact._seed(path_id, 0, 521 + side) % 101) / 100.0
-	var shifted := distance + phase
-	var cell := floori(shifted / CLUSTER_LENGTH)
-	var local := shifted - float(cell) * CLUSTER_LENGTH
-	var seed_value := Contact._seed(path_id, cell, 541 + side)
-	if seed_value % 4 == 0: return 0.0
-	var start := 0.30 + float(seed_value % 37) / 100.0
-	var span := 0.45 + float(Contact._seed(path_id, cell, 563 + side) % 56) / 100.0
-	var profile := _faceted_profile(local, start, start + 0.25, start + span, start + span + 0.35)
-	var depth := minf(FACET_LATERAL_UNIT * (1.0 + float(seed_value % 2)), width * 0.10)
-	return profile * depth
 
 static func _interior_wear(path_id: int, distance: float, signed_offset: float, width: float) -> Vector2:
 	# Broad localized compaction remains continuous across the ribbon. Sampling
@@ -244,10 +220,13 @@ static func _ground_polygon(renderer: Node, builder: Dictionary, polygon: Packed
 static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height: float, path_id: int, station_a: Dictionary, station_b: Dictionary, _band: int) -> void:
 	var triangles := Geometry2D.triangulate_polygon(polygon)
 	if triangles.is_empty(): return
+	var surface: Dictionary = builder["surfaces"][0]
+	var base: int = surface["vertices"].size()
 	var centre_a: Vector2 = station_a["centre"]
 	var centre_b: Vector2 = station_b["centre"]
-	var samples: Array[Vector4] = []
 	for point: Vector2 in polygon:
+		surface["vertices"].append(Vector3(point.x, height + TOP_EPSILON, point.y))
+		surface["normals"].append(Vector3.UP)
 		var closest := Geometry2D.get_closest_point_to_segment(point, centre_a, centre_b)
 		var segment := centre_b - centre_a
 		var along := clampf((closest - centre_a).dot(segment) / maxf(segment.length_squared(), 0.0000001), 0.0, 1.0)
@@ -257,54 +236,21 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		var signed_offset := (point - closest).dot(normal)
 		var route_distance := lerpf(float(station_a["distance"]), float(station_b["distance"]), along)
 		var wear := _interior_wear(path_id, route_distance, signed_offset, float(station_a["width"]))
-		samples.append(Vector4(point.x, point.y, wear.x, wear.y))
-	# Split each terrain-grounded triangle at the wear contours. This gives
-	# the patches their own mesh boundaries rather than a nearly invisible
-	# colour interpolation over the whole ribbon. All three regions replace
-	# soil at the SAME height: no overlapping decals, layers, or extra draw.
+		# One quiet earth base and two broad, low-contrast compaction fields.
+		# No world-cell noise or green endpoint/shoulder paint. Ends are shaped
+		# by the same top-only geometry, so they also work on non-green terrain.
+		var shade := Color("#957058").lerp(Color("#a58165"), wear.x * 0.18)
+		shade = shade.lerp(Color("#896751"), wear.y * 0.12)
+		builder["earth"]["colours"][0].append(shade)
 	for index in range(0, triangles.size(), 3):
-		var triangle: Array[Vector4] = [samples[triangles[index]], samples[triangles[index + 1]], samples[triangles[index + 2]]]
-		var unscuffed := _clip_wear(triangle, 3, SCUFF_THRESHOLD, false)
-		_emit_patch(builder, _clip_wear(triangle, 3, SCUFF_THRESHOLD, true), height, SOIL_SCUFF)
-		_emit_patch(builder, _clip_wear(unscuffed, 2, WORN_THRESHOLD, true), height, SOIL_WORN)
-		_emit_patch(builder, _clip_wear(unscuffed, 2, WORN_THRESHOLD, false), height, SOIL_BASE)
-
-static func _clip_wear(polygon: Array[Vector4], component: int, threshold: float, above: bool) -> Array[Vector4]:
-	var result: Array[Vector4] = []
-	if polygon.is_empty(): return result
-	var previous: Vector4 = polygon.back()
-	var previous_inside := previous[component] >= threshold if above else previous[component] < threshold
-	for point: Vector4 in polygon:
-		var inside := point[component] >= threshold if above else point[component] < threshold
-		if inside != previous_inside:
-			var weight := (threshold - previous[component]) / (point[component] - previous[component])
-			result.append(previous.lerp(point, clampf(weight, 0.0, 1.0)))
-		if inside: result.append(point)
-		previous = point
-		previous_inside = inside
-	return result
-
-static func _emit_patch(builder: Dictionary, samples: Array[Vector4], height: float, shade: Color) -> void:
-	if samples.size() < 3: return
-	# Clipping a triangle by a linear field remains convex, so a fan is exact.
-	# Drop zero-area fans before appending vertices; threshold-on-vertex cases
-	# cannot leave invalid triangles or unmatched colour arrays behind.
-	var surface: Dictionary = builder["surfaces"][0]
-	var emitted := false
-	for index in range(1, samples.size() - 1):
-		var a := Vector2(samples[0].x, samples[0].y)
-		var b := Vector2(samples[index].x, samples[index].y)
-		var c := Vector2(samples[index + 1].x, samples[index + 1].y)
-		var signed_area := (b - a).cross(c - a)
+		var a := triangles[index]
+		var b := triangles[index + 1]
+		var c := triangles[index + 2]
+		var signed_area := (polygon[b] - polygon[a]).cross(polygon[c] - polygon[a])
 		if absf(signed_area) < 0.000000001: continue
-		var base: int = surface["vertices"].size()
-		for point: Vector2 in [a, b, c]:
-			surface["vertices"].append(Vector3(point.x, height + TOP_EPSILON, point.y))
-			surface["normals"].append(Vector3.UP)
-			builder["earth"]["colours"][0].append(shade)
-		surface["indices"].append_array([base, base + 1, base + 2] if signed_area > 0.0 else [base, base + 2, base + 1])
-		emitted = true
-	if emitted: builder["cells"] = int(builder["cells"]) + 1
+		# Positive X/Z signed area is clockwise from above in Godot.
+		surface["indices"].append_array([base + a, base + b, base + c] if signed_area > 0.0 else [base + a, base + c, base + b])
+	builder["cells"] = int(builder["cells"]) + 1
 
 static func _grass(renderer: Node, builder: Dictionary, stations: Array, path_id: int) -> void:
 	if renderer.backend == null or stations.size() < 5: return
