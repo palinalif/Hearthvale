@@ -1,0 +1,5 @@
+import test from "node:test"; import assert from "node:assert/strict"; import os from "node:os"; import path from "node:path"; import fs from "node:fs/promises";
+import { SafeError, assertBranch, safePath } from "../src/core.mjs";
+test("rejects traversal and Windows escapes", async()=>{const root=await fs.mkdtemp(path.join(os.tmpdir(),"hvmcp-"));await assert.rejects(()=>safePath(root,"../x"),SafeError);await assert.rejects(()=>safePath(root,"C:\\x"),SafeError);await assert.rejects(()=>safePath(root,"\\\\server\\share"),SafeError);await assert.rejects(()=>safePath(root,"a/../../x"),SafeError);});
+test("accepts a normal repository path", async()=>{const root=await fs.mkdtemp(path.join(os.tmpdir(),"hvmcp-"));assert.equal((await safePath(root,"tests/a.gd",{allowMissing:true})).relative,"tests/a.gd");});
+test("validates branch names",()=>{assert.equal(assertBranch("feat/example"),"feat/example");assert.throws(()=>assertBranch("../bad"),SafeError);assert.throws(()=>assertBranch("-bad"),SafeError);assert.throws(()=>assertBranch("bad name"),SafeError);});
