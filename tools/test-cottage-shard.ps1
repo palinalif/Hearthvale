@@ -11,9 +11,10 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
-# Each shard runs on a clean hosted runner. The paths shard uses bootstrap-only
-# first so targeted script checks can expose deep parser failures before the
-# ordinary project import collapses them into an unresolved descendant class.
+# Each shard runs on a clean hosted runner. The paths shard bootstraps the pinned
+# editor first, then performs a normal import to build Godot's global class cache
+# before targeted --check-only probes. This keeps the probes actionable without
+# false failures on class_name symbols such as BuildingWorld.
 $placementSuite = if ($Shard -eq 'paths') { 'bootstrap' } else { 'setup' }
 ./tools/test-m1-placement.ps1 -Suite $placementSuite
 if ($LASTEXITCODE -ne 0) { throw 'Pinned Godot/voxel setup failed' }
@@ -151,10 +152,10 @@ switch ($Shard) {
         )
     }
     'paths' {
+        Invoke-ProjectImport
         Invoke-ScriptCheck 'scripts/m2_scene_paths.gd'
         Invoke-ScriptCheck 'scripts/m2_scene_composition.gd'
         Invoke-ScriptCheck 'scripts/m2_scene_build_browser.gd'
-        Invoke-ProjectImport
         Invoke-NativeTests @(
             'm2_painted_path_region_test',
             'm2_painted_path_authority_test',
