@@ -12,6 +12,10 @@ const MAX_TUFTS := 64
 const MAX_PER_PATH := 8
 const MAX_CELLS_PER_TUFT := 4
 const ACROSS := [-1.0, -0.64, 0.0, 0.64, 1.0]
+const VISIBLE_ROUTE_STEP := 0.5
+const VISIBLE_EDGE_UNIT := 0.125
+const MIN_VISIBLE_EDGE_UNIT := 0.03125
+const WEAR_LEVEL_STEP := 0.25
 static var _soil_material: StandardMaterial3D
 static var _grass_material: StandardMaterial3D
 
@@ -38,8 +42,8 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 		var normal := Vector2(tangent.y, -tangent.x)
 		var left := extent(safe_width, distance, path_id, -1)
 		var right := extent(safe_width, distance, path_id, 1)
-		var left_core := left * _core_fraction(distance, path_id, -1)
-		var right_core := right * _core_fraction(distance, path_id, 1)
+		var left_core := _visible_core_extent(safe_width, left, distance, path_id, -1)
+		var right_core := _visible_core_extent(safe_width, right, distance, path_id, 1)
 		var section := PackedVector2Array()
 		var end_station_distance := mini(index, samples.size() - 1 - index)
 		var end_influence := 1.0 - smoothstep(0.0, 3.0, float(end_station_distance))
@@ -91,15 +95,33 @@ static func extent(width: float, distance: float, path_id: int, side: int) -> fl
 	var inset := width * (0.004 + 0.045 * broad_pocket + 0.006 * pow(drift_wave, 2.0) + 0.028 * side_pocket)
 	return width * 0.5 - inset
 
+static func _visible_core_extent(width: float, edge_extent: float, distance: float, path_id: int, side: int) -> float:
+	# Keep the authored route and outer footprint smooth, but make the visible
+	# soil shoulder speak the terrain's voxel language. Short route plateaus and
+	# native-scale lateral steps produce flat runs, notches and blocky tongues
+	# without snapping the centreline itself or expanding past the saved width.
+	var phase := float(Contact._seed(path_id, 0, 503 + side) % 3) * 0.125
+	var stepped_distance := floorf((distance + phase) / VISIBLE_ROUTE_STEP) * VISIBLE_ROUTE_STEP
+	var lateral_step := minf(VISIBLE_EDGE_UNIT, maxf(MIN_VISIBLE_EDGE_UNIT, width * 0.10))
+	var raw := edge_extent * _core_fraction(stepped_distance, path_id, side)
+	var stepped := snappedf(raw, lateral_step)
+	var minimum := width * 0.19
+	var maximum := floorf((edge_extent - lateral_step * 0.25) / lateral_step) * lateral_step
+	maximum = maxf(minimum, maximum)
+	return clampf(stepped, minimum, maximum)
+
 static func _interior_wear(path_id: int, distance: float, signed_offset: float, width: float) -> Vector2:
-	# Broad localized compaction patches provide readable surface character without
-	# footprints, ruts or a permanent centre stripe. Each route cell has one dusty
-	# worn stretch with deterministic lateral drift and unequal shoulders.
+	# Broad localized compaction patches remain route-scale rather than footprint
+	# marks, but both their sampling and strength are quantized. This gives the
+	# soil a small-cell vocabulary instead of an airbrushed procedural gradient.
 	var half_width := maxf(width * 0.5, 0.0001)
-	var across := signed_offset / half_width
+	var stepped_distance := snappedf(distance, VISIBLE_ROUTE_STEP)
+	var lateral_step := minf(VISIBLE_EDGE_UNIT, maxf(MIN_VISIBLE_EDGE_UNIT, width * 0.10))
+	var stepped_offset := snappedf(signed_offset, lateral_step)
+	var across := stepped_offset / half_width
 	const WEAR_CELL_LENGTH := 5.2
-	var cell := floori(distance / WEAR_CELL_LENGTH)
-	var local := distance - float(cell) * WEAR_CELL_LENGTH
+	var cell := floori(stepped_distance / WEAR_CELL_LENGTH)
+	var local := stepped_distance - float(cell) * WEAR_CELL_LENGTH
 	var centre := 1.55 + float(Contact._seed(path_id, cell, 401) % 121) / 100.0
 	var before_radius := 1.00 + float(Contact._seed(path_id, cell, 419) % 36) / 100.0
 	var after_radius := 1.15 + float(Contact._seed(path_id, cell, 431) % 41) / 100.0
@@ -107,7 +129,7 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	var radius := before_radius if delta < 0.0 else after_radius
 	var along_profile := 1.0 - smoothstep(radius * 0.16, radius, absf(delta))
 	var centre_offset := (float(Contact._seed(path_id, cell, 443) % 25) - 12.0) / 100.0
-	centre_offset += sin(distance * 0.23 + float(Contact._seed(path_id, 0, 449) % 6283) / 1000.0) * 0.045
+	centre_offset += sin(stepped_distance * 0.23 + float(Contact._seed(path_id, 0, 449) % 6283) / 1000.0) * 0.045
 	# Keep the dusty wear broad enough to survive gameplay distance, but still
 	# leave quiet soil along both edges instead of turning into a full-width stripe.
 	var across_profile := 1.0 - smoothstep(0.05, 0.72, absf(across - centre_offset))
@@ -116,8 +138,8 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	# A second, sparser field creates occasional broad deeper scuffs offset from
 	# centre. It is deliberately wider than a footprint and never forms twin ruts.
 	const PATCH_CELL_LENGTH := 7.1
-	var patch_cell := floori(distance / PATCH_CELL_LENGTH)
-	var patch_local := distance - float(patch_cell) * PATCH_CELL_LENGTH
+	var patch_cell := floori(stepped_distance / PATCH_CELL_LENGTH)
+	var patch_local := stepped_distance - float(patch_cell) * PATCH_CELL_LENGTH
 	var patch_centre_distance := 2.0 + float(Contact._seed(path_id, patch_cell, 457) % 181) / 100.0
 	var patch_radius := 0.72 + float(Contact._seed(path_id, patch_cell, 463) % 44) / 100.0
 	var patch_along := 1.0 - smoothstep(patch_radius * 0.18, patch_radius, absf(patch_local - patch_centre_distance))
@@ -126,6 +148,8 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	var patch_across := 1.0 - smoothstep(0.06, 0.54, absf(across - patch_offset))
 	var patch_presence := 1.0 if Contact._seed(path_id, patch_cell, 487) % 4 != 0 else 0.0
 	var patch_wear := patch_along * patch_across * patch_presence
+	centre_wear = snappedf(clampf(centre_wear, 0.0, 1.0), WEAR_LEVEL_STEP)
+	patch_wear = snappedf(clampf(patch_wear, 0.0, 1.0), WEAR_LEVEL_STEP)
 	return Vector2(clampf(centre_wear, 0.0, 1.0), clampf(patch_wear, 0.0, 1.0))
 
 static func _core_fraction(distance: float, path_id: int, side: int) -> float:
@@ -227,6 +251,7 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		if not outer_band:
 			var phase := float(Contact._seed(path_id, 0, 31) % 6283) / 1000.0
 			var quiet := sin(point.x * 0.71 + point.y * 0.39 + phase) * 0.5 + 0.5
+			quiet = snappedf(quiet, WEAR_LEVEL_STEP)
 			# The inner two bands are the actual worn-soil route. The base is muted
 			# enough that dusty compacted areas read at Mobile distance without making
 			# the whole path orange or producing segment-by-segment colour blocks.
