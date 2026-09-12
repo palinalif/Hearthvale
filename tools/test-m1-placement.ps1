@@ -2,7 +2,7 @@
 # as the existing M1/sculpt gates; no signing keys, exports, or user saves.
 param(
     [ValidateSet(
-        'auto','setup','native','native-structure','native-assets','native-placement','native-ui',
+        'auto','bootstrap','setup','native','native-structure','native-assets','native-placement','native-ui',
         'mobile-core','mobile-window','mobile-house-ux','roof','joined-roof','facade',
         'catalogue','catalogue-capture','catalogue-behavior','all'
     )]
@@ -82,8 +82,13 @@ function Invoke-MobileReview(
     }
 }
 
-# Every shard imports independently so it can run on a clean hosted runner.
-Invoke-Gate 'import' @('--headless', '--path', '.', '--editor', '--import', '--quit')
+# Most shards import independently so they can run on a clean hosted runner.
+# `bootstrap` intentionally stops before import so callers can probe individual
+# scripts and expose a deep parser failure that project import would mask behind
+# an unresolved descendant class.
+if ($Suite -ne 'bootstrap') {
+    Invoke-Gate 'import' @('--headless', '--path', '.', '--editor', '--import', '--quit')
+}
 
 $nativeStructure = @(
     'facade_depth_layout_test','joined_roof_course_test','roof_course_layout_test','m2_ground_wall_test',
