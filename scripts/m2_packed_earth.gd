@@ -86,7 +86,7 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	# directional patches. They only drive vertex colour; they add no geometry.
 	var half_width := maxf(width * 0.5, 0.0001)
 	var across := signed_offset / half_width
-	var centre_profile := 1.0 - smoothstep(0.10, 0.46, absf(across))
+	var centre_profile := 1.0 - smoothstep(0.08, 0.60, absf(across))
 	var centre_phase := float(Contact._seed(path_id, 0, 131) % 6283) / 1000.0
 	var centre_signal := sin(distance * 0.63 + centre_phase) * 0.66 + sin(distance * 1.47 + centre_phase * 1.73) * 0.34
 	var centre_breaks := smoothstep(-0.10, 0.52, centre_signal)
@@ -96,16 +96,16 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	var patch_signal := sin(distance * 0.91 + patch_phase) * 0.72 + sin(distance * 2.03 + patch_phase * 0.61) * 0.28
 	var patch_presence := smoothstep(0.36, 0.82, patch_signal)
 	var patch_centre := sin(distance * 0.31 + patch_phase * 1.29) * 0.20
-	var patch_profile := 1.0 - smoothstep(0.13, 0.43, absf(across - patch_centre))
+	var patch_profile := 1.0 - smoothstep(0.12, 0.52, absf(across - patch_centre))
 	var patch_wear := patch_presence * patch_profile
 	return Vector2(clampf(centre_wear, 0.0, 1.0), clampf(patch_wear, 0.0, 1.0))
 
 static func _core_fraction(distance: float, path_id: int, side: int) -> float:
 	# Most stretches keep only a narrow soil/grass transition. Selected broad,
-	# asymmetric pockets reach farther inward, leaving the central 70% untouched.
+	# asymmetric pockets reach farther inward while retaining a broad calm core.
 	var phase := float(Contact._seed(path_id, 0, 82 + side) % 6283) / 1000.0
 	var pocket := clampf(0.5 + 0.5 * (sin(distance * 1.41 + phase) * 0.65 + sin(distance * 0.71 + phase * 1.31) * 0.35), 0.0, 1.0)
-	return 0.97 - 0.27 * pow(pocket, 2.2)
+	return 0.98 - 0.30 * pow(pocket, 2.0)
 
 static func _height(renderer: Node, data: Dictionary, cell: Vector2i, scale_value: float) -> float:
 	var heights: Dictionary = data["heights"]
@@ -172,16 +172,16 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		var phase := float(Contact._seed(path_id, 0, 31) % 6283) / 1000.0
 		var quiet := sin(point.x * 0.71 + point.y * 0.39 + phase) * 0.5 + 0.5
 		# One broad world-continuous soil field, never an alternating segment colour.
-		var shade := Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.11 + pow(edge, 3.0) * 0.09)
+		var shade := Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.14 + pow(edge, 3.0) * 0.09)
 		var route_distance := lerpf(float(station_a["distance"]), float(station_b["distance"]), along)
 		var wear := _interior_wear(path_id, route_distance, signed_offset, float(station_a["width"]))
-		# Broken compacted centre wear is readable at Mobile distance. The second
-		# field stays broader, softer and route-aligned so neither becomes a stripe.
-		shade = shade.lerp(Color("#6e5140"), wear.x * 0.40)
-		shade = shade.lerp(Color("#765440"), wear.y * 0.24)
+		# Broken compacted centre wear is broad enough to read at Mobile distance.
+		# The second field stays softer and route-aligned so neither becomes a stripe.
+		shade = shade.lerp(Color("#6a5141"), wear.x * 0.58)
+		shade = shade.lerp(Color("#73533f"), wear.y * 0.30)
 		# Worn grass/soil at the outer band, not a separate raised shoulder.
 		# A continuous asymmetric field varies the transition's visible depth;
-		# the central 70% stays soil-only. Native grass colour, fully opaque.
+		# a broad central dirt core remains clear. Native grass colour, fully opaque.
 		var side := -1 if signed_offset < 0.0 else 1
 		var edge_phase := float(Contact._seed(path_id, 0, 82 + side) % 6283) / 1000.0
 		var pocket := smoothstep(-0.3, 0.6, sin(point.x * 0.81 + point.y * 0.57 + edge_phase) * 0.65 + sin(point.x * 2.2 - point.y * 0.73 + edge_phase * 1.31) * 0.35)
@@ -189,9 +189,9 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		var core_key := side_key + "_core"
 		var core_extent := lerpf(float(station_a[core_key]), float(station_b[core_key]), along)
 		var edge_extent := lerpf(float(station_a[side_key]), float(station_b[side_key]), along)
-		# Reach native-grass colour before the geometry edge. That makes selected
-		# core pockets read as shallow incursions without adding masks or slabs.
-		var transition_end := lerpf(core_extent, edge_extent, 0.58)
+		# Reach native-grass colour well before the geometry edge. That makes
+		# selected core pockets read as incursions without masks or extra slabs.
+		var transition_end := lerpf(core_extent, edge_extent, 0.36)
 		var boundary := smoothstep(core_extent, transition_end, point.distance_to(closest))
 		var direction := (centre_b - centre_a).normalized()
 		if bool(station_a["first"]): boundary = maxf(boundary, (1.0 - smoothstep(0.0, 0.18, (point - centre_a).dot(direction))) * (0.75 + 0.25 * pocket))
