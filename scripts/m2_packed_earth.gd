@@ -120,13 +120,16 @@ static func _core_fraction(distance: float, path_id: int, side: int) -> float:
 	# grass reaches into; the zero crossings leave near-full-width worn tongues.
 	var shared_phase := float(Contact._seed(path_id, 0, 89) % 6283) / 1000.0
 	var local_phase := float(Contact._seed(path_id, 0, 149 + side) % 6283) / 1000.0
-	var alternating := sin(distance * 0.62 + shared_phase) * float(side)
-	var broad_bite := pow(maxf(0.0, alternating), 2.6)
+	var alternating := sin(distance * 0.56 + shared_phase) * float(side)
+	var broad_bite := pow(maxf(0.0, alternating), 2.1)
 	# A smaller unrelated field keeps successive incursions from becoming mirror
 	# images while remaining smooth and deterministic at station spacing.
-	var local_wave := maxf(0.0, sin(distance * 0.91 + local_phase))
+	var local_wave := maxf(0.0, sin(distance * 0.83 + local_phase))
 	var local_bite := pow(local_wave, 4.0)
-	return 0.97 - 0.34 * broad_bite - 0.06 * local_bite
+	# The explicit grass bands let us use a much stronger soil silhouette without
+	# changing the saved footprint: selected one-sided bites can halve the local
+	# soil half-width while long zero-crossing stretches remain nearly full width.
+	return clampf(0.98 - 0.50 * broad_bite - 0.04 * local_bite, 0.44, 0.98)
 
 static func _height(renderer: Node, data: Dictionary, cell: Vector2i, scale_value: float) -> float:
 	var heights: Dictionary = data["heights"]
