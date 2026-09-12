@@ -226,3 +226,43 @@ func _path_ownership_key(position: Vector3i) -> String:
 
 func _path_integer(value: Variant) -> bool:
 	return (value is int or value is float) and is_finite(float(value)) and float(value) == floorf(float(value))
+
+const PolishedPathVisual = preload("res://scripts/m2_path_visual_polish.gd")
+
+func _ready() -> void:
+	super._ready()
+	if path_visual and is_instance_valid(path_visual):
+		path_visual.queue_free()
+	path_visual = PolishedPathVisual.new()
+	path_visual.name = "M2PathVisual"
+	add_child(path_visual)
+	if backend: path_visual.attach_backend(backend)
+	_path_render_signature = ""
+	_refresh_path_visual(true)
+
+func _input(event: InputEvent) -> void:
+	if path_placement_active and not path_painting and not menu_open:
+		if event.is_action_pressed("m1_cycle_left"):
+			_adjust_path_brush(-1)
+			get_viewport().set_input_as_handled()
+			return
+		if event.is_action_pressed("m1_cycle_right"):
+			_adjust_path_brush(1)
+			get_viewport().set_input_as_handled()
+			return
+	super._input(event)
+
+func _adjust_path_brush(direction: int) -> void:
+	if direction == 0 or path_painting: return
+	var step := PathGrid.UNIT if precision_mode else PathGrid.UNIT * 2.0
+	path_width = snappedf(clampf(path_width + float(direction) * step, PathGrid.UNIT * 2.0, 8.0), PathGrid.UNIT)
+	_path_preview_signature = ""
+	_set_status("%s • %.3f m brush • hold A paint" % [_path_style_name(), path_width])
+	_update_brush_preview()
+	_update_path_validity()
+	_update_path_preview()
+	_refresh_controller_hud()
+
+func _update_presentation() -> void:
+	super._update_presentation()
+	if path_placement_active and target_label:
