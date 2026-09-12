@@ -1,5 +1,7 @@
 extends SceneTree
 
+const ContactChecks = preload("res://tests/m2_path_grass_contact_checks.gd")
+
 var scene: Node
 var checks := 0
 var failures := 0
@@ -11,6 +13,8 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
+	ContactChecks.source_lock(self)
+	ContactChecks.budget_selection(self)
 	if DisplayServer.get_name() == "headless":
 		await _run_scene_checks(false)
 	else:
@@ -58,6 +62,7 @@ func _run_scene_checks(capture: bool) -> void:
 	var stone_node: MeshInstance3D = scene.path_visual._style_nodes["stepping_stones"]
 	_check_stepping_faces(stone_node.mesh as ArrayMesh, "committed")
 	_check_surface_reference(stone_node.mesh as ArrayMesh, "committed")
+	ContactChecks.inspect(self, scene, "committed")
 	if capture:
 		scene.cursor = Vector3(24.0, 8.0, 24.0)
 		scene.camera_yaw = -1.1
@@ -73,6 +78,7 @@ func _run_scene_checks(capture: bool) -> void:
 		captures += 1
 		await _capture_stepping_close_views()
 	await _check_dig_reseat()
+	await ContactChecks.lifecycle(self, scene)
 	await _finish_scene()
 
 # Godot fronts are CLOCKWISE: the geometric cross product must oppose the
@@ -158,6 +164,7 @@ func _capture_stepping_close_views() -> void:
 		captures += 1
 
 func _check_dig_reseat() -> void:
+	var contact_before := ContactChecks.digest(scene.path_visual._contact_data)
 	var top := _first_stone_top()
 	var point := Vector2(top.x, top.z)
 	var ground_before: float = scene.path_visual._surface_height(point)
@@ -171,9 +178,11 @@ func _check_dig_reseat() -> void:
 	var live_ground: float = scene.path_visual._surface_height(point)
 	_check(live_ground < ground_before, "live dig lowers the queried native surface")
 	_check(_first_stone_top().is_equal_approx(top), "live stroke retains stone mesh until commit, explaining temporary exposure")
+	_check(ContactChecks.digest(scene.path_visual._contact_data) == contact_before, "live stroke retains committed grass until the existing refresh")
 	_check(scene.backend.cancel_stroke(), "dig cancellation restores terrain")
 	await process_frame
 	_check(_first_stone_top().is_equal_approx(top), "cancel restores original stone top")
+	_check(ContactChecks.digest(scene.path_visual._contact_data) == contact_before, "dig cancel restores identical grass contact")
 	_check(is_equal_approx(scene.path_visual._surface_height(point), ground_before), "cancel restores native surface height")
 	begun = scene.backend.begin_stroke("dig", centre, settings)
 	_check(begun, "second dig begins for release/commit regression")
@@ -185,9 +194,11 @@ func _check_dig_reseat() -> void:
 	var node: MeshInstance3D = scene.path_visual._style_nodes["stepping_stones"]
 	_check_stepping_faces(node.mesh as ArrayMesh, "after-dig")
 	_check_surface_reference(node.mesh as ArrayMesh, "after-dig")
+	ContactChecks.inspect(self, scene, "after-dig")
 	_check(scene.backend.undo(), "dig can be undone")
 	await process_frame
 	_check(_first_stone_top().is_equal_approx(top), "undo restores stone height without a saved offset")
+	_check(ContactChecks.digest(scene.path_visual._contact_data) == contact_before, "dig undo restores identical grass contact")
 	_check(JSON.stringify(scene.landscape_state.paths) == paths_before, "dig/cancel/release/undo leave saved path authority unchanged")
 
 func _mesh_is_finite_bounded_grounded(mesh: ArrayMesh) -> bool:

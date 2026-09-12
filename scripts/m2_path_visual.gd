@@ -7,6 +7,7 @@ class_name M2PathVisual
 ## leaving only a shallow exposed skin so lanes read as inset rather than stacked
 ## on top of the landscape.
 
+const Contact = preload("res://scripts/m2_path_grass_contact.gd")
 const Grid = preload("res://scripts/visual_grid.gd")
 const State = preload("res://scripts/landscape_state.gd")
 const STYLE_ORDER: Array[String] = ["packed_earth", "cobblestone", "stepping_stones"]
@@ -27,6 +28,8 @@ const STYLE_COLOURS := {
 
 var backend: Node
 var _style_nodes: Dictionary = {}
+var _contact_node: MeshInstance3D
+var _contact_data: Dictionary = Contact.empty_result()
 var _preview_node: MeshInstance3D
 var _preview_marker: MeshInstance3D
 var _stats: Dictionary = {"styles": {}, "draw_calls": 0, "geometry_cells": 0, "preview_cells": 0}
@@ -59,6 +62,14 @@ func rebuild(path_values: Array, terrain_backend: Node = null) -> void:
 		_stats["styles"][style_id] = {"geometry": true, "surfaces": mesh.get_surface_count(), "cells": _builder_cell_count(builders[style_id])}
 		_stats["draw_calls"] = _style_nodes.size()
 		_stats["geometry_cells"] = geometry_cells
+	# Separate opaque detail surface: never append grass to the locked stones.
+	_contact_data = Contact.build(self, builders["stepping_stones"])
+	if _contact_data["mesh"] != null:
+		_contact_node = MeshInstance3D.new()
+		_contact_node.name = "PathGrassContact"
+		_contact_node.mesh = _contact_data["mesh"]
+		_contact_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(_contact_node)
 
 func show_preview(style_id: String, width: float, point_values: Array, valid: bool, reason: String) -> void:
 	hide_preview()
@@ -110,9 +121,25 @@ func hide_preview() -> void:
 	_stats["preview_cells"] = 0
 
 func stats() -> Dictionary:
-	return _stats.duplicate(true)
+	var result := _stats.duplicate(true)
+	result["grass_contact"] = {
+		"tufts": _contact_data["tufts"], "cells": _contact_data["cells"],
+		"vertices": _contact_data["vertices"], "triangles": _contact_data["triangles"],
+		"draw_calls": _contact_data["draw_calls"], "max_tufts": Contact.MAX_TUFTS,
+	}
+	# Preserve the legacy <=3 STYLE BATCH counter. Actual surface draws include
+	# up to two materials per style, plus at most one grass draw (no shadows).
+	result["opaque_surface_draws"] = int(_contact_data["draw_calls"])
+	for style: Dictionary in result["styles"].values():
+		result["opaque_surface_draws"] += int(style["surfaces"])
+	return result
 
 func _clear_authoritative_nodes() -> void:
+	if is_instance_valid(_contact_node):
+		remove_child(_contact_node)
+		_contact_node.queue_free()
+	_contact_node = null
+	_contact_data = Contact.empty_result()
 	for style_id in _style_nodes:
 		var node: Node = _style_nodes[style_id]
 		if is_instance_valid(node): node.queue_free()
@@ -216,6 +243,7 @@ func _append_path(builder: Dictionary, style_id: String, width: float, point_val
 				# extra rim, material change or lower top is needed for ground contact.
 				var grass_gap := 0.025 + 0.020 * (sin(float(path_id * 83 + cluster_index * 11 + 17)) * 0.5 + 0.5)
 				_append_rounded_stone(builder, _stepping_stone_center(cluster_center, primary_size, primary_basis, STEPPING_STONE_TOP_EPSILON), primary_size, primary_basis, primary_material)
+				Contact.record_primary(builder, path_id, cluster_index, primary_material)
 				cells += 1
 
 				var pattern := (path_id + cluster_index * 2) % 5
