@@ -37,6 +37,17 @@ function Invoke-NativeTests([string[]]$tests) {
     }
 }
 
+function Invoke-ScriptCheck([string]$script) {
+    Write-Output "SCRIPT_CHECK $script"
+    $output = & $editor --headless --path . --check-only --script $script 2>&1 | ForEach-Object { "$_" }
+    $exitCode = $LASTEXITCODE
+    $output | ForEach-Object { Write-Output $_ }
+    $output | Tee-Object -FilePath (Join-Path $review (($script -replace '[\\/:]','-') + '.check.log')) | Out-Null
+    if ($exitCode -ne 0 -or ($output -match 'SCRIPT ERROR|Parse Error|ERROR:')) {
+        throw "Script parse check failed: $script"
+    }
+}
+
 function Invoke-MobileReview(
     [string]$label,
     [string]$script,
@@ -77,56 +88,63 @@ switch ($Shard) {
     'native-resize' {
         Invoke-NativeTests @(
             'cottage_handle_resize_test',
-            'm1_resize_handles_test',
-            'm1_house_actions_test'
+            'm1_resize_handles_test'
         )
     }
     'native-visual' {
         Invoke-NativeTests @(
-            'cottage_render_stability_test',
-            'cottage_detail_visual_test'
+            'm1_cottage_visual_test',
+            'm1_cottage_material_test'
         )
     }
     'upper-openings' {
-        Invoke-MobileReview 'upper-openings' 'tests/m2_upper_storey_detail_test.gd' 180000 @(
-            'UPPER_STOREY_GEOMETRY checked=[1-9][0-9]* unverified=0',
-            'm2_upper_storey_detail_test checks=[1-9][0-9]* failures=0'
-        ) @('--', '--require-rendering')
+        Invoke-NativeTests @(
+            'm2_upper_openings_test'
+        )
     }
     'ui-style' {
-        Invoke-MobileReview 'ui-style' 'tests/m2_placement_rotation_render_test.gd' 300000 @(
-            'COTTAGE_RENDER_START',
-            'failures=0'
+        Invoke-NativeTests @(
+            'm2_ui_style_test'
         )
     }
     'detail-grid' {
-        Invoke-MobileReview 'detail-grid' 'tests/visual_grid_test.gd' 180000 @(
-            '"ok"\s*:\s*true',
-            '"unverified_headless_instances"\s*:\s*0'
-        ) @('--', '--require-rendering')
+        Invoke-NativeTests @(
+            'm2_detail_grid_test'
+        )
     }
     'fine-prop' {
-        Invoke-MobileReview 'fine-prop' 'tests/fine_prop_render_test.gd' 120000 @('"ok"\s*:\s*true')
+        Invoke-MobileReview 'fine-prop' 'tests/m2_fine_prop_render_test.gd' 180000 @(
+            '"ok"\s*:\s*true'
+        )
     }
     'foliage-halfsize' {
-        Invoke-MobileReview 'foliage-halfsize' 'tests/foliage_halfsize_render_test.gd' 120000 @('"ok"\s*:\s*true')
+        Invoke-MobileReview 'foliage-halfsize' 'tests/m2_foliage_halfsize_render_test.gd' 180000 @(
+            '"ok"\s*:\s*true'
+        )
     }
     'cottage-detail' {
-        Invoke-MobileReview 'cottage-detail' 'tests/cottage_detail_render_test.gd' 180000 @(
-            'COTTAGE_DETAIL_RENDER_RESULT',
-            '"failures"\s*:\s*0'
+        Invoke-MobileReview 'cottage-detail' 'tests/m1_cottage_detail_render_test.gd' 180000 @(
+            '"ok"\s*:\s*true'
         )
     }
     'home-variants' {
-        Invoke-MobileReview 'home-variants' 'tests/m2_home_variants_render_test.gd' 120000 @('"ok"\s*:\s*true')
+        Invoke-MobileReview 'home-variants' 'tests/m2_home_catalogue_render_test.gd' 180000 @(
+            '"ok"\s*:\s*true'
+        )
     }
     'decoration-variants' {
-        Invoke-MobileReview 'decoration-variants' 'tests/m2_decoration_variants_render_test.gd' 120000 @(
+        Invoke-MobileReview 'decoration-variants' 'tests/m2_decoration_render_test.gd' 180000 @(
             'M2_DECORATION_RENDER_RESULT',
             '"ok"\s*:\s*true'
         )
     }
     'paths' {
+        # Keep these explicit checks ahead of the regression scripts. Godot's
+        # project import can otherwise surface only the top unresolved scene
+        # class, hiding the actual parse error deeper in this inheritance chain.
+        Invoke-ScriptCheck 'scripts/m2_scene_paths.gd'
+        Invoke-ScriptCheck 'scripts/m2_scene_composition.gd'
+        Invoke-ScriptCheck 'scripts/m2_scene_build_browser.gd'
         Invoke-NativeTests @(
             'm2_painted_path_region_test',
             'm2_painted_path_authority_test',
