@@ -75,15 +75,17 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 	return int(builder["cells"]) - before
 
 static func extent(width: float, distance: float, path_id: int, side: int) -> float:
+	# The outer silhouette needs long calm tongues as well as a few readable
+	# incursions. One slow shared wave changes the overall footprint; a much
+	# smaller opposite-signed drift stops the two shoulders from mirroring.
+	# The rates are deliberately low enough to satisfy the no-sample-jumps gate
+	# even at the widest supported path.
 	var broad_phase := float(Contact._seed(path_id, 0, 200) % 6283) / 1000.0
-	var drift_phase := float(Contact._seed(path_id, 0, 240) % 6283) / 1000.0
-	var side_phase := float(Contact._seed(path_id, 0, 223 + side) % 6283) / 1000.0
-	var broad_wave := 0.5 + 0.5 * sin(distance * 0.31 + broad_phase)
-	var broad_pocket := pow(broad_wave, 3.0)
-	var drift_wave := 0.5 + 0.5 * sin(distance * 0.17 + drift_phase)
-	var side_wave := 0.5 + 0.5 * sin(distance * 0.53 + side_phase)
-	var side_pocket := pow(side_wave, 4.0)
-	var inset := width * (0.008 + 0.032 * broad_pocket + 0.008 * pow(drift_wave, 2.0) + 0.022 * side_pocket)
+	var asym_phase := float(Contact._seed(path_id, 0, 223) % 6283) / 1000.0
+	var broad_wave := 0.5 + 0.5 * sin(distance * 0.58 + broad_phase)
+	var broad_pocket := pow(broad_wave, 2.0)
+	var asymmetric_drift := sin(distance * 0.23 + asym_phase) * float(side) * 0.0035
+	var inset := width * (0.004 + 0.064 * broad_pocket + asymmetric_drift)
 	return width * 0.5 - inset
 
 static func _faceted_profile(local: float, start: float, plateau_start: float, plateau_end: float, finish: float) -> float:
