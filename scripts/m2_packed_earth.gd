@@ -1,9 +1,9 @@
 extends RefCounted
 
 ## Disposable packed-earth skin. No terrain writes, offsets in saves, or frame work.
-## The saved route stays smooth. Its visible dirt shoulder is a continuous
-## terrain-following ribbon with broad route-relative facets instead of either
-## smooth procedural lobes or world-grid raster stairs.
+## Only the worn soil is emitted: the surrounding native terrain remains visible.
+## Broad route-relative facets and sparse compaction carry the shape; no painted
+## grass shoulders, endpoint tint, raised edging or per-cell texture is needed.
 const Contact = preload("res://scripts/m2_path_grass_contact.gd")
 const Flora = preload("res://scripts/vegetation_mesh.gd")
 const State = preload("res://scripts/landscape_state.gd")
@@ -66,21 +66,25 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 					if index != 0: end_shift = -end_shift
 			section.append(centre + normal * offset + tangent * end_shift)
 		sections.append(section)
+		# Contact follows the visible boundary, including the geometric end taper.
+		left_core = (centre - section[1]).dot(normal)
+		right_core = (section[3] - centre).dot(normal)
 		stations.append({"path_id": path_id, "index": index, "distance": distance, "centre": centre, "normal": normal, "tangent": tangent, "left": left, "right": right, "left_core": left_core, "right_core": right_core, "width": safe_width, "first": index == 0, "last": index == samples.size() - 1})
 	var before := int(builder["cells"])
 	for index in range(1, sections.size()):
 		var a: PackedVector2Array = sections[index - 1]
 		var b: PackedVector2Array = sections[index]
-		for across in range(ACROSS.size() - 1):
+		# Emit the two soil bands only. The outer safety envelope is not a green
+		# overlay: its grass/soil/terrace appearance belongs to the native terrain.
+		for across in range(1, ACROSS.size() - 2):
 			_ground_polygon(renderer, builder, PackedVector2Array([a[across], a[across + 1], b[across + 1], b[across]]), path_id, stations[index - 1], stations[index], across)
 	data["stations"].append_array(stations)
 	if decorate: _grass(renderer, builder, stations, path_id)
 	return int(builder["cells"]) - before
 
 static func extent(width: float, distance: float, path_id: int, side: int) -> float:
-	# Keep the established bounded nominal footprint. The grass-coloured outer
-	# shoulder hides this smooth safety envelope; visible dirt uses the faceted
-	# core extent below.
+	# Preserve the established bounded safety envelope. Only the faceted core
+	# inside it is rendered; the envelope never paints over the native terrain.
 	var broad_phase := float(Contact._seed(path_id, 0, 200) % 6283) / 1000.0
 	var drift_phase := float(Contact._seed(path_id, 0, 240) % 6283) / 1000.0
 	var side_phase := float(Contact._seed(path_id, 0, 223 + side) % 6283) / 1000.0
@@ -112,7 +116,7 @@ static func _visible_core_extent(width: float, edge_extent: float, distance: flo
 	var lateral_unit := minf(FACET_LATERAL_UNIT, maxf(FACET_MIN_UNIT, width * 0.08))
 	var raw := edge_extent * _core_fraction(stepped_distance, path_id, side)
 	var faceted := snappedf(raw, lateral_unit)
-	return clampf(faceted, width * 0.18, edge_extent * 0.995)
+	return clampf(faceted, width * 0.34, edge_extent * 0.995)
 
 static func _interior_wear(path_id: int, distance: float, signed_offset: float, width: float) -> Vector2:
 	# Broad localized compaction remains continuous across the ribbon. Sampling
@@ -121,7 +125,7 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	var half_width := maxf(width * 0.5, 0.0001)
 	var sampled_distance := snappedf(distance, FACET_ROUTE_STEP)
 	var across := signed_offset / half_width
-	const WEAR_CELL_LENGTH := 5.2
+	const WEAR_CELL_LENGTH := 8.4
 	var cell := floori(sampled_distance / WEAR_CELL_LENGTH)
 	var local := sampled_distance - float(cell) * WEAR_CELL_LENGTH
 	var centre := 1.55 + float(Contact._seed(path_id, cell, 401) % 121) / 100.0
@@ -137,7 +141,7 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 
 	# A second, sparser field creates occasional broad deeper scuffs offset from
 	# centre. It stays low contrast and wider than a footprint, never twin ruts.
-	const PATCH_CELL_LENGTH := 7.1
+	const PATCH_CELL_LENGTH := 11.6
 	var patch_cell := floori(sampled_distance / PATCH_CELL_LENGTH)
 	var patch_local := sampled_distance - float(patch_cell) * PATCH_CELL_LENGTH
 	var patch_centre_distance := 2.0 + float(Contact._seed(path_id, patch_cell, 457) % 181) / 100.0
@@ -151,40 +155,21 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	return Vector2(clampf(centre_wear, 0.0, 1.0), clampf(patch_wear, 0.0, 1.0))
 
 static func _core_fraction(distance: float, path_id: int, side: int) -> float:
-	# One broad trapezoidal grass incursion owns each route cell. Ownership
-	# alternates sides, while an occasional shallow companion notch keeps the
-	# opposite edge from looking machine-straight. Linear ramps are intentional:
-	# they make a few large low-poly facets instead of sine-wave scallops.
-	const CELL_LENGTH := 5.6
+	# Long calm runs with an occasional shallow, broad bite. Independent seeded
+	# side/presence decisions avoid the old compulsory left-right zig-zag.
+	const CELL_LENGTH := 7.4
 	var cell := floori(distance / CELL_LENGTH)
 	var local := distance - float(cell) * CELL_LENGTH
-	var path_parity := Contact._seed(path_id, 0, 311) % 2
-	var bite_side := -1 if posmod(cell + path_parity, 2) == 0 else 1
-	var plateau_start := 1.75 + float(Contact._seed(path_id, cell, 317) % 50) / 100.0
+	var bite_side := -1 if Contact._seed(path_id, cell, 311) % 2 == 0 else 1
+	if side != bite_side or Contact._seed(path_id, cell, 373) % 3 == 0: return 0.992
+	var plateau_start := 1.45 + float(Contact._seed(path_id, cell, 317) % 190) / 100.0
 	var plateau_length := 0.72 + float(Contact._seed(path_id, cell, 331) % 48) / 100.0
 	var approach := 0.62 + float(Contact._seed(path_id, cell, 347) % 34) / 100.0
 	var release := 0.72 + float(Contact._seed(path_id, cell, 353) % 38) / 100.0
 	var plateau_end := plateau_start + plateau_length
-	var start := plateau_start - approach
-	var finish := plateau_end + release
-
-	if side != bite_side:
-		# Not every cell gets a companion; long calm opposite edges make the larger
-		# dominant facets read as erosion rather than a repeated zig-zag pattern.
-		if Contact._seed(path_id, cell, 373) % 3 != 0: return 0.992
-		var shift_sign := -1.0 if Contact._seed(path_id, cell, 379) % 2 == 0 else 1.0
-		var shift := 0.28 + float(Contact._seed(path_id, cell, 383) % 29) / 100.0
-		var companion_start := clampf(plateau_start + shift_sign * shift, 1.20, CELL_LENGTH - 2.0)
-		var companion_length := 0.42 + float(Contact._seed(path_id, cell, 389) % 24) / 100.0
-		var companion_approach := 0.52 + float(Contact._seed(path_id, cell, 397) % 20) / 100.0
-		var companion_release := 0.58 + float(Contact._seed(path_id, cell, 409) % 22) / 100.0
-		var companion := _faceted_profile(local, companion_start - companion_approach, companion_start, companion_start + companion_length, companion_start + companion_length + companion_release)
-		var companion_depth := 0.04 + float(Contact._seed(path_id, cell, 421) % 4) * 0.01
-		return clampf(0.992 - companion * companion_depth, 0.92, 0.992)
-
-	var bite := _faceted_profile(local, start, plateau_start, plateau_end, finish)
-	var depth := 0.27 + float(Contact._seed(path_id, cell, 359) % 10) / 100.0
-	return clampf(0.992 - bite * depth, 0.58, 0.992)
+	var bite := _faceted_profile(local, plateau_start - approach, plateau_start, plateau_end, plateau_end + release)
+	var depth := 0.07 + float(Contact._seed(path_id, cell, 359) % 7) * 0.01
+	return clampf(0.992 - bite * depth, 0.84, 0.992)
 
 static func _height(renderer: Node, data: Dictionary, cell: Vector2i, scale_value: float) -> float:
 	var heights: Dictionary = data["heights"]
@@ -232,7 +217,7 @@ static func _ground_polygon(renderer: Node, builder: Dictionary, polygon: Packed
 				_emit_soil(builder, clipped, height, path_id, station_a, station_b, band)
 			data["terrain_rects"] = int(data["terrain_rects"]) + 1
 
-static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height: float, path_id: int, station_a: Dictionary, station_b: Dictionary, band: int) -> void:
+static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height: float, path_id: int, station_a: Dictionary, station_b: Dictionary, _band: int) -> void:
 	var triangles := Geometry2D.triangulate_polygon(polygon)
 	if triangles.is_empty(): return
 	var surface: Dictionary = builder["surfaces"][0]
@@ -245,31 +230,17 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		var closest := Geometry2D.get_closest_point_to_segment(point, centre_a, centre_b)
 		var segment := centre_b - centre_a
 		var along := clampf((closest - centre_a).dot(segment) / maxf(segment.length_squared(), 0.0000001), 0.0, 1.0)
-		var normal: Vector2 = station_a["normal"]
+		var normal_a: Vector2 = station_a["normal"]
+		var normal_b: Vector2 = station_b["normal"]
+		var normal := normal_a.lerp(normal_b, along).normalized()
 		var signed_offset := (point - closest).dot(normal)
-		var edge := clampf(absf(signed_offset) / (float(station_a["width"]) * 0.5), 0.0, 1.0)
-		var outer_band := band == 0 or band == ACROSS.size() - 2
-		var shade := Color("#7d9957")
-		if not outer_band:
-			var phase := float(Contact._seed(path_id, 0, 31) % 6283) / 1000.0
-			var quiet := sin(point.x * 0.71 + point.y * 0.39 + phase) * 0.5 + 0.5
-			# Mostly one earth colour. Very low-contrast variation keeps the surface
-			# from feeling dead without exposing rectangular cells or painted tiles.
-			shade = Color("#957058").lerp(Color("#906b55"), 0.08 + quiet * 0.06 + pow(edge, 3.0) * 0.04)
-			var route_distance := lerpf(float(station_a["distance"]), float(station_b["distance"]), along)
-			var wear := _interior_wear(path_id, route_distance, signed_offset, float(station_a["width"]))
-			shade = shade.lerp(Color("#a58165"), wear.x * 0.30)
-			shade = shade.lerp(Color("#896751"), wear.y * 0.10)
-
-			# Preserve the worn-out endpoint treatment without softening the long-side
-			# silhouette. Only the first/last short run fades back to grass.
-			var direction := (centre_b - centre_a).normalized()
-			var endpoint_fade := 0.0
-			if bool(station_a["first"]):
-				endpoint_fade = maxf(endpoint_fade, 1.0 - smoothstep(0.0, 0.18, (point - centre_a).dot(direction)))
-			if bool(station_b["last"]):
-				endpoint_fade = maxf(endpoint_fade, 1.0 - smoothstep(0.0, 0.18, (centre_b - point).dot(direction)))
-			shade = shade.lerp(Color("#7d9957"), endpoint_fade)
+		var route_distance := lerpf(float(station_a["distance"]), float(station_b["distance"]), along)
+		var wear := _interior_wear(path_id, route_distance, signed_offset, float(station_a["width"]))
+		# One quiet earth base and two broad, low-contrast compaction fields.
+		# No world-cell noise or green endpoint/shoulder paint. Ends are shaped
+		# by the same top-only geometry, so they also work on non-green terrain.
+		var shade := Color("#957058").lerp(Color("#a58165"), wear.x * 0.18)
+		shade = shade.lerp(Color("#896751"), wear.y * 0.12)
 		builder["earth"]["colours"][0].append(shade)
 	for index in range(0, triangles.size(), 3):
 		var a := triangles[index]
@@ -292,12 +263,12 @@ static func _grass(renderer: Node, builder: Dictionary, stations: Array, path_id
 		var station: Dictionary = stations[index]
 		var distance := float(station["distance"])
 		var seed_value := Contact._seed(path_id, floori(distance / SPACING), 61)
-		if seed_value % 7 > 1 or distance - previous_distance < 1.15: continue
+		if seed_value % 13 != 0 or distance - previous_distance < 2.75: continue
 		var side := -1.0 if seed_value % 2 == 0 else 1.0
 		var centre: Vector2 = station["centre"]
 		var normal: Vector2 = station["normal"]
 		var tangent: Vector2 = station["tangent"]
-		var edge_extent := float(station["left"] if side < 0 else station["right"])
+		var edge_extent := float(station["left_core"] if side < 0 else station["right_core"])
 		var contact := centre + normal * side * (edge_extent - Contact.UNIT * 0.12)
 		var first := Vector2i(floori(contact.x / Contact.UNIT), floori(contact.y / Contact.UNIT))
 		var step := Vector2i(1 if tangent.x > 0 else -1, 0) if absf(tangent.x) > absf(tangent.y) else Vector2i(0, 1 if tangent.y > 0 else -1)
