@@ -1,4 +1,4 @@
-extends "res://scripts/m2_scene_build_browser.gd"
+extends "res://scripts/m2_scene_path_terrain_ownership.gd"
 
 ## Keep the controller style picker live without rebuilding the same cottage
 ## presentation on every idle frame. The inherited picker applies a preview

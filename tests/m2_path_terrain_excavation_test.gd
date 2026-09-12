@@ -13,7 +13,7 @@ class FakeBackend:
 	func fill_column(x: int, z: int, top_y: int, material: int = 7) -> void:
 		for y in range(top_y + 1): values[Vector3i(x, y, z)] = material
 	func apply_plan(plan: Dictionary) -> void:
-		for item: Dictionary in plan.removals:
+		for item: Dictionary in plan.get("changes", plan.get("removals", [])):
 			values[item.position] = int(item.after)
 
 var checks := 0
@@ -60,6 +60,7 @@ func _initialize() -> void:
 			transition_backend.fill_column(x, z, 14, 8)
 	var first_cut := Excavation.plan_packed_earth(transition_backend, small)
 	transition_backend.apply_plan(first_cut)
+	var ownership: Array = first_cut.acquired.duplicate(true)
 	var expanded := small.duplicate()
 	for z in range(59, 66):
 		for x in range(59, 66):
@@ -67,13 +68,40 @@ func _initialize() -> void:
 			if not expanded.has(cell):
 				expanded.append(cell)
 				transition_backend.fill_column(x, z, 14, 8)
-	var transition := Excavation.plan_packed_earth_transition(transition_backend, small, expanded)
+	var transition := Excavation.plan_packed_earth_transition(transition_backend, small, expanded, ownership)
 	_check(bool(transition.ok) and int(transition.changed_count) > 0, "growing a packed-earth mask plans only its additional excavation")
 	var centre_delta := 0
 	for item: Dictionary in transition.removals:
 		var p: Vector3i = item.position
 		if p.x == 62 and p.z == 62: centre_delta += 1
 	_check(centre_delta <= 1, "transition planning does not re-dig the already lowered centre from scratch")
+	transition_backend.apply_plan(transition)
+	ownership.append_array(transition.acquired)
+
+	var restore := Excavation.plan_packed_earth_transition(transition_backend, expanded, [], ownership)
+	_check(bool(restore.ok) and restore.restorations.size() > 0, "erasing packed earth plans owned terrain restoration")
+	var restore_materials_ok := true
+	for item: Dictionary in restore.restorations:
+		restore_materials_ok = restore_materials_ok and int(item.before) == 0 and int(item.after) == 8
+	_check(restore_materials_ok, "restoration uses the exact original owned terrain material")
+	transition_backend.apply_plan(restore)
+	_check(transition_backend.voxel_at(Vector3i(62, 14, 62)) == 8, "erasing a broad packed-earth centre restores its original top voxel")
+
+	var conflict_backend := FakeBackend.new()
+	for z in range(10, 15):
+		for x in range(10, 15): conflict_backend.fill_column(x, z, 12, 6)
+	var conflict_cells: Array = []
+	for z in range(10, 15):
+		for x in range(10, 15): conflict_cells.append(Vector2i(x, z))
+	var conflict_cut := Excavation.plan_packed_earth(conflict_backend, conflict_cells)
+	conflict_backend.apply_plan(conflict_cut)
+	var owned_position: Vector3i = conflict_cut.acquired[0].position
+	conflict_backend.values[owned_position] = 11
+	var conflict_restore := Excavation.plan_packed_earth_transition(conflict_backend, conflict_cells, [], conflict_cut.acquired)
+	var overwrote_player_edit := false
+	for item: Dictionary in conflict_restore.restorations:
+		if item.position == owned_position: overwrote_player_edit = true
+	_check(not overwrote_player_edit and int(conflict_restore.conflict_count) > 0, "restoration preserves a voxel changed after path ownership was acquired")
 
 	var cave := FakeBackend.new()
 	for z in range(40, 48):

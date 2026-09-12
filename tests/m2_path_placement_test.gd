@@ -57,6 +57,7 @@ func _initialize() -> void:
 	_check(scene.backend.voxel_at(cut_position) == 0 and int(scene.backend.stats().revision) == terrain_revision_before + 1, "packed-earth commit excavates native terrain exactly once")
 	_check(scene._history_tags.back() == "path", "terrain cut and painted authority share one path history transaction")
 	_check(scene._history_tags.size() == history_before + 1, "one painted stroke records one landscape history entry")
+	_check(scene.path_terrain_ownership_count() > 0, "packed-earth excavation records exact terrain ownership")
 	var after: Dictionary = scene.landscape_state.document()
 	_check(after.paths[0].has("cells") and not after.paths[0].has("points") and not after.paths[0].has("width"), "committed path stores only painted-cell authority")
 	_check(scene.landscape_state.records.size() < before.records.size() and not _has_record_at(scene.landscape_state.records, 40.0, fixture_z), "stroke commit clears intersecting planting atomically")
@@ -64,6 +65,7 @@ func _initialize() -> void:
 	await _press(JOY_BUTTON_LEFT_SHOULDER)
 	_check(scene.landscape_state.document() == before, "LB undo while painting tool is open restores path and planting together")
 	_check(scene.backend.voxel_at(cut_position) == cut_material, "LB undo restores the terrain removed by the same path transaction")
+	_check(scene.path_terrain_ownership_count() == 0, "LB undo restores the matching path-terrain ownership state")
 	_check(scene.path_placement_active, "undo keeps the path paint tool active")
 	# Repaint after undo so save/reload exercises canonical painted authority.
 	_aim(Vector2(36.0, fixture_z))
@@ -73,9 +75,36 @@ func _initialize() -> void:
 	await _button_up(JOY_BUTTON_A)
 	after = scene.landscape_state.document()
 	var saved := JSON.stringify(after)
+	var owned_before_save: int = scene.path_terrain_ownership_count()
+	_check(owned_before_save > 0, "repaint owns the excavated terrain before save")
 	_check(scene._save_all(), "painted path save succeeds")
 	_check(scene._reload_all(), "painted path reload succeeds")
 	_check(JSON.stringify(scene.landscape_state.document()) == saved, "save/reload preserves exact painted cells and region ID")
+	_check(scene.path_terrain_ownership_count() == owned_before_save, "save/reload preserves packed-earth terrain ownership")
+	_check(scene.backend.voxel_at(cut_position) == 0, "reloaded packed-earth ownership still corresponds to the excavated voxel")
+
+	# Repainting the exact packed-earth region as cobblestone must restore terrain
+	# before transferring painted-cell authority to the new material.
+	var packed_cells: Array = scene.landscape_state.path_cells("packed_earth")
+	scene.path_style_id = "cobblestone"
+	scene.path_width = 1.50
+	scene._begin_path_placement()
+	scene._reset_path_baseline()
+	scene.path_painting = true
+	scene.path_cells = packed_cells.duplicate()
+	_check(scene._commit_path_stroke(), "painting another material over packed earth commits")
+	_check(scene.landscape_state.path_cells("packed_earth").is_empty() and not scene.landscape_state.path_cells("cobblestone").is_empty(), "material overwrite transfers painted-cell authority")
+	_check(scene.backend.voxel_at(cut_position) == cut_material, "material overwrite restores the terrain previously owned by packed earth")
+	_check(scene.path_terrain_ownership_count() == 0, "material overwrite releases restored packed-earth ownership")
+	await _press(JOY_BUTTON_LEFT_SHOULDER)
+	_check(scene.backend.voxel_at(cut_position) == 0 and scene.path_terrain_ownership_count() == owned_before_save, "undoing overwrite re-excavates packed earth and restores ownership atomically")
+	_check(JSON.stringify(scene.landscape_state.document()) == saved, "undoing overwrite restores the saved packed-earth authority")
+
+	var erase_cells: Array = scene.landscape_state.path_cells("packed_earth")
+	_check(scene.erase_painted_path_cells(erase_cells), "path erase reconciles packed-earth terrain")
+	_check(scene.backend.voxel_at(cut_position) == cut_material and scene.path_terrain_ownership_count() == 0, "path erase restores owned terrain and releases ownership")
+	await _press(JOY_BUTTON_LEFT_SHOULDER)
+	_check(scene.backend.voxel_at(cut_position) == 0 and scene.path_terrain_ownership_count() == owned_before_save, "undoing path erase restores excavation and ownership")
 
 	scene._begin_path_placement()
 	var cancel_before := JSON.stringify(scene.landscape_state.document())
