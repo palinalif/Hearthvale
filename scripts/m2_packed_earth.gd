@@ -129,31 +129,39 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	return Vector2(clampf(centre_wear, 0.0, 1.0), clampf(patch_wear, 0.0, 1.0))
 
 static func _core_fraction(distance: float, path_id: int, side: int) -> float:
-	# Broad asymmetric shoulders replace the previous short notch-like bites.
-	# Each long cell belongs to one side, then the next cell alternates sides.
-	# A shallow outer shoulder lasts several metres and contains a deeper centre,
-	# so grass looks like it gradually reclaims the path rather than punching a dent.
+	# One edge carries the dominant broad incursion. The opposite edge gets a
+	# much shallower offset shoulder so it never reads as a ruler-straight rail.
 	const CELL_LENGTH := 5.6
 	var cell := floori(distance / CELL_LENGTH)
 	var local := distance - float(cell) * CELL_LENGTH
 	var path_parity := Contact._seed(path_id, 0, 311) % 2
 	var bite_side := -1 if posmod(cell + path_parity, 2) == 0 else 1
-	if side != bite_side:
-		return 0.98
-
-	# Centres and unequal shoulders are bounded away from the cell joins, leaving
-	# a genuine near-full-width recovery stretch between successive incursions.
 	var centre := 2.00 + float(Contact._seed(path_id, cell, 317) % 61) / 100.0
 	var before_radius := 1.45 + float(Contact._seed(path_id, cell, 331) % 31) / 100.0
 	var after_radius := 1.65 + float(Contact._seed(path_id, cell, 347) % 31) / 100.0
 	var delta := local - centre
 	var radius := before_radius if delta < 0.0 else after_radius
+
+	if side != bite_side:
+		# The companion shoulder is deliberately small (3.5–6.5% of this side)
+		# and offset along the route. Its centre/radius stay well inside the cell,
+		# so adjacent cells still meet at a near-full-width recovery stretch.
+		var shift_sign := -1.0 if Contact._seed(path_id, cell, 373) % 2 == 0 else 1.0
+		var shift := 0.30 + float(Contact._seed(path_id, cell, 379) % 21) / 100.0
+		var companion_centre := clampf(centre + shift_sign * shift, 1.55, CELL_LENGTH - 1.55)
+		var companion_radius := 0.95 + float(Contact._seed(path_id, cell, 383) % 26) / 100.0
+		var companion := 1.0 - smoothstep(companion_radius * 0.12, companion_radius, absf(local - companion_centre))
+		var companion_depth := 0.035 + float(Contact._seed(path_id, cell, 389) % 4) * 0.01
+		return clampf(0.99 - companion * companion_depth, 0.92, 0.99)
+
+	# The dominant side keeps the accepted long shallow shoulder plus deeper
+	# middle, but returns almost to nominal width between cells.
 	var broad_bite := 1.0 - smoothstep(radius * 0.10, radius, absf(delta))
 	var deep_radius := radius * (0.48 + float(Contact._seed(path_id, cell, 353) % 9) / 100.0)
 	var deep_bite := 1.0 - smoothstep(deep_radius * 0.20, deep_radius, absf(delta))
 	var broad_depth := 0.24 + float(Contact._seed(path_id, cell, 359) % 5) / 100.0
 	var deep_depth := 0.36 + float(Contact._seed(path_id, cell, 367) % 5) / 100.0
-	return clampf(0.98 - broad_bite * broad_depth - deep_bite * deep_depth, 0.34, 0.98)
+	return clampf(0.99 - broad_bite * broad_depth - deep_bite * deep_depth, 0.35, 0.99)
 
 static func _height(renderer: Node, data: Dictionary, cell: Vector2i, scale_value: float) -> float:
 	var heights: Dictionary = data["heights"]
