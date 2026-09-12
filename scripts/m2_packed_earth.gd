@@ -74,17 +74,21 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 	return int(builder["cells"]) - before
 
 static func extent(width: float, distance: float, path_id: int, side: int) -> float:
-	# Most of the edge sits close to nominal width. Broad deterministic pockets
-	# occasionally cut farther inward, so full-width stretches read as worn-soil
-	# tongues rather than a periodic wobble. Both sides use unrelated phases.
-	var phase_a := float(Contact._seed(path_id, 0, 11 + side) % 6283) / 1000.0
-	var phase_b := float(Contact._seed(path_id, 0, 47 + side) % 6283) / 1000.0
-	var broad := sin(distance * 0.29 + phase_a) * 0.72 + sin(distance * 0.43 + phase_b) * 0.28
-	var pocket := smoothstep(-0.10, 0.74, broad)
-	var drift := smoothstep(-0.70, 0.65, sin(distance * 0.15 + phase_b * 0.73))
-	# Slow fields make long shallow bites instead of a noisy scalloped edge.
-	# The largest inset is still wholly inside the saved nominal footprint.
-	var inset := width * 0.085 * clampf(0.04 + pocket * 0.72 + drift * 0.24, 0.0, 1.0)
+	# A shared slow pocket changes the route's actual width enough to survive
+	# Mobile distance, while a much smaller side field keeps the two edges from
+	# mirroring one another. Avoid clamped/saturated fields: they can freeze one
+	# side into a ruler-straight edge for an entire short path.
+	var broad_phase := float(Contact._seed(path_id, 0, 200) % 6283) / 1000.0
+	var drift_phase := float(Contact._seed(path_id, 0, 240) % 6283) / 1000.0
+	var side_phase := float(Contact._seed(path_id, 0, 223 + side) % 6283) / 1000.0
+	var broad_wave := 0.5 + 0.5 * sin(distance * 0.50 + broad_phase)
+	var broad_pocket := pow(broad_wave, 3.0)
+	var drift_wave := 0.5 + 0.5 * sin(distance * 0.25 + drift_phase)
+	var side_wave := 0.5 + 0.5 * sin(distance * 0.31 + side_phase)
+	# The shared field creates long shallow incursions and near-full-width
+	# tongues. Maximum inset still leaves >83% of nominal full path width and
+	# stays wholly inside the saved footprint.
+	var inset := width * (0.004 + 0.058 * broad_pocket + 0.014 * pow(drift_wave, 2.0) + 0.007 * side_wave)
 	return width * 0.5 - inset
 
 static func _interior_wear(path_id: int, distance: float, signed_offset: float, width: float) -> Vector2:
