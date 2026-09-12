@@ -92,26 +92,38 @@ static func extent(width: float, distance: float, path_id: int, side: int) -> fl
 	return width * 0.5 - inset
 
 static func _interior_wear(path_id: int, distance: float, signed_offset: float, width: float) -> Vector2:
-	# Two smooth route-local fields: a broken compacted centre and sparse broad
-	# directional patches. They only drive vertex colour; they add no geometry.
+	# Broad localized compaction patches provide readable surface character without
+	# footprints, ruts or a permanent centre stripe. Each route cell has one dusty
+	# worn stretch with deterministic lateral drift and unequal shoulders.
 	var half_width := maxf(width * 0.5, 0.0001)
 	var across := signed_offset / half_width
-	var centre_phase := float(Contact._seed(path_id, 0, 131) % 6283) / 1000.0
-	# The compacted route wanders slightly and completes roughly one broad wear
-	# cycle over the review path. That guarantees readable quiet/worn stretches
-	# without turning into repeated footprints or a permanent centre stripe.
-	var centre_offset := sin(distance * 0.19 + centre_phase * 0.73) * 0.09
-	var centre_profile := 1.0 - smoothstep(0.06, 0.52, absf(across - centre_offset))
-	var centre_signal := sin(distance * 0.72 + centre_phase)
-	var centre_breaks := smoothstep(-0.35, 0.35, centre_signal)
-	var centre_wear := centre_profile * centre_breaks
+	const WEAR_CELL_LENGTH := 5.2
+	var cell := floori(distance / WEAR_CELL_LENGTH)
+	var local := distance - float(cell) * WEAR_CELL_LENGTH
+	var centre := 1.55 + float(Contact._seed(path_id, cell, 401) % 121) / 100.0
+	var before_radius := 1.00 + float(Contact._seed(path_id, cell, 419) % 36) / 100.0
+	var after_radius := 1.15 + float(Contact._seed(path_id, cell, 431) % 41) / 100.0
+	var delta := local - centre
+	var radius := before_radius if delta < 0.0 else after_radius
+	var along_profile := 1.0 - smoothstep(radius * 0.16, radius, absf(delta))
+	var centre_offset := (float(Contact._seed(path_id, cell, 443) % 25) - 12.0) / 100.0
+	centre_offset += sin(distance * 0.23 + float(Contact._seed(path_id, 0, 449) % 6283) / 1000.0) * 0.045
+	var across_profile := 1.0 - smoothstep(0.08, 0.62, absf(across - centre_offset))
+	var centre_wear := along_profile * across_profile
 
-	var patch_phase := float(Contact._seed(path_id, 0, 173) % 6283) / 1000.0
-	var patch_signal := sin(distance * 0.91 + patch_phase) * 0.72 + sin(distance * 2.03 + patch_phase * 0.61) * 0.28
-	var patch_presence := smoothstep(0.36, 0.82, patch_signal)
-	var patch_centre := sin(distance * 0.31 + patch_phase * 1.29) * 0.20
-	var patch_profile := 1.0 - smoothstep(0.12, 0.52, absf(across - patch_centre))
-	var patch_wear := patch_presence * patch_profile
+	# A second, sparser field creates occasional broad deeper scuffs offset from
+	# centre. It is deliberately wider than a footprint and never forms twin ruts.
+	const PATCH_CELL_LENGTH := 7.1
+	var patch_cell := floori(distance / PATCH_CELL_LENGTH)
+	var patch_local := distance - float(patch_cell) * PATCH_CELL_LENGTH
+	var patch_centre_distance := 2.0 + float(Contact._seed(path_id, patch_cell, 457) % 181) / 100.0
+	var patch_radius := 0.72 + float(Contact._seed(path_id, patch_cell, 463) % 44) / 100.0
+	var patch_along := 1.0 - smoothstep(patch_radius * 0.18, patch_radius, absf(patch_local - patch_centre_distance))
+	var patch_side := -1.0 if Contact._seed(path_id, patch_cell, 467) % 2 == 0 else 1.0
+	var patch_offset := patch_side * (0.10 + float(Contact._seed(path_id, patch_cell, 479) % 10) / 100.0)
+	var patch_across := 1.0 - smoothstep(0.08, 0.46, absf(across - patch_offset))
+	var patch_presence := 1.0 if Contact._seed(path_id, patch_cell, 487) % 4 != 0 else 0.0
+	var patch_wear := patch_along * patch_across * patch_presence
 	return Vector2(clampf(centre_wear, 0.0, 1.0), clampf(patch_wear, 0.0, 1.0))
 
 static func _core_fraction(distance: float, path_id: int, side: int) -> float:
@@ -208,11 +220,11 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 			# The inner two bands are the actual worn-soil route. Keeping the outer
 			# bands at native grass colour makes the moving core boundary a real,
 			# readable silhouette instead of a wide interpolated brown/green fringe.
-			shade = Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.10 + pow(edge, 3.0) * 0.09)
+			shade = Color("#9f7352").lerp(Color("#886047"), 0.16 + quiet * 0.08 + pow(edge, 3.0) * 0.07)
 			var route_distance := lerpf(float(station_a["distance"]), float(station_b["distance"]), along)
 			var wear := _interior_wear(path_id, route_distance, signed_offset, float(station_a["width"]))
-			shade = shade.lerp(Color("#b98a60"), wear.x * 0.55)
-			shade = shade.lerp(Color("#835f49"), wear.y * 0.26)
+			shade = shade.lerp(Color("#b79270"), wear.x * 0.52)
+			shade = shade.lerp(Color("#7f5a46"), wear.y * 0.24)
 
 			# Preserve the accepted worn-out endpoint treatment without softening the
 			# long-side silhouette. Only the first/last short run fades back to grass.
