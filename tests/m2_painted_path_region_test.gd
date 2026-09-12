@@ -30,6 +30,20 @@ func _initialize() -> void:
 	_check(Region.union_cells(joined, [Vector2i(5, 5)]) == joined, "painting the same cell is idempotent")
 	_check(Region.erase_cells(joined, [Vector2i(5, 5)]) == [Vector2i(4, 5), Vector2i(6, 5)], "erase removes only covered cells")
 
+	var sweep_from := Vector2(4.0, 4.0)
+	var sweep_to := Vector2(6.0, 4.0)
+	var sweep := Region.stroke_cells(sweep_from, sweep_to, Grid.UNIT * 0.5)
+	_check(sweep == Region.stroke_cells(sweep_to, sweep_from, Grid.UNIT * 0.5), "stroke rasterization is direction independent")
+	var columns := {}
+	for cell: Vector2i in sweep: columns[cell.x] = true
+	var first_column := floori(sweep_from.x / Grid.UNIT)
+	var last_column := floori(sweep_to.x / Grid.UNIT)
+	var continuous := true
+	for x in range(first_column, last_column + 1): continuous = continuous and columns.has(x)
+	_check(continuous, "fast brush sweep leaves no skipped structural columns")
+	var wide_sweep := Region.stroke_cells(sweep_from, sweep_to, Grid.UNIT * 2.0)
+	_check(wide_sweep.size() > sweep.size(), "stroke radius controls painted width while preserving continuity")
+
 	var three := _block(20, 20, 3, 3)
 	var three_field := Region.distance_field(three)
 	_check(int(three_field[Vector2i(21, 21)]) == 1, "three-cell trail has one-voxel-deep centre ring")
@@ -65,7 +79,7 @@ func _initialize() -> void:
 		in_world = in_world and cell.x >= 0 and cell.y >= 0
 	_check(in_world, "brush clips cleanly at editable-world edge")
 
-	print(JSON.stringify({"ok": failures == 0, "checks": checks, "failures": failures, "unit": Grid.UNIT, "tiny_cells": tiny.size(), "small_cells": small.size(), "plaza_cells": plaza.size()}))
+	print(JSON.stringify({"ok": failures == 0, "checks": checks, "failures": failures, "unit": Grid.UNIT, "tiny_cells": tiny.size(), "small_cells": small.size(), "plaza_cells": plaza.size(), "sweep_cells": sweep.size()}))
 	quit(1 if failures else 0)
 
 func _block(x0: int, y0: int, width: int, height: int) -> Array:
