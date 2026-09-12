@@ -50,11 +50,11 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 			if index == 0 or index == samples.size() - 1:
 				var end_key := 101 if index == 0 else 107
 				var side_key := end_key + (-3 if across < 0.0 else 5)
-				var taper := 0.82 + float(Contact._seed(path_id, 0, side_key) % 9) * 0.01
+				var taper := 0.74 + float(Contact._seed(path_id, 0, side_key) % 9) * 0.01
 				offset *= lerpf(1.0, taper, pow(absf(across), 1.25))
 				var neighbour: Vector3 = samples[1 if index == 0 else index - 1]["point"]
 				var end_length := centre.distance_to(Vector2(neighbour.x, neighbour.z))
-				end_shift = minf(end_length * 0.18, minf(0.10, safe_width * 0.14)) * pow(absf(across), 1.15) * (0.88 + 0.12 * across)
+				end_shift = minf(end_length * 0.20, minf(0.12, safe_width * 0.16)) * pow(absf(across), 1.15) * (0.88 + 0.12 * across)
 				if index != 0: end_shift = -end_shift
 			section.append(centre + normal * offset + tangent * end_shift)
 		sections.append(section)
@@ -101,11 +101,11 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	return Vector2(clampf(centre_wear, 0.0, 1.0), clampf(patch_wear, 0.0, 1.0))
 
 static func _core_fraction(distance: float, path_id: int, side: int) -> float:
-	# Move the soil/grass transition within the existing footprint, not the
-	# route. Asymmetric broad pockets leave the central 76% entirely calm.
+	# Most stretches keep only a narrow soil/grass transition. Selected broad,
+	# asymmetric pockets reach farther inward, leaving the central 70% untouched.
 	var phase := float(Contact._seed(path_id, 0, 82 + side) % 6283) / 1000.0
 	var pocket := clampf(0.5 + 0.5 * (sin(distance * 1.41 + phase) * 0.65 + sin(distance * 0.71 + phase * 1.31) * 0.35), 0.0, 1.0)
-	return 0.96 - 0.20 * pow(pocket, 1.5)
+	return 0.97 - 0.27 * pow(pocket, 2.2)
 
 static func _height(renderer: Node, data: Dictionary, cell: Vector2i, scale_value: float) -> float:
 	var heights: Dictionary = data["heights"]
@@ -171,17 +171,17 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		var edge := clampf(absf(signed_offset) / (float(station_a["width"]) * 0.5), 0.0, 1.0)
 		var phase := float(Contact._seed(path_id, 0, 31) % 6283) / 1000.0
 		var quiet := sin(point.x * 0.71 + point.y * 0.39 + phase) * 0.5 + 0.5
-		# Same low-contrast field across every native rectangle: no alternating tiles.
-		var shade := Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.07 + pow(edge, 3.0) * 0.09)
+		# One broad world-continuous soil field, never an alternating segment colour.
+		var shade := Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.11 + pow(edge, 3.0) * 0.09)
 		var route_distance := lerpf(float(station_a["distance"]), float(station_b["distance"]), along)
 		var wear := _interior_wear(path_id, route_distance, signed_offset, float(station_a["width"]))
-		# Centre wear is broader and calmer; the second field appears only in
-		# occasional elongated route-aligned patches. Both remain subordinate.
-		shade = shade.lerp(Color("#8f684d"), wear.x * 0.105)
-		shade = shade.lerp(Color("#855f48"), wear.y * 0.075)
+		# Broken compacted centre wear is now deliberately readable at Mobile
+		# distance. Sparse route-aligned patches remain broad and lower contrast.
+		shade = shade.lerp(Color("#765743"), wear.x * 0.24)
+		shade = shade.lerp(Color("#805b45"), wear.y * 0.16)
 		# Worn grass/soil at the outer band, not a separate raised shoulder.
 		# A continuous asymmetric field varies the transition's visible depth;
-		# the central 76% stays soil-only. Native grass colour, fully opaque.
+		# the central 70% stays soil-only. Native grass colour, fully opaque.
 		var side := -1 if signed_offset < 0.0 else 1
 		var edge_phase := float(Contact._seed(path_id, 0, 82 + side) % 6283) / 1000.0
 		var pocket := smoothstep(-0.3, 0.6, sin(point.x * 0.81 + point.y * 0.57 + edge_phase) * 0.65 + sin(point.x * 2.2 - point.y * 0.73 + edge_phase * 1.31) * 0.35)
