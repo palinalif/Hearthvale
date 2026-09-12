@@ -129,7 +129,8 @@ switch ($Shard) {
     'paths' {
         Invoke-NativeTests @(
             'm2_painted_path_region_test',
-            'm2_painted_path_authority_test'
+            'm2_painted_path_authority_test',
+            'm2_path_terrain_excavation_test'
         )
         Invoke-MobileReview 'paths' 'tests/m2_path_render_test.gd' 180000 @(
             '"ok"\s*:\s*true',
