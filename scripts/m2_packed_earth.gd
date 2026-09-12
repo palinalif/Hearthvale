@@ -127,10 +127,11 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	return Vector2(clampf(centre_wear, 0.0, 1.0), clampf(patch_wear, 0.0, 1.0))
 
 static func _core_fraction(distance: float, path_id: int, side: int) -> float:
-	# Localized route cells produce a few broad grass incursions separated by long
-	# calm stretches. This avoids the manufactured look of continuously varying
-	# sine-wave width while remaining deterministic and independent of frame time.
-	const CELL_LENGTH := 4.4
+	# Broad asymmetric shoulders replace the previous short notch-like bites.
+	# Each long cell belongs to one side, then the next cell alternates sides.
+	# A shallow outer shoulder lasts several metres and contains a deeper centre,
+	# so grass looks like it gradually reclaims the path rather than punching a dent.
+	const CELL_LENGTH := 5.6
 	var cell := floori(distance / CELL_LENGTH)
 	var local := distance - float(cell) * CELL_LENGTH
 	var path_parity := Contact._seed(path_id, 0, 311) % 2
@@ -138,17 +139,19 @@ static func _core_fraction(distance: float, path_id: int, side: int) -> float:
 	if side != bite_side:
 		return 0.98
 
-	# Each cell moves the bite centre and gives the two shoulders unequal reach.
-	# Centres/radii are bounded so every pulse dies out before its cell boundary;
-	# adjacent cells therefore join at the same calm full-width value.
-	var centre := 1.55 + float(Contact._seed(path_id, cell, 317) % 126) / 100.0
-	var before_radius := 0.72 + float(Contact._seed(path_id, cell, 331) % 31) / 100.0
-	var after_radius := 0.82 + float(Contact._seed(path_id, cell, 347) % 31) / 100.0
+	# Centres and unequal shoulders are bounded away from the cell joins, leaving
+	# a genuine near-full-width recovery stretch between successive incursions.
+	var centre := 2.00 + float(Contact._seed(path_id, cell, 317) % 61) / 100.0
+	var before_radius := 1.45 + float(Contact._seed(path_id, cell, 331) % 31) / 100.0
+	var after_radius := 1.65 + float(Contact._seed(path_id, cell, 347) % 31) / 100.0
 	var delta := local - centre
 	var radius := before_radius if delta < 0.0 else after_radius
-	var bite := 1.0 - smoothstep(radius * 0.12, radius, absf(delta))
-	var depth := 0.42 + float(Contact._seed(path_id, cell, 359) % 7) / 100.0
-	return clampf(0.98 - bite * depth, 0.50, 0.98)
+	var broad_bite := 1.0 - smoothstep(radius * 0.10, radius, absf(delta))
+	var deep_radius := radius * (0.48 + float(Contact._seed(path_id, cell, 353) % 9) / 100.0)
+	var deep_bite := 1.0 - smoothstep(deep_radius * 0.20, deep_radius, absf(delta))
+	var broad_depth := 0.24 + float(Contact._seed(path_id, cell, 359) % 5) / 100.0
+	var deep_depth := 0.36 + float(Contact._seed(path_id, cell, 367) % 5) / 100.0
+	return clampf(0.98 - broad_bite * broad_depth - deep_bite * deep_depth, 0.34, 0.98)
 
 static func _height(renderer: Node, data: Dictionary, cell: Vector2i, scale_value: float) -> float:
 	var heights: Dictionary = data["heights"]
