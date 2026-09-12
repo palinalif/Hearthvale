@@ -4,6 +4,13 @@ class_name LandscapeState
 const LIMIT := 320
 const TREE_LIMIT := 24
 const PATH_STYLE_IDS: Array[String] = ["packed_earth", "cobblestone", "stepping_stones"]
+# Transitional caller-only limits while the scene tool is cut from point routes
+# to hold-to-paint strokes. Saved path documents never use width or points.
+const PATH_MIN_POINTS := 2
+const PATH_MAX_POINTS := 64
+const PATH_MIN_WIDTH := 0.25
+const PATH_MAX_WIDTH := 3.0
+const PATH_MIN_SEGMENT := 0.125
 const PATH_RENDER_CELL_LIMIT := 24000
 const BRIDGE_STYLE_IDS: Array[String] = ["timber", "stone"]
 const BRIDGE_LIMIT := 16
@@ -127,6 +134,39 @@ func add(kind: String, point: Vector3, seed_value: int) -> bool:
 	records.append({"id": next_id, "kind": kind, "position": [point.x, point.y, point.z], "seed": seed_value})
 	next_id += 1
 	return true
+
+## Temporary caller bridge during the interaction rewrite. Point routes are
+## rasterized immediately and never enter the saved document schema.
+func add_path(style_id: String, width: float, point_values: Array) -> int:
+	if not PATH_STYLE_IDS.has(style_id) or point_values.size() < PATH_MIN_POINTS or point_values.size() > PATH_MAX_POINTS: return -1
+	var safe_width := snappedf(clampf(width, PATH_MIN_WIDTH, PATH_MAX_WIDTH), Grid.UNIT)
+	var points: Array[Vector2] = []
+	for value in point_values:
+		var point := _point_array(value)
+		if point.is_empty(): return -1
+		var parsed := Vector2(float(point[0]), float(point[1]))
+		if parsed.x < 0.0 or parsed.x > EDITABLE_WORLD_SIZE or parsed.y < 0.0 or parsed.y > EDITABLE_WORLD_SIZE: return -1
+		points.append(parsed)
+	var cells: Array = []
+	for index in range(1, points.size()):
+		if points[index - 1].distance_to(points[index]) < PATH_MIN_SEGMENT - 0.000001: return -1
+		cells = PathRegion.union_cells(cells, PathRegion.stroke_cells(points[index - 1], points[index], safe_width * 0.5, EDITABLE_WORLD_SIZE), EDITABLE_WORLD_SIZE)
+	return paint_path_cells(style_id, cells)
+
+## Same temporary bridge for planting clearance. The authoritative operation is
+## still cell-based, so removing this adapter later does not change save data.
+func clear_records_along_path(point_values: Array, width: float) -> bool:
+	if point_values.size() < PATH_MIN_POINTS: return false
+	var safe_width := snappedf(clampf(width, PATH_MIN_WIDTH, PATH_MAX_WIDTH), Grid.UNIT)
+	var points: Array[Vector2] = []
+	for value in point_values:
+		var point := _point_array(value)
+		if point.is_empty(): return false
+		points.append(Vector2(float(point[0]), float(point[1])))
+	var cells: Array = []
+	for index in range(1, points.size()):
+		cells = PathRegion.union_cells(cells, PathRegion.stroke_cells(points[index - 1], points[index], safe_width * 0.5, EDITABLE_WORLD_SIZE), EDITABLE_WORLD_SIZE)
+	return clear_records_in_path_cells(cells)
 
 ## Paint authoritative structural-grid cells. Repainting the same material
 ## merges into its region; painting another material transfers ownership.
