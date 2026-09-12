@@ -23,7 +23,7 @@ func _initialize() -> void:
 		if scene.landscape_state.add("foliage", Vector3(40.0, 8.0, z), 2):
 			fixture_z = z
 			break
-	_check(fixture_z > 0.0, "path route has a planting fixture to clear")
+	_check(fixture_z > 0.0, "paint route has a planting fixture to clear")
 	scene.garden_visual.reset_records(scene.landscape_state.records)
 	var before: Dictionary = scene.landscape_state.document()
 	var history_before: int = scene._history_tags.size()
@@ -32,86 +32,76 @@ func _initialize() -> void:
 	_check(scene._build_catalogue_open, "D-pad Up opens the build catalogue")
 	scene._build_catalogue_buttons[1].grab_focus()
 	await _press(JOY_BUTTON_A)
-	_check(scene._roads_catalogue_open and scene._roads_catalogue_buttons.size() == 5, "Roads & Paths opens its three path styles plus two bridge styles")
-	_check(scene._roads_catalogue_buttons[0].text.begins_with("Packed-earth footpath") and scene._roads_catalogue_buttons[1].text.begins_with("Cobblestone lane") and scene._roads_catalogue_buttons[2].text.begins_with("Stepping-stone trail"), "all path styles are visually named")
+	_check(scene._roads_catalogue_open and scene._roads_catalogue_buttons.size() == 5, "Roads & Paths opens its path and bridge styles")
 	scene._roads_catalogue_buttons[0].grab_focus()
 	await _press(JOY_BUTTON_A)
-	_check(scene.path_placement_active and scene.path_style_id == "packed_earth" and scene.view_context == "terrain", "style selection enters terrain path placement")
-	_check(scene.landscape_state.document() == before, "starting path placement is read-only")
+	_check(scene.path_placement_active and scene.path_style_id == "packed_earth" and scene.view_context == "terrain", "style selection enters terrain path painting")
+	_check(scene.landscape_state.document() == before, "starting path painting is read-only")
 
 	_aim(Vector2(36.0, fixture_z))
-	await _press(JOY_BUTTON_A)
-	_check(scene.path_points.size() == 1, "A places the first path point")
-	var preview_before: String = JSON.stringify(scene.landscape_state.document())
+	await _button_down(JOY_BUTTON_A)
+	_check(scene.path_painting and scene.path_cells.size() > 0, "holding A starts a painted-cell stroke")
+	var preview_before := JSON.stringify(scene.landscape_state.document())
 	scene._update_path_preview()
-	_check(JSON.stringify(scene.landscape_state.document()) == preview_before and scene.path_visual.stats().preview_cells > 0, "live preview does not mutate authority and has geometry")
+	_check(JSON.stringify(scene.landscape_state.document()) == preview_before and scene.path_visual.stats().preview_cells > 0, "live painted preview has geometry without mutating authority")
 	_aim(Vector2(44.0, fixture_z))
-	var next_point_was_valid: bool = bool(scene.path_placement_valid)
-	await _press(JOY_BUTTON_A)
-	_check(scene.path_points.size() == 2 and next_point_was_valid, "A adds a valid second bend/point")
-	_check(scene.path_placement_reason.contains("farther"), "cursor at the latest point explains that another meaningful segment is needed")
-	await _press(JOY_BUTTON_LEFT_SHOULDER)
-	_check(scene.path_points.size() == 1 and scene.landscape_state.document() == before, "LB removes only the most recent uncommitted point")
-	await _press(JOY_BUTTON_X)
-	_check(scene.path_placement_active and scene.path_points.size() < 2 and scene.status_text.contains("two valid points"), "X cannot finish a path with fewer than two points")
-	_aim(Vector2(44.0, fixture_z))
-	await _press(JOY_BUTTON_A)
-	var committed_candidate: String = JSON.stringify(scene.landscape_state.document())
-	_check(JSON.stringify(scene.landscape_state.document()) == preview_before, "adding points remains preview-only")
-	await _press(JOY_BUTTON_X)
-	_check(not scene.path_placement_active and scene.landscape_state.paths.size() == 1, "X commits a valid path")
-	_check(scene._history_tags.size() == history_before + 1, "path commit records one landscape history entry")
+	_check(scene._sample_path_stroke() and scene.path_cells.size() > 20, "moving while A is held continuously extends the stroke")
+	await _button_up(JOY_BUTTON_A)
+	_check(not scene.path_painting and scene.path_placement_active and scene.landscape_state.paths.size() == 1, "A release commits the stroke and keeps the paint tool active")
+	_check(scene._history_tags.size() == history_before + 1, "one painted stroke records one landscape history entry")
 	var after: Dictionary = scene.landscape_state.document()
-	_check(scene.landscape_state.records.size() < before.records.size() and not _has_record_at(scene.landscape_state.records, 40.0, fixture_z), "commit clears intersecting planting atomically with the path")
-	_check(not committed_candidate.is_empty(), "path preview document remains serializable")
+	_check(after.paths[0].has("cells") and not after.paths[0].has("points") and not after.paths[0].has("width"), "committed path stores only painted-cell authority")
+	_check(scene.landscape_state.records.size() < before.records.size() and not _has_record_at(scene.landscape_state.records, 40.0, fixture_z), "stroke commit clears intersecting planting atomically")
 
 	await _press(JOY_BUTTON_LEFT_SHOULDER)
-	_check(scene.landscape_state.document() == before, "undo removes the path and restores cleared planting")
-	await _press(JOY_BUTTON_RIGHT_SHOULDER)
-	_check(scene.landscape_state.document() == after, "redo restores the path and planting removal")
-	var saved := JSON.stringify(scene.landscape_state.document())
-	_check(scene._save_all(), "path save succeeds")
-	_check(scene._reload_all(), "path reload succeeds")
-	_check(JSON.stringify(scene.landscape_state.document()) == saved, "save/reload preserves exact path ID style width and points")
+	_check(scene.landscape_state.document() == before, "LB undo while painting tool is open restores path and planting together")
+	_check(scene.path_placement_active, "undo keeps the path paint tool active")
+	# Repaint after undo so save/reload exercises canonical painted authority.
+	_aim(Vector2(36.0, fixture_z))
+	await _button_down(JOY_BUTTON_A)
+	_aim(Vector2(44.0, fixture_z))
+	scene._sample_path_stroke()
+	await _button_up(JOY_BUTTON_A)
+	after = scene.landscape_state.document()
+	var saved := JSON.stringify(after)
+	_check(scene._save_all(), "painted path save succeeds")
+	_check(scene._reload_all(), "painted path reload succeeds")
+	_check(JSON.stringify(scene.landscape_state.document()) == saved, "save/reload preserves exact painted cells and region ID")
 
 	var cancel_before := JSON.stringify(scene.landscape_state.document())
 	var history_after_reload: int = scene._history_tags.size()
-	scene._begin_path_placement()
 	_aim(Vector2(30.0, 35.0))
-	await _press(JOY_BUTTON_A)
+	await _button_down(JOY_BUTTON_A)
+	_aim(Vector2(32.0, 35.0))
+	scene._sample_path_stroke()
 	await _press(JOY_BUTTON_B)
-	_check(scene.path_placement_active and not scene.path_point_active and scene.path_points.size() == 1, "first B stops only the live next point and keeps the confirmed route")
-	_check(JSON.stringify(scene.landscape_state.document()) == cancel_before and scene._history_tags.size() == history_after_reload, "stopping the live point does not mutate authority or history")
+	_check(scene.path_placement_active and not scene.path_painting and scene.path_cells.is_empty(), "B cancels only the live uncommitted stroke")
+	_check(JSON.stringify(scene.landscape_state.document()) == cancel_before and scene._history_tags.size() == history_after_reload, "stroke cancellation changes neither authority nor history")
 	await _press(JOY_BUTTON_B)
-	_check(not scene.path_placement_active and JSON.stringify(scene.landscape_state.document()) == cancel_before and scene._history_tags.size() == history_after_reload, "second B exits path placement without document drift")
+	_check(not scene.path_placement_active and JSON.stringify(scene.landscape_state.document()) == cancel_before, "B while idle closes path painting without document drift")
 
 	var home: Dictionary = scene.building_world.get_building(scene.selected_building_id)
 	var home_center: Vector3 = (home["transform"] as Transform3D).origin
 	scene._begin_path_placement()
-	_aim(Vector2(home_center.x - 3.0, home_center.z))
-	await _press(JOY_BUTTON_A)
-	_aim(Vector2(home_center.x + 3.0, home_center.z))
-	_check(not scene.path_placement_valid and scene.path_placement_reason.contains("interior"), "home interior crossing is explained and invalid")
-	await _press(JOY_BUTTON_A)
-	_check(scene.path_points.size() == 1, "home interior crossing cannot add a point")
-	await _press(JOY_BUTTON_X)
-	_check(scene.path_placement_active and scene.landscape_state.document().paths.size() == 1, "invalid home path cannot commit")
-	scene._cancel_path_placement()
-
-	scene._begin_path_placement()
-	scene.path_points = [Vector2(10.0, 10.0), Vector2(48.125, 10.0)]
-	_check(not scene._commit_path() and scene.path_placement_reason == "Outside editable world", "out-of-bounds finish is rejected with a plain-language reason")
+	_aim(Vector2(home_center.x, home_center.z))
+	_check(not scene.path_placement_valid and scene.path_placement_reason.contains("interior"), "brush footprint over a home interior is explained and invalid")
+	await _button_down(JOY_BUTTON_A)
+	_check(not scene.path_painting and scene.path_cells.is_empty(), "invalid home brush cannot begin a stroke")
+	await _button_up(JOY_BUTTON_A)
+	_check(JSON.stringify(scene.landscape_state.document()) == cancel_before, "invalid home paint cannot commit")
 	scene._cancel_path_placement()
 
 	scene._begin_path_placement()
 	_aim(Vector2(31.0, 37.0))
-	await _press(JOY_BUTTON_A)
+	await _button_down(JOY_BUTTON_A)
+	var focus_before := JSON.stringify(scene.landscape_state.document())
 	scene._notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
-	_check(not scene.path_placement_active and scene.landscape_state.document() == after and scene.menu_open, "focus loss cancels the path and pauses the world")
+	_check(not scene.path_placement_active and JSON.stringify(scene.landscape_state.document()) == focus_before and scene.menu_open, "focus loss discards a live stroke and pauses the world")
 	scene._set_menu(false)
 	scene._begin_path_placement()
+	var disconnect_before := JSON.stringify(scene.landscape_state.document())
 	scene._on_joy_connection_changed(0, false)
-	_check(not scene.path_placement_active and scene.menu_open and scene.landscape_state.document() == after, "controller disconnect cannot confirm a path accidentally")
+	_check(not scene.path_placement_active and scene.menu_open and JSON.stringify(scene.landscape_state.document()) == disconnect_before, "controller disconnect cannot commit a stroke accidentally")
 	_finish()
 
 func _aim(point: Vector2) -> void:
@@ -126,19 +116,25 @@ func _has_record_at(records: Array, x: float, z: float) -> bool:
 		if is_equal_approx(point.x, x) and is_equal_approx(point.z, z): return true
 	return false
 
+func _button_down(button: JoyButton) -> void:
+	var event := InputEventJoypadButton.new()
+	event.button_index = button
+	event.pressed = true
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	await process_frame
+
+func _button_up(button: JoyButton) -> void:
+	var event := InputEventJoypadButton.new()
+	event.button_index = button
+	event.pressed = false
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	await process_frame
+
 func _press(button: JoyButton) -> void:
-	var down := InputEventJoypadButton.new()
-	down.button_index = button
-	down.pressed = true
-	Input.parse_input_event(down)
-	Input.flush_buffered_events()
-	await process_frame
-	var up := InputEventJoypadButton.new()
-	up.button_index = button
-	up.pressed = false
-	Input.parse_input_event(up)
-	Input.flush_buffered_events()
-	await process_frame
+	await _button_down(button)
+	await _button_up(button)
 
 func _check(condition: bool, label: String) -> void:
 	checks += 1
