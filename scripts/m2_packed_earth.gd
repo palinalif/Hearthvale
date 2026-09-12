@@ -115,11 +115,18 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	return Vector2(clampf(centre_wear, 0.0, 1.0), clampf(patch_wear, 0.0, 1.0))
 
 static func _core_fraction(distance: float, path_id: int, side: int) -> float:
-	# Most stretches keep only a narrow soil/grass transition. Selected broad,
-	# asymmetric pockets reach farther inward while retaining a broad calm core.
-	var phase := float(Contact._seed(path_id, 0, 82 + side) % 6283) / 1000.0
-	var pocket := clampf(0.5 + 0.5 * (sin(distance * 1.41 + phase) * 0.65 + sin(distance * 0.71 + phase * 1.31) * 0.35), 0.0, 1.0)
-	return 0.97 - 0.23 * pow(pocket, 2.0)
+	# Visible soil width changes in a few broad one-sided movements instead of
+	# wobbling both edges at once. A shared slow field alternates which side the
+	# grass reaches into; the zero crossings leave near-full-width worn tongues.
+	var shared_phase := float(Contact._seed(path_id, 0, 89) % 6283) / 1000.0
+	var local_phase := float(Contact._seed(path_id, 0, 149 + side) % 6283) / 1000.0
+	var alternating := sin(distance * 0.62 + shared_phase) * float(side)
+	var broad_bite := pow(maxf(0.0, alternating), 2.6)
+	# A smaller unrelated field keeps successive incursions from becoming mirror
+	# images while remaining smooth and deterministic at station spacing.
+	var local_wave := maxf(0.0, sin(distance * 0.91 + local_phase))
+	var local_bite := pow(local_wave, 4.0)
+	return 0.97 - 0.34 * broad_bite - 0.06 * local_bite
 
 static func _height(renderer: Node, data: Dictionary, cell: Vector2i, scale_value: float) -> float:
 	var heights: Dictionary = data["heights"]
