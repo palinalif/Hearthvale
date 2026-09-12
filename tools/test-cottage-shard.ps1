@@ -11,10 +11,11 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
-# Each shard runs on a clean hosted runner. Keep dependency/bootstrap behavior
-# identical to the former monolithic cottage job, but make it explicit so the
-# matrix job name does not affect test-m1-placement.ps1's historical auto mode.
-./tools/test-m1-placement.ps1 -Suite setup
+# Each shard runs on a clean hosted runner. The paths shard uses bootstrap-only
+# first so targeted script checks can expose deep parser failures before the
+# ordinary project import collapses them into an unresolved descendant class.
+$placementSuite = if ($Shard -eq 'paths') { 'bootstrap' } else { 'setup' }
+./tools/test-m1-placement.ps1 -Suite $placementSuite
 if ($LASTEXITCODE -ne 0) { throw 'Pinned Godot/voxel setup failed' }
 
 $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
@@ -45,6 +46,17 @@ function Invoke-ScriptCheck([string]$script) {
     $output | Tee-Object -FilePath (Join-Path $review (($script -replace '[\\/:]','-') + '.check.log')) | Out-Null
     if ($exitCode -ne 0 -or ($output -match 'SCRIPT ERROR|Parse Error|ERROR:')) {
         throw "Script parse check failed: $script"
+    }
+}
+
+function Invoke-ProjectImport() {
+    Write-Output 'PROJECT_IMPORT'
+    $output = & $editor --headless --path . --editor --import --quit 2>&1 | ForEach-Object { "$_" }
+    $exitCode = $LASTEXITCODE
+    $output | ForEach-Object { Write-Output $_ }
+    $output | Tee-Object -FilePath (Join-Path $review 'project-import.log') | Out-Null
+    if ($exitCode -ne 0 -or ($output -match 'SCRIPT ERROR|Parse Error|ERROR:')) {
+        throw "Project import failed (exit=$exitCode)"
     }
 }
 
@@ -139,12 +151,10 @@ switch ($Shard) {
         )
     }
     'paths' {
-        # Keep these explicit checks ahead of the regression scripts. Godot's
-        # project import can otherwise surface only the top unresolved scene
-        # class, hiding the actual parse error deeper in this inheritance chain.
         Invoke-ScriptCheck 'scripts/m2_scene_paths.gd'
         Invoke-ScriptCheck 'scripts/m2_scene_composition.gd'
         Invoke-ScriptCheck 'scripts/m2_scene_build_browser.gd'
+        Invoke-ProjectImport
         Invoke-NativeTests @(
             'm2_painted_path_region_test',
             'm2_painted_path_authority_test',
