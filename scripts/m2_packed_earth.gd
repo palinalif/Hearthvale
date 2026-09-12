@@ -214,7 +214,17 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		# Reach native-grass colour well before the geometry edge. That makes
 		# selected core pockets read as incursions without masks or extra slabs.
 		var transition_end := lerpf(core_extent, edge_extent, 0.36)
-		var boundary := smoothstep(core_extent, transition_end, point.distance_to(closest))
+		var radial_distance := point.distance_to(closest)
+		var boundary := smoothstep(core_extent, transition_end, radial_distance)
+		# With only centre/core/edge vertices, a deep core movement used to get
+		# averaged back into a soft outer fade. When a route-local incursion is
+		# genuinely deep, carry native grass colour onto that existing core vertex
+		# so the silhouette change survives gameplay distance. Calm/full-width
+		# stretches keep the core brown and therefore remain broad.
+		var visible_fraction := core_extent / maxf(edge_extent, 0.0001)
+		var incursion_strength := 1.0 - smoothstep(0.60, 0.90, visible_fraction)
+		var inner_boundary := smoothstep(core_extent * 0.52, core_extent, radial_distance) * incursion_strength * 0.78
+		boundary = maxf(boundary, inner_boundary)
 		var direction := (centre_b - centre_a).normalized()
 		if bool(station_a["first"]): boundary = maxf(boundary, (1.0 - smoothstep(0.0, 0.18, (point - centre_a).dot(direction))) * (0.75 + 0.25 * pocket))
 		if bool(station_b["last"]): boundary = maxf(boundary, (1.0 - smoothstep(0.0, 0.18, (centre_b - point).dot(direction))) * (0.75 + 0.25 * pocket))
