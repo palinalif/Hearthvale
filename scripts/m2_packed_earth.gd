@@ -41,21 +41,25 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 		var left_core := left * _core_fraction(distance, path_id, -1)
 		var right_core := right * _core_fraction(distance, path_id, 1)
 		var section := PackedVector2Array()
+		var end_station_distance := mini(index, samples.size() - 1 - index)
+		var end_influence := 1.0 - smoothstep(0.0, 3.0, float(end_station_distance))
 		for across: float in ACROSS:
 			var offset := across * (left if across < 0.0 else right)
 			if is_equal_approx(absf(across), 0.64): offset = -left_core if across < 0.0 else right_core
-			# Taper only the visual end section. The centreline endpoint remains exact,
-			# while unequal shoulders stop the route reading as a square brush stroke.
+			# Taper across several stations so the route wears out gradually instead
+			# of ending in one clipped section. The centreline endpoint remains exact.
 			var end_shift := 0.0
-			if index == 0 or index == samples.size() - 1:
-				var end_key := 101 if index == 0 else 107
+			if end_influence > 0.0:
+				var near_start := index <= samples.size() / 2
+				var end_key := 101 if near_start else 107
 				var side_key := end_key + (-3 if across < 0.0 else 5)
-				var taper := 0.74 + float(Contact._seed(path_id, 0, side_key) % 9) * 0.01
-				offset *= lerpf(1.0, taper, pow(absf(across), 1.25))
-				var neighbour: Vector3 = samples[1 if index == 0 else index - 1]["point"]
-				var end_length := centre.distance_to(Vector2(neighbour.x, neighbour.z))
-				end_shift = minf(end_length * 0.20, minf(0.12, safe_width * 0.16)) * pow(absf(across), 1.15) * (0.88 + 0.12 * across)
-				if index != 0: end_shift = -end_shift
+				var taper := 0.64 + float(Contact._seed(path_id, 0, side_key) % 9) * 0.012
+				offset *= lerpf(1.0, taper, end_influence * pow(absf(across), 1.25))
+				if index == 0 or index == samples.size() - 1:
+					var neighbour: Vector3 = samples[1 if index == 0 else index - 1]["point"]
+					var end_length := centre.distance_to(Vector2(neighbour.x, neighbour.z))
+					end_shift = minf(end_length * 0.20, minf(0.12, safe_width * 0.16)) * pow(absf(across), 1.15) * (0.88 + 0.12 * across)
+					if index != 0: end_shift = -end_shift
 			section.append(centre + normal * offset + tangent * end_shift)
 		sections.append(section)
 		stations.append({"path_id": path_id, "index": index, "distance": distance, "centre": centre, "normal": normal, "tangent": tangent, "left": left, "right": right, "left_core": left_core, "right_core": right_core, "width": safe_width, "first": index == 0, "last": index == samples.size() - 1})
@@ -75,10 +79,12 @@ static func extent(width: float, distance: float, path_id: int, side: int) -> fl
 	# tongues rather than a periodic wobble. Both sides use unrelated phases.
 	var phase_a := float(Contact._seed(path_id, 0, 11 + side) % 6283) / 1000.0
 	var phase_b := float(Contact._seed(path_id, 0, 47 + side) % 6283) / 1000.0
-	var broad := sin(distance * 0.53 + phase_a) * 0.68 + sin(distance * 1.21 + phase_b) * 0.32
-	var pocket := smoothstep(0.18, 0.86, broad)
-	var drift := smoothstep(-0.75, 0.55, sin(distance * 0.27 + phase_b * 0.73))
-	var inset := width * 0.030 * clampf(0.06 + pocket * 0.70 + drift * 0.24, 0.0, 1.0)
+	var broad := sin(distance * 0.29 + phase_a) * 0.72 + sin(distance * 0.43 + phase_b) * 0.28
+	var pocket := smoothstep(-0.10, 0.74, broad)
+	var drift := smoothstep(-0.70, 0.65, sin(distance * 0.15 + phase_b * 0.73))
+	# Slow fields make long shallow bites instead of a noisy scalloped edge.
+	# The largest inset is still wholly inside the saved nominal footprint.
+	var inset := width * 0.085 * clampf(0.04 + pocket * 0.72 + drift * 0.24, 0.0, 1.0)
 	return width * 0.5 - inset
 
 static func _interior_wear(path_id: int, distance: float, signed_offset: float, width: float) -> Vector2:
@@ -105,7 +111,7 @@ static func _core_fraction(distance: float, path_id: int, side: int) -> float:
 	# asymmetric pockets reach farther inward while retaining a broad calm core.
 	var phase := float(Contact._seed(path_id, 0, 82 + side) % 6283) / 1000.0
 	var pocket := clampf(0.5 + 0.5 * (sin(distance * 1.41 + phase) * 0.65 + sin(distance * 0.71 + phase * 1.31) * 0.35), 0.0, 1.0)
-	return 0.98 - 0.30 * pow(pocket, 2.0)
+	return 0.97 - 0.23 * pow(pocket, 2.0)
 
 static func _height(renderer: Node, data: Dictionary, cell: Vector2i, scale_value: float) -> float:
 	var heights: Dictionary = data["heights"]
@@ -172,13 +178,13 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		var phase := float(Contact._seed(path_id, 0, 31) % 6283) / 1000.0
 		var quiet := sin(point.x * 0.71 + point.y * 0.39 + phase) * 0.5 + 0.5
 		# One broad world-continuous soil field, never an alternating segment colour.
-		var shade := Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.14 + pow(edge, 3.0) * 0.09)
+		var shade := Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.10 + pow(edge, 3.0) * 0.09)
 		var route_distance := lerpf(float(station_a["distance"]), float(station_b["distance"]), along)
 		var wear := _interior_wear(path_id, route_distance, signed_offset, float(station_a["width"]))
 		# Broken compacted centre wear is broad enough to read at Mobile distance.
 		# The second field stays softer and route-aligned so neither becomes a stripe.
-		shade = shade.lerp(Color("#6a5141"), wear.x * 0.58)
-		shade = shade.lerp(Color("#73533f"), wear.y * 0.30)
+		shade = shade.lerp(Color("#765947"), wear.x * 0.40)
+		shade = shade.lerp(Color("#7a5a43"), wear.y * 0.20)
 		# Worn grass/soil at the outer band, not a separate raised shoulder.
 		# A continuous asymmetric field varies the transition's visible depth;
 		# a broad central dirt core remains clear. Native grass colour, fully opaque.
