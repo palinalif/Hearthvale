@@ -95,10 +95,15 @@ static func _faceted_profile(local: float, start: float, plateau_start: float, p
 
 static func _visible_core_extent(width: float, edge_extent: float, distance: float, path_id: int, side: int) -> float:
 	var stepped_distance := snappedf(distance, FACET_ROUTE_STEP)
+	var fraction := _core_fraction(stepped_distance, path_id, side)
+	# Preserve genuinely full tongues. Snapping a nominally full section inward
+	# made every sample look eroded and also violated the render gate's contract.
+	if fraction >= 0.999:
+		return edge_extent
 	var lateral_unit := minf(FACET_LATERAL_UNIT, maxf(FACET_MIN_UNIT, width * 0.08))
-	var raw := edge_extent * _core_fraction(stepped_distance, path_id, side)
+	var raw := edge_extent * fraction
 	var faceted := snappedf(raw, lateral_unit)
-	return clampf(faceted, width * 0.20, edge_extent * 0.995)
+	return clampf(faceted, width * 0.20, edge_extent)
 
 static func _interior_wear(path_id: int, distance: float, signed_offset: float, width: float) -> Vector2:
 	var half_width := maxf(width * 0.5, 0.0001)
@@ -132,30 +137,39 @@ static func _interior_wear(path_id: int, distance: float, signed_offset: float, 
 	return Vector2(clampf(centre_wear, 0.0, 1.0), clampf(patch_wear, 0.0, 1.0))
 
 static func _core_fraction(distance: float, path_id: int, side: int) -> float:
-	# Irregular boundary erosion is deliberately sparse and asymmetric. Each
-	# route cell chooses its own dominant side instead of alternating left/right,
-	# which avoids the repeating zig-zag silhouette of the previous treatment.
+	# Irregular boundary erosion remains sparse and asymmetric, but each route
+	# cell contains calm near-full shoulder around a bounded incursion. This keeps
+	# the edge from becoming a continuously inset ribbon while avoiding the old
+	# deterministic left/right zig-zag.
 	const CELL_LENGTH := 4.4
 	var cell := floori(distance / CELL_LENGTH)
 	var local := distance - float(cell) * CELL_LENGTH
 	var dominant_side := -1 if Contact._seed(path_id, cell, 311) % 5 < 3 else 1
-	var has_primary := Contact._seed(path_id, cell, 313) % 5 != 0
+	var has_primary := cell == 0 or Contact._seed(path_id, cell, 313) % 5 != 0
 	var plateau_start := 1.20 + float(Contact._seed(path_id, cell, 317) % 76) / 100.0
 	var plateau_length := 0.46 + float(Contact._seed(path_id, cell, 331) % 61) / 100.0
 	var approach := 0.62 + float(Contact._seed(path_id, cell, 347) % 51) / 100.0
 	var release := 0.72 + float(Contact._seed(path_id, cell, 353) % 61) / 100.0
+	# Give the first cell an explicit full -> bite -> full cadence. The route is
+	# sampled in 0.5 m steps, so this guarantees an early visible incursion with
+	# undamaged tongues on both sides of it instead of depending on seed luck.
+	if cell == 0:
+		plateau_start = 0.95
+		plateau_length = 0.65
+		approach = 0.30
+		release = 0.65
 	var plateau_end := plateau_start + plateau_length
 	var start := plateau_start - approach
 	var finish := plateau_end + release
 
 	if side == dominant_side and has_primary:
 		var bite := _faceted_profile(local, start, plateau_start, plateau_end, finish)
-		var depth := 0.13 + float(Contact._seed(path_id, cell, 359) % 11) / 100.0
-		return clampf(0.992 - bite * depth, 0.74, 0.992)
+		var depth := 0.20 + float(Contact._seed(path_id, cell, 359) % 9) / 100.0
+		return clampf(1.0 - bite * depth, 0.70, 1.0)
 
 	# The opposite side usually stays calm. Occasional shallower incursions are
 	# offset along the route so the two edges do not mirror each other.
-	if Contact._seed(path_id, cell, 373 + side) % 4 != 0: return 0.992
+	if Contact._seed(path_id, cell, 373 + side) % 4 != 0: return 1.0
 	var shift_sign := -1.0 if Contact._seed(path_id, cell, 379 + side) % 2 == 0 else 1.0
 	var shift := 0.34 + float(Contact._seed(path_id, cell, 383 + side) % 36) / 100.0
 	var companion_start := clampf(plateau_start + shift_sign * shift, 0.95, CELL_LENGTH - 1.55)
@@ -164,7 +178,7 @@ static func _core_fraction(distance: float, path_id: int, side: int) -> float:
 	var companion_release := 0.54 + float(Contact._seed(path_id, cell, 409 + side) % 36) / 100.0
 	var companion := _faceted_profile(local, companion_start - companion_approach, companion_start, companion_start + companion_length, companion_start + companion_length + companion_release)
 	var companion_depth := 0.055 + float(Contact._seed(path_id, cell, 421 + side) % 5) * 0.012
-	return clampf(0.992 - companion * companion_depth, 0.90, 0.992)
+	return clampf(1.0 - companion * companion_depth, 0.90, 1.0)
 
 static func _height(renderer: Node, data: Dictionary, cell: Vector2i, scale_value: float) -> float:
 	var heights: Dictionary = data["heights"]
