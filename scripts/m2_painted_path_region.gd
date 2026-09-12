@@ -41,6 +41,22 @@ static func brush_cells(center: Vector2, radius: float, world_size: float = DEFA
 		))
 	return _sorted(result)
 
+## Rasterize a continuous brush sweep between two world-space X/Z samples.
+## Cursor/controller input is frame based, so painting only the endpoints can
+## leave holes when the cursor moves several cells in one frame. Sampling at a
+## half-cell cadence guarantees overlapping circular stamps without making the
+## saved representation depend on frame rate.
+static func stroke_cells(from: Vector2, to: Vector2, radius: float, world_size: float = DEFAULT_WORLD_SIZE) -> Array:
+	if not from.is_finite() or not to.is_finite(): return []
+	var distance := from.distance_to(to)
+	var spacing := Grid.UNIT * 0.5
+	var steps := maxi(1, ceili(distance / spacing))
+	var result: Array = []
+	for step in range(steps + 1):
+		var amount := float(step) / float(steps)
+		result = union_cells(result, brush_cells(from.lerp(to, amount), radius, world_size), world_size)
+	return result
+
 static func normalize_cells(values: Array, world_size: float = DEFAULT_WORLD_SIZE) -> Array:
 	var cell_limit := maxi(1, floori(world_size / Grid.UNIT))
 	var unique := {}
