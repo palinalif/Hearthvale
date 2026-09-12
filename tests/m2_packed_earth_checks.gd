@@ -51,6 +51,11 @@ static func inspect(checker: SceneTree, scene: Node, phase: String) -> void:
 	var arrays: Array = actual.surface_get_arrays(0)
 	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var colours: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+	var opaque_colours := colours.size() == vertices.size()
+	for colour: Color in colours:
+		opaque_colours = opaque_colours and is_finite(colour.r) and is_finite(colour.g) and is_finite(colour.b) and is_equal_approx(colour.a, 1.0)
+	checker._check(opaque_colours, "soil/grass edge transition uses finite fully opaque vertex colours, not a terrain mask: " + phase)
 	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
 	var finite := true
 	var extent_ok := true
@@ -213,7 +218,7 @@ static func _views(checker: SceneTree, scene: Node, directory: String) -> void:
 	checker.screenshot_dir = old_dir
 	var target := Vector3(18.5, float(scene.path_visual._surface_height(Vector2(18.5, 14.5))), 14.5)
 	for view: String in ["packed-earth-close", "packed-earth-reverse"]:
-		var direction := Vector3(0.5, 4.8, 6.5) if view == "packed-earth-close" else Vector3(-0.5, 4.8, -6.5)
+		var direction := Vector3(-4.0, 5.6, 4.8) if view == "packed-earth-close" else Vector3(4.0, 5.6, -4.8)
 		scene.camera.position = target + direction
 		scene.camera.look_at(target, Vector3.UP)
 		await _capture(checker, scene, directory.path_join(view + ".png"))

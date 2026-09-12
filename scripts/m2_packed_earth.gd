@@ -50,7 +50,7 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 				if index != 0: end_shift = -end_shift
 			section.append(centre + normal * offset + tangent * end_shift)
 		sections.append(section)
-		stations.append({"path_id": path_id, "index": index, "distance": distance, "centre": centre, "normal": normal, "tangent": tangent, "left": left, "right": right, "width": safe_width})
+		stations.append({"path_id": path_id, "index": index, "distance": distance, "centre": centre, "normal": normal, "tangent": tangent, "left": left, "right": right, "width": safe_width, "first": index == 0, "last": index == samples.size() - 1})
 	var before := int(builder["cells"])
 	for index in range(1, sections.size()):
 		var a: PackedVector2Array = sections[index - 1]
@@ -130,7 +130,19 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		var phase := float(Contact._seed(path_id, 0, 31) % 6283) / 1000.0
 		var quiet := sin(point.x * 0.71 + point.y * 0.39 + phase) * 0.5 + 0.5
 		# Same field across every native rectangle: no alternating coloured tiles.
-		var shade := Color("#a8784f").lerp(Color("#8f6244"), 0.10 + quiet * 0.055 + pow(edge, 3.0) * 0.16)
+		var shade := Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.08 + pow(edge, 3.0) * 0.10)
+		# Worn grass/soil at the outer band, not a separate raised shoulder.
+		# A continuous asymmetric field varies the transition's visible depth;
+		# the central 64% stays soil-only. Native grass colour, fully opaque.
+		var normal: Vector2 = station_a["normal"]
+		var side := -1 if (point - closest).dot(normal) < 0.0 else 1
+		var edge_phase := float(Contact._seed(path_id, 0, 82 + side) % 6283) / 1000.0
+		var pocket := smoothstep(-0.3, 0.6, sin(point.x * 0.81 + point.y * 0.57 + edge_phase) * 0.65 + sin(point.x * 2.2 - point.y * 0.73 + edge_phase * 1.31) * 0.35)
+		var boundary := smoothstep(0.64, 0.99, edge) * (0.30 + 0.70 * pocket)
+		var direction := (centre_b - centre_a).normalized()
+		if bool(station_a["first"]): boundary = maxf(boundary, (1.0 - smoothstep(0.0, 0.18, (point - centre_a).dot(direction))) * (0.75 + 0.25 * pocket))
+		if bool(station_b["last"]): boundary = maxf(boundary, (1.0 - smoothstep(0.0, 0.18, (centre_b - point).dot(direction))) * (0.75 + 0.25 * pocket))
+		shade = shade.lerp(Color("#7d9957"), boundary)
 		builder["earth"]["colours"][0].append(shade)
 	for index in range(0, triangles.size(), 3):
 		var a := triangles[index]
