@@ -38,10 +38,21 @@ func _initialize() -> void:
 	await _press(JOY_BUTTON_A)
 	_check(scene.path_placement_active and scene.path_style_id == "packed_earth" and scene.view_context == "terrain", "style selection enters terrain path painting")
 	_check(scene.landscape_state.document() == before, "starting path painting is read-only")
+	var default_width: float = scene.path_width
+	await _press(JOY_BUTTON_DPAD_RIGHT)
+	_check(is_equal_approx(scene.path_width, default_width + 0.25), "D-pad right enlarges the path brush by the normal 0.25 m step")
+	scene.precision_mode = true
+	await _press(JOY_BUTTON_DPAD_LEFT)
+	_check(is_equal_approx(scene.path_width, default_width + 0.125), "precision mode uses the 0.125 m structural brush-size step")
+	scene.precision_mode = false
+	scene.path_width = default_width
 
 	_aim(Vector2(36.0, fixture_z))
 	await _button_down(JOY_BUTTON_A)
 	_check(scene.path_painting and scene.path_cells.size() > 0, "holding A starts a painted-cell stroke")
+	var painting_width: float = scene.path_width
+	await _press(JOY_BUTTON_DPAD_RIGHT)
+	_check(is_equal_approx(scene.path_width, painting_width), "brush size is locked while an A stroke is live")
 	var preview_before := JSON.stringify(scene.landscape_state.document())
 	scene._update_path_preview()
 	_check(JSON.stringify(scene.landscape_state.document()) == preview_before and scene.path_visual.stats().preview_cells > 0, "live painted preview has geometry without mutating authority")

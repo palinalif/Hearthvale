@@ -2,7 +2,7 @@ extends RefCounted
 
 const Grid = preload("res://scripts/visual_grid.gd")
 const Region = preload("res://scripts/m2_painted_path_region.gd")
-const PathVisual = preload("res://scripts/m2_path_visual.gd")
+const PathVisual = preload("res://scripts/m2_path_visual_polish.gd")
 const ContactChecks = preload("res://tests/m2_path_grass_contact_checks.gd")
 
 static func inspect(checker: SceneTree, scene: Node, phase: String) -> void:
@@ -15,7 +15,7 @@ static func inspect(checker: SceneTree, scene: Node, phase: String) -> void:
 	var mesh: Mesh = visual._style_nodes["packed_earth"].mesh
 	checker._check(mesh != null and mesh.get_surface_count() <= 2, "packed earth stays within two opaque material surfaces: " + phase)
 	checker._check(visual.stats().opaque_surface_draws <= 6, "painted path styles stay inside the existing opaque draw budget: " + phase)
-	var grid_aligned := true
+	var detail_aligned := true
 	var finite := true
 	var top_vertices := 0
 	for surface_index in mesh.get_surface_count():
@@ -27,9 +27,9 @@ static func inspect(checker: SceneTree, scene: Node, phase: String) -> void:
 			finite = finite and vertex.is_finite()
 			if normals[index].dot(Vector3.UP) > 0.99:
 				top_vertices += 1
-				grid_aligned = grid_aligned and is_equal_approx(vertex.x, snappedf(vertex.x, Grid.UNIT)) and is_equal_approx(vertex.z, snappedf(vertex.z, Grid.UNIT))
+				detail_aligned = detail_aligned and is_equal_approx(vertex.x, snappedf(vertex.x, Grid.COTTAGE_DETAIL_UNIT)) and is_equal_approx(vertex.z, snappedf(vertex.z, Grid.COTTAGE_DETAIL_UNIT))
 	checker._check(finite and top_vertices > 0, "painted packed-earth mesh is finite and exposes top faces: " + phase)
-	checker._check(grid_aligned, "packed-earth top silhouette conforms to the 0.125 m structural voxel grid: " + phase)
+	checker._check(detail_aligned, "packed-earth wear detail conforms to the supported 0.0625 m detail grid: " + phase)
 	var stats: Dictionary = visual.stats().get("packed_earth", {})
 	checker._check(int(stats.get("cells", -1)) == cells.size(), "renderer accounts for every authoritative packed-earth cell: " + phase)
 	checker._check(int(stats.get("triangles", 0)) <= cells.size() * 12, "packed-earth cell presentation stays inside box-equivalent geometry budget: " + phase)
@@ -85,6 +85,5 @@ static func lifecycle(checker: SceneTree, scene: Node) -> void:
 
 static func review(checker: SceneTree, scene: Node, directory: String) -> void:
 	# Screenshot orchestration remains in the caller. The architecture gate here
-	# deliberately checks the new authority rather than comparing to ribbon-era
-	# geometry fixtures.
+	# checks painted authority plus deterministic 0.0625 m presentation detail.
 	inspect(checker, scene, "review")
