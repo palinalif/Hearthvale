@@ -1,51 +1,41 @@
-# Hearthvale — packed-earth refinement handoff
+# Hearthvale - packed-earth surface pass (work in progress)
 
-2026-09-12, branch `feat/m2-path-ground-polish`.
-Read `AGENTS.md`, `tasks/M2-hamlet-building.md`, and the current user request.
-The preceding handoff is preserved verbatim in
-`reports/handoffs/HANDOFF-e8560f30.md`; its inherited contracts remain in force.
+2026-09-12. Branch: `fix/m2-packed-earth-worn-surface`.
+Base: `fix/m2-packed-earth-quiet` at `8e384a13bc2fdbb4775f48bcb5917beb4db7076b`.
+The preceding handoff is preserved in `reports/handoffs/HANDOFF-8e384a13.md`.
+Read `AGENTS.md`, the current user request and `tasks/M2-hamlet-building.md`.
 
-## Exact starting point and scope
+The user authorized implementing the proposed packed-earth repair. This first
+commit tackles the soil surface, small boundary incursions and asymmetric end
+taper. It is NOT a finished/visually accepted delivery. Junction unions,
+doorstep-aware termination and fitted curve transitions remain future steps
+of the proposed repair; the authored route is deliberately not moved here.
 
-Actual branch head resolved before editing and rechecked before commit:
-`e8560f30e2466854ab359459463659e0c9cd5b9e`.
-Its verified delivery run is `34669385153`.
-No reset, master merge, terrain-authority, saved-record, section-placement,
-cobblestone or stepping-stone change is included.
+Three explicit soil colours replace nearly invisible vertex washes. Each
+native-grounded triangle is partitioned into adjacent base/compacted/scuffed
+regions, with vertices at wear boundaries and no overlapping decal layer.
+Presentation samples resolve at 0.25 units; small coherent edge bites retain
+the existing 0.0625 lateral-detail vocabulary and safety envelope. End taper
+uses physical distance instead of a fixed station count.
 
-Packed earth now dispatches from `scripts/m2_path_visual.gd` to the disposable
-`m2_packed_earth.gd` helper. The old packed-earth branch inside `_append_path`
-is no longer called by the runtime/preview dispatcher. It is intentionally left
-byte-identical because the accepted contact gate locks that entire method.
-All 17 existing helper/constants source locks remain unchanged. Stone placement,
-size variation, winding, separation, materials and contact are preserved.
+Terrain clipping, height lookup, materials/batching, grass helper bodies,
+saved records, stone styles and the shared renderer are unchanged. Existing
+geometry/draw/lifecycle/authority assertions remain intact. New surface tests
+run from the existing packed-earth width gate. Matched Mobile cameras now
+compare against an exact, SHA256-checked copy of the actual 8e384a13 helper.
 
-The replacement is a top-only native-terrain skin, coherent distance-based
-edges, quiet soil vertex colours, and capped small cubic edge grass in the
-existing dirt batch. No terrain mask, saved decoration, extra draw pass or
-per-frame generation is introduced. See `reports/M2-packed-earth.md`.
+Local numerical/source checks PASS: 10,000 complementary clipping partitions;
+0.25/0.75/3.0 width bounds and existing scalar wear assertions; eight unchanged
+renderer helper bodies; unchanged native-height/lifecycle/camera test bodies.
+These are NOT native Godot results. This container has no Godot runtime and
+could not clone over its network; source was read/written through GitHub and
+all three edited/new GDScript blobs matched the locally checked bytes.
 
-## Verification and delivery
+Required before delivery/merge: exact-head native regression, actual Mobile
+before/after review, geometry/performance gates, verified ARM64 APK/Windows
+packages and the existing gated private Drive delivery. Keep the PR draft
+until that evidence exists. Physical Thor testing and visual approval belong
+to the user. Do not reuse the base run as evidence for this commit.
 
-Local source-lock comparison: 17/17. Existing Python delivery/performance
-contract suite: 10 passed. Local Godot/native/Mobile execution is unavailable
-in this editing container; it is NOT claimed as run.
-
-The unchanged push-triggered verified Drive workflow must verify this exact
-new head, including native checks, actual-Mobile paths/performance, Android
-ARM64 and Windows package validation, before private Drive delivery. Do not
-infer success from the baseline run. The new path gate records deterministic
-geometry, bounded extents/cost, native height agreement, lifecycle/authority,
-stone byte-identity and matched before/after images. Its artifact contains
-`all-styles.png`, retained stepping close/reverse, packed-earth close/reverse,
-and an additional native terrace crossing; matched originals are in `before/`.
-`PACKED_EARTH_AUDIT` and `PACKED_EARTH_BEFORE_COST` in the paths log report cost.
-Use the exact-head CI receipts and final task report for completed results.
-
-Hosted Windows D3D12 Mobile-renderer evidence is not physical AYN Thor testing.
-Physical Thor testing and player visual acceptance remain separate. Stop at
-packed earth; no cobblestone, junction or further stone redesign is authorized.
-
-Execution note: repository preference is Sol/high for visual work; this session
-exposes GPT-6 Astra Pro rather than that requested runtime. No delegation or
-silent model substitution was performed.
+Execution: GPT-6 Astra Pro is exposed, not the repository's preferred Sol/high.
+No delegation or runtime substitution was performed.

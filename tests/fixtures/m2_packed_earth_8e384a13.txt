@@ -12,14 +12,9 @@ const TOP_EPSILON := 0.004
 const MAX_TUFTS := 64
 const MAX_PER_PATH := 8
 const MAX_CELLS_PER_TUFT := 4
-const FACET_ROUTE_STEP := 0.25
+const FACET_ROUTE_STEP := 0.5
 const FACET_LATERAL_UNIT := 0.0625
 const FACET_MIN_UNIT := 0.015625
-const SOIL_BASE := Color("#957058")
-const SOIL_COMPACTED := Color("#a58165")
-const SOIL_SCUFF := Color("#896751")
-const COMPACTION_THRESHOLD := 0.40
-const SCUFF_THRESHOLD := 0.55
 const ACROSS := [-1.0, -0.64, 0.0, 0.64, 1.0]
 static var _soil_material: StandardMaterial3D
 static var _grass_material: StandardMaterial3D
@@ -28,7 +23,7 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 	if not builder.has("earth"):
 		builder["earth"] = {"heights": {}, "colours": [[], []], "roots": [], "tufts": 0, "grass_cells": 0, "stations": [], "terrain_rects": 0}
 	var data: Dictionary = builder["earth"]
-	var samples := _detail_samples(renderer._sample_polyline(values))
+	var samples: Array = renderer._sample_polyline(values)
 	if samples.size() < 2: return 0
 	var safe_width := clampf(width, State.PATH_MIN_WIDTH, State.PATH_MAX_WIDTH)
 	var distance := 0.0
@@ -50,10 +45,8 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 		var left_core := _visible_core_extent(safe_width, left, distance, path_id, -1)
 		var right_core := _visible_core_extent(safe_width, right, distance, path_id, 1)
 		var section := PackedVector2Array()
-		var route_length := float(samples.back()["distance"])
-		var end_distance := minf(distance, route_length - distance)
-		var taper_length := minf(route_length * 0.35, clampf(safe_width * 0.75, 0.25, 0.9))
-		var end_influence := 1.0 - smoothstep(0.0, maxf(taper_length, 0.001), end_distance)
+		var end_station_distance := mini(index, samples.size() - 1 - index)
+		var end_influence := 1.0 - smoothstep(0.0, 3.0, float(end_station_distance))
 		for across: float in ACROSS:
 			var offset := across * (left if across < 0.0 else right)
 			if is_equal_approx(absf(across), 0.64): offset = -left_core if across < 0.0 else right_core
@@ -64,9 +57,8 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 				var near_start := index <= samples.size() / 2
 				var end_key := 101 if near_start else 107
 				var side_key := end_key + (-3 if across < 0.0 else 5)
-				var taper := 0.42 + float(Contact._seed(path_id, 0, side_key) % 9) * 0.014
-				var edge_weight := clampf(absf(across) / 0.64, 0.0, 1.0)
-				offset *= lerpf(1.0, taper, end_influence * edge_weight)
+				var taper := 0.64 + float(Contact._seed(path_id, 0, side_key) % 9) * 0.012
+				offset *= lerpf(1.0, taper, end_influence * pow(absf(across), 1.25))
 				if index == 0 or index == samples.size() - 1:
 					var neighbour: Vector3 = samples[1 if index == 0 else index - 1]["point"]
 					var end_length := centre.distance_to(Vector2(neighbour.x, neighbour.z))
@@ -89,26 +81,6 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 	data["stations"].append_array(stations)
 	if decorate: _grass(renderer, builder, stations, path_id)
 	return int(builder["cells"]) - before
-
-static func _detail_samples(samples: Array) -> Array:
-	# Refine only presentation samples; every authored point and segment survives.
-	# No curve can cut a corner outside the validated saved footprint.
-	var result: Array = []
-	var distance := 0.0
-	for index in range(1, samples.size()):
-		var a: Vector3 = samples[index - 1]["point"]
-		var b: Vector3 = samples[index]["point"]
-		var delta := Vector2(b.x - a.x, b.z - a.z)
-		var length := delta.length()
-		if length < 0.000001: continue
-		var steps := maxi(1, ceili(length / FACET_ROUTE_STEP))
-		for step in steps:
-			var weight := float(step) / float(steps)
-			result.append({"point": a.lerp(b, weight), "tangent": delta / length, "distance": distance + length * weight})
-		distance += length
-	if not result.is_empty():
-		result.append({"point": samples.back()["point"], "tangent": result.back()["tangent"], "distance": distance})
-	return result
 
 static func extent(width: float, distance: float, path_id: int, side: int) -> float:
 	# Preserve the established bounded safety envelope. Only the faceted core
@@ -136,29 +108,19 @@ static func _faceted_profile(local: float, start: float, plateau_start: float, p
 	return clampf(1.0 - inverse_lerp(plateau_end, finish, local), 0.0, 1.0)
 
 static func _visible_core_extent(width: float, edge_extent: float, distance: float, path_id: int, side: int) -> float:
-	# Resolve a broad outline plus occasional small bites on the detail grid.
-	# This is not per-cell noise: each bite spans several neighbouring stations,
-	# and independent sides retain long, unequal stretches of quiet boundary.
+	# Quantize only in route-relative space, never X/Z world cells. Four native
+	# terrain voxels along the path share a shoulder decision, and lateral values
+	# use the decorative half-grid when the legal width is large enough. Curves
+	# therefore remain curves while the dirt edge resolves into broad facets.
 	var stepped_distance := snappedf(distance, FACET_ROUTE_STEP)
 	var lateral_unit := minf(FACET_LATERAL_UNIT, maxf(FACET_MIN_UNIT, width * 0.08))
 	var raw := edge_extent * _core_fraction(stepped_distance, path_id, side)
-	raw -= minf(FACET_LATERAL_UNIT, width * 0.09) * _edge_bite(stepped_distance, path_id, side)
 	var faceted := snappedf(raw, lateral_unit)
 	return clampf(faceted, width * 0.34, edge_extent * 0.995)
 
-static func _edge_bite(distance: float, path_id: int, side: int) -> float:
-	const CELL_LENGTH := 2.75
-	var cell := floori(distance / CELL_LENGTH)
-	var local := distance - float(cell) * CELL_LENGTH
-	var key := 521 + side * 17
-	if Contact._seed(path_id, cell, key) % 3 == 0: return 0.0
-	var centre := 0.8 + float(Contact._seed(path_id, cell, key + 3) % 71) / 100.0
-	var hold := 0.125 + float(Contact._seed(path_id, cell, key + 7) % 3) * 0.0625
-	return _faceted_profile(local, centre - 0.5, centre - hold, centre + hold, centre + 0.65)
-
 static func _interior_wear(path_id: int, distance: float, signed_offset: float, width: float) -> Vector2:
 	# Broad localized compaction remains continuous across the ribbon. Sampling
-	# the route distance in quarter-metre chunks gives the patches slightly faceted
+	# the route distance in half-metre chunks gives the patches slightly faceted
 	# ends without exposing the X/Z grid or turning the surface into paving.
 	var half_width := maxf(width * 0.5, 0.0001)
 	var sampled_distance := snappedf(distance, FACET_ROUTE_STEP)
@@ -258,10 +220,13 @@ static func _ground_polygon(renderer: Node, builder: Dictionary, polygon: Packed
 static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height: float, path_id: int, station_a: Dictionary, station_b: Dictionary, _band: int) -> void:
 	var triangles := Geometry2D.triangulate_polygon(polygon)
 	if triangles.is_empty(): return
+	var surface: Dictionary = builder["surfaces"][0]
+	var base: int = surface["vertices"].size()
 	var centre_a: Vector2 = station_a["centre"]
 	var centre_b: Vector2 = station_b["centre"]
-	var field: Array[Vector4] = []
 	for point: Vector2 in polygon:
+		surface["vertices"].append(Vector3(point.x, height + TOP_EPSILON, point.y))
+		surface["normals"].append(Vector3.UP)
 		var closest := Geometry2D.get_closest_point_to_segment(point, centre_a, centre_b)
 		var segment := centre_b - centre_a
 		var along := clampf((closest - centre_a).dot(segment) / maxf(segment.length_squared(), 0.0000001), 0.0, 1.0)
@@ -271,53 +236,21 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		var signed_offset := (point - closest).dot(normal)
 		var route_distance := lerpf(float(station_a["distance"]), float(station_b["distance"]), along)
 		var wear := _interior_wear(path_id, route_distance, signed_offset, float(station_a["width"]))
-		field.append(Vector4(point.x, point.y, wear.x, wear.y))
-	for index in range(0, triangles.size(), 3):
-		var triangle: Array[Vector4] = [field[triangles[index]], field[triangles[index + 1]], field[triangles[index + 2]]]
-		# Cut the existing top into adjacent patches, not coplanar overlays.
-		# Boundary vertices give connected, crisp wear silhouettes; three opaque
-		# soil colours cannot become a barely visible interpolated wash or a grid
-		# of independently coloured terrain cells. Dark scuffs take precedence.
-		var scuff := _clip_wear(triangle, 3, SCUFF_THRESHOLD, true)
-		var rest := _clip_wear(triangle, 3, SCUFF_THRESHOLD, false)
-		_emit_patch(builder, scuff, height, SOIL_SCUFF)
-		_emit_patch(builder, _clip_wear(rest, 2, COMPACTION_THRESHOLD, true), height, SOIL_COMPACTED)
-		_emit_patch(builder, _clip_wear(rest, 2, COMPACTION_THRESHOLD, false), height, SOIL_BASE)
-	builder["cells"] = int(builder["cells"]) + 1
-
-static func _clip_wear(polygon: Array[Vector4], component: int, threshold: float, above: bool) -> Array[Vector4]:
-	# Linear scalar clipping preserves a convex triangle's footprint. A strict
-	# below side assigns threshold-equal plateaus to exactly one colour.
-	var result: Array[Vector4] = []
-	if polygon.is_empty(): return result
-	var previous: Vector4 = polygon.back()
-	var previous_inside := previous[component] >= threshold if above else previous[component] < threshold
-	for current: Vector4 in polygon:
-		var current_inside := current[component] >= threshold if above else current[component] < threshold
-		if current_inside != previous_inside:
-			var weight := (threshold - previous[component]) / (current[component] - previous[component])
-			result.append(previous.lerp(current, clampf(weight, 0.0, 1.0)))
-		if current_inside: result.append(current)
-		previous = current
-		previous_inside = current_inside
-	return result
-
-static func _emit_patch(builder: Dictionary, polygon: Array[Vector4], height: float, shade: Color) -> void:
-	if polygon.size() < 3: return
-	var surface: Dictionary = builder["surfaces"][0]
-	var base: int = surface["vertices"].size()
-	for point: Vector4 in polygon:
-		surface["vertices"].append(Vector3(point.x, height + TOP_EPSILON, point.y))
-		surface["normals"].append(Vector3.UP)
+		# One quiet earth base and two broad, low-contrast compaction fields.
+		# No world-cell noise or green endpoint/shoulder paint. Ends are shaped
+		# by the same top-only geometry, so they also work on non-green terrain.
+		var shade := Color("#957058").lerp(Color("#a58165"), wear.x * 0.18)
+		shade = shade.lerp(Color("#896751"), wear.y * 0.12)
 		builder["earth"]["colours"][0].append(shade)
-	for index in range(1, polygon.size() - 1):
-		var a := Vector2(polygon[0].x, polygon[0].y)
-		var b := Vector2(polygon[index].x, polygon[index].y)
-		var c := Vector2(polygon[index + 1].x, polygon[index + 1].y)
-		var signed_area := (b - a).cross(c - a)
+	for index in range(0, triangles.size(), 3):
+		var a := triangles[index]
+		var b := triangles[index + 1]
+		var c := triangles[index + 2]
+		var signed_area := (polygon[b] - polygon[a]).cross(polygon[c] - polygon[a])
 		if absf(signed_area) < 0.000000001: continue
 		# Positive X/Z signed area is clockwise from above in Godot.
-		surface["indices"].append_array([base, base + index, base + index + 1] if signed_area > 0.0 else [base, base + index + 1, base + index])
+		surface["indices"].append_array([base + a, base + b, base + c] if signed_area > 0.0 else [base + a, base + c, base + b])
+	builder["cells"] = int(builder["cells"]) + 1
 
 static func _grass(renderer: Node, builder: Dictionary, stations: Array, path_id: int) -> void:
 	if renderer.backend == null or stations.size() < 5: return
