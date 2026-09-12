@@ -68,7 +68,7 @@ static func append_path(renderer: Node, builder: Dictionary, width: float, value
 		var a: PackedVector2Array = sections[index - 1]
 		var b: PackedVector2Array = sections[index]
 		for across in range(ACROSS.size() - 1):
-			_ground_polygon(renderer, builder, PackedVector2Array([a[across], a[across + 1], b[across + 1], b[across]]), path_id, stations[index - 1], stations[index])
+			_ground_polygon(renderer, builder, PackedVector2Array([a[across], a[across + 1], b[across + 1], b[across]]), path_id, stations[index - 1], stations[index], across)
 	data["stations"].append_array(stations)
 	if decorate: _grass(renderer, builder, stations, path_id)
 	return int(builder["cells"]) - before
@@ -133,7 +133,7 @@ static func _height(renderer: Node, data: Dictionary, cell: Vector2i, scale_valu
 	if not heights.has(cell): heights[cell] = renderer._surface_height((Vector2(cell) + Vector2.ONE * 0.5) * scale_value)
 	return float(heights[cell])
 
-static func _ground_polygon(renderer: Node, builder: Dictionary, polygon: PackedVector2Array, path_id: int, station_a: Dictionary, station_b: Dictionary) -> void:
+static func _ground_polygon(renderer: Node, builder: Dictionary, polygon: PackedVector2Array, path_id: int, station_a: Dictionary, station_b: Dictionary, band: int) -> void:
 	var data: Dictionary = builder["earth"]
 	var scale_value := 0.125
 	if renderer.backend != null: scale_value = maxf(0.001, float(renderer.backend.get("voxel_scale")))
@@ -171,10 +171,10 @@ static func _ground_polygon(renderer: Node, builder: Dictionary, polygon: Packed
 			var rect := PackedVector2Array([Vector2(x, z), Vector2(end_x, z), Vector2(end_x, end_z), Vector2(x, end_z)])
 			for index in rect.size(): rect[index] *= scale_value
 			for clipped: PackedVector2Array in Geometry2D.intersect_polygons(polygon, rect):
-				_emit_soil(builder, clipped, height, path_id, station_a, station_b)
+				_emit_soil(builder, clipped, height, path_id, station_a, station_b, band)
 			data["terrain_rects"] = int(data["terrain_rects"]) + 1
 
-static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height: float, path_id: int, station_a: Dictionary, station_b: Dictionary) -> void:
+static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height: float, path_id: int, station_a: Dictionary, station_b: Dictionary, band: int) -> void:
 	var triangles := Geometry2D.triangulate_polygon(polygon)
 	if triangles.is_empty(): return
 	var surface: Dictionary = builder["surfaces"][0]
@@ -190,45 +190,29 @@ static func _emit_soil(builder: Dictionary, polygon: PackedVector2Array, height:
 		var normal: Vector2 = station_a["normal"]
 		var signed_offset := (point - closest).dot(normal)
 		var edge := clampf(absf(signed_offset) / (float(station_a["width"]) * 0.5), 0.0, 1.0)
-		var phase := float(Contact._seed(path_id, 0, 31) % 6283) / 1000.0
-		var quiet := sin(point.x * 0.71 + point.y * 0.39 + phase) * 0.5 + 0.5
-		# One broad world-continuous soil field, never an alternating segment colour.
-		var shade := Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.10 + pow(edge, 3.0) * 0.09)
-		var route_distance := lerpf(float(station_a["distance"]), float(station_b["distance"]), along)
-		var wear := _interior_wear(path_id, route_distance, signed_offset, float(station_a["width"]))
-		# Compacted soil is slightly lighter/desaturated than the base earth, which
-		# survives Mobile distance without becoming a dark painted stripe. Sparse
-		# offset patches pull some stretches back toward deeper earth.
-		shade = shade.lerp(Color("#b98a60"), wear.x * 0.55)
-		shade = shade.lerp(Color("#835f49"), wear.y * 0.26)
-		# Worn grass/soil at the outer band, not a separate raised shoulder.
-		# A continuous asymmetric field varies the transition's visible depth;
-		# a broad central dirt core remains clear. Native grass colour, fully opaque.
-		var side := -1 if signed_offset < 0.0 else 1
-		var edge_phase := float(Contact._seed(path_id, 0, 82 + side) % 6283) / 1000.0
-		var pocket := smoothstep(-0.3, 0.6, sin(point.x * 0.81 + point.y * 0.57 + edge_phase) * 0.65 + sin(point.x * 2.2 - point.y * 0.73 + edge_phase * 1.31) * 0.35)
-		var side_key := "left" if side < 0 else "right"
-		var core_key := side_key + "_core"
-		var core_extent := lerpf(float(station_a[core_key]), float(station_b[core_key]), along)
-		var edge_extent := lerpf(float(station_a[side_key]), float(station_b[side_key]), along)
-		# Reach native-grass colour well before the geometry edge. That makes
-		# selected core pockets read as incursions without masks or extra slabs.
-		var transition_end := lerpf(core_extent, edge_extent, 0.36)
-		var radial_distance := point.distance_to(closest)
-		var boundary := smoothstep(core_extent, transition_end, radial_distance)
-		# With only centre/core/edge vertices, a deep core movement used to get
-		# averaged back into a soft outer fade. When a route-local incursion is
-		# genuinely deep, carry native grass colour onto that existing core vertex
-		# so the silhouette change survives gameplay distance. Calm/full-width
-		# stretches keep the core brown and therefore remain broad.
-		var visible_fraction := core_extent / maxf(edge_extent, 0.0001)
-		var incursion_strength := 1.0 - smoothstep(0.68, 0.90, visible_fraction)
-		var inner_boundary := smoothstep(core_extent * 0.78, core_extent, radial_distance) * incursion_strength
-		boundary = maxf(boundary, inner_boundary)
-		var direction := (centre_b - centre_a).normalized()
-		if bool(station_a["first"]): boundary = maxf(boundary, (1.0 - smoothstep(0.0, 0.18, (point - centre_a).dot(direction))) * (0.75 + 0.25 * pocket))
-		if bool(station_b["last"]): boundary = maxf(boundary, (1.0 - smoothstep(0.0, 0.18, (centre_b - point).dot(direction))) * (0.75 + 0.25 * pocket))
-		shade = shade.lerp(Color("#7d9957"), boundary)
+		var outer_band := band == 0 or band == ACROSS.size() - 2
+		var shade := Color("#7d9957")
+		if not outer_band:
+			var phase := float(Contact._seed(path_id, 0, 31) % 6283) / 1000.0
+			var quiet := sin(point.x * 0.71 + point.y * 0.39 + phase) * 0.5 + 0.5
+			# The inner two bands are the actual worn-soil route. Keeping the outer
+			# bands at native grass colour makes the moving core boundary a real,
+			# readable silhouette instead of a wide interpolated brown/green fringe.
+			shade = Color("#a8784f").lerp(Color("#8f6244"), 0.20 + quiet * 0.10 + pow(edge, 3.0) * 0.09)
+			var route_distance := lerpf(float(station_a["distance"]), float(station_b["distance"]), along)
+			var wear := _interior_wear(path_id, route_distance, signed_offset, float(station_a["width"]))
+			shade = shade.lerp(Color("#b98a60"), wear.x * 0.55)
+			shade = shade.lerp(Color("#835f49"), wear.y * 0.26)
+
+			# Preserve the accepted worn-out endpoint treatment without softening the
+			# long-side silhouette. Only the first/last short run fades back to grass.
+			var direction := (centre_b - centre_a).normalized()
+			var endpoint_fade := 0.0
+			if bool(station_a["first"]):
+				endpoint_fade = maxf(endpoint_fade, 1.0 - smoothstep(0.0, 0.18, (point - centre_a).dot(direction)))
+			if bool(station_b["last"]):
+				endpoint_fade = maxf(endpoint_fade, 1.0 - smoothstep(0.0, 0.18, (centre_b - point).dot(direction)))
+			shade = shade.lerp(Color("#7d9957"), endpoint_fade)
 		builder["earth"]["colours"][0].append(shade)
 	for index in range(0, triangles.size(), 3):
 		var a := triangles[index]
