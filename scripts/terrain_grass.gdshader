@@ -1,14 +1,14 @@
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
-// Dark cool meadow palette centred on #14523c.
+// Warm desaturated meadow palette proposed for Hearthvale.
 // Variation stays discrete and fine-grained: no smooth value-noise gradients,
 // and no metre-scale tiles. Terrain authority remains on the native 0.125 grid.
-uniform vec4 grass_light : source_color = vec4(0.231, 0.541, 0.416, 1.0); // #3b8a6a
-uniform vec4 grass_lift : source_color = vec4(0.165, 0.459, 0.349, 1.0);  // #2a7559
-uniform vec4 grass_mid : source_color = vec4(0.078, 0.322, 0.235, 1.0);   // #14523c base
-uniform vec4 grass_dark : source_color = vec4(0.055, 0.247, 0.180, 1.0);  // #0e3f2e
-uniform vec4 grass_edge : source_color = vec4(0.043, 0.200, 0.145, 1.0);  // #0b3325
+uniform vec4 grass_light : source_color = vec4(0.820, 0.867, 0.549, 1.0); // #d1dd8c rare light accent
+uniform vec4 grass_lift : source_color = vec4(0.694, 0.788, 0.490, 1.0);  // #b1c97d lifted green
+uniform vec4 grass_mid : source_color = vec4(0.588, 0.729, 0.400, 1.0);   // #96ba66 base
+uniform vec4 grass_dark : source_color = vec4(0.502, 0.647, 0.384, 1.0);  // #80a562 shadow
+uniform vec4 grass_edge : source_color = vec4(0.408, 0.557, 0.322, 1.0);  // #688e52 deep shadow
 uniform float detail_cell = 0.0625;
 uniform float meadow_patch = 0.25;
 
@@ -27,8 +27,8 @@ void vertex() {
 }
 
 void fragment() {
-	// The requested #14523c is the dominant field colour. Quarter-metre cells
-	// provide restrained voxel-like breakup without the previous chunky patches.
+	// The proposed #96ba66 is the dominant field colour. Quarter-metre cells
+	// provide restrained voxel-like breakup without returning to chunky patches.
 	vec2 patch_cell = floor((world_position.xz + vec2(0.07, 0.11)) / meadow_patch);
 	float patch = hash21(patch_cell + vec2(7.0, 19.0));
 	vec3 top = grass_mid.rgb;
@@ -58,7 +58,7 @@ void fragment() {
 	if (fine < 0.012) {
 		top = mix(top, grass_dark.rgb, 0.12);
 	} else if (fine > 0.994) {
-		top = mix(top, grass_lift.rgb, 0.08);
+		top = mix(top, grass_light.rgb, 0.08);
 	}
 
 	float top_face = smoothstep(0.72, 0.96, world_normal.y);
