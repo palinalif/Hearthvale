@@ -134,28 +134,23 @@ func _append_stepping_stone_cells(builder: Dictionary, cells: Array) -> void:
 	_stepping_offset_stones = 0
 	_stepping_max_span = 0.0
 	var normalized := Region.normalize_cells(cells)
-	# Deterministic local-maxima sampling gives a blue-noise-ish scatter without
-	# exposing a fixed block lattice. Each stone wins against nearby occupied
-	# cells on the painted mask, so narrow trails and broad patches both keep an
-	# irregular cadence while authority remains purely area-based.
-	var occupied := {}
-	for cell: Vector2i in normalized: occupied[cell] = true
-	var selected: Array = []
+	# Keep this selection strictly linear-time. The previous local-maxima pass
+	# inspected a 5x5 neighbourhood for every painted cell and caused a real Thor
+	# regression whenever committed path presentation was refreshed during editing.
+	# Hash-shifted macro cells preserve an irregular cadence without that hot loop.
+	var block_size := 5
+	var selected := {}
 	for cell: Vector2i in normalized:
-		var score := absi(cell.x * 73856093 ^ cell.y * 19349663 ^ 83492791)
-		var winner := true
-		for dz in range(-2, 3):
-			for dx in range(-2, 3):
-				if dx == 0 and dz == 0: continue
-				var neighbour := cell + Vector2i(dx, dz)
-				if not occupied.has(neighbour): continue
-				var neighbour_score := absi(neighbour.x * 73856093 ^ neighbour.y * 19349663 ^ 83492791)
-				if neighbour_score > score or (neighbour_score == score and (neighbour.y < cell.y or (neighbour.y == cell.y and neighbour.x < cell.x))):
-					winner = false
-					break
-			if not winner: break
-		if winner: selected.append(cell)
-	for cell: Vector2i in selected:
+		var band_x := floori(float(cell.x) / float(block_size))
+		var band_y := floori(float(cell.y) / float(block_size))
+		var shift_x := posmod(band_y * 3 + band_y * band_y, block_size)
+		var shift_y := posmod(band_x * 2 + band_x * band_x, block_size)
+		var block := Vector2i(floori(float(cell.x + shift_x) / float(block_size)), floori(float(cell.y + shift_y) / float(block_size)))
+		var score := absi(cell.x * 73856093 ^ cell.y * 19349663 ^ block.x * 83492791 ^ block.y * 2971215073)
+		if not selected.has(block) or score > int((selected[block] as Dictionary).score):
+			selected[block] = {"cell": cell, "score": score}
+	for block in selected:
+		var cell: Vector2i = (selected[block] as Dictionary).cell
 		var point := Region.cell_center(cell)
 		var surface_y := _surface_height(point)
 		var cell_hash := absi(cell.x * 73856093 ^ cell.y * 19349663)
@@ -212,7 +207,8 @@ func stats() -> Dictionary:
 	result["stepping_stone_polish"] = {
 		"stones": _stepping_stones,
 		"offset_stones": _stepping_offset_stones,
-		"selection_radius_cells": 2,
+		"cadence_period": 5,
+		"scatter_mode": "hash_shifted_macro",
 		"max_span": _stepping_max_span,
 		"detail_unit": Grid.COTTAGE_DETAIL_UNIT,
 	}

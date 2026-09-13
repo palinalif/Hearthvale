@@ -79,7 +79,7 @@ func _run_scene_checks(capture: bool) -> void:
 	_check(int(step_polish.get("stones", 0)) > 0 and int(step_polish.get("stones", 0)) < steps.size(), "stepping stones remain sparse inside painted authority")
 	_check(int(step_polish.get("offset_stones", 0)) <= int(step_polish.get("stones", 0)), "stepping stones keep deterministic sub-cell offsets")
 	_check(float(step_polish.get("max_span", 0.0)) >= Grid.UNIT * 2.8, "stepping stones are substantially larger than one structural cell")
-	_check(int(step_polish.get("selection_radius_cells", 0)) == 2, "stepping-stone scatter uses deterministic local spacing rather than a fixed block lattice")
+	_check(str(step_polish.get("scatter_mode", "")) == "hash_shifted_macro", "stepping-stone scatter stays linear-time while breaking the fixed block cadence")
 	var transitions: Dictionary = stats.get("style_transitions", {})
 	_check(int(transitions.get("edges", 0)) > 0, "touching path materials produce presentation transition geometry")
 	_check(int(transitions.get("cobble_chips", 0)) > 0, "cobblestone breaks its edge where it meets another path material")
