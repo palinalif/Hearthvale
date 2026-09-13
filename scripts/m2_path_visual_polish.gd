@@ -5,11 +5,19 @@ var _packed_shoulder_omissions := 0
 var _packed_exposed_shoulder_patches := 0
 var _packed_stone_flecks := 0
 var _packed_merged_quads := 0
+var _cobble_stones := 0
+var _cobble_raised_stones := 0
 
 func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
-	if style_id != "packed_earth":
-		super._append_cells(builder, style_id, cells)
+	if style_id == "packed_earth":
+		_append_packed_earth_cells(builder, cells)
 		return
+	if style_id == "cobblestone":
+		_append_cobblestone_cells(builder, cells)
+		return
+	super._append_cells(builder, style_id, cells)
+
+func _append_packed_earth_cells(builder: Dictionary, cells: Array) -> void:
 	_packed_detail_patches = 0
 	_packed_shoulder_omissions = 0
 	_packed_exposed_shoulder_patches = 0
@@ -52,6 +60,31 @@ func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
 			_packed_stone_flecks += 1
 	_append_merged_detail_patches(builder, patches, detail)
 
+func _append_cobblestone_cells(builder: Dictionary, cells: Array) -> void:
+	_cobble_stones = 0
+	_cobble_raised_stones = 0
+	var normalized := Region.normalize_cells(cells)
+	var detail := Grid.COTTAGE_DETAIL_UNIT
+	var gap := detail * 0.10
+	for cell: Vector2i in normalized:
+		var point := Region.cell_center(cell)
+		var surface_y := _surface_height(point)
+		var row_horizontal := posmod(cell.y, 2) == 0
+		for half in 2:
+			var cell_hash := absi(cell.x * 73856093 ^ cell.y * 19349663 ^ (half + 1) * 83492791)
+			var material_index := posmod(cell_hash, 5) == 0 or posmod(cell_hash, 7) == 0
+			var lifted := posmod(cell_hash, 11) == 0
+			var center := Vector3(point.x, surface_y + TOP_EPSILON + (TOP_EPSILON * 0.75 if lifted else 0.0), point.y)
+			var size := Vector2(Grid.UNIT - gap * 2.0, detail - gap * 2.0)
+			if row_horizontal:
+				center.z += (-0.5 if half == 0 else 0.5) * detail
+			else:
+				center.x += (-0.5 if half == 0 else 0.5) * detail
+				size = Vector2(size.y, size.x)
+			_append_top_quad(builder, center, size, 1 if material_index else 0)
+			_cobble_stones += 1
+			if lifted: _cobble_raised_stones += 1
+
 func stats() -> Dictionary:
 	var result := super.stats()
 	result["packed_earth_polish"] = {
@@ -60,6 +93,12 @@ func stats() -> Dictionary:
 		"exposed_shoulder_patches": _packed_exposed_shoulder_patches,
 		"stone_flecks": _packed_stone_flecks,
 		"merged_quads": _packed_merged_quads,
+		"detail_unit": Grid.COTTAGE_DETAIL_UNIT,
+	}
+	result["cobblestone_polish"] = {
+		"stones": _cobble_stones,
+		"raised_stones": _cobble_raised_stones,
+		"joint_gap": Grid.COTTAGE_DETAIL_UNIT * 0.10,
 		"detail_unit": Grid.COTTAGE_DETAIL_UNIT,
 	}
 	return result
@@ -78,10 +117,6 @@ func _quadrant_touches_exposed_edge(quadrant: int, exposed: int) -> bool:
 	return (left and (exposed & 1) != 0) or (not left and (exposed & 2) != 0) or (top and (exposed & 4) != 0) or (not top and (exposed & 8) != 0)
 
 func _omit_shoulder_quadrant(cell_hash: int, quadrant: int, exposed: int) -> bool:
-	# Prefer omissions on quadrants that actually touch lawn. This makes the
-	# structural mask read as an eroded shoulder rather than four equally noisy
-	# mini-tiles per boundary cell. Keep one deterministic fallback omission for
-	# diagonal-only boundary cells so curved brush edges still fray naturally.
 	var touches_exposed := _quadrant_touches_exposed_edge(quadrant, exposed)
 	if touches_exposed:
 		return posmod(cell_hash + quadrant * 11, 3) != 0
