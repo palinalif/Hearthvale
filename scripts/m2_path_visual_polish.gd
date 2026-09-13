@@ -16,23 +16,16 @@ var _style_lookup: Dictionary = {}
 var _transition_edges := 0
 var _transition_cobble_chips := 0
 var _transition_step_stones := 0
-var _smoothed_surface_cache: Dictionary = {}
-var _smoothed_surface_quads := 0
-var _smoothing_authoritative_rebuild := false
 
 func rebuild(path_values: Array, terrain_backend: Node = null) -> void:
 	_style_lookup.clear()
-	_smoothed_surface_cache.clear()
-	_smoothed_surface_quads = 0
 	_transition_edges = 0
 	_transition_cobble_chips = 0
 	_transition_step_stones = 0
 	for style_id in STYLE_ORDER:
 		for cell: Vector2i in _cells_for_style(path_values, style_id):
 			_style_lookup[cell] = style_id
-	_smoothing_authoritative_rebuild = true
 	super.rebuild(path_values, terrain_backend)
-	_smoothing_authoritative_rebuild = false
 
 func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
 	if style_id == "packed_earth":
@@ -224,10 +217,6 @@ func stats() -> Dictionary:
 		"cobble_chips": _transition_cobble_chips,
 		"step_stones": _transition_step_stones,
 	}
-	result["terrain_following"] = {
-		"mode": "bilinear_cell_centres",
-		"smoothed_quads": _smoothed_surface_quads,
-	}
 	return result
 
 func _foreign_cardinal_neighbours(cell: Vector2i, own_style: String) -> Array:
@@ -331,26 +320,6 @@ func _rectangle_row_exists(cells: Dictionary, start: Vector2i, width: int, dz: i
 			return false
 	return true
 
-func _smoothed_surface_height(point: Vector2) -> float:
-	# Interpolate the heights sampled at structural-cell centres. The result is a
-	# continuous surface across one-voxel terrain ledges, so committed path tops
-	# form short ramps instead of reproducing the raw vertical stair-step.
-	var key := Vector2i(roundi(point.x / Grid.COTTAGE_DETAIL_UNIT), roundi(point.y / Grid.COTTAGE_DETAIL_UNIT))
-	if _smoothed_surface_cache.has(key): return float(_smoothed_surface_cache[key])
-	var gx := point.x / Grid.UNIT - 0.5
-	var gz := point.y / Grid.UNIT - 0.5
-	var x0 := floori(gx)
-	var z0 := floori(gz)
-	var tx := gx - float(x0)
-	var tz := gz - float(z0)
-	var h00 := _surface_height(Region.cell_center(Vector2i(x0, z0)))
-	var h10 := _surface_height(Region.cell_center(Vector2i(x0 + 1, z0)))
-	var h01 := _surface_height(Region.cell_center(Vector2i(x0, z0 + 1)))
-	var h11 := _surface_height(Region.cell_center(Vector2i(x0 + 1, z0 + 1)))
-	var height := lerpf(lerpf(h00, h10, tx), lerpf(h01, h11, tx), tz)
-	_smoothed_surface_cache[key] = height
-	return height
-
 func _append_rotated_top_quad(builder: Dictionary, center: Vector3, size: Vector2, angle: float, material_index: int) -> void:
 	var surface: Dictionary = builder["surfaces"][material_index]
 	var vertices: Array = surface["vertices"]
@@ -359,24 +328,9 @@ func _append_rotated_top_quad(builder: Dictionary, center: Vector3, size: Vector
 	var half := size * 0.5
 	var basis := Basis(Vector3.UP, angle)
 	var base := vertices.size()
-	var use_smoothed_surface: bool = _smoothing_authoritative_rebuild
-	var center_surface := _surface_height(Vector2(center.x, center.z)) if use_smoothed_surface else center.y
-	var lift := center.y - center_surface if use_smoothed_surface else 0.0
-	var quad_vertices: Array[Vector3] = []
 	for corner in [Vector3(-half.x, 0.0, -half.y), Vector3(half.x, 0.0, -half.y), Vector3(half.x, 0.0, half.y), Vector3(-half.x, 0.0, half.y)]:
-		var world_corner: Vector3 = center + basis * corner
-		if use_smoothed_surface:
-			world_corner.y = _smoothed_surface_height(Vector2(world_corner.x, world_corner.z)) + lift
-		quad_vertices.append(world_corner)
-	if use_smoothed_surface: _smoothed_surface_quads += 1
-	var normal_a := (quad_vertices[1] - quad_vertices[0]).cross(quad_vertices[2] - quad_vertices[0]).normalized()
-	var normal_b := (quad_vertices[2] - quad_vertices[0]).cross(quad_vertices[3] - quad_vertices[0]).normalized()
-	var normal := (normal_a + normal_b).normalized()
-	if not normal.is_finite() or normal.length_squared() < 0.5: normal = Vector3.UP
-	if normal.y < 0.0: normal = -normal
-	for vertex in quad_vertices:
-		vertices.append(vertex)
-		normals.append(normal)
+		vertices.append(center + basis * corner)
+		normals.append(Vector3.UP)
 	indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
 	surface["vertices"] = vertices
 	surface["normals"] = normals
