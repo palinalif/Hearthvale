@@ -2,6 +2,7 @@ extends "res://scripts/m2_path_visual.gd"
 
 var _packed_detail_patches := 0
 var _packed_shoulder_omissions := 0
+var _packed_exposed_shoulder_patches := 0
 var _packed_stone_flecks := 0
 var _packed_merged_quads := 0
 
@@ -11,9 +12,12 @@ func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
 		return
 	_packed_detail_patches = 0
 	_packed_shoulder_omissions = 0
+	_packed_exposed_shoulder_patches = 0
 	_packed_stone_flecks = 0
 	_packed_merged_quads = 0
 	var normalized := Region.normalize_cells(cells)
+	var occupied := {}
+	for cell: Vector2i in normalized: occupied[cell] = true
 	var profile := Region.packed_earth_profile(normalized)
 	var detail := Grid.COTTAGE_DETAIL_UNIT
 	var quarter := detail * 0.5
@@ -23,14 +27,15 @@ func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
 		var point := Region.cell_center(cell)
 		var surface_y := _surface_height(point)
 		var cell_hash := absi(cell.x * 73856093 ^ cell.y * 19349663)
+		var exposed := _exposed_cardinal_edges(cell, occupied)
 		for quadrant in 4:
 			if depth == 0:
-				var omit_count := 1 + posmod(cell_hash, 2)
-				var omit_a := posmod(cell_hash / 7, 4)
-				var omit_b := posmod(omit_a + 1 + posmod(cell_hash / 19, 2), 4)
-				if quadrant == omit_a or (omit_count > 1 and quadrant == omit_b):
+				var omit := _omit_shoulder_quadrant(cell_hash, quadrant, exposed)
+				if omit:
 					_packed_shoulder_omissions += 1
 					continue
+				if _quadrant_touches_exposed_edge(quadrant, exposed):
+					_packed_exposed_shoulder_patches += 1
 			var sx := -1 if quadrant % 2 == 0 else 1
 			var sz := -1 if quadrant < 2 else 1
 			var center := Vector3(point.x + float(sx) * quarter, surface_y + TOP_EPSILON, point.y + float(sz) * quarter)
@@ -49,8 +54,41 @@ func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
 
 func stats() -> Dictionary:
 	var result := super.stats()
-	result["packed_earth_polish"] = {"detail_patches": _packed_detail_patches, "shoulder_omissions": _packed_shoulder_omissions, "stone_flecks": _packed_stone_flecks, "merged_quads": _packed_merged_quads, "detail_unit": Grid.COTTAGE_DETAIL_UNIT}
+	result["packed_earth_polish"] = {
+		"detail_patches": _packed_detail_patches,
+		"shoulder_omissions": _packed_shoulder_omissions,
+		"exposed_shoulder_patches": _packed_exposed_shoulder_patches,
+		"stone_flecks": _packed_stone_flecks,
+		"merged_quads": _packed_merged_quads,
+		"detail_unit": Grid.COTTAGE_DETAIL_UNIT,
+	}
 	return result
+
+func _exposed_cardinal_edges(cell: Vector2i, occupied: Dictionary) -> int:
+	var mask := 0
+	if not occupied.has(cell + Vector2i(-1, 0)): mask |= 1
+	if not occupied.has(cell + Vector2i(1, 0)): mask |= 2
+	if not occupied.has(cell + Vector2i(0, -1)): mask |= 4
+	if not occupied.has(cell + Vector2i(0, 1)): mask |= 8
+	return mask
+
+func _quadrant_touches_exposed_edge(quadrant: int, exposed: int) -> bool:
+	var left := quadrant % 2 == 0
+	var top := quadrant < 2
+	return (left and (exposed & 1) != 0) or (not left and (exposed & 2) != 0) or (top and (exposed & 4) != 0) or (not top and (exposed & 8) != 0)
+
+func _omit_shoulder_quadrant(cell_hash: int, quadrant: int, exposed: int) -> bool:
+	# Prefer omissions on quadrants that actually touch lawn. This makes the
+	# structural mask read as an eroded shoulder rather than four equally noisy
+	# mini-tiles per boundary cell. Keep one deterministic fallback omission for
+	# diagonal-only boundary cells so curved brush edges still fray naturally.
+	var touches_exposed := _quadrant_touches_exposed_edge(quadrant, exposed)
+	if touches_exposed:
+		return posmod(cell_hash + quadrant * 11, 3) != 0
+	if exposed == 0:
+		var fallback := posmod(cell_hash / 7, 4)
+		return quadrant == fallback
+	return false
 
 func _append_merged_detail_patches(builder: Dictionary, patches: Array, detail: float) -> void:
 	var buckets := {}

@@ -35,6 +35,7 @@ static func inspect(checker: SceneTree, scene: Node, phase: String) -> void:
 	checker._check(int(stats.get("triangles", 0)) <= cells.size() * 12, "packed-earth cell presentation stays inside box-equivalent geometry budget: " + phase)
 	var polish: Dictionary = visual.stats().get("packed_earth_polish", {})
 	checker._check(int(polish.get("detail_patches", 0)) > 0 and int(polish.get("shoulder_omissions", 0)) > 0, "packed-earth polish keeps continuous wear plus broken grassy shoulders: " + phase)
+	checker._check(int(polish.get("exposed_shoulder_patches", 0)) > 0 and int(polish.get("exposed_shoulder_patches", 0)) < int(polish.get("detail_patches", 0)), "packed-earth shoulder breakup follows exposed lawn edges instead of uniform cell noise: " + phase)
 	checker._check(int(polish.get("stone_flecks", 0)) > 0 and is_equal_approx(float(polish.get("detail_unit", 0.0)), Grid.COTTAGE_DETAIL_UNIT), "packed-earth polish adds deterministic embedded stone flecks on the detail grid: " + phase)
 	checker._check(int(polish.get("merged_quads", 0)) > 0 and int(polish.get("merged_quads", 0)) < int(polish.get("detail_patches", 0)), "packed-earth detail presentation merges adjacent patches without changing authority: " + phase)
 	var profile: Dictionary = Region.packed_earth_profile(cells)
@@ -48,8 +49,6 @@ static func inspect(checker: SceneTree, scene: Node, phase: String) -> void:
 	print("PACKED_EARTH_AUDIT " + JSON.stringify({"phase": phase, "cells": cells.size(), "profile": expected_depths, "opaque_surface_draws": visual.stats().opaque_surface_draws, "polish": polish}))
 
 static func width_cases(checker: SceneTree, scene: Node) -> void:
-	# Width is now brush area rather than saved ribbon metadata. Exercise narrow,
-	# ordinary and plaza-sized masks against the canonical depth field.
 	for diameter: float in [0.25, 0.75, 3.0]:
 		var cells := Region.brush_cells(Vector2(12.0, 18.0), diameter * 0.5)
 		var profile := Region.packed_earth_profile(cells)
@@ -88,6 +87,4 @@ static func lifecycle(checker: SceneTree, scene: Node) -> void:
 	checker._check(JSON.stringify(scene.landscape_state.document()) == document, "painted rebuild/remove/restore preserves the saved document")
 
 static func review(checker: SceneTree, scene: Node, directory: String) -> void:
-	# Screenshot orchestration remains in the caller. The architecture gate here
-	# checks painted authority plus deterministic 0.0625 m presentation detail.
 	inspect(checker, scene, "review")
