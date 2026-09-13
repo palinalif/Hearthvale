@@ -180,6 +180,9 @@ func _set_view_context(next_context: String, reason: String = "Context changed")
 	var old_pitch := camera_pitch
 	var old_distance := camera_distance
 	var pivot := camera.global_position - camera.global_basis.z * camera_distance if camera else cursor + Vector3(0, 2, 0)
+	# At a map edge the actual camera distance can be shorter than the requested
+	# zoom. Keep its real subject, not a point projected past that subject.
+	if _bounded_camera_focus.is_finite(): pivot = _bounded_camera_focus
 	if next_context == "building" and view_context == "terrain":
 		_update_world_hover()
 		if not _world_hover.is_empty(): selected_building_id = str(_world_hover["id"])
@@ -241,8 +244,7 @@ func _update_camera() -> void:
 	_free_camera_y = lerpf(_free_camera_y, target.y, 1.0 - exp(-8.0 * _frame_delta))
 	target.y = _free_camera_y
 	var offset := Vector3(sin(camera_yaw) * cos(camera_pitch), sin(camera_pitch), cos(camera_yaw) * cos(camera_pitch)) * camera_distance
-	camera.position = target + offset
-	camera.look_at(target, Vector3.UP)
+	_position_bounded_camera(target, offset)
 
 func _begin_building_placement() -> void:
 	var previous := {"yaw": camera_yaw, "pitch": camera_pitch, "distance": camera_distance}

@@ -81,8 +81,7 @@ func _update_camera() -> void:
 		_terrain_camera_goal_y = _free_camera_y
 	var target := Vector3(cursor.x, _free_camera_y, cursor.z)
 	var offset := Vector3(sin(camera_yaw) * cos(camera_pitch), sin(camera_pitch), cos(camera_yaw) * cos(camera_pitch)) * camera_distance
-	camera.position = target + offset
-	camera.look_at(target, Vector3.UP)
+	_position_bounded_camera(target, offset)
 
 func _begin_stroke() -> void:
 	super._begin_stroke()

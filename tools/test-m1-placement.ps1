@@ -113,6 +113,7 @@ $nativeUi = @(
     'm2_surface_material_picker_test','m2_decor_colour_test','m2_compact_colour_test','m2_window_style_expansion_test',
     'm2_window_customization_test','m2_window_alignment_test','m2_window_alignment_minimum_test','m2_path_render_test',
     'm1_controller_test','m1_building_camera_test','m1_window_layout_test','m1_cottage_edit_ux_test',
+    'm2_camera_boundary_test','m2_camera_boundary_integration_test',
     'm1_ui_overhaul_test','m1_tool_ui_test','m1_full_ui_test'
 )
 
