@@ -11,6 +11,7 @@ const LEGACY_VOXEL_SCALE := 0.5
 const LEGACY_GENERATOR_ID := "m1_cottage_pad_v1"
 const CHANNEL_TYPE := 0
 const GENERATOR_ID := "m2_starter_valley_v3"
+const GRASS_SHADER := preload("res://scripts/terrain_grass.gdshader")
 
 static func river_center_x(world_z: float) -> float:
 	return snappedf(40.75 + sin(world_z * 0.19) * 0.9 + sin(world_z * 0.43 + 1.2) * 0.3, VOXEL_SCALE)
@@ -78,9 +79,8 @@ static func build_library() -> Object:
 	stone_material.vertex_color_use_as_albedo = true
 	stone.set_material_override(0, stone_material)
 	var grass: Object = ClassDB.instantiate("VoxelBlockyModelCube")
-	var grass_material := StandardMaterial3D.new()
-	grass_material.albedo_color = Color("#7d9957")
-	grass_material.vertex_color_use_as_albedo = true
+	var grass_material := ShaderMaterial.new()
+	grass_material.shader = GRASS_SHADER
 	grass.set_material_override(0, grass_material)
 	library.add_model(empty)
 	library.add_model(stone)
