@@ -7,6 +7,8 @@ var _packed_stone_flecks := 0
 var _packed_merged_quads := 0
 var _cobble_stones := 0
 var _cobble_raised_stones := 0
+var _stepping_stones := 0
+var _stepping_offset_stones := 0
 
 func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
 	if style_id == "packed_earth":
@@ -14,6 +16,9 @@ func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
 		return
 	if style_id == "cobblestone":
 		_append_cobblestone_cells(builder, cells)
+		return
+	if style_id == "stepping_stones":
+		_append_stepping_stone_cells(builder, cells)
 		return
 	super._append_cells(builder, style_id, cells)
 
@@ -85,6 +90,34 @@ func _append_cobblestone_cells(builder: Dictionary, cells: Array) -> void:
 			_cobble_stones += 1
 			if lifted: _cobble_raised_stones += 1
 
+func _append_stepping_stone_cells(builder: Dictionary, cells: Array) -> void:
+	_stepping_stones = 0
+	_stepping_offset_stones = 0
+	var normalized := Region.normalize_cells(cells)
+	var occupied := {}
+	for cell: Vector2i in normalized: occupied[cell] = true
+	for cell: Vector2i in normalized:
+		# A stable staggered lattice gives a readable walking cadence inside any
+		# painted region without reconstructing or saving a hidden centreline.
+		if posmod(cell.x + cell.y * 2, 4) != 0:
+			continue
+		var point := Region.cell_center(cell)
+		var surface_y := _surface_height(point)
+		var cell_hash := absi(cell.x * 73856093 ^ cell.y * 19349663)
+		var offset_axis := posmod(cell_hash, 2)
+		var offset_sign := -1.0 if posmod(cell_hash / 3, 2) == 0 else 1.0
+		var offset := Grid.COTTAGE_DETAIL_UNIT * 0.16 * offset_sign
+		var center := Vector3(point.x, surface_y + TOP_EPSILON * 1.25, point.y)
+		if offset_axis == 0: center.x += offset
+		else: center.z += offset
+		var size_hash := posmod(cell_hash, 3)
+		var size := Vector2(Grid.UNIT * (0.74 + float(size_hash) * 0.04), Grid.UNIT * (0.62 + float(posmod(cell_hash / 5, 3)) * 0.04))
+		var angle := deg_to_rad(float(posmod(cell_hash, 17) - 8))
+		var material_index := 1 if posmod(cell_hash, 5) == 0 else 0
+		_append_rotated_top_quad(builder, center, size, angle, material_index)
+		_stepping_stones += 1
+		if absf(offset) > 0.00001: _stepping_offset_stones += 1
+
 func stats() -> Dictionary:
 	var result := super.stats()
 	result["packed_earth_polish"] = {
@@ -99,6 +132,12 @@ func stats() -> Dictionary:
 		"stones": _cobble_stones,
 		"raised_stones": _cobble_raised_stones,
 		"joint_gap": Grid.COTTAGE_DETAIL_UNIT * 0.10,
+		"detail_unit": Grid.COTTAGE_DETAIL_UNIT,
+	}
+	result["stepping_stone_polish"] = {
+		"stones": _stepping_stones,
+		"offset_stones": _stepping_offset_stones,
+		"cadence_period": 4,
 		"detail_unit": Grid.COTTAGE_DETAIL_UNIT,
 	}
 	return result
@@ -171,18 +210,23 @@ func _rectangle_row_exists(cells: Dictionary, start: Vector2i, width: int, dz: i
 			return false
 	return true
 
-func _append_top_quad(builder: Dictionary, center: Vector3, size: Vector2, material_index: int) -> void:
+func _append_rotated_top_quad(builder: Dictionary, center: Vector3, size: Vector2, angle: float, material_index: int) -> void:
 	var surface: Dictionary = builder["surfaces"][material_index]
 	var vertices: Array = surface["vertices"]
 	var normals: Array = surface["normals"]
 	var indices: Array = surface["indices"]
 	var half := size * 0.5
+	var basis := Basis(Vector3.UP, angle)
 	var base := vertices.size()
-	vertices.append_array([center + Vector3(-half.x, 0.0, -half.y), center + Vector3(half.x, 0.0, -half.y), center + Vector3(half.x, 0.0, half.y), center + Vector3(-half.x, 0.0, half.y)])
-	for _i in 4: normals.append(Vector3.UP)
+	for corner in [Vector3(-half.x, 0.0, -half.y), Vector3(half.x, 0.0, -half.y), Vector3(half.x, 0.0, half.y), Vector3(-half.x, 0.0, half.y)]:
+		vertices.append(center + basis * corner)
+		normals.append(Vector3.UP)
 	indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
 	surface["vertices"] = vertices
 	surface["normals"] = normals
 	surface["indices"] = indices
 	builder["surfaces"][material_index] = surface
 	builder["cells"] = int(builder["cells"]) + 1
+
+func _append_top_quad(builder: Dictionary, center: Vector3, size: Vector2, material_index: int) -> void:
+	_append_rotated_top_quad(builder, center, size, 0.0, material_index)

@@ -58,10 +58,12 @@ func _run_scene_checks(capture: bool) -> void:
 		var node: MeshInstance3D = scene.path_visual._style_nodes[style_id]
 		_check(node.mesh != null and node.mesh.get_surface_count() > 0 and node.mesh.get_surface_count() <= 2, "style uses bounded mesh surfaces: " + style_id)
 		_check(_mesh_is_finite_bounded_grounded(node.mesh as ArrayMesh), "style mesh is finite, bounded, and grounded: " + style_id)
-	var cobble: Dictionary = stats.get("cobblestone_polish", {})
-	var cobble_cells := int((stats.styles.get("cobblestone", {}) as Dictionary).get("cells", 0))
-	_check(int(cobble.get("stones", 0)) == cobble_cells * 2, "cobblestone presentation subdivides each painted cell into two stones")
-	_check(int(cobble.get("raised_stones", 0)) > 0 and float(cobble.get("joint_gap", 0.0)) > 0.0, "cobblestone presentation keeps deterministic joint gaps and subtle height variation")
+	var cobble_polish: Dictionary = stats.get("cobblestone_polish", {})
+	_check(int(cobble_polish.get("stones", 0)) > stone.size(), "cobblestone splits painted cells into individual slab stones")
+	_check(int(cobble_polish.get("raised_stones", 0)) > 0, "cobblestone includes deterministic height variation")
+	var step_polish: Dictionary = stats.get("stepping_stone_polish", {})
+	_check(int(step_polish.get("stones", 0)) > 0 and int(step_polish.get("stones", 0)) < steps.size(), "stepping stones remain sparse inside painted authority")
+	_check(int(step_polish.get("offset_stones", 0)) == int(step_polish.get("stones", 0)), "stepping stones receive deterministic sub-cell offsets")
 	EarthChecks.inspect(self, scene, "committed")
 	EarthChecks.width_cases(self, scene)
 	if capture:
