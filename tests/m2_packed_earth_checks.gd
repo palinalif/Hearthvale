@@ -36,6 +36,7 @@ static func inspect(checker: SceneTree, scene: Node, phase: String) -> void:
 	var polish: Dictionary = visual.stats().get("packed_earth_polish", {})
 	checker._check(int(polish.get("detail_patches", 0)) > 0 and int(polish.get("shoulder_omissions", 0)) > 0, "packed-earth polish keeps continuous wear plus broken grassy shoulders: " + phase)
 	checker._check(int(polish.get("stone_flecks", 0)) > 0 and is_equal_approx(float(polish.get("detail_unit", 0.0)), Grid.COTTAGE_DETAIL_UNIT), "packed-earth polish adds deterministic embedded stone flecks on the detail grid: " + phase)
+	checker._check(int(polish.get("merged_quads", 0)) > 0 and int(polish.get("merged_quads", 0)) < int(polish.get("detail_patches", 0)), "packed-earth detail presentation merges adjacent patches without changing authority: " + phase)
 	var profile: Dictionary = Region.packed_earth_profile(cells)
 	var depths: Dictionary = stats.get("profile_depth_steps", {})
 	var expected_depths := {0: 0, 1: 0, 2: 0}
