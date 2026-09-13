@@ -3,6 +3,7 @@ extends SceneTree
 const EarthChecks = preload("res://tests/m2_packed_earth_checks.gd")
 const Region = preload("res://scripts/m2_painted_path_region.gd")
 const State = preload("res://scripts/landscape_state.gd")
+const Grid = preload("res://scripts/visual_grid.gd")
 
 var scene: Node
 var checks := 0
@@ -64,6 +65,7 @@ func _run_scene_checks(capture: bool) -> void:
 	var step_polish: Dictionary = stats.get("stepping_stone_polish", {})
 	_check(int(step_polish.get("stones", 0)) > 0 and int(step_polish.get("stones", 0)) < steps.size(), "stepping stones remain sparse inside painted authority")
 	_check(int(step_polish.get("offset_stones", 0)) == int(step_polish.get("stones", 0)), "stepping stones receive deterministic sub-cell offsets")
+	_check(float(step_polish.get("max_span", 0.0)) >= Grid.UNIT * 2.8, "stepping stones are substantially larger than one structural cell")
 	EarthChecks.inspect(self, scene, "committed")
 	EarthChecks.width_cases(self, scene)
 	if capture:

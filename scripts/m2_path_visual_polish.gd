@@ -9,6 +9,7 @@ var _cobble_stones := 0
 var _cobble_raised_stones := 0
 var _stepping_stones := 0
 var _stepping_offset_stones := 0
+var _stepping_max_span := 0.0
 
 func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
 	if style_id == "packed_earth":
@@ -53,7 +54,13 @@ func _append_packed_earth_cells(builder: Dictionary, cells: Array) -> void:
 			var sz := -1 if quadrant < 2 else 1
 			var center := Vector3(point.x + float(sx) * quarter, surface_y + TOP_EPSILON, point.y + float(sz) * quarter)
 			var patch_hash := absi(cell_hash ^ (quadrant + 1) * 83492791)
-			var material_index := 1 if posmod(patch_hash, 7) < (3 if depth >= 1 else 2) else 0
+			# Use broad deterministic tone islands rather than quadrant-by-quadrant
+			# alternation, so compacted earth reads as worn ground instead of tiles.
+			var cluster := Vector2i(floori(float(cell.x) / 3.0), floori(float(cell.y) / 3.0))
+			var cluster_hash := absi(cluster.x * 19349663 ^ cluster.y * 83492791)
+			var broad_tone := posmod(cluster_hash, 5) < (3 if depth >= 1 else 2)
+			var fleck_tone := posmod(patch_hash, 13) == 0
+			var material_index := 1 if broad_tone != fleck_tone else 0
 			patches.append({"center": center, "material": material_index})
 			_packed_detail_patches += 1
 		if depth >= 1 and posmod(cell_hash, 23) == 0:
@@ -93,30 +100,35 @@ func _append_cobblestone_cells(builder: Dictionary, cells: Array) -> void:
 func _append_stepping_stone_cells(builder: Dictionary, cells: Array) -> void:
 	_stepping_stones = 0
 	_stepping_offset_stones = 0
+	_stepping_max_span = 0.0
 	var normalized := Region.normalize_cells(cells)
-	var occupied := {}
-	for cell: Vector2i in normalized: occupied[cell] = true
+	# Pick one deterministic occupied cell from each 5x5 structural block. This
+	# keeps authority area-based while avoiding the old regimented lane lattice.
+	var block_size := 5
+	var selected := {}
 	for cell: Vector2i in normalized:
-		# A stable staggered lattice gives a readable walking cadence inside any
-		# painted region without reconstructing or saving a hidden centreline.
-		if posmod(cell.x + cell.y * 2, 4) != 0:
-			continue
+		var block := Vector2i(floori(float(cell.x) / float(block_size)), floori(float(cell.y) / float(block_size)))
+		var score := absi(cell.x * 73856093 ^ cell.y * 19349663 ^ block.x * 83492791 ^ block.y * 2971215073)
+		if not selected.has(block) or score > int((selected[block] as Dictionary).score):
+			selected[block] = {"cell": cell, "score": score}
+	for block in selected:
+		var cell: Vector2i = (selected[block] as Dictionary).cell
 		var point := Region.cell_center(cell)
 		var surface_y := _surface_height(point)
 		var cell_hash := absi(cell.x * 73856093 ^ cell.y * 19349663)
-		var offset_axis := posmod(cell_hash, 2)
-		var offset_sign := -1.0 if posmod(cell_hash / 3, 2) == 0 else 1.0
-		var offset := Grid.COTTAGE_DETAIL_UNIT * 0.16 * offset_sign
-		var center := Vector3(point.x, surface_y + TOP_EPSILON * 1.25, point.y)
-		if offset_axis == 0: center.x += offset
-		else: center.z += offset
+		var offset_x := (float(posmod(cell_hash, 9)) - 4.0) * Grid.UNIT * 0.055
+		var offset_z := (float(posmod(cell_hash / 11, 9)) - 4.0) * Grid.UNIT * 0.055
+		var center := Vector3(point.x + offset_x, surface_y + TOP_EPSILON * 1.25, point.y + offset_z)
+		# These are intentionally footstep-sized stones (roughly 0.30-0.42 m),
+		# substantially larger than a single 0.125 m structural cell.
 		var size_hash := posmod(cell_hash, 3)
-		var size := Vector2(Grid.UNIT * (0.74 + float(size_hash) * 0.04), Grid.UNIT * (0.62 + float(posmod(cell_hash / 5, 3)) * 0.04))
-		var angle := deg_to_rad(float(posmod(cell_hash, 17) - 8))
+		var size := Vector2(Grid.UNIT * (2.85 + float(size_hash) * 0.22), Grid.UNIT * (2.35 + float(posmod(cell_hash / 5, 3)) * 0.18))
+		var angle := deg_to_rad(float(posmod(cell_hash, 29) - 14))
 		var material_index := 1 if posmod(cell_hash, 5) == 0 else 0
 		_append_rotated_top_quad(builder, center, size, angle, material_index)
 		_stepping_stones += 1
-		if absf(offset) > 0.00001: _stepping_offset_stones += 1
+		if absf(offset_x) > 0.00001 or absf(offset_z) > 0.00001: _stepping_offset_stones += 1
+		_stepping_max_span = maxf(_stepping_max_span, maxf(size.x, size.y))
 
 func stats() -> Dictionary:
 	var result := super.stats()
@@ -137,7 +149,8 @@ func stats() -> Dictionary:
 	result["stepping_stone_polish"] = {
 		"stones": _stepping_stones,
 		"offset_stones": _stepping_offset_stones,
-		"cadence_period": 4,
+		"cadence_period": 5,
+		"max_span": _stepping_max_span,
 		"detail_unit": Grid.COTTAGE_DETAIL_UNIT,
 	}
 	return result
