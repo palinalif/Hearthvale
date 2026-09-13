@@ -2,7 +2,7 @@ extends RefCounted
 
 const Grid = preload("res://scripts/visual_grid.gd")
 const Region = preload("res://scripts/m2_painted_path_region.gd")
-const PathVisual = preload("res://scripts/m2_path_visual_polish.gd")
+const PathVisual = preload("res://scripts/m2_path_visual_subtle.gd")
 const ContactChecks = preload("res://tests/m2_path_grass_contact_checks.gd")
 
 static func inspect(checker: SceneTree, scene: Node, phase: String) -> void:
