@@ -33,9 +33,12 @@ func run() -> void:
 	# Do not opt into a test-only starter: exercise the shipped default itself.
 	scene.checkpoint_root = "user://m2-starter-render-%d" % Time.get_ticks_usec()
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 90000
+	var boot_started := Time.get_ticks_msec()
+	var deadline := boot_started + 120000
 	while not scene._player_restored and Time.get_ticks_msec() < deadline:
 		await process_frame
+		if scene.backend and not str(scene.backend.stats().get("error", "")).is_empty(): break
+	print("STARTER_BOOT " + JSON.stringify({"elapsed_ms":Time.get_ticks_msec() - boot_started, "restored":scene._player_restored, "backend":scene.backend.stats() if scene.backend else {}}))
 	check(scene._player_restored, "Production main scene reached ready")
 	if not scene._player_restored:
 		scene._shutting_down = true
@@ -45,7 +48,7 @@ func run() -> void:
 		return
 	check(scene._starter_seeded, "Production cold start seeds the hamlet")
 	check(scene.building_world.get_buildings().size() == 3, "Production cold start has three homes")
-	for frame in 180: await process_frame
+	await settle_frames(1500)
 	scene.set_process(false)
 	# The first two captures use the real initial camera without moving it.
 	for home: Dictionary in scene.building_world.get_buildings():
@@ -113,9 +116,19 @@ func frame_scene(scene: Node, target: Vector3, yaw: float, pitch: float, distanc
 	scene._update_camera()
 
 func capture(label: String) -> void:
-	for frame in 30: await process_frame
+	await settle_frames(500)
 	await RenderingServer.frame_post_draw
 	var image := root.get_texture().get_image()
 	var path := OUTPUT + "/" + label + ".png"
 	check(not image.is_empty() and image.save_png(path) == OK, "Saved " + label + " capture")
 	captures.append(path)
+
+func settle_frames(milliseconds: int) -> void:
+	# WARP is a software renderer. A fixed 180-frame delay can consume minutes
+	# without adding evidence; allow real rendered frames and bounded settling
+	# time instead. Readiness still requires the full native production scene.
+	var deadline := Time.get_ticks_msec() + milliseconds
+	var frames := 0
+	while frames < 3 or Time.get_ticks_msec() < deadline:
+		await process_frame
+		frames += 1

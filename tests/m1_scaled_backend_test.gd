@@ -26,8 +26,8 @@ func _initialize() -> void:
 	if not backend.is_ready():
 		_finish()
 		return
-	_check(backend.world_size().is_equal_approx(Vector3(48, 32, 48)), "M1 keeps 48×32×48 world bounds")
-	_check(backend.patch_size == Vector3i(384, 256, 384) and backend.patch_size == Generator.PATCH_SIZE, "M1 uses 384×256×384 index grid")
+	_check(backend.world_size().is_equal_approx(Vector3(64, 32, 64)), "Approved starter expansion uses 64x32x64 world bounds")
+	_check(backend.patch_size == Vector3i(512, 256, 512) and backend.patch_size == Generator.PATCH_SIZE, "Expanded map uses 512x256x512 index grid")
 	_check(is_equal_approx(backend.voxel_scale, 0.125), "M1 uses eighth-unit editable voxels")
 	_check(backend.terrain.bounds.size == Vector3(Generator.PATCH_SIZE), "native bounds use index dimensions")
 	_check(backend.terrain.scale.is_equal_approx(Vector3.ONE * Generator.VOXEL_SCALE), "native terrain scales geometry uniformly")

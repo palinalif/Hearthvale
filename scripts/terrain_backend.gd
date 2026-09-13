@@ -116,7 +116,12 @@ func _ready() -> void:
 		add_child(viewer)
 	voxels = generator_script.generate()
 	var full_area := AABB(Vector3.ZERO, Vector3(patch_size))
-	var initialization_budget_ms := initialization_budget_override_ms if initialization_budget_override_ms > 0 else (45000 if patch_size.x > 96 else 15000)
+	# The expanded 512-cell valley has 78% more native data than the previous
+	# 384-cell map. Keep a bounded cold-start allowance on slower devices, not
+	# just in test_mode; M0 and the previous map retain their original limits.
+	var default_budget_ms := 45000 if patch_size.x > 96 else 15000
+	if patch_size.x > 384 or patch_size.z > 384: default_budget_ms = 90000
+	var initialization_budget_ms := initialization_budget_override_ms if initialization_budget_override_ms > 0 else default_budget_ms
 	var load_deadline := Time.get_ticks_msec() + initialization_budget_ms
 	var tool = terrain.get_voxel_tool()
 	while not tool.is_area_editable(full_area) and Time.get_ticks_msec() < load_deadline:
