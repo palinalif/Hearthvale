@@ -106,47 +106,48 @@ switch ($Shard) {
     }
     'native-visual' {
         Invoke-NativeTests @(
-            'm1_cottage_visual_test',
-            'm1_cottage_material_test'
+            'm1_visual_test',
+            'cottage_detail_visual_test'
         )
     }
     'upper-openings' {
         Invoke-NativeTests @(
-            'm2_upper_openings_test'
+            'm2_upper_storey_auto_windows_test',
+            'm2_upper_storey_detail_test'
         )
     }
     'ui-style' {
         Invoke-NativeTests @(
-            'm2_ui_style_test'
+            'm1_ui_overhaul_test'
         )
     }
     'detail-grid' {
         Invoke-NativeTests @(
-            'm2_detail_grid_test'
+            'visual_grid_test'
         )
     }
     'fine-prop' {
-        Invoke-MobileReview 'fine-prop' 'tests/m2_fine_prop_render_test.gd' 180000 @(
+        Invoke-MobileReview 'fine-prop' 'tests/fine_prop_render_test.gd' 180000 @(
             '"ok"\s*:\s*true'
         )
     }
     'foliage-halfsize' {
-        Invoke-MobileReview 'foliage-halfsize' 'tests/m2_foliage_halfsize_render_test.gd' 180000 @(
+        Invoke-MobileReview 'foliage-halfsize' 'tests/foliage_halfsize_render_test.gd' 180000 @(
             '"ok"\s*:\s*true'
         )
     }
     'cottage-detail' {
-        Invoke-MobileReview 'cottage-detail' 'tests/m1_cottage_detail_render_test.gd' 180000 @(
+        Invoke-MobileReview 'cottage-detail' 'tests/cottage_detail_render_test.gd' 180000 @(
             '"ok"\s*:\s*true'
         )
     }
     'home-variants' {
-        Invoke-MobileReview 'home-variants' 'tests/m2_home_catalogue_render_test.gd' 180000 @(
+        Invoke-MobileReview 'home-variants' 'tests/m2_home_variants_render_test.gd' 180000 @(
             '"ok"\s*:\s*true'
         )
     }
     'decoration-variants' {
-        Invoke-MobileReview 'decoration-variants' 'tests/m2_decoration_render_test.gd' 180000 @(
+        Invoke-MobileReview 'decoration-variants' 'tests/m2_decoration_variants_render_test.gd' 180000 @(
             'M2_DECORATION_RENDER_RESULT',
             '"ok"\s*:\s*true'
         )
