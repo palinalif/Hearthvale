@@ -160,6 +160,7 @@ switch ($Shard) {
             'm2_painted_path_region_test',
             'm2_painted_path_authority_test',
             'm2_path_terrain_excavation_test',
+            'm2_path_plaza_integration_test',
             'm2_path_placement_test'
         )
         Invoke-MobileReview 'paths' 'tests/m2_path_render_test.gd' 180000 @(
