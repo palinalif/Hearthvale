@@ -126,3 +126,29 @@ The later player-approved palette restoration returns the exact 7131d22
 pale-stem/warm-cap colors. Runtime foliage and rock tint variation is deterministic
 presentation and does not alter canonical source colors. See
 `foliage-halfsize.authoring.json` for the MCP operation record.
+
+## Barrel planter family
+
+`hearthvale_planter_flowers`, `hearthvale_planter_herbs`, and
+`hearthvale_planter_light` are actual MCP-authored runtime assets. Their common
+editable empty barrel is `hearthvale_planter_barrel.vox`. They retain the
+0.75 x 0.75 furniture footprint and cubic 0.0625 decorative cells. The original
+`barrel_planter` saved style resolves to the full flower arrangement; herb and
+light styles are additive choices. There is no save-schema migration.
+
+`planters.authoring.json` records the palette, source/staging hashes, operation
+types and connectivity. Promotion restores only the common 12 x 14 x 12 SIZE
+metadata that the MCP writer shrinks during edits; voxel coordinates and
+palette entries are verified unchanged. The pivot remains (6, 0, 6) voxels.
+
+Re-export canonical sources with `python tools/magicavoxel/planter_assets.py`,
+import with the pinned editor, then use the existing bake script with explicit
+`0.0625`. Only explicit `--promote` reads the named MCP staging files. CI uses
+canonical sources and never requires the development server or private staging.
+The three greedy meshes contain 818 / 696 / 572 triangles respectively.
+
+`tests/m2_planter_asset_test.gd` validates sources, reproducible exports, grid,
+materials, preview parity and legacy records. `m2_planter_placement_test.gd`
+uses the current controller catalogue and checks cancel, confirm, undo/redo,
+recolour, relocation, save/reload and invalid targets. The `planters` cottage
+CI shard also runs actual Mobile rendering. Real source contact sheets and

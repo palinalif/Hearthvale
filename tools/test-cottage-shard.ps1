@@ -3,7 +3,7 @@ param(
     [ValidateSet(
         'native-interaction','native-resize','native-visual',
         'upper-openings','ui-style','detail-grid','fine-prop','foliage-halfsize',
-        'cottage-detail','home-variants','decoration-variants','paths','hamlet','starter-valley'
+        'cottage-detail','home-variants','decoration-variants','paths','hamlet','starter-valley','planters'
     )]
     [string]$Shard
 )
@@ -15,7 +15,7 @@ Set-Location (Split-Path -Parent $PSScriptRoot)
 # editor first, then performs a normal import to build Godot's global class cache
 # before targeted --check-only probes. This keeps the probes actionable without
 # false failures on class_name symbols such as BuildingWorld.
-$placementSuite = if ($Shard -eq 'paths') { 'bootstrap' } else { 'setup' }
+$placementSuite = if ($Shard -in @('paths','planters')) { 'bootstrap' } else { 'setup' }
 ./tools/test-m1-placement.ps1 -Suite $placementSuite
 if ($LASTEXITCODE -ne 0) { throw 'Pinned Godot/voxel setup failed' }
 
@@ -180,6 +180,20 @@ switch ($Shard) {
         )
         Invoke-MobileReview 'starter-valley' 'tests/m2_starter_render_test.gd' 300000 @(
             'STARTER_MOBILE_CAPTURE',
+            '"ok"\s*:\s*true',
+            '"renderer"\s*:\s*"mobile"'
+        )
+    }
+    'planters' {
+        Invoke-ProjectImport
+        Invoke-ScriptCheck 'scripts/m2_planter_assets.gd'
+        Invoke-ScriptCheck 'scripts/m2_hamlet_visual.gd'
+        Invoke-NativeTests @(
+            'm2_planter_asset_test',
+            'm2_planter_placement_test'
+        )
+        Invoke-MobileReview 'planters' 'tests/m2_planter_render_test.gd' 300000 @(
+            'PLANTER_MOBILE_CAPTURE',
             '"ok"\s*:\s*true',
             '"renderer"\s*:\s*"mobile"'
         )

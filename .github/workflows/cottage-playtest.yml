@@ -36,6 +36,7 @@ jobs:
           - paths
           - hamlet
           - starter-valley
+          - planters
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -68,9 +69,10 @@ jobs:
             reports/screenshots/m2-paths/
             reports/screenshots/m2-hamlet/
             reports/screenshots/m2-starter-valley/
+            reports/screenshots/m2-planters/
           if-no-files-found: error
           retention-days: 14
 
-  # Packaging is intentionally owned by the caller rather than this regression
-  # workflow. Cottage failures remain visible, but they no longer suppress an
-  # otherwise verified Android/Windows candidate from being delivered.
+  # Packaging is owned by the caller and can run independently. Private Drive
+  # delivery depends on this entire regression workflow as well as package
+  # verification; a failed shard must block delivery.
