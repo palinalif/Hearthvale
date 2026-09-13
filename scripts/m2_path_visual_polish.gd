@@ -59,7 +59,7 @@ func _append_packed_earth_cells(builder: Dictionary, cells: Array) -> void:
 		var exposed := _exposed_cardinal_edges(cell, occupied)
 		for quadrant in 4:
 			if depth == 0:
-				var omit := _omit_shoulder_quadrant(cell_hash, quadrant, exposed)
+				var omit := _omit_shoulder_quadrant(cell, quadrant, exposed)
 				if omit:
 					_packed_shoulder_omissions += 1
 					continue
@@ -134,31 +134,25 @@ func _append_stepping_stone_cells(builder: Dictionary, cells: Array) -> void:
 	_stepping_offset_stones = 0
 	_stepping_max_span = 0.0
 	var normalized := Region.normalize_cells(cells)
-	# Keep this selection strictly linear-time. The previous local-maxima pass
-	# inspected a 5x5 neighbourhood for every painted cell and caused a real Thor
-	# regression whenever committed path presentation was refreshed during editing.
-	# Hash-shifted macro cells preserve an irregular cadence without that hot loop.
-	var block_size := 5
+	# Linear-time, hash-shifted bucket selection avoids both a visible fixed grid
+	# and the expensive neighbourhood scan that regressed live road painting.
+	var bucket_size := 5
 	var selected := {}
 	for cell: Vector2i in normalized:
-		var band_x := floori(float(cell.x) / float(block_size))
-		var band_y := floori(float(cell.y) / float(block_size))
-		var shift_x := posmod(band_y * 3 + band_y * band_y, block_size)
-		var shift_y := posmod(band_x * 2 + band_x * band_x, block_size)
-		var block := Vector2i(floori(float(cell.x + shift_x) / float(block_size)), floori(float(cell.y + shift_y) / float(block_size)))
-		var score := absi(cell.x * 73856093 ^ cell.y * 19349663 ^ block.x * 83492791 ^ block.y * 2971215073)
-		if not selected.has(block) or score > int((selected[block] as Dictionary).score):
-			selected[block] = {"cell": cell, "score": score}
-	for block in selected:
-		var cell: Vector2i = (selected[block] as Dictionary).cell
+		var shift_x := posmod(cell.y * 3, bucket_size)
+		var shift_y := posmod(cell.x * 2, bucket_size)
+		var bucket := Vector2i(floori(float(cell.x + shift_x) / float(bucket_size)), floori(float(cell.y + shift_y) / float(bucket_size)))
+		var score := absi(cell.x * 73856093 ^ cell.y * 19349663 ^ bucket.x * 83492791 ^ bucket.y * 2971215073)
+		if not selected.has(bucket) or score > int((selected[bucket] as Dictionary).score):
+			selected[bucket] = {"cell": cell, "score": score}
+	for bucket in selected:
+		var cell: Vector2i = (selected[bucket] as Dictionary).cell
 		var point := Region.cell_center(cell)
 		var surface_y := _surface_height(point)
 		var cell_hash := absi(cell.x * 73856093 ^ cell.y * 19349663)
 		var offset_x := (float(posmod(cell_hash, 9)) - 4.0) * Grid.UNIT * 0.055
 		var offset_z := (float(posmod(cell_hash / 11, 9)) - 4.0) * Grid.UNIT * 0.055
 		var center := Vector3(point.x + offset_x, surface_y + TOP_EPSILON * 1.25, point.y + offset_z)
-		# These are intentionally footstep-sized stones (roughly 0.30-0.42 m),
-		# substantially larger than a single 0.125 m structural cell.
 		var size_hash := posmod(cell_hash, 3)
 		var size := Vector2(Grid.UNIT * (2.85 + float(size_hash) * 0.22), Grid.UNIT * (2.35 + float(posmod(cell_hash / 5, 3)) * 0.18))
 		var angle := deg_to_rad(float(posmod(cell_hash, 29) - 14))
@@ -207,8 +201,7 @@ func stats() -> Dictionary:
 	result["stepping_stone_polish"] = {
 		"stones": _stepping_stones,
 		"offset_stones": _stepping_offset_stones,
-		"cadence_period": 5,
-		"scatter_mode": "hash_shifted_macro",
+		"bucket_size_cells": 5,
 		"max_span": _stepping_max_span,
 		"detail_unit": Grid.COTTAGE_DETAIL_UNIT,
 	}
@@ -240,14 +233,27 @@ func _quadrant_touches_exposed_edge(quadrant: int, exposed: int) -> bool:
 	var top := quadrant < 2
 	return (left and (exposed & 1) != 0) or (not left and (exposed & 2) != 0) or (top and (exposed & 4) != 0) or (not top and (exposed & 8) != 0)
 
-func _omit_shoulder_quadrant(cell_hash: int, quadrant: int, exposed: int) -> bool:
-	var touches_exposed := _quadrant_touches_exposed_edge(quadrant, exposed)
-	if touches_exposed:
-		return posmod(cell_hash + quadrant * 11, 3) != 0
-	if exposed == 0:
-		var fallback := posmod(cell_hash / 7, 4)
-		return quadrant == fallback
-	return false
+func _omit_shoulder_quadrant(cell: Vector2i, quadrant: int, exposed: int) -> bool:
+	if exposed == 0: return false
+	var left := quadrant % 2 == 0
+	var top := quadrant < 2
+	var omit := false
+	# Erode in broad deterministic runs along an exposed side, rather than making
+	# each 0.0625 m quadrant independently disappear. That removes the comb/teeth
+	# silhouette while keeping the packed-earth shoulder visibly worn into grass.
+	if left and (exposed & 1) != 0:
+		var run := floori(float(cell.y) / 4.0)
+		omit = omit or posmod(run * 17 + cell.x * 5, 7) < 2
+	if not left and (exposed & 2) != 0:
+		var run := floori(float(cell.y) / 4.0)
+		omit = omit or posmod(run * 19 + cell.x * 3, 7) < 2
+	if top and (exposed & 4) != 0:
+		var run := floori(float(cell.x) / 4.0)
+		omit = omit or posmod(run * 23 + cell.y * 5, 7) < 2
+	if not top and (exposed & 8) != 0:
+		var run := floori(float(cell.x) / 4.0)
+		omit = omit or posmod(run * 29 + cell.y * 3, 7) < 2
+	return omit
 
 func _append_merged_detail_patches(builder: Dictionary, patches: Array, detail: float) -> void:
 	var buckets := {}
