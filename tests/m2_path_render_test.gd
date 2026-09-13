@@ -67,21 +67,28 @@ func _run_scene_checks(capture: bool) -> void:
 	EarthChecks.inspect(self, scene, "committed")
 	EarthChecks.width_cases(self, scene)
 	if capture:
-		scene.cursor = Vector3(24.0, 8.0, 24.0)
-		scene.camera_yaw = -1.1
-		scene.camera_pitch = 0.66
-		scene.camera_distance = 36.0
-		scene._update_camera()
-		scene._update_presentation()
-		scene._refresh_controller_hud()
-		for _i in 4: await RenderingServer.frame_post_draw
-		var image: Image = root.get_texture().get_image()
-		_check(not image.is_empty() and image.get_width() == 1280 and image.get_height() == 720, "1280x720 Mobile painted-path capture exists")
-		_check(image.save_png(screenshot_dir.path_join("all-styles.png")) == OK, "painted-path review capture saved")
-		captures += 1
+		await _capture_view("all-styles.png", Vector3(24.0, 8.0, 24.0), 36.0, -1.1, 0.66, "wide painted-path review capture")
+		await _capture_view("packed-earth-close.png", Vector3(18.0, 8.0, 15.0), 12.5, -1.18, 0.72, "phone-readable packed-earth close capture")
+		await _capture_view("cobblestone-close.png", Vector3(31.5, 8.0, 13.5), 14.5, -1.12, 0.72, "phone-readable cobblestone close capture")
+		await _capture_view("stepping-stones-close.png", Vector3(20.5, 8.0, 28.5), 13.5, -1.05, 0.72, "phone-readable stepping-stone close capture")
 		await EarthChecks.review(self, scene, screenshot_dir)
 	await EarthChecks.lifecycle(self, scene)
 	await _finish_scene()
+
+func _capture_view(file_name: String, target: Vector3, distance: float, yaw: float, pitch: float, label: String) -> void:
+	scene.cursor = target
+	scene.terrain_cursor = target
+	scene.camera_yaw = yaw
+	scene.camera_pitch = pitch
+	scene.camera_distance = distance
+	scene._update_camera()
+	scene._update_presentation()
+	scene._refresh_controller_hud()
+	for _i in 4: await RenderingServer.frame_post_draw
+	var image: Image = root.get_texture().get_image()
+	_check(not image.is_empty() and image.get_width() == 1280 and image.get_height() == 720, label + " exists at 1280x720")
+	_check(image.save_png(screenshot_dir.path_join(file_name)) == OK, label + " saved")
+	captures += 1
 
 func _mesh_is_finite_bounded_grounded(mesh: ArrayMesh) -> bool:
 	if mesh == null: return false
