@@ -38,21 +38,18 @@ func _initialize() -> void:
 	await _press(JOY_BUTTON_A)
 	_check(scene.path_placement_active and scene.path_style_id == "packed_earth" and scene.view_context == "terrain", "style selection enters terrain path painting")
 	_check(scene.landscape_state.document() == before, "starting path painting is read-only")
-	var default_width: float = scene.path_width
+	var initial_width: float = scene.path_width
 	await _press(JOY_BUTTON_DPAD_RIGHT)
-	_check(is_equal_approx(scene.path_width, default_width + 0.25), "D-pad right enlarges the path brush by the normal 0.25 m step")
-	scene.precision_mode = true
+	_check(scene.path_width > initial_width, "D-pad right increases painted-path brush width")
 	await _press(JOY_BUTTON_DPAD_LEFT)
-	_check(is_equal_approx(scene.path_width, default_width + 0.125), "precision mode uses the 0.125 m structural brush-size step")
-	scene.precision_mode = false
-	scene.path_width = default_width
+	_check(is_equal_approx(scene.path_width, initial_width), "D-pad left restores painted-path brush width")
 
 	_aim(Vector2(36.0, fixture_z))
 	await _button_down(JOY_BUTTON_A)
 	_check(scene.path_painting and scene.path_cells.size() > 0, "holding A starts a painted-cell stroke")
-	var painting_width: float = scene.path_width
+	var width_during_stroke: float = scene.path_width
 	await _press(JOY_BUTTON_DPAD_RIGHT)
-	_check(is_equal_approx(scene.path_width, painting_width), "brush size is locked while an A stroke is live")
+	_check(is_equal_approx(scene.path_width, width_during_stroke), "brush width is locked while a path stroke is live")
 	var preview_before := JSON.stringify(scene.landscape_state.document())
 	scene._update_path_preview()
 	_check(JSON.stringify(scene.landscape_state.document()) == preview_before and scene.path_visual.stats().preview_cells > 0, "live painted preview has geometry without mutating authority")
@@ -116,6 +113,23 @@ func _initialize() -> void:
 	_check(scene.backend.voxel_at(cut_position) == cut_material and scene.path_terrain_ownership_count() == 0, "path erase restores owned terrain and releases ownership")
 	await _press(JOY_BUTTON_LEFT_SHOULDER)
 	_check(scene.backend.voxel_at(cut_position) == 0 and scene.path_terrain_ownership_count() == owned_before_save, "undoing path erase restores excavation and ownership")
+
+	# Player-facing erase mode uses the same continuous brush grammar as painting.
+	var erase_mode_before := JSON.stringify(scene.landscape_state.document())
+	var erase_owned_before: int = scene.path_terrain_ownership_count()
+	await _press(JOY_BUTTON_X)
+	_check(scene.path_erase_mode, "X toggles the active path tool into erase mode")
+	scene.path_width = 1.5
+	var scale_value: float = float(scene.backend.voxel_scale)
+	_aim(Vector2((float(cut_position.x) + 0.5) * scale_value, (float(cut_position.z) + 0.5) * scale_value))
+	await _button_down(JOY_BUTTON_A)
+	await _button_up(JOY_BUTTON_A)
+	_check(scene.landscape_state.path_cells("packed_earth").size() < (JSON.parse_string(erase_mode_before).paths[0].cells as Array).size(), "erase stroke removes painted path cells")
+	_check(scene.path_terrain_ownership_count() < erase_owned_before, "erase stroke releases packed-earth terrain ownership")
+	await _press(JOY_BUTTON_LEFT_SHOULDER)
+	_check(JSON.stringify(scene.landscape_state.document()) == erase_mode_before and scene.path_terrain_ownership_count() == erase_owned_before, "undo restores an erase stroke atomically")
+	await _press(JOY_BUTTON_X)
+	_check(not scene.path_erase_mode, "X toggles the path tool back to paint mode")
 
 	scene._begin_path_placement()
 	var cancel_before := JSON.stringify(scene.landscape_state.document())
