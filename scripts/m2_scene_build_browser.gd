@@ -90,6 +90,10 @@ func _input(event: InputEvent) -> void:
 			var focus := get_viewport().gui_get_focus_owner()
 			if focus in _build_browser.cards:
 				(focus as Button).pressed.emit()
+		elif event is InputEventJoypadButton and (event as InputEventJoypadButton).button_index == JOY_BUTTON_DPAD_LEFT:
+			_build_browser.navigate(-1, 0)
+		elif event is InputEventJoypadButton and (event as InputEventJoypadButton).button_index == JOY_BUTTON_DPAD_RIGHT:
+			_build_browser.navigate(1, 0)
 		elif event.is_action_pressed("m1_cycle_left"):
 			_build_browser.next_category(-1)
 		elif event.is_action_pressed("m1_cycle_right"):
