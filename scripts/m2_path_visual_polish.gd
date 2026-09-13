@@ -1,9 +1,5 @@
 extends "res://scripts/m2_path_visual.gd"
 
-## Terrain-cut packed earth should read as worn ground, not a brown ribbon.
-## Saved authority remains on the 0.125 m structural grid; this node never
-## changes path ownership. Presentation may use the supported 0.0625 m detail
-## grid and merge adjacent equal patches back into longer quads.
 var _packed_detail_patches := 0
 var _packed_shoulder_omissions := 0
 var _packed_stone_flecks := 0
@@ -53,19 +49,10 @@ func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
 
 func stats() -> Dictionary:
 	var result := super.stats()
-	result["packed_earth_polish"] = {
-		"detail_patches": _packed_detail_patches,
-		"shoulder_omissions": _packed_shoulder_omissions,
-		"stone_flecks": _packed_stone_flecks,
-		"merged_quads": _packed_merged_quads,
-		"detail_unit": Grid.COTTAGE_DETAIL_UNIT,
-	}
+	result["packed_earth_polish"] = {"detail_patches": _packed_detail_patches, "shoulder_omissions": _packed_shoulder_omissions, "stone_flecks": _packed_stone_flecks, "merged_quads": _packed_merged_quads, "detail_unit": Grid.COTTAGE_DETAIL_UNIT}
 	return result
 
 func _append_merged_detail_patches(builder: Dictionary, patches: Array, detail: float) -> void:
-	# Index each patch by its detail-grid lower-left corner. Reconstruct merged
-	# strips from grid boundaries, so every output vertex remains exactly aligned
-	# to the supported 0.0625 m presentation grid.
 	var buckets := {}
 	for patch: Dictionary in patches:
 		var center: Vector3 = patch.center
@@ -73,26 +60,43 @@ func _append_merged_detail_patches(builder: Dictionary, patches: Array, detail: 
 		var gz := roundi((center.z - detail * 0.5) / detail)
 		var gy := roundi(center.y / 0.0005)
 		var material := int(patch.material)
-		var key := Vector3i(gz, gy, material)
-		if not buckets.has(key): buckets[key] = []
-		(buckets[key] as Array).append(gx)
-	for key: Vector3i in buckets:
-		var xs: Array = buckets[key]
-		xs.sort()
-		var start_x := int(xs[0])
-		var previous_x := start_x
-		for index in range(1, xs.size() + 1):
-			var flush := index == xs.size()
-			var current_x := previous_x + 2 if flush else int(xs[index])
-			if current_x != previous_x + 1:
-				var count := previous_x - start_x + 1
-				var center_x := (float(start_x) + float(count) * 0.5) * detail
-				var center_z := (float(key.x) + 0.5) * detail
-				var center_y := float(key.y) * 0.0005
-				_append_top_quad(builder, Vector3(center_x, center_y, center_z), Vector2(float(count) * detail, detail), key.z)
-				_packed_merged_quads += 1
-				start_x = current_x
-			previous_x = current_x
+		var key := Vector2i(gy, material)
+		if not buckets.has(key): buckets[key] = {}
+		(buckets[key] as Dictionary)[Vector2i(gx, gz)] = true
+	for key: Vector2i in buckets:
+		var remaining: Dictionary = (buckets[key] as Dictionary).duplicate()
+		while not remaining.is_empty():
+			var start := _minimum_grid_cell(remaining)
+			var width := 1
+			while remaining.has(Vector2i(start.x + width, start.y)):
+				width += 1
+			var height := 1
+			while _rectangle_row_exists(remaining, start, width, height):
+				height += 1
+			for dz in height:
+				for dx in width:
+					remaining.erase(Vector2i(start.x + dx, start.y + dz))
+			var center_x := (float(start.x) + float(width) * 0.5) * detail
+			var center_z := (float(start.y) + float(height) * 0.5) * detail
+			var center_y := float(key.x) * 0.0005
+			_append_top_quad(builder, Vector3(center_x, center_y, center_z), Vector2(float(width) * detail, float(height) * detail), key.y)
+			_packed_merged_quads += 1
+
+func _minimum_grid_cell(cells: Dictionary) -> Vector2i:
+	var found := false
+	var result := Vector2i.ZERO
+	for value in cells.keys():
+		var cell: Vector2i = value
+		if not found or cell.y < result.y or (cell.y == result.y and cell.x < result.x):
+			result = cell
+			found = true
+	return result
+
+func _rectangle_row_exists(cells: Dictionary, start: Vector2i, width: int, dz: int) -> bool:
+	for dx in width:
+		if not cells.has(Vector2i(start.x + dx, start.y + dz)):
+			return false
+	return true
 
 func _append_top_quad(builder: Dictionary, center: Vector3, size: Vector2, material_index: int) -> void:
 	var surface: Dictionary = builder["surfaces"][material_index]
@@ -101,12 +105,7 @@ func _append_top_quad(builder: Dictionary, center: Vector3, size: Vector2, mater
 	var indices: Array = surface["indices"]
 	var half := size * 0.5
 	var base := vertices.size()
-	vertices.append_array([
-		center + Vector3(-half.x, 0.0, -half.y),
-		center + Vector3(half.x, 0.0, -half.y),
-		center + Vector3(half.x, 0.0, half.y),
-		center + Vector3(-half.x, 0.0, half.y),
-	])
+	vertices.append_array([center + Vector3(-half.x, 0.0, -half.y), center + Vector3(half.x, 0.0, -half.y), center + Vector3(half.x, 0.0, half.y), center + Vector3(-half.x, 0.0, half.y)])
 	for _i in 4: normals.append(Vector3.UP)
 	indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
 	surface["vertices"] = vertices
