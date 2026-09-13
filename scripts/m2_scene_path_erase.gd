@@ -85,9 +85,9 @@ func _update_presentation() -> void:
 	if path_placement_active and target_label:
 		var mode_name := "ERASE" if path_erase_mode else _path_style_name()
 		var action_name := "erase" if path_erase_mode else "paint"
-		target_label.text = "%s • %.3f m brush • %s\nD-pad L/R size  X paint/erase  Hold A %s  release commit  B cancel/close" % [mode_name, path_width, path_placement_reason, action_name]
+		target_label.text = "%s • %.3f m brush • %s\nD-pad L/R size  X paint/erase  Hold A %s  release commit  LB undo  RB redo  B cancel/close" % [mode_name, path_width, path_placement_reason, action_name]
 
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
 	if path_placement_active and not menu_open and _prompt_row:
-		_set_prompts([["A", "Hold to erase" if path_erase_mode else "Hold to paint"], ["D-PAD L/R", "Brush size"], ["X", "Paint/erase"], ["B", "Cancel/close"], ["LB", "Undo"], ["RS", "Orbit"]])
+		_set_prompts([["A", "Hold to erase" if path_erase_mode else "Hold to paint"], ["D-PAD L/R", "Brush size"], ["X", "Paint/erase"], ["LB", "Undo"], ["RB", "Redo"], ["B", "Cancel/close"]])
