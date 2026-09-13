@@ -4,7 +4,7 @@ extends RefCounted
 ## Authoring lives on the structural 0.125 m visual grid; rendering may derive
 ## finer accents later, but saved authority remains a deterministic cell mask.
 const Grid = preload("res://scripts/visual_grid.gd")
-const DEFAULT_WORLD_SIZE := 48.0
+const DEFAULT_WORLD_SIZE := preload("res://scripts/m2_world_bounds.gd").SIZE
 const PROFILE_RING_CAP := 4
 const NEIGHBOURS := [
 	Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1),

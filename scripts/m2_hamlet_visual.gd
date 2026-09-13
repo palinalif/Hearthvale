@@ -5,7 +5,11 @@ class_name M2HamletVisual
 ## renderer. No lights or simulation live here: these are deliberately cheap,
 ## fine voxel miniatures rebuilt from saved composition records.
 
+const StarterProps = preload("res://scripts/m2_starter_props.gd")
 const FURNITURE_COLOURS := {
+	"well": StarterProps.COLOURS["well"],
+	"chopping_block": StarterProps.COLOURS["chopping_block"],
+	"log_stack": StarterProps.COLOURS["log_stack"],
 	"bench": [Color("#7d5b43"), Color("#594337"), Color("#9a795c"), Color("#6b6f64")],
 	"lantern": [Color("#454a47"), Color("#655344"), Color("#d7a85e"), Color("#8c765c")],
 	"signpost": [Color("#72543f"), Color("#4e3d32"), Color("#967556"), Color("#d1c29b")],
@@ -81,6 +85,7 @@ func _append_furniture(builder: Dictionary, record: Dictionary) -> void:
 		"lantern": _append_lantern(builder, center, basis)
 		"signpost": _append_signpost(builder, center, basis)
 		"barrel_planter": _append_barrel_planter(builder, center, basis)
+		"well", "chopping_block", "log_stack": StarterProps.append(self, builder, center, basis, style_id)
 
 func _append_bench(builder: Dictionary, center: Vector3, basis: Basis) -> void:
 	# Narrow slats and separate supports make the silhouette read at normal

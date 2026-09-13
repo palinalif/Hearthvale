@@ -195,7 +195,8 @@ static func _ground_polygon(renderer: Node, builder: Dictionary, polygon: Packed
 	var high := polygon[0]
 	for point: Vector2 in polygon:
 		low = low.min(point); high = high.max(point)
-	var limit := Vector2i(ceili(48.0 / scale_value), ceili(48.0 / scale_value))
+	var extent: float = preload("res://scripts/m2_world_bounds.gd").SIZE
+	var limit := Vector2i(ceili(extent / scale_value), ceili(extent / scale_value))
 	if renderer.backend != null:
 		var patch: Vector3i = renderer.backend.get("patch_size")
 		limit = Vector2i(patch.x, patch.z)
@@ -286,7 +287,8 @@ static func _grass(renderer: Node, builder: Dictionary, stations: Array, path_id
 		var roots: Array[Vector3] = []
 		for cell: Vector2i in [first, first + step]:
 			var point := (Vector2(cell) + Vector2.ONE * 0.5) * Contact.UNIT
-			if point.x < Contact.UNIT or point.y < Contact.UNIT or point.x > 48.0 - Contact.UNIT or point.y > 48.0 - Contact.UNIT: break
+			var extent: float = preload("res://scripts/m2_world_bounds.gd").SIZE
+			if point.x < Contact.UNIT or point.y < Contact.UNIT or point.x > extent - Contact.UNIT or point.y > extent - Contact.UNIT: break
 			var across := (point - centre).dot(normal) * side
 			if across - Contact.UNIT * 0.71 < float(station["width"]) * 0.30: break
 			var height: float = renderer._surface_height(point)

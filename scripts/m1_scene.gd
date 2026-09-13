@@ -1,7 +1,7 @@
 extends Node3D
 ## Controller-first M1 playtest: one cottage recipe beside a volumetric bank.
 
-const PATCH_SIZE := Vector3i(48, 32, 48)
+const PATCH_SIZE := Vector3i(preload("res://scripts/m2_world_bounds.gd").EXTENT)
 const BUILDING_ID := "building-1"
 const M1PatchGenerator = preload("res://scripts/m1_patch_generator.gd")
 const BuildingWorldScript = preload("res://scripts/building_world.gd")
@@ -740,7 +740,7 @@ func _read_camera_and_cursor(delta: float) -> void:
 		else:
 			if not detail_move_active:
 				var speed := lerpf(2.5, 10.0, pow(magnitude, 0.85)); if precision_mode: speed *= 0.35
-				var forward := Vector3(sin(camera_yaw), 0, cos(camera_yaw)); var right := Vector3(forward.z, 0, -forward.x); cursor += (right * move.x + forward * move.y) * delta * speed; cursor.x = clampf(cursor.x, 0.5, 47.5); cursor.z = clampf(cursor.z, 0.5, 47.5)
+				var forward := Vector3(sin(camera_yaw), 0, cos(camera_yaw)); var right := Vector3(forward.z, 0, -forward.x); cursor += (right * move.x + forward * move.y) * delta * speed; cursor.x = clampf(cursor.x, 0.5, float(PATCH_SIZE.x) - 0.5); cursor.z = clampf(cursor.z, 0.5, float(PATCH_SIZE.z) - 0.5)
 	var orbit_x := Input.get_axis("m1_orbit_left", "m1_orbit_right"); var orbit_y := Input.get_axis("m1_orbit_up", "m1_orbit_down"); camera_yaw += orbit_x * delta * 2.2; camera_pitch = clampf(camera_pitch + orbit_y * delta * 1.5, 0.15, 1.25); var zoom := Input.get_axis("m1_zoom_out", "m1_zoom_in"); camera_distance = clampf(camera_distance - zoom * delta * 18.0, 8, 52)
 	if not detail_move_active and not resize_active and Input.is_action_just_pressed("m1_height_up"): cursor.y = clampf(cursor.y + 1.0, 0.0, 31.0)
 	if not detail_move_active and not resize_active and Input.is_action_just_pressed("m1_height_down"): cursor.y = clampf(cursor.y - 1.0, 0.0, 31.0)
@@ -1212,9 +1212,9 @@ func _focus_selected_building() -> void:
 		var transform_value = view.get("transform", Transform3D.IDENTITY)
 		if transform_value is Transform3D:
 			cursor = transform_value * Vector3(0, 2, 0)
-		cursor.x = clampf(cursor.x, 0.5, 47.5)
+		cursor.x = clampf(cursor.x, 0.5, float(PATCH_SIZE.x) - 0.5)
 		cursor.y = clampf(cursor.y, 0.5, 31.5)
-		cursor.z = clampf(cursor.z, 0.5, 47.5)
+		cursor.z = clampf(cursor.z, 0.5, float(PATCH_SIZE.z) - 0.5)
 		cottage_cursor = cursor
 	camera_yaw = -1.1
 	camera_pitch = 0.66

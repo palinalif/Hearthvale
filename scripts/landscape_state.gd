@@ -22,13 +22,13 @@ const BRIDGE_RENDER_CELL_LIMIT := 8000
 const COMPOSITION_STYLE_IDS := {
 	"garden": ["cottage_flowers", "kitchen_rows", "herb_garden"],
 	"fence": ["rustic_fence", "rustic_gate"],
-	"furniture": ["bench", "lantern", "signpost", "barrel_planter"],
+	"furniture": ["bench", "lantern", "signpost", "barrel_planter", "well", "chopping_block", "log_stack"],
 }
 const COMPOSITION_LIMIT := 96
 const COMPOSITION_MIN_SIZE := 0.125
 const COMPOSITION_MAX_SIZE := 6.0
 const COMPOSITION_RENDER_CELL_LIMIT := 24000
-const EDITABLE_WORLD_SIZE := 48.0
+const EDITABLE_WORLD_SIZE := preload("res://scripts/m2_world_bounds.gd").SIZE
 const Grid = preload("res://scripts/visual_grid.gd")
 const PathRegion = preload("res://scripts/m2_painted_path_region.gd")
 const PathAuthority = preload("res://scripts/m2_painted_path_authority.gd")
@@ -68,7 +68,7 @@ static func validate(value: Dictionary) -> bool:
 		if not p is Array or p.size() != 3: return false
 		for number in p:
 			if not (number is float or number is int) or not is_finite(float(number)): return false
-		if float(p[0]) < 0 or float(p[0]) > 48 or float(p[2]) < 0 or float(p[2]) > 48 or float(p[1]) < 0 or float(p[1]) > 32: return false
+		if float(p[0]) < 0 or float(p[0]) > EDITABLE_WORLD_SIZE or float(p[2]) < 0 or float(p[2]) > EDITABLE_WORLD_SIZE or float(p[1]) < 0 or float(p[1]) > 32: return false
 		if record["kind"] == "tree": trees += 1
 	if trees > TREE_LIMIT: return false
 	for path_value in path_values:
@@ -128,7 +128,7 @@ static func position_of(record: Dictionary) -> Vector3:
 	return Vector3(p[0], p[1], p[2])
 
 func add(kind: String, point: Vector3, seed_value: int, yaw_degrees: float = NAN) -> bool:
-	if not kind in ["tree", "foliage", "rock"] or records.size() >= LIMIT or not point.is_finite() or point.y <= 5.05 or point.y > 32 or point.x < 0 or point.x > 48 or point.z < 0 or point.z > 48: return false
+	if not kind in ["tree", "foliage", "rock"] or records.size() >= LIMIT or not point.is_finite() or point.y <= 5.05 or point.y > 32 or point.x < 0 or point.x > EDITABLE_WORLD_SIZE or point.z < 0 or point.z > EDITABLE_WORLD_SIZE: return false
 	var trees := 0
 	for other in records:
 		if other["kind"] == "tree": trees += 1
@@ -446,4 +446,6 @@ static func _estimated_composition_render_cells(object: Dictionary) -> int:
 	var size: Array = object["size"]
 	var area := float(size[0]) * float(size[1])
 	var base := 24 if str(object["kind"]) == "furniture" else (48 if str(object["kind"]) == "fence" else 72)
+	# The roofed stone well has 204 merged voxel runs at its fixed scale.
+	if str(object.get("style_id", "")) == "well": base = 224
 	return base + ceili(area * 24.0)

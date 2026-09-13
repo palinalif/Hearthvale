@@ -522,15 +522,29 @@ func load_world() -> bool:
 	var source_store: RefCounted = _checkpoint
 	var migrated := false
 	if loaded == null and initial_generator == M1Generator and generator_id == M1Generator.GENERATOR_ID and patch_size == M1Generator.PATCH_SIZE and is_equal_approx(voxel_scale, M1Generator.VOXEL_SCALE):
-		var legacy_store := CheckpointStore.new(checkpoint_root)
-		legacy_store.expected_dimensions = M1Generator.LEGACY_PATCH_SIZE
-		legacy_store.expected_generator_id = M1Generator.LEGACY_GENERATOR_ID
-		legacy_store.require_building_document = require_building_document
-		var legacy: Object = legacy_store.load()
-		if legacy != null:
-			loaded = _upsample_legacy_m1(legacy)
-			source_store = legacy_store
+		# Validate both older envelopes before touching any authoritative data.
+		# CheckpointStore keeps other generator generations out of its GC domain.
+		var previous_store := CheckpointStore.new(checkpoint_root)
+		previous_store.expected_dimensions = M1Generator.Bounds.PREVIOUS_NATIVE_SIZE
+		previous_store.expected_generator_id = M1Generator.Bounds.PREVIOUS_GENERATOR_ID
+		previous_store.require_building_document = require_building_document
+		var previous: Object = previous_store.load()
+		if previous != null:
+			# Reload must also discard unsaved edits in the newly added land.
+			# Build off to the side; do not mutate the live buffer during migration.
+			loaded = M1Generator.expand_previous(previous)
+			source_store = previous_store
 			migrated = loaded != null
+		else:
+			var legacy_store := CheckpointStore.new(checkpoint_root)
+			legacy_store.expected_dimensions = M1Generator.LEGACY_PATCH_SIZE
+			legacy_store.expected_generator_id = M1Generator.LEGACY_GENERATOR_ID
+			legacy_store.require_building_document = require_building_document
+			var legacy: Object = legacy_store.load()
+			if legacy != null:
+				loaded = _upsample_legacy_m1(legacy)
+				source_store = legacy_store
+				migrated = loaded != null
 	if loaded == null:
 		_save_status = "error"; _error = _checkpoint.last_error; return false
 	var loaded_revision: int = source_store.loaded_revision
@@ -548,9 +562,11 @@ func load_world() -> bool:
 
 func _upsample_legacy_m1(source: Object) -> Object:
 	if source == null or source.get_size() != M1Generator.LEGACY_PATCH_SIZE: return null
-	var result: Object = ClassDB.instantiate("VoxelBuffer")
-	result.create(M1Generator.PATCH_SIZE.x, M1Generator.PATCH_SIZE.y, M1Generator.PATCH_SIZE.z)
+	var result: Object = M1Generator.generate()
 	result.set_channel_depth(PatchGenerator.CHANNEL_TYPE, source.get_channel_depth(PatchGenerator.CHANNEL_TYPE))
+	# Clear the ENTIRE old volume before copying runs, so saved excavations and
+	# air do not get refilled by the new starter generator.
+	result.fill_area(0, Vector3i.ZERO, M1Generator.Bounds.PREVIOUS_NATIVE_SIZE, PatchGenerator.CHANNEL_TYPE)
 	# Expand every vertical material run, including caves and disconnected
 	# overhangs. No sampling, surface reconstruction or save rewrite occurs.
 	var dimensions: Vector3i = source.get_size()

@@ -2,13 +2,17 @@ extends "res://scripts/m2_scene_hamlet_details.gd"
 
 const HamletVisual = preload("res://scripts/m2_hamlet_visual.gd")
 
+const StarterFurniture = preload("res://scripts/m2_starter_props.gd")
 const FURNITURE_STYLES := {
+	"well": StarterFurniture.DEFINITIONS["well"],
+	"chopping_block": StarterFurniture.DEFINITIONS["chopping_block"],
+	"log_stack": StarterFurniture.DEFINITIONS["log_stack"],
 	"bench": {"name": "Village bench", "size": Vector2(1.5, 0.625), "summary": "Slatted timber seat with a proper back"},
 	"lantern": {"name": "Path lantern", "size": Vector2(0.5, 0.5), "summary": "Small warm lantern on a dark village post"},
 	"signpost": {"name": "Wooden signpost", "size": Vector2(0.625, 0.625), "summary": "Two crooked direction boards on one post"},
 	"barrel_planter": {"name": "Barrel planter", "size": Vector2(0.75, 0.75), "summary": "Weathered barrel packed with greenery and flowers"},
 }
-const FURNITURE_STYLE_ORDER: Array[String] = ["bench", "lantern", "signpost", "barrel_planter"]
+const FURNITURE_STYLE_ORDER: Array[String] = ["bench", "lantern", "signpost", "barrel_planter", "well", "chopping_block", "log_stack"]
 const FURNITURE_RANDOM_TURN_COUNT := 24
 const FURNITURE_RANDOM_STEP_DEGREES := 15.0
 
@@ -44,7 +48,7 @@ func _install_hamlet_catalogue() -> void:
 		var style: Dictionary = FURNITURE_STYLES[style_id]
 		_add_catalogue_button(box, _hamlet_catalogue_buttons, "%s\n%s" % [style["name"], style["summary"]], _choose_furniture_style.bind(style_id))
 
-	# This catalogue is deliberately bounded to nine choices, so keep it all on
+	# This catalogue is deliberately bounded to twelve choices, so keep it all on
 	# one 720p handheld page rather than adding scrolling. The selected item's
 	# placement HUD still carries the descriptive context once it enters world
 	# placement; this menu only needs fast, readable names.

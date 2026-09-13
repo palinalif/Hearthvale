@@ -3,7 +3,7 @@ param(
     [ValidateSet(
         'native-interaction','native-resize','native-visual',
         'upper-openings','ui-style','detail-grid','fine-prop','foliage-halfsize',
-        'cottage-detail','home-variants','decoration-variants','paths','hamlet'
+        'cottage-detail','home-variants','decoration-variants','paths','hamlet','starter-valley'
     )]
     [string]$Shard
 )
@@ -170,6 +170,18 @@ switch ($Shard) {
         Invoke-MobileReview 'paths' 'tests/m2_path_render_test.gd' 180000 @(
             '"ok"\s*:\s*true',
             '"capture"'
+        )
+    }
+    'starter-valley' {
+        Invoke-NativeTests @(
+            'm2_starter_valley_test',
+            'm2_starter_migration_test',
+            'm2_starter_scene_test'
+        )
+        Invoke-MobileReview 'starter-valley' 'tests/m2_starter_render_test.gd' 300000 @(
+            'STARTER_MOBILE_CAPTURE',
+            '"ok"\s*:\s*true',
+            '"renderer"\s*:\s*"mobile"'
         )
     }
     'hamlet' {
