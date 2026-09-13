@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Excavation = preload("res://scripts/m2_path_terrain_excavation.gd")
+const Grid = preload("res://scripts/visual_grid.gd")
 
 var checks := 0
 var failures := 0
@@ -19,9 +20,6 @@ func _initialize() -> void:
 		return
 	scene.set_process(false)
 
-	# Use a compact 9x9 structural-grid fixture well away from the default home.
-	# Nine cells are wide enough to contain edge, one-voxel shoulder and two-voxel
-	# centre rings in the distance-field profile.
 	var plaza_cells: Array = []
 	for z in range(64, 73):
 		for x in range(64, 73): plaza_cells.append(Vector2i(x, z))
@@ -64,6 +62,23 @@ func _initialize() -> void:
 
 	var profile: Dictionary = scene.path_visual.stats().get("packed_earth", {}).get("profile_depth_steps", {})
 	_check(int(profile.get(2, profile.get("2", 0))) > 0, "committed broad plaza renderer sees depth-two centre cells")
+
+	var sampled_heights: Array[float] = []
+	var samples_valid := true
+	for x in range(64, 73):
+		var world_x := (float(x) + 0.5) * Grid.UNIT
+		var world_z := (float(centre.y) + 0.5) * Grid.UNIT
+		var hit: Dictionary = scene.backend.sample_surface_plane(Vector3(world_x, 8.0, world_z), Vector3.UP, 4.0)
+		samples_valid = samples_valid and bool(hit.get("valid", false))
+		if bool(hit.get("valid", false)):
+			sampled_heights.append(float((hit.get("point", Vector3.ZERO) as Vector3).y))
+	_check(samples_valid and sampled_heights.size() == 9, "native surface sampling stays valid across the excavated plaza")
+	var connected := sampled_heights.size() == 9
+	for index in range(1, sampled_heights.size()):
+		connected = connected and absf(sampled_heights[index] - sampled_heights[index - 1]) <= Grid.UNIT + 0.00001
+	_check(connected, "plaza shoulders change by at most one native voxel per structural column")
+	if sampled_heights.size() == 9:
+		_check(sampled_heights[4] <= sampled_heights[0] - Grid.UNIT * 2.0 + 0.00001, "plaza centre surface is two voxels below its lawn-grade edge")
 
 	scene._undo()
 	var restore_ok := true
