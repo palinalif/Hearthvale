@@ -55,6 +55,31 @@ func _commit_path_erase_stroke() -> bool:
 	_refresh_controller_hud()
 	return true
 
+func _update_path_preview() -> void:
+	if not path_erase_mode:
+		super._update_path_preview()
+		return
+	if not path_visual or not path_placement_active: return
+	var preview_cells: Array = path_cells.duplicate()
+	var point := _path_cursor_point()
+	if point.is_finite():
+		preview_cells = PathRegion.union_cells(preview_cells, PathRegion.brush_cells(point, path_width * 0.5, PathState.EDITABLE_WORLD_SIZE), PathState.EDITABLE_WORLD_SIZE)
+	var signature := "erase|%s|%s|%d" % [JSON.stringify(PathRegion.encode_cells(preview_cells)), path_placement_valid, _terrain_revision()]
+	if signature == _path_preview_signature: return
+	_path_preview_signature = signature
+	if preview_cells.is_empty():
+		path_visual.hide_preview()
+		return
+	path_visual.show_cell_preview(path_style_id, preview_cells, path_placement_valid, path_placement_reason)
+	var erase_colours := [Color("#f29a73"), Color("#ffd08a")] if path_placement_valid else [Color("#d95858"), Color("#ef7676")]
+	if is_instance_valid(path_visual._preview_node) and path_visual._preview_node.mesh:
+		path_visual._preview_node.name = "PathErasePreview"
+		for surface in path_visual._preview_node.mesh.get_surface_count():
+			path_visual._preview_node.mesh.surface_set_material(surface, path_visual._preview_material(erase_colours[mini(surface, 1)], 0.58))
+	if is_instance_valid(path_visual._preview_marker):
+		path_visual._preview_marker.name = "PathErasePreviewMarker"
+		path_visual._preview_marker.material_override = path_visual._preview_material(Color("#ff755f") if path_placement_valid else Color("#d95858"), 0.96)
+
 func _update_presentation() -> void:
 	super._update_presentation()
 	if path_placement_active and target_label:

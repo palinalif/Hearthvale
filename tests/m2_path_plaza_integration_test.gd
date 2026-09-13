@@ -80,6 +80,19 @@ func _initialize() -> void:
 	if sampled_heights.size() == 9:
 		_check(sampled_heights[4] <= sampled_heights[0] - Grid.UNIT * 2.0 + 0.00001, "plaza centre surface is two voxels below its lawn-grade edge")
 
+	var centre_world := Vector3((float(centre.x) + 0.5) * Grid.UNIT, 16.0, (float(centre.y) + 0.5) * Grid.UNIT)
+	var collision: Dictionary = {}
+	var collision_deadline := Time.get_ticks_msec() + 5000
+	while Time.get_ticks_msec() < collision_deadline:
+		await physics_frame
+		var ray := PhysicsRayQueryParameters3D.create(centre_world, Vector3(centre_world.x, 0.0, centre_world.z))
+		collision = scene.get_world_3d().direct_space_state.intersect_ray(ray)
+		if not collision.is_empty() and sampled_heights.size() == 9 and absf(float((collision.position as Vector3).y) - sampled_heights[4]) <= Grid.UNIT + 0.02:
+			break
+	_check(not collision.is_empty(), "packed-earth plaza remains physically collidable after excavation")
+	if not collision.is_empty() and sampled_heights.size() == 9:
+		_check(absf(float((collision.position as Vector3).y) - sampled_heights[4]) <= Grid.UNIT + 0.02, "native collision surface follows the excavated plaza centre")
+
 	scene._undo()
 	var restore_ok := true
 	for entry: Dictionary in originals:

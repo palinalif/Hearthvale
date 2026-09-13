@@ -75,7 +75,6 @@ func _initialize() -> void:
 	_check(scene.backend.voxel_at(cut_position) == cut_material, "LB undo restores the terrain removed by the same path transaction")
 	_check(scene.path_terrain_ownership_count() == 0, "LB undo restores the matching path-terrain ownership state")
 	_check(scene.path_placement_active, "undo keeps the path paint tool active")
-	# Repaint after undo so save/reload exercises canonical painted authority.
 	_aim(Vector2(36.0, fixture_z))
 	await _button_down(JOY_BUTTON_A)
 	_aim(Vector2(44.0, fixture_z))
@@ -91,8 +90,6 @@ func _initialize() -> void:
 	_check(scene.path_terrain_ownership_count() == owned_before_save, "save/reload preserves packed-earth terrain ownership")
 	_check(scene.backend.voxel_at(cut_position) == 0, "reloaded packed-earth ownership still corresponds to the excavated voxel")
 
-	# Repainting the exact packed-earth region as cobblestone must restore terrain
-	# before transferring painted-cell authority to the new material.
 	var packed_cells: Array = scene.landscape_state.path_cells("packed_earth")
 	scene.path_style_id = "cobblestone"
 	scene.path_width = 1.50
@@ -114,7 +111,6 @@ func _initialize() -> void:
 	await _press(JOY_BUTTON_LEFT_SHOULDER)
 	_check(scene.backend.voxel_at(cut_position) == 0 and scene.path_terrain_ownership_count() == owned_before_save, "undoing path erase restores excavation and ownership")
 
-	# Player-facing erase mode uses the same continuous brush grammar as painting.
 	var erase_mode_before := JSON.stringify(scene.landscape_state.document())
 	var erase_owned_before: int = scene.path_terrain_ownership_count()
 	await _press(JOY_BUTTON_X)
@@ -122,6 +118,10 @@ func _initialize() -> void:
 	scene.path_width = 1.5
 	var scale_value: float = float(scene.backend.voxel_scale)
 	_aim(Vector2((float(cut_position.x) + 0.5) * scale_value, (float(cut_position.z) + 0.5) * scale_value))
+	scene._path_preview_signature = ""
+	scene._update_path_preview()
+	_check(scene._path_preview_signature.begins_with("erase|") and scene.path_visual.stats().preview_cells > 0, "erase mode owns a distinct preview path")
+	_check(is_instance_valid(scene.path_visual._preview_marker), "erase mode keeps an explicit erase marker visible")
 	await _button_down(JOY_BUTTON_A)
 	await _button_up(JOY_BUTTON_A)
 	_check(scene.landscape_state.path_cells("packed_earth").size() < (JSON.parse_string(erase_mode_before).paths[0].cells as Array).size(), "erase stroke removes painted path cells")
