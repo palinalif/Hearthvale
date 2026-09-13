@@ -53,15 +53,16 @@ func _install_place_home_action() -> void:
 	var margin := _building_panel.get_child(0) as MarginContainer
 	var box := margin.get_child(0) as VBoxContainer
 	var title := box.get_child(0) as Label
-	title.text = "HOMES & DETAILS"
-	_add_building_button(box, "Place new home", _open_home_catalogue)
-	_place_home_button = box.get_child(box.get_child_count() - 1) as Button
-	box.move_child(_place_home_button, 1)
+	title.text = "HOME DETAILS"
 	for button in _building_buttons:
 		if button.text.begins_with("Material:"): button.text = "Wall colour"
 	_add_building_button(box, "Roof colour", _cycle_selected_roof)
-	var ordered: Array[Button] = [_place_home_button]
-	for prefix in ["Duplicate", "Add window", "Add door", "Add flower box", "Add shutter", "Wall colour", "Roof colour", "Needs placement", "Close"]:
+	for child in box.get_children():
+		if child is Button and str((child as Button).text) in ["Add window", "Add door", "Add flower box", "Add shutter"]:
+			box.remove_child(child)
+			child.queue_free()
+	var ordered: Array[Button] = []
+	for prefix in ["Duplicate", "Wall colour", "Roof colour", "Needs placement", "Close"]:
 		for child in box.get_children():
 			if child is Button and (child as Button).text.begins_with(prefix) and child not in ordered: ordered.append(child)
 	for index in ordered.size(): box.move_child(ordered[index], index + 1)

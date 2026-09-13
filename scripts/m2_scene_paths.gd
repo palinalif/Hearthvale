@@ -49,10 +49,12 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	super._process(delta)
 	if path_placement_active and not menu_open:
+		# Presentation is deliberately skipped while an edit is static to avoid
+		# rebuilding cottage/UI state every frame. Drive the disposable preview
+		# explicitly here so hold-A feedback remains visible throughout a drag.
 		_update_path_validity()
 		if path_painting: _sample_path_stroke()
 		_update_path_preview()
-		_refresh_controller_hud()
 
 func _build_roads_catalogue() -> void:
 	_roads_catalogue_panel = _make_catalogue_panel("RoadsCatalogue", Vector2(540, 410))
@@ -186,7 +188,6 @@ func _begin_path_placement() -> void:
 
 func _read_camera_and_cursor(delta: float) -> void:
 	super._read_camera_and_cursor(delta)
-	if path_placement_active: _update_path_validity()
 
 func _update_brush_preview() -> void:
 	if not path_placement_active:
@@ -371,12 +372,21 @@ func _restore_landscape(document: Dictionary) -> void:
 	_refresh_path_visual(true)
 
 func _on_backend_changed() -> void:
+	var started := Time.get_ticks_usec()
 	super._on_backend_changed()
+	var upstream_ms := float(Time.get_ticks_usec() - started) / 1000.0
+	started = Time.get_ticks_usec()
 	_refresh_path_visual(true)
+	var rebuild_ms := float(Time.get_ticks_usec() - started) / 1000.0
+	if OS.is_debug_build():
+		print("THOR_TERRAIN_CHANGE " + JSON.stringify({"upstream_ms": upstream_ms, "path_rebuild_ms": rebuild_ms, "total_ms": upstream_ms + rebuild_ms, "path_count": landscape_state.paths.size()}))
 
 func _refresh_path_visual(force: bool = false) -> void:
 	if not path_visual: return
 	if backend and path_visual.has_method("attach_backend"): path_visual.attach_backend(backend)
+	if backend and path_visual.has_method("set_authoritative_terrain_change"):
+		var edit_bounds: AABB = backend.get_last_edit_bounds() if backend.has_method("get_last_edit_bounds") else AABB()
+		path_visual.set_authoritative_terrain_change(_terrain_revision(), edit_bounds)
 	var signature := JSON.stringify(landscape_state.paths) + "|" + str(_terrain_revision())
 	if not force and signature == _path_render_signature: return
 	_path_render_signature = signature
@@ -440,12 +450,47 @@ func _candidate_cells_fit_limits(values: Array) -> bool:
 	return PathState.validate(proposed)
 
 func _cells_hit_home_interior(values: Array) -> bool:
-	for cell: Vector2i in PathRegion.normalize_cells(values, PathState.EDITABLE_WORLD_SIZE):
+	# BuildingWorld materializes a presentation-safe view. Fetch it once per
+	# brush test: a path stamp tests several corners per cell, so fetching it in
+	# _segment_hits_home_interior multiplied that work by every sampled point.
+	var buildings: Array = building_world.get_buildings()
+	var cells: Array = PathRegion.normalize_cells(values, PathState.EDITABLE_WORLD_SIZE)
+	if cells.is_empty() or buildings.is_empty(): return false
+	# A wide brush can contain thousands of structural cells. First reject homes
+	# whose conservative world-space bounds cannot overlap the stamped region;
+	# retained homes still use the exact local-space interior predicate below.
+	var cell_half := PathGrid.UNIT * 0.49
+	var stamp_low := Vector2(INF, INF)
+	var stamp_high := Vector2(-INF, -INF)
+	for cell: Vector2i in cells:
 		var centre := PathRegion.cell_center(cell)
-		var half := PathGrid.UNIT * 0.49
-		for offset in [Vector2.ZERO, Vector2(-half, -half), Vector2(half, -half), Vector2(half, half), Vector2(-half, half)]:
+		var cell_low := centre - Vector2.ONE * cell_half
+		var cell_high := centre + Vector2.ONE * cell_half
+		stamp_low = Vector2(minf(stamp_low.x, cell_low.x), minf(stamp_low.y, cell_low.y))
+		stamp_high = Vector2(maxf(stamp_high.x, cell_high.x), maxf(stamp_high.y, cell_high.y))
+	var nearby_buildings: Array = []
+	for building: Dictionary in buildings:
+		var transform_value = building.get("transform", Transform3D.IDENTITY)
+		var dimensions: Vector3 = building.get("dimensions", Vector3.ZERO)
+		if not transform_value is Transform3D or dimensions.x <= 0.0 or dimensions.z <= 0.0: continue
+		var building_transform: Transform3D = transform_value as Transform3D
+		var home_half := dimensions * 0.5
+		var home_low := Vector2(INF, INF)
+		var home_high := Vector2(-INF, -INF)
+		for local_corner: Vector3 in [Vector3(-home_half.x, 0.0, -home_half.z), Vector3(home_half.x, 0.0, -home_half.z), Vector3(home_half.x, 0.0, home_half.z), Vector3(-home_half.x, 0.0, home_half.z)]:
+			var world_corner: Vector3 = building_transform * local_corner
+			var home_corner := Vector2(world_corner.x, world_corner.z)
+			home_low = Vector2(minf(home_low.x, home_corner.x), minf(home_low.y, home_corner.y))
+			home_high = Vector2(maxf(home_high.x, home_corner.x), maxf(home_high.y, home_corner.y))
+		if home_high.x < stamp_low.x or home_low.x > stamp_high.x or home_high.y < stamp_low.y or home_low.y > stamp_high.y: continue
+		nearby_buildings.append(building)
+	if nearby_buildings.is_empty(): return false
+	for cell: Vector2i in cells:
+		var centre := PathRegion.cell_center(cell)
+		for offset in [Vector2.ZERO, Vector2(-cell_half, -cell_half), Vector2(cell_half, -cell_half), Vector2(cell_half, cell_half), Vector2(-cell_half, cell_half)]:
 			var point: Vector2 = centre + offset
-			if _segment_hits_home_interior(point, point): return true
+			for building: Dictionary in nearby_buildings:
+				if _segment_crosses_home_interior(point, point, building): return true
 	return false
 
 func _segment_hits_home_interior(a: Vector2, b: Vector2) -> bool:

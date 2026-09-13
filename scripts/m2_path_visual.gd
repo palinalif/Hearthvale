@@ -19,27 +19,69 @@ var _style_nodes: Dictionary = {}
 var _preview_node: MeshInstance3D
 var _preview_marker: MeshInstance3D
 var _stats: Dictionary = {"styles": {}, "draw_calls": 0, "geometry_cells": 0, "preview_cells": 0}
+var _preview_surface_heights: Dictionary = {}
+var _preview_terrain_revision := -1
+var _cache_surface_heights := false
 
 func attach_backend(value: Node) -> void:
+	if backend == value: return
 	backend = value
+	_preview_surface_heights.clear()
+	_preview_terrain_revision = -1
+
+## A live path preview may be rebuilt repeatedly during one unchanged terrain
+## revision. Cache its per-cell surface probes so preview mesh construction does
+## not scan the voxel column for every previously painted cell each time.
+func set_preview_terrain_revision(revision: int) -> void:
+	if revision == _preview_terrain_revision: return
+	_preview_terrain_revision = revision
+	_preview_surface_heights.clear()
+
+## Committed path geometry usually survives a terrain edit unchanged. Retain
+## sampled column heights for the whole path network and invalidate only cells
+## around the exact edited terrain bounds, so a local sculpt does not rescan
+## every path column on Android.
+func set_authoritative_terrain_change(revision: int, edit_bounds: AABB) -> void:
+	if revision == _preview_terrain_revision: return
+	_preview_terrain_revision = revision
+	if edit_bounds.size == Vector3.ZERO:
+		_preview_surface_heights.clear()
+		return
+	var min_cell := Vector2i(floori(edit_bounds.position.x / Grid.UNIT) - 2, floori(edit_bounds.position.z / Grid.UNIT) - 2)
+	var max_cell := Vector2i(ceili(edit_bounds.end.x / Grid.UNIT) + 2, ceili(edit_bounds.end.z / Grid.UNIT) + 2)
+	for key in _preview_surface_heights.keys():
+		var cell: Vector2i = key
+		if cell.x >= min_cell.x and cell.x <= max_cell.x and cell.y >= min_cell.y and cell.y <= max_cell.y:
+			_preview_surface_heights.erase(cell)
 
 func rebuild(path_values: Array, terrain_backend: Node = null) -> void:
 	if terrain_backend != null: backend = terrain_backend
-	_clear_authoritative_nodes()
+	var started := Time.get_ticks_usec()
+	_stats = {"styles": {}, "draw_calls": 0, "geometry_cells": 0, "preview_cells": _stats.get("preview_cells", 0)}
+	_cache_surface_heights = true
 	var geometry_cells := 0
+	var rebuilt_styles: Dictionary = {}
 	for style_id in STYLE_ORDER:
+		var style_started := Time.get_ticks_usec()
 		var cells := _cells_for_style(path_values, style_id)
-		if cells.is_empty(): continue
+		if cells.is_empty():
+			_remove_authoritative_style(style_id)
+			continue
 		var builder := _new_builder()
 		_append_cells(builder, style_id, cells)
 		var mesh := _mesh_from_builder(builder, STYLE_COLOURS[style_id])
-		if mesh == null: continue
-		var node := MeshInstance3D.new()
-		node.name = "PathBatch_" + style_id
+		if mesh == null:
+			_remove_authoritative_style(style_id)
+			continue
+		var node: MeshInstance3D = _style_nodes.get(style_id, null)
+		if not is_instance_valid(node):
+			node = MeshInstance3D.new()
+			node.name = "PathBatch_" + style_id
+			add_child(node)
 		node.mesh = mesh
 		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(node)
 		_style_nodes[style_id] = node
+		rebuilt_styles[style_id] = {"cells": cells.size(), "ms": float(Time.get_ticks_usec() - style_started) / 1000.0}
 		geometry_cells += cells.size()
 		_stats["styles"][style_id] = {"geometry": true, "surfaces": mesh.get_surface_count(), "cells": cells.size()}
 		if style_id == "packed_earth":
@@ -49,8 +91,14 @@ func rebuild(path_values: Array, terrain_backend: Node = null) -> void:
 				var step := int(profile[cell])
 				depths[step] = int(depths.get(step, 0)) + 1
 			_stats["packed_earth"] = {"cells": cells.size(), "profile_depth_steps": depths, "triangles": _builder_triangles(builder), "vertices": _builder_vertices(builder)}
+	# Reuse the three stable style nodes. Replacing their meshes avoids a
+	# queue_free/recreate burst that temporarily doubled native mesh memory on
+	# Android whenever terrain under a path changed.
 	_stats["draw_calls"] = _style_nodes.size()
 	_stats["geometry_cells"] = geometry_cells
+	_cache_surface_heights = false
+	if OS.is_debug_build():
+		print("THOR_PATH_REBUILD " + JSON.stringify({"total_ms": float(Time.get_ticks_usec() - started) / 1000.0, "styles": rebuilt_styles, "cells": geometry_cells}))
 
 func show_cell_preview(style_id: String, cell_values: Array, valid: bool, reason: String = "") -> void:
 	hide_preview()
@@ -113,6 +161,12 @@ func _clear_authoritative_nodes() -> void:
 	_style_nodes.clear()
 	_stats = {"styles": {}, "draw_calls": 0, "geometry_cells": 0, "preview_cells": _stats.get("preview_cells", 0)}
 
+func _remove_authoritative_style(style_id: String) -> void:
+	var node: Node = _style_nodes.get(style_id, null)
+	if is_instance_valid(node):
+		node.queue_free()
+	_style_nodes.erase(style_id)
+
 func _cells_for_style(path_values: Array, style_id: String) -> Array:
 	var cells: Array = []
 	for value in path_values:
@@ -145,6 +199,16 @@ func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
 		_append_box(builder, centre, size, Basis.IDENTITY, material_index)
 
 func _surface_height(point: Vector2) -> float:
+	if _cache_surface_heights:
+		var preview_cell := Vector2i(floori(point.x / Grid.UNIT), floori(point.y / Grid.UNIT))
+		if _preview_surface_heights.has(preview_cell):
+			return float(_preview_surface_heights[preview_cell])
+		var height := _surface_height_uncached(point)
+		_preview_surface_heights[preview_cell] = height
+		return height
+	return _surface_height_uncached(point)
+
+func _surface_height_uncached(point: Vector2) -> float:
 	if backend == null or not backend.has_method("voxel_at"): return 8.0
 	var scale_value := maxf(0.001, float(backend.get("voxel_scale")))
 	var patch: Vector3i = backend.get("patch_size")

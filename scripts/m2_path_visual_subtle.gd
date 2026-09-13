@@ -18,7 +18,9 @@ func _path_material(colour: Color) -> StandardMaterial3D:
 
 func show_cell_preview(style_id: String, cell_values: Array, valid: bool, reason: String = "") -> void:
 	_building_live_preview = true
+	_cache_surface_heights = true
 	super.show_cell_preview(style_id, cell_values, valid, reason)
+	_cache_surface_heights = false
 	_building_live_preview = false
 
 func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
@@ -29,5 +31,5 @@ func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
 	for cell: Vector2i in normalized:
 		var point := Region.cell_center(cell)
 		var surface_y := _surface_height(point)
-		var material_index := posmod(cell.x * 17 + cell.y * 31, 7) == 0 as int
+		var material_index := 1 if posmod(cell.x * 17 + cell.y * 31, 7) == 0 else 0
 		_append_top_quad(builder, Vector3(point.x, surface_y + TOP_EPSILON * 1.4, point.y), Vector2.ONE * Grid.UNIT * 0.94, material_index)

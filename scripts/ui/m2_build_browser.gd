@@ -5,10 +5,11 @@ signal item_chosen(item: Dictionary)
 signal category_changed(category: String)
 signal house_requested
 signal landscape_requested
-const CATEGORIES := [
+const DEFAULT_CATEGORIES := [
 	["windows", "Windows"], ["doors", "Doors"], ["wall", "Wall decor"],
 	["roof", "Roof decor"], ["homes", "Homes"],
 ]
+var categories: Array = DEFAULT_CATEGORIES.duplicate(true)
 var category := "windows"
 var remembered: Dictionary = {}
 var entries: Array[Dictionary] = []
@@ -17,6 +18,7 @@ var tabs: Array[Button] = []
 var grid: GridContainer
 var scroll: ScrollContainer
 var status: Label
+var category_row: HBoxContainer
 var _stack: VBoxContainer
 
 func _init() -> void:
@@ -33,27 +35,20 @@ func _init() -> void:
 	_stack = VBoxContainer.new()
 	_stack.add_theme_constant_override("separation", 8)
 	add_child(_stack)
-	var heading := HBoxContainer.new()
-	_stack.add_child(heading)
-	for spec in CATEGORIES:
-		var tab := Button.new()
-		tab.text = spec[1]
-		tab.toggle_mode = true
-		tab.custom_minimum_size = Vector2(92, 36)
-		tab.pressed.connect(select_category.bind(str(spec[0])))
-		tab.set_meta("category", spec[0])
-		heading.add_child(tab)
-		tabs.append(tab)
+	category_row = HBoxContainer.new()
+	_stack.add_child(category_row)
+	_rebuild_category_tabs()
 	var spacer := Control.new()
+	spacer.name = "CategorySpacer"
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	heading.add_child(spacer)
+	category_row.add_child(spacer)
 	for label in ["House options", "Landscape"]:
 		var button := Button.new()
 		button.text = label
 		button.custom_minimum_size.y = 36
 		if label == "House options": button.pressed.connect(func(): house_requested.emit())
 		else: button.pressed.connect(func(): landscape_requested.emit())
-		heading.add_child(button)
+		category_row.add_child(button)
 	scroll = ScrollContainer.new()
 	scroll.name = "CatalogueScroll"
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -71,14 +66,43 @@ func _init() -> void:
 	status.add_theme_font_size_override("font_size", 16)
 	_stack.add_child(status)
 
+func set_categories(values: Array) -> void:
+	if values.is_empty(): return
+	categories = values.duplicate(true)
+	var valid := false
+	for spec in categories:
+		if str(spec[0]) == category: valid = true
+	if not valid: category = str(categories[0][0])
+	_rebuild_category_tabs()
+	select_category(category)
+
+func _rebuild_category_tabs() -> void:
+	if category_row == null: return
+	for tab in tabs:
+		if is_instance_valid(tab):
+			category_row.remove_child(tab)
+			tab.queue_free()
+	tabs.clear()
+	for index in categories.size():
+		var spec: Array = categories[index]
+		var tab := Button.new()
+		tab.text = str(spec[1])
+		tab.toggle_mode = true
+		tab.custom_minimum_size = Vector2(92, 36)
+		tab.pressed.connect(select_category.bind(str(spec[0])))
+		tab.set_meta("category", spec[0])
+		category_row.add_child(tab)
+		category_row.move_child(tab, index)
+		tabs.append(tab)
+
 func set_entries(values: Array[Dictionary]) -> void:
 	entries = values.duplicate(true)
 	select_category(category)
 
 func select_category(value: String) -> void:
 	var valid := false
-	for spec in CATEGORIES:
-		if spec[0] == value: valid = true
+	for spec in categories:
+		if str(spec[0]) == value: valid = true
 	if not valid: return
 	category = value
 	for tab in tabs: tab.set_pressed_no_signal(str(tab.get_meta("category")) == category)
@@ -142,7 +166,8 @@ func _remember(card: Button) -> void:
 	scroll.ensure_control_visible.call_deferred(card)
 
 func _describe(item: Dictionary) -> void:
-	status.text = str(item["name"])
+	var summary := str(item.get("summary", ""))
+	status.text = str(item["name"]) if summary.is_empty() else "%s • %s" % [item["name"], summary]
 
 func restore_focus() -> void:
 	if not is_visible_in_tree() or cards.is_empty(): return
@@ -161,9 +186,9 @@ func navigate(horizontal: int, vertical: int) -> void:
 
 func next_category(direction: int) -> void:
 	var index := 0
-	for i in CATEGORIES.size():
-		if CATEGORIES[i][0] == category: index = i
-	select_category(str(CATEGORIES[posmod(index + direction, CATEGORIES.size())][0]))
+	for i in categories.size():
+		if str(categories[i][0]) == category: index = i
+	select_category(str(categories[posmod(index + direction, categories.size())][0]))
 
 func apply_thumbnail(id: String, texture: Texture2D) -> void:
 	for card in cards:
@@ -173,9 +198,6 @@ func apply_thumbnail(id: String, texture: Texture2D) -> void:
 
 func fit(viewport_size: Vector2, prompt_top: float) -> void:
 	var width := viewport_size.x - 32
-	# Reduce the content minimum before assigning the narrower panel size.
-	# Otherwise eight old columns clamp size.x and prevent a smaller window
-	# from ever switching down to the six columns it actually needs.
 	grid.columns = maxi(1, floori((width - 32) / 134.0))
 	position = Vector2(16, viewport_size.y * 0.5)
 	size = Vector2(width, maxf(0, minf(viewport_size.y - 12, prompt_top - 8) - position.y))

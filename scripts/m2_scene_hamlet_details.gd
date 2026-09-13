@@ -27,6 +27,7 @@ var detail_kind := ""
 var detail_style_id := ""
 var detail_size := Vector2.ZERO
 var detail_yaw_quarters := 0
+var detail_yaw_degrees := 0.0
 var detail_placement_valid := false
 var detail_placement_reason := ""
 var _detail_before: Dictionary = {}
@@ -35,6 +36,11 @@ var _detail_building_revision := -1
 var _detail_terrain_revision := -1
 var _detail_preview_signature := ""
 var _detail_render_signature := ""
+var _detail_edit_id := -1
+var _detail_selected_id := -1
+var _detail_selected_colour := ""
+const DETAIL_EDIT_COLOURS: Array[String] = ["natural", "sage", "blue", "berry", "cream"]
+const DETAIL_SELECT_RADIUS := 1.25
 
 # Explicit aliases used by tests and by feature-specific entry points.
 var garden_placement_active := false
@@ -85,6 +91,24 @@ func _input(event: InputEvent) -> void:
 	if _blocked_until_accept_release:
 		super._input(event)
 		return
+	if _detail_selected_id > 0 and not detail_placement_active and not menu_open and not tools_open and not detail_open:
+		if event.is_action_pressed("m1_accept"):
+			_begin_selected_detail_move()
+		elif event.is_action_pressed("m1_tools"):
+			_cycle_selected_detail_colour()
+		elif event.is_action_pressed("m1_cancel"):
+			_detail_selected_id = -1
+			_set_status("Outdoor decor deselected")
+			_refresh_controller_hud()
+		else:
+			super._input(event)
+			return
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("m1_accept") and not detail_placement_active and not menu_open and not tools_open and not detail_open and view_context == "terrain":
+		if _select_detail_near_cursor():
+			get_viewport().set_input_as_handled()
+			return
 	if _hamlet_catalogue_open and not menu_open:
 		if event.is_action_pressed("m1_cancel") or event.is_action_pressed("m1_tools"):
 			_return_to_build_catalogue()
@@ -176,6 +200,7 @@ func _begin_detail_placement(kind: String, style_id: String, size: Vector2, yaw_
 		detail_style_id = style_id
 		detail_size = size
 		detail_yaw_quarters = posmod(yaw_quarters, 4)
+		detail_yaw_degrees = float(detail_yaw_quarters) * 90.0
 		detail_placement_valid = false
 		detail_placement_reason = "Find a terrain surface"
 		_detail_before = landscape_state.document()
@@ -196,6 +221,79 @@ func _begin_detail_placement(kind: String, style_id: String, size: Vector2, yaw_
 		_update_detail_preview()
 		_sync_detail_aliases()
 		_refresh_controller_hud()
+
+func _select_detail_near_cursor() -> bool:
+	var point := _path_cursor_point()
+	if not point.is_finite(): return false
+	var best_id := -1
+	var best_distance := INF
+	for value in landscape_state.composition:
+		if not value is Dictionary: continue
+		var record: Dictionary = value
+		var kind := str(record.get("kind", ""))
+		if kind not in ["garden", "fence", "furniture"]: continue
+		var position: Array = record.get("position", [])
+		if position.size() != 2: continue
+		var distance := point.distance_to(Vector2(float(position[0]), float(position[1])))
+		var size_value: Array = record.get("size", [1.0, 1.0])
+		var reach := maxf(DETAIL_SELECT_RADIUS, maxf(float(size_value[0]), float(size_value[1])) * 0.55)
+		if distance <= reach and distance < best_distance:
+			best_distance = distance
+			best_id = int(record.get("id", -1))
+	if best_id < 1: return false
+	_detail_selected_id = best_id
+	var selected := _composition_record(best_id)
+	_detail_selected_colour = str(selected.get("colour_id", ""))
+	_set_status("%s selected • A move • X colour • B deselect" % _composition_label(selected))
+	_refresh_controller_hud()
+	return true
+
+func _composition_record(object_id: int) -> Dictionary:
+	for value in landscape_state.composition:
+		if value is Dictionary and int((value as Dictionary).get("id", -1)) == object_id: return (value as Dictionary).duplicate(true)
+	return {}
+
+func _composition_label(record: Dictionary) -> String:
+	var definition := _detail_definition(str(record.get("kind", "")), str(record.get("style_id", "")))
+	return str(definition.get("name", str(record.get("kind", "Outdoor decor")).capitalize()))
+
+func _begin_selected_detail_move() -> void:
+	var record := _composition_record(_detail_selected_id)
+	if record.is_empty(): _detail_selected_id = -1; return
+	var position: Array = record.get("position", [])
+	var size_value: Array = record.get("size", [])
+	if position.size() != 2 or size_value.size() != 2: return
+	_detail_edit_id = _detail_selected_id
+	_detail_selected_id = -1
+	detail_kind = str(record.get("kind", ""))
+	detail_style_id = str(record.get("style_id", ""))
+	detail_size = Vector2(float(size_value[0]), float(size_value[1]))
+	detail_yaw_quarters = int(record.get("yaw_quarters", 0))
+	detail_yaw_degrees = float(record.get("yaw_degrees", detail_yaw_quarters * 90.0))
+	_detail_selected_colour = str(record.get("colour_id", ""))
+	cursor.x = float(position[0]); cursor.z = float(position[1])
+	_begin_detail_placement(detail_kind, detail_style_id, detail_size, detail_yaw_quarters)
+	if detail_placement_active:
+		detail_yaw_degrees = float(record.get("yaw_degrees", detail_yaw_quarters * 90.0))
+		_refresh_detail_visual(true)
+		_set_status("Move %s • A place • left/right rotate • B cancel" % _composition_label(record))
+
+func _cycle_selected_detail_colour() -> void:
+	var record := _composition_record(_detail_selected_id)
+	if record.is_empty(): _detail_selected_id = -1; return
+	var current := str(record.get("colour_id", ""))
+	var index := DETAIL_EDIT_COLOURS.find(current)
+	var next_colour := DETAIL_EDIT_COLOURS[0] if index < 0 else DETAIL_EDIT_COLOURS[(index + 1) % DETAIL_EDIT_COLOURS.size()]
+	var before := landscape_state.document()
+	var position: Array = record.get("position", [])
+	var yaw_degrees := float(record.get("yaw_degrees", NAN))
+	if landscape_state.update_composition(_detail_selected_id, Vector2(float(position[0]), float(position[1])), int(record.get("yaw_quarters", 0)), yaw_degrees, next_colour):
+		_landscape_before = before
+		_record_history("landscape")
+		_detail_selected_colour = next_colour
+		_refresh_detail_visual(true)
+		_set_status("%s colour: %s • A move • X colour • B deselect" % [_composition_label(record), next_colour.capitalize()])
+	_refresh_controller_hud()
 
 func _close_hamlet_for_world() -> void:
 	_hamlet_catalogue_open = false
@@ -269,12 +367,18 @@ func _hide_detail_preview() -> void:
 
 func _rotate_detail(direction: int) -> void:
 	if not detail_placement_active: return
-	detail_yaw_quarters = posmod(detail_yaw_quarters + direction, 4)
+	if detail_kind == "furniture":
+		var step := 1.0 if precision_mode else 15.0
+		detail_yaw_degrees = fposmod(detail_yaw_degrees + step * float(signi(direction)), 360.0)
+		detail_yaw_quarters = posmod(roundi(detail_yaw_degrees / 90.0), 4)
+	else:
+		detail_yaw_quarters = posmod(detail_yaw_quarters + direction, 4)
+		detail_yaw_degrees = float(detail_yaw_quarters) * 90.0
 	_detail_preview_signature = ""
 	_update_detail_validity()
 	_update_detail_preview()
 	_sync_detail_aliases()
-	_set_status("%s • rotated %d° • %s" % [_detail_style_name(), detail_yaw_quarters * 90, detail_placement_reason])
+	_set_status("%s • rotated %.0f° • %s" % [_detail_style_name(), detail_yaw_degrees, detail_placement_reason])
 	_refresh_controller_hud()
 
 func _rotate_garden(direction: int) -> void:
@@ -303,20 +407,27 @@ func _commit_detail() -> bool:
 	_landscape_before = _detail_before.duplicate(true)
 	var placed_kind := detail_kind
 	var placed_name := _detail_style_name()
-	var object_id := landscape_state.add_composition(detail_kind, detail_style_id, point, detail_size, detail_yaw_quarters)
-	if object_id < 1:
+	var object_id := _detail_edit_id
+	var changed := false
+	if _detail_edit_id > 0:
+		changed = landscape_state.update_composition(_detail_edit_id, point, detail_yaw_quarters, detail_yaw_degrees if detail_kind == "furniture" else NAN, _detail_selected_colour)
+	else:
+		object_id = landscape_state.add_composition(detail_kind, detail_style_id, point, detail_size, detail_yaw_quarters, detail_yaw_degrees if detail_kind == "furniture" else NAN)
+		changed = object_id > 0
+	if not changed:
 		_landscape_before.clear()
-		detail_placement_reason = "%s limit reached" % _detail_kind_label()
+		detail_placement_reason = "%s could not be updated" % _detail_kind_label()
 		_sync_detail_aliases()
 		return false
 	var margin := 0.10 if detail_kind == "garden" else 0.02
-	landscape_state.clear_records_in_footprint(point, detail_size, detail_yaw_quarters, margin)
+	landscape_state.clear_records_in_footprint(point, detail_size, detail_yaw_quarters, margin, detail_yaw_degrees if detail_kind == "furniture" else NAN)
 	if garden_visual: garden_visual.reset_records(landscape_state.records)
+	var was_edit := _detail_edit_id > 0
 	_finish_detail_placement()
 	_record_history("landscape")
 	_landscape_before.clear()
 	_refresh_detail_visual(true)
-	_set_status("%s placed • LB undo" % placed_name)
+	_set_status(("%s moved • LB undo" if was_edit else "%s placed • LB undo") % placed_name)
 	_refresh_controller_hud()
 	return placed_kind in ["garden", "fence"]
 
@@ -344,6 +455,7 @@ func _finish_detail_placement() -> void:
 	_detail_preview_signature = ""
 	_detail_before.clear()
 	_detail_before_serialized = ""
+	_detail_edit_id = -1
 	_sync_detail_aliases()
 
 func _cancel_garden_placement(reason: String = "Garden cancelled") -> void:
@@ -395,15 +507,22 @@ func _detail_kind_label() -> String:
 func _candidate_detail_fits_limits(kind: String, style_id: String, point: Vector2, size: Vector2, yaw_quarters: int) -> bool:
 	var proposed := landscape_state.document()
 	var values: Array = proposed.get("composition", [])
-	values.append({"id": int(proposed["next_id"]), "kind": kind, "style_id": style_id, "position": [point.x, point.y], "size": [size.x, size.y], "yaw_quarters": posmod(yaw_quarters, 4)})
+	var candidate := {"id": int(proposed["next_id"]), "kind": kind, "style_id": style_id, "position": [point.x, point.y], "size": [size.x, size.y], "yaw_quarters": posmod(yaw_quarters, 4)}
+	if kind == "furniture": candidate["yaw_degrees"] = detail_yaw_degrees
+	values.append(candidate)
 	proposed["composition"] = values
 	proposed["next_id"] = int(proposed["next_id"]) + 1
 	return DetailState.validate(proposed)
 
 func _composition_hits_home(center: Vector2, size: Vector2, yaw_quarters: int) -> bool:
-	var rotated := Vector2(size.y, size.x) if posmod(yaw_quarters, 4) % 2 == 1 else size
-	var half := rotated * 0.5 + Vector2.ONE * 0.08
-	var candidate := [center + Vector2(-half.x, -half.y), center + Vector2(half.x, -half.y), center + Vector2(half.x, half.y), center + Vector2(-half.x, half.y)]
+	var angle := deg_to_rad(detail_yaw_degrees) if detail_kind == "furniture" else float(posmod(yaw_quarters, 4)) * PI * 0.5
+	var half := size * 0.5 + Vector2.ONE * 0.08
+	var cosine := cos(angle)
+	var sine := sin(angle)
+	var candidate: Array = []
+	for corner in [Vector2(-half.x, -half.y), Vector2(half.x, -half.y), Vector2(half.x, half.y), Vector2(-half.x, half.y)]:
+		var rotated := Vector2(corner.x * cosine - corner.y * sine, corner.x * sine + corner.y * cosine)
+		candidate.append(center + rotated)
 	for building: Dictionary in building_world.get_buildings():
 		var transform_value = building.get("transform", Transform3D.IDENTITY)
 		if not transform_value is Transform3D: continue
@@ -453,8 +572,13 @@ func _restore_landscape(document: Dictionary) -> void:
 	_refresh_detail_visual(true)
 
 func _on_backend_changed() -> void:
+	var started := Time.get_ticks_usec()
 	super._on_backend_changed()
+	var upstream_ms := float(Time.get_ticks_usec() - started) / 1000.0
+	started = Time.get_ticks_usec()
 	_refresh_detail_visual(true)
+	if OS.is_debug_build():
+		print("THOR_BACKEND_DETAILS " + JSON.stringify({"upstream_ms": upstream_ms, "details_ms": float(Time.get_ticks_usec() - started) / 1000.0, "items": landscape_state.composition.size()}))
 
 func _refresh_detail_visual(force: bool = false) -> void:
 	if not composition_visual: return
@@ -474,7 +598,7 @@ func _refresh_fence_visual(force: bool = false) -> void:
 func _update_presentation() -> void:
 	super._update_presentation()
 	if not detail_placement_active or not target_label: return
-	target_label.text = "%s • %d° • %s\nA place  left/right rotate  B cancel  RS orbit" % [_detail_style_name(), detail_yaw_quarters * 90, detail_placement_reason]
+	target_label.text = "%s • %.0f° • %s\nA place  left/right rotate  B cancel  RS orbit" % [_detail_style_name(), detail_yaw_degrees, detail_placement_reason]
 	_update_detail_preview()
 
 func _refresh_controller_hud() -> void:
@@ -493,7 +617,7 @@ func _refresh_controller_hud() -> void:
 	if not detail_placement_active: return
 	_mode_label.text = "TERRAIN"
 	_tool_name.text = _detail_style_name()
-	_tool_meta.text = "%d° • %s" % [detail_yaw_quarters * 90, detail_placement_reason]
+	_tool_meta.text = "%.0f° • %s" % [detail_yaw_degrees, detail_placement_reason]
 	_tool_card.visible = true
 	if _terrain_panel: _terrain_panel.visible = false
 	if _building_panel: _building_panel.visible = false

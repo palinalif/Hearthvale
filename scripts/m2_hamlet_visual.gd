@@ -22,8 +22,6 @@ func rebuild_furniture(composition_values: Array, terrain_backend: Node = null) 
 	for node in _furniture_nodes:
 		if is_instance_valid(node): node.queue_free()
 	_furniture_nodes.clear()
-	var builders := {}
-	for style_id in FURNITURE_COLOURS: builders[style_id] = _new_builder(4)
 	_furniture_count = 0
 	_furniture_geometry_cells = 0
 	for value in composition_values:
@@ -31,24 +29,24 @@ func rebuild_furniture(composition_values: Array, terrain_backend: Node = null) 
 		var record: Dictionary = value
 		if str(record.get("kind", "")) != "furniture": continue
 		var style_id := str(record.get("style_id", ""))
-		if not builders.has(style_id): continue
-		_append_furniture(builders[style_id], record)
-		_furniture_count += 1
-	for style_id in FURNITURE_COLOURS:
-		var builder: Dictionary = builders[style_id]
+		if not FURNITURE_COLOURS.has(style_id): continue
+		var builder := _new_builder(4)
+		_append_furniture(builder, record)
 		_furniture_geometry_cells += _builder_cell_count(builder)
-		var mesh := _mesh_from_builder(builder, FURNITURE_COLOURS[style_id])
+		var mesh := _mesh_from_builder(builder, _record_colours(FURNITURE_COLOURS[style_id], record))
 		if mesh == null: continue
 		var node := MeshInstance3D.new()
-		node.name = "FurnitureBatch_" + style_id
+		node.name = "Furniture_%s" % int(record.get("id", 0))
+		node.set_meta("composition_id", int(record.get("id", 0)))
 		node.mesh = mesh
 		add_child(node)
 		_furniture_nodes.append(node)
+		_furniture_count += 1
 
-func show_furniture_preview(style_id: String, point: Vector2, size: Vector2, yaw_quarters: int, valid: bool) -> void:
+func show_furniture_preview(style_id: String, point: Vector2, size: Vector2, yaw_degrees: float, valid: bool) -> void:
 	hide_furniture_preview()
 	if not FURNITURE_COLOURS.has(style_id) or not point.is_finite(): return
-	var record := {"kind": "furniture", "style_id": style_id, "position": [point.x, point.y], "size": [size.x, size.y], "yaw_quarters": posmod(yaw_quarters, 4)}
+	var record := {"kind": "furniture", "style_id": style_id, "position": [point.x, point.y], "size": [size.x, size.y], "yaw_quarters": posmod(roundi(yaw_degrees / 90.0), 4), "yaw_degrees": fposmod(yaw_degrees, 360.0)}
 	var builder := _new_builder(4)
 	_append_furniture(builder, record)
 	var mesh := _mesh_from_builder(builder, _preview_colours(FURNITURE_COLOURS[style_id], valid), true)
@@ -74,7 +72,9 @@ func _append_furniture(builder: Dictionary, record: Dictionary) -> void:
 	var style_id := str(record.get("style_id", ""))
 	var point := _point(record.get("position", []))
 	if not point.is_finite(): return
-	var basis := Basis(Vector3.UP, float(posmod(int(record.get("yaw_quarters", 0)), 4)) * PI * 0.5)
+	var yaw_degrees := float(posmod(int(record.get("yaw_quarters", 0)), 4)) * 90.0
+	if record.has("yaw_degrees"): yaw_degrees = fposmod(float(record.get("yaw_degrees", 0.0)), 360.0)
+	var basis := Basis(Vector3.UP, deg_to_rad(yaw_degrees))
 	var center := Vector3(point.x, _surface_height(point), point.y)
 	match style_id:
 		"bench": _append_bench(builder, center, basis)
