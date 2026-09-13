@@ -11,6 +11,20 @@ var _cobble_raised_stones := 0
 var _stepping_stones := 0
 var _stepping_offset_stones := 0
 var _stepping_max_span := 0.0
+var _style_lookup: Dictionary = {}
+var _transition_edges := 0
+var _transition_cobble_chips := 0
+var _transition_step_stones := 0
+
+func rebuild(path_values: Array, terrain_backend: Node = null) -> void:
+	_style_lookup.clear()
+	_transition_edges = 0
+	_transition_cobble_chips = 0
+	_transition_step_stones = 0
+	for style_id in STYLE_ORDER:
+		for cell: Vector2i in _cells_for_style(path_values, style_id):
+			_style_lookup[cell] = style_id
+	super.rebuild(path_values, terrain_backend)
 
 func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
 	if style_id == "packed_earth":
@@ -97,6 +111,23 @@ func _append_cobblestone_cells(builder: Dictionary, cells: Array) -> void:
 			_append_top_quad(builder, center, size, 1 if material_index else 0)
 			_cobble_stones += 1
 			if lifted: _cobble_raised_stones += 1
+		_append_cobble_transition_chips(builder, cell, point, surface_y, detail, gap)
+
+func _append_cobble_transition_chips(builder: Dictionary, cell: Vector2i, point: Vector2, surface_y: float, detail: float, gap: float) -> void:
+	for entry in _foreign_cardinal_neighbours(cell, "cobblestone"):
+		var neighbour_style := str(entry.style)
+		if neighbour_style != "packed_earth" and neighbour_style != "stepping_stones": continue
+		var direction: Vector2i = entry.direction
+		var hash_value := absi(cell.x * 92821 ^ cell.y * 68917 ^ direction.x * 2833 ^ direction.y * 4099)
+		if posmod(hash_value, 3) == 0: continue
+		var edge := Vector2(float(direction.x), float(direction.y))
+		var center_2d := point + edge * (Grid.UNIT * 0.52)
+		var center := Vector3(center_2d.x, surface_y + TOP_EPSILON * 1.55, center_2d.y)
+		var along_x := direction.y != 0
+		var size := Vector2(detail * (1.35 if along_x else 0.72) - gap, detail * (0.72 if along_x else 1.35) - gap)
+		_append_rotated_top_quad(builder, center, size, deg_to_rad(float(posmod(hash_value, 9) - 4)), posmod(hash_value, 5) == 0 as int)
+		_transition_cobble_chips += 1
+		_transition_edges += 1
 
 func _append_stepping_stone_cells(builder: Dictionary, cells: Array) -> void:
 	_stepping_stones = 0
@@ -130,6 +161,26 @@ func _append_stepping_stone_cells(builder: Dictionary, cells: Array) -> void:
 		_stepping_stones += 1
 		if absf(offset_x) > 0.00001 or absf(offset_z) > 0.00001: _stepping_offset_stones += 1
 		_stepping_max_span = maxf(_stepping_max_span, maxf(size.x, size.y))
+	_append_step_transition_stones(builder, normalized)
+
+func _append_step_transition_stones(builder: Dictionary, cells: Array) -> void:
+	for cell: Vector2i in cells:
+		var neighbours := _foreign_cardinal_neighbours(cell, "stepping_stones")
+		if neighbours.is_empty(): continue
+		var hash_value := absi(cell.x * 19349663 ^ cell.y * 83492791)
+		if posmod(hash_value, 4) != 0: continue
+		var entry: Dictionary = neighbours[posmod(hash_value / 7, neighbours.size())]
+		if str(entry.style) != "packed_earth": continue
+		var direction: Vector2i = entry.direction
+		var point := Region.cell_center(cell) + Vector2(float(direction.x), float(direction.y)) * Grid.UNIT * 0.58
+		var surface_y := _surface_height(point)
+		var size := Vector2(Grid.UNIT * 2.15, Grid.UNIT * 1.72)
+		var angle := deg_to_rad(float(posmod(hash_value, 25) - 12))
+		_append_rotated_top_quad(builder, Vector3(point.x, surface_y + TOP_EPSILON * 1.6, point.y), size, angle, 1 if posmod(hash_value, 5) == 0 else 0)
+		_transition_step_stones += 1
+		_transition_edges += 1
+		_stepping_stones += 1
+		_stepping_max_span = maxf(_stepping_max_span, size.x)
 
 func stats() -> Dictionary:
 	var result := super.stats()
@@ -154,6 +205,19 @@ func stats() -> Dictionary:
 		"max_span": _stepping_max_span,
 		"detail_unit": Grid.COTTAGE_DETAIL_UNIT,
 	}
+	result["style_transitions"] = {
+		"edges": _transition_edges,
+		"cobble_chips": _transition_cobble_chips,
+		"step_stones": _transition_step_stones,
+	}
+	return result
+
+func _foreign_cardinal_neighbours(cell: Vector2i, own_style: String) -> Array:
+	var result: Array = []
+	for direction: Vector2i in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
+		var style := str(_style_lookup.get(cell + direction, ""))
+		if style != "" and style != own_style:
+			result.append({"direction": direction, "style": style})
 	return result
 
 func _exposed_cardinal_edges(cell: Vector2i, occupied: Dictionary) -> int:

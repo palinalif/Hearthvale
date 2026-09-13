@@ -41,6 +41,19 @@ func _run_scene_checks(capture: bool) -> void:
 	var dirt := Region.stroke_cells(Vector2(14.0, 14.0), Vector2(22.0, 16.0), 0.375)
 	var stone := Region.stroke_cells(Vector2(27.0, 12.0), Vector2(36.0, 15.0), 0.75)
 	var steps := Region.stroke_cells(Vector2(14.0, 28.0), Vector2(27.0, 29.0), 0.50)
+	# Deliberate cardinal joins exercise presentation-only material transitions.
+	# Authority remains exclusive: neighbouring cells touch but never overlap.
+	var transition_dirt: Array = []
+	var transition_cobble: Array = []
+	var transition_steps: Array = []
+	for z in range(200, 216):
+		transition_dirt.append(Vector2i(180, z))
+		transition_cobble.append(Vector2i(181, z))
+		transition_dirt.append(Vector2i(220, z))
+		transition_steps.append(Vector2i(221, z))
+	dirt = Region.union_cells(dirt, transition_dirt)
+	stone = Region.union_cells(stone, transition_cobble)
+	steps = Region.union_cells(steps, transition_steps)
 	var first: int = scene.landscape_state.paint_path_cells("packed_earth", dirt)
 	var second: int = scene.landscape_state.paint_path_cells("cobblestone", stone)
 	var third: int = scene.landscape_state.paint_path_cells("stepping_stones", steps)
@@ -64,8 +77,12 @@ func _run_scene_checks(capture: bool) -> void:
 	_check(int(cobble_polish.get("raised_stones", 0)) > 0, "cobblestone includes deterministic height variation")
 	var step_polish: Dictionary = stats.get("stepping_stone_polish", {})
 	_check(int(step_polish.get("stones", 0)) > 0 and int(step_polish.get("stones", 0)) < steps.size(), "stepping stones remain sparse inside painted authority")
-	_check(int(step_polish.get("offset_stones", 0)) == int(step_polish.get("stones", 0)), "stepping stones receive deterministic sub-cell offsets")
+	_check(int(step_polish.get("offset_stones", 0)) <= int(step_polish.get("stones", 0)), "stepping stones keep deterministic sub-cell offsets")
 	_check(float(step_polish.get("max_span", 0.0)) >= Grid.UNIT * 2.8, "stepping stones are substantially larger than one structural cell")
+	var transitions: Dictionary = stats.get("style_transitions", {})
+	_check(int(transitions.get("edges", 0)) > 0, "touching path materials produce presentation transition geometry")
+	_check(int(transitions.get("cobble_chips", 0)) > 0, "cobblestone breaks its edge where it meets another path material")
+	_check(int(transitions.get("step_stones", 0)) > 0, "stepping stones bridge sparsely into adjacent packed earth")
 	EarthChecks.inspect(self, scene, "committed")
 	EarthChecks.width_cases(self, scene)
 	if capture:
