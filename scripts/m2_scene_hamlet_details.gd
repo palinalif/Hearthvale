@@ -63,6 +63,9 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	super._process(delta)
+	if view_context == "terrain" and not menu_open and not tools_open and not detail_open and not detail_placement_active:
+		var hover_record := _detail_near_cursor_record()
+		if not hover_record.is_empty(): _show_outdoor_detail_hover(hover_record)
 	if detail_placement_active and not menu_open:
 		_update_detail_validity()
 		_update_detail_preview()
@@ -91,22 +94,14 @@ func _input(event: InputEvent) -> void:
 	if _blocked_until_accept_release:
 		super._input(event)
 		return
-	if _detail_selected_id > 0 and not detail_placement_active and not menu_open and not tools_open and not detail_open:
-		if event.is_action_pressed("m1_accept"):
+	if not detail_placement_active and not menu_open and not tools_open and not detail_open and view_context == "terrain":
+		if event.is_action_pressed("m1_accept") and _select_detail_near_cursor():
 			_begin_selected_detail_move()
-		elif event.is_action_pressed("m1_tools"):
-			_cycle_selected_detail_colour()
-		elif event.is_action_pressed("m1_cancel"):
-			_detail_selected_id = -1
-			_set_status("Outdoor decor deselected")
-			_refresh_controller_hud()
-		else:
-			super._input(event)
+			get_viewport().set_input_as_handled()
 			return
-		get_viewport().set_input_as_handled()
-		return
-	if event.is_action_pressed("m1_accept") and not detail_placement_active and not menu_open and not tools_open and not detail_open and view_context == "terrain":
-		if _select_detail_near_cursor():
+		if event.is_action_pressed("m1_tools") and _select_detail_near_cursor():
+			_cycle_selected_detail_colour()
+			_detail_selected_id = -1
 			get_viewport().set_input_as_handled()
 			return
 	if _hamlet_catalogue_open and not menu_open:
@@ -623,3 +618,43 @@ func _refresh_controller_hud() -> void:
 	if _building_panel: _building_panel.visible = false
 	if _world_prompt: _world_prompt.visible = false
 	_set_prompts([["A", "Place"], ["LEFT/RIGHT", "Rotate"], ["B", "Cancel"], ["RS", "Orbit"], ["LT/RT", "Zoom"]])
+
+func _detail_near_cursor_record() -> Dictionary:
+	var point := _path_cursor_point()
+	if not point.is_finite(): return {}
+	var best: Dictionary = {}
+	var best_distance := INF
+	for value in landscape_state.composition:
+		if not value is Dictionary: continue
+		var record: Dictionary = value
+		var kind := str(record.get("kind", ""))
+		if kind not in ["garden", "fence", "furniture"]: continue
+		var position: Array = record.get("position", [])
+		if position.size() != 2: continue
+		var distance := point.distance_to(Vector2(float(position[0]), float(position[1])))
+		var size_value: Array = record.get("size", [1.0, 1.0])
+		var reach := maxf(DETAIL_SELECT_RADIUS, maxf(float(size_value[0]), float(size_value[1])) * 0.55)
+		if distance <= reach and distance < best_distance:
+			best_distance = distance
+			best = record.duplicate(true)
+	return best
+
+func _show_outdoor_detail_hover(record: Dictionary) -> void:
+	if not _hover_outline or not _hover_prompt or not camera: return
+	var position: Array = record.get("position", [])
+	if position.size() != 2: return
+	var point := Vector2(float(position[0]), float(position[1]))
+	var size_value: Array = record.get("size", [1.0, 1.0])
+	var size := Vector2(float(size_value[0]), float(size_value[1]))
+	var y := cursor.y
+	if composition_visual and composition_visual.has_method("_surface_height"):
+		y = float(composition_visual.call("_surface_height", point)) + 0.45
+	var center := Vector3(point.x, y, point.y)
+	if camera.is_position_behind(center): return
+	var screen := camera.unproject_position(center)
+	var radius := clampf(maxf(size.x, size.y) * 14.0, 24.0, 70.0)
+	_hover_outline.position = screen - Vector2(radius, radius * 0.65)
+	_hover_outline.size = Vector2(radius * 2.0, radius * 1.3)
+	_hover_outline.visible = true
+	_hover_prompt.text = "%s   A Move   X Options" % _composition_label(record)
+	_hover_prompt.position = screen + Vector2(-radius, -radius * 0.95)

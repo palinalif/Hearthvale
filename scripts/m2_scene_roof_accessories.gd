@@ -41,6 +41,12 @@ func _ready() -> void:
 	_build_roof_decor_picker()
 	_refresh_roof_accessories()
 
+func _process(delta: float) -> void:
+	super._process(delta)
+	if view_context == "building" and not menu_open and not tools_open and not roof_accessory_placement_active and hovered_detail_id.is_empty():
+		var record := _roof_accessory_at_screen(edit_pointer)
+		if not record.is_empty(): _show_roof_accessory_hover(record)
+
 func _install_roof_decor_action() -> void:
 	if not _building_panel: return
 	var margin: MarginContainer = _building_panel.get_child(0) as MarginContainer
@@ -88,20 +94,14 @@ func _build_roof_decor_picker() -> void:
 	_roof_decor_buttons.append(_roof_decor_remove_button)
 
 func _input(event: InputEvent) -> void:
-	if not _roof_selected_id.is_empty() and not roof_accessory_placement_active and not menu_open and not tools_open and view_context == "building":
-		if event.is_action_pressed("m1_accept"):
+	if not roof_accessory_placement_active and not _roof_decor_picker_open and not menu_open and not tools_open and view_context == "building" and hovered_detail_id.is_empty():
+		if event.is_action_pressed("m1_accept") and _select_roof_accessory(edit_pointer):
 			_begin_selected_roof_move()
-		elif event.is_action_pressed("m1_tools"):
+			get_viewport().set_input_as_handled(); return
+		if event.is_action_pressed("m1_tools") and _select_roof_accessory(edit_pointer):
 			_cycle_selected_roof_colour()
-		elif event.is_action_pressed("m1_cancel"):
 			_roof_selected_id = ""
-			_set_status("Roof decor deselected")
-		else:
-			super._input(event)
-			return
-		get_viewport().set_input_as_handled(); return
-	if event.is_action_pressed("m1_accept") and not roof_accessory_placement_active and not _roof_decor_picker_open and not menu_open and not tools_open and view_context == "building" and _select_roof_accessory(edit_pointer):
-		get_viewport().set_input_as_handled(); return
+			get_viewport().set_input_as_handled(); return
 	if roof_accessory_placement_active and not menu_open:
 		if event.is_action_pressed("m1_cancel") or event.is_action_pressed("m1_tools"):
 			_cancel_roof_accessory_placement()
@@ -294,7 +294,7 @@ func _select_roof_accessory(point: Vector2) -> bool:
 	_roof_selected_id = best
 	var selected := _roof_accessory_record(best)
 	_roof_selected_colour = str(selected.get("colour_id", ""))
-	_set_status("%s selected • A move • X colour • B deselect" % _roof_accessory_label(str(selected.get("asset_id", ""))))
+	_set_status("%s • A move • X options" % _roof_accessory_label(str(selected.get("asset_id", ""))))
 	return true
 
 func _begin_selected_roof_move() -> void:
@@ -507,3 +507,50 @@ func _refresh_controller_hud() -> void:
 		_tool_name.text = "Place roof decor"
 		_tool_meta.text = _roof_accessory_label(roof_accessory_asset_id)
 		_set_prompts([["LS", "Move"], ["◀▶", "Rotate"], ["A", "Place"], ["B", "Cancel"], ["RS", "Orbit"]])
+func _roof_accessory_at_screen(point: Vector2) -> Dictionary:
+	var view: Dictionary = building_world.get_building(selected_building_id)
+	if view.is_empty() or not camera: return {}
+	var transform_value = view.get("transform", null)
+	if not transform_value is Transform3D: return {}
+	var transform: Transform3D = transform_value
+	var dimensions: Vector3 = view.get("dimensions", Vector3(15, 6, 12))
+	var best: Dictionary = {}
+	var best_distance := ROOF_PICK_RADIUS
+	for value in _roof_accessories_for(selected_building_id):
+		if not value is Dictionary: continue
+		var record: Dictionary = value
+		var u := clampf(float(record.get("u", 0.5)), 0.05, 0.95)
+		var v := clampf(float(record.get("v", 0.5)), 0.05, 0.95)
+		var x := lerpf(-dimensions.x * 0.36, dimensions.x * 0.36, u)
+		var z := lerpf(-dimensions.z * 0.36, dimensions.z * 0.36, v)
+		var y := _roof_height_at(str(view.get("roof_profile", "gentle_gable")), dimensions, x, z) + 0.5
+		var world := transform * Vector3(x, y, z)
+		if camera.is_position_behind(world): continue
+		var screen := camera.unproject_position(world)
+		var distance := screen.distance_to(point)
+		if distance < best_distance:
+			best_distance = distance
+			best = record.duplicate(true)
+	return best
+
+func _show_roof_accessory_hover(record: Dictionary) -> void:
+	var selected_id := str(record.get("id", ""))
+	if selected_id.is_empty(): return
+	if not _hover_outline or not _hover_prompt or not camera: return
+	var view: Dictionary = building_world.get_building(selected_building_id)
+	if view.is_empty(): return
+	var transform: Transform3D = view.get("transform", Transform3D.IDENTITY)
+	var dimensions: Vector3 = view.get("dimensions", Vector3(15, 6, 12))
+	var u := clampf(float(record.get("u", 0.5)), 0.05, 0.95)
+	var v := clampf(float(record.get("v", 0.5)), 0.05, 0.95)
+	var x := lerpf(-dimensions.x * 0.36, dimensions.x * 0.36, u)
+	var z := lerpf(-dimensions.z * 0.36, dimensions.z * 0.36, v)
+	var y := _roof_height_at(str(view.get("roof_profile", "gentle_gable")), dimensions, x, z) + 1.2
+	var world := transform * Vector3(x, y, z)
+	if camera.is_position_behind(world): return
+	var screen := camera.unproject_position(world)
+	_hover_outline.position = screen - Vector2(34, 42)
+	_hover_outline.size = Vector2(68, 84)
+	_hover_outline.visible = true
+	_hover_prompt.text = "%s   A Move   X Options" % _roof_accessory_label(str(record.get("asset_id", "")))
+	_hover_prompt.position = screen + Vector2(-34, -68); _hover_prompt.visible = true
