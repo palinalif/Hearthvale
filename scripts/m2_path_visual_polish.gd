@@ -6,6 +6,7 @@ var _packed_shoulder_omissions := 0
 var _packed_exposed_shoulder_patches := 0
 var _packed_stone_flecks := 0
 var _packed_merged_quads := 0
+var _packed_path_contact_patches := 0
 var _cobble_stones := 0
 var _cobble_raised_stones := 0
 var _stepping_stones := 0
@@ -44,6 +45,7 @@ func _append_packed_earth_cells(builder: Dictionary, cells: Array) -> void:
 	_packed_exposed_shoulder_patches = 0
 	_packed_stone_flecks = 0
 	_packed_merged_quads = 0
+	_packed_path_contact_patches = 0
 	var normalized := Region.normalize_cells(cells)
 	var occupied := {}
 	for cell: Vector2i in normalized: occupied[cell] = true
@@ -57,12 +59,16 @@ func _append_packed_earth_cells(builder: Dictionary, cells: Array) -> void:
 		var surface_y := _surface_height(point)
 		var cell_hash := absi(cell.x * 73856093 ^ cell.y * 19349663)
 		var exposed := _exposed_cardinal_edges(cell, occupied)
+		var path_contacts := _foreign_path_contact_edges(cell, "packed_earth")
 		for quadrant in 4:
 			if depth == 0:
-				var omit := _omit_shoulder_quadrant(cell, quadrant, exposed)
+				var touches_path := _quadrant_touches_exposed_edge(quadrant, path_contacts)
+				var omit := false if touches_path else _omit_shoulder_quadrant(cell, quadrant, exposed)
 				if omit:
 					_packed_shoulder_omissions += 1
 					continue
+				if touches_path:
+					_packed_path_contact_patches += 1
 				if _quadrant_touches_exposed_edge(quadrant, exposed):
 					_packed_exposed_shoulder_patches += 1
 			var sx := -1 if quadrant % 2 == 0 else 1
@@ -188,6 +194,7 @@ func stats() -> Dictionary:
 		"detail_patches": _packed_detail_patches,
 		"shoulder_omissions": _packed_shoulder_omissions,
 		"exposed_shoulder_patches": _packed_exposed_shoulder_patches,
+		"path_contact_patches": _packed_path_contact_patches,
 		"stone_flecks": _packed_stone_flecks,
 		"merged_quads": _packed_merged_quads,
 		"detail_unit": Grid.COTTAGE_DETAIL_UNIT,
@@ -219,6 +226,18 @@ func _foreign_cardinal_neighbours(cell: Vector2i, own_style: String) -> Array:
 		if style != "" and style != own_style:
 			result.append({"direction": direction, "style": style})
 	return result
+
+func _foreign_path_contact_edges(cell: Vector2i, own_style: String) -> int:
+	var mask := 0
+	var style := str(_style_lookup.get(cell + Vector2i(-1, 0), ""))
+	if style != "" and style != own_style: mask |= 1
+	style = str(_style_lookup.get(cell + Vector2i(1, 0), ""))
+	if style != "" and style != own_style: mask |= 2
+	style = str(_style_lookup.get(cell + Vector2i(0, -1), ""))
+	if style != "" and style != own_style: mask |= 4
+	style = str(_style_lookup.get(cell + Vector2i(0, 1), ""))
+	if style != "" and style != own_style: mask |= 8
+	return mask
 
 func _exposed_cardinal_edges(cell: Vector2i, occupied: Dictionary) -> int:
 	var mask := 0
