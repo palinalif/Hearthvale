@@ -1,0 +1,125 @@
+{
+  "authored_utc_date": "2026-09-13",
+  "tool": "MagicaVoxel MCP v2",
+  "upstream_tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "provenance": "Created and edited directly through connected MagicaVoxel MCP v2 tools; not runtime procedural geometry or image generation",
+  "operations": [
+    "create_voxel_model",
+    "set_palette_color",
+    "copy_model",
+    "fill_box",
+    "clear_region",
+    "copy_region",
+    "place_voxel",
+    "find_connected_components",
+    "render_model_turntable",
+    "take_snapshot"
+  ],
+  "base": "Tapered octagonal barrel; eight one-cell-deep stave seams; two continuous iron hoops; separate overhanging rim; soil inset two cells below rim top",
+  "planting": {
+    "flowers": "Four flower heads at Y=9,10,11,12 with branched asymmetric leaf sprays",
+    "herbs": "Two broad stepped leaf sprays plus a taller offset herb shoot; no flowers",
+    "light": "Two sparse shoots and one cream flower; exposed soil and negative space"
+  },
+  "palette": {
+    "1": "79563f",
+    "2": "638348",
+    "3": "486d46",
+    "4": "87a657",
+    "5": "df9a8b",
+    "6": "c7b897",
+    "7": "9a795c",
+    "8": "594337",
+    "9": "4b514d",
+    "10": "6b6f64",
+    "11": "473629"
+  },
+  "voxel_unit": 0.0625,
+  "pivot_voxels": [
+    6,
+    0,
+    6
+  ],
+  "promotion": "SIZE metadata only restored to a common even horizontal volume; no voxel moved, rescaled, removed or recoloured",
+  "mcp_components": {
+    "flowers": 1,
+    "herbs": 1,
+    "light": 1
+  },
+  "raw_preview_caveat": "MCP orthographic contact sheets display increasing Y downward; these are source inspections, not Godot captures or visual approval",
+  "license": "Project-authored; development MCP upstream is MIT",
+  "records": [
+    {
+      "source": "hearthvale_planter_flowers.vox",
+      "staged_source": "hearthvale_planter_flowers.vox",
+      "staged_sha256": "f19ee073744b6f2254c7133a42e2473788ff1112a6135cdc2fb132c9babc8681",
+      "source_sha256": "f19ee073744b6f2254c7133a42e2473788ff1112a6135cdc2fb132c9babc8681",
+      "staged_dimensions": [
+        12,
+        14,
+        12
+      ],
+      "declared_dimensions": [
+        12,
+        14,
+        12
+      ],
+      "voxels": 562,
+      "geometry_and_palette_unchanged": true
+    },
+    {
+      "source": "hearthvale_planter_herbs.vox",
+      "staged_source": "hearthvale_planter_herbs.vox",
+      "staged_sha256": "4ab6593a7f9d891da7db3531298a3ff210fc2866ccd35f626feff0cc43aab59e",
+      "source_sha256": "4ab6593a7f9d891da7db3531298a3ff210fc2866ccd35f626feff0cc43aab59e",
+      "staged_dimensions": [
+        12,
+        14,
+        12
+      ],
+      "declared_dimensions": [
+        12,
+        14,
+        12
+      ],
+      "voxels": 544,
+      "geometry_and_palette_unchanged": true
+    },
+    {
+      "source": "hearthvale_planter_light.vox",
+      "staged_source": "hearthvale_planter_light.vox",
+      "staged_sha256": "90eaa9673b5041a3e5106d2b27e61c0f6179fa8be959cb5206aa2fbd7bd31ddb",
+      "source_sha256": "90eaa9673b5041a3e5106d2b27e61c0f6179fa8be959cb5206aa2fbd7bd31ddb",
+      "staged_dimensions": [
+        12,
+        14,
+        12
+      ],
+      "declared_dimensions": [
+        12,
+        14,
+        12
+      ],
+      "voxels": 498,
+      "geometry_and_palette_unchanged": true
+    },
+    {
+      "source": "hearthvale_planter_barrel.vox",
+      "staged_source": "hearthvale_planter_barrel_v2.vox",
+      "staged_sha256": "3826af02397940dceb22abf6ce958f12ce94f0cf6ee17f650abef8fca69e2d22",
+      "source_sha256": "3826af02397940dceb22abf6ce958f12ce94f0cf6ee17f650abef8fca69e2d22",
+      "staged_dimensions": [
+        12,
+        14,
+        12
+      ],
+      "declared_dimensions": [
+        12,
+        14,
+        12
+      ],
+      "voxels": 472,
+      "geometry_and_palette_unchanged": true
+    }
+  ]
+}

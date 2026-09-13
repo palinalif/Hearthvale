@@ -22,7 +22,7 @@ const BRIDGE_RENDER_CELL_LIMIT := 8000
 const COMPOSITION_STYLE_IDS := {
 	"garden": ["cottage_flowers", "kitchen_rows", "herb_garden"],
 	"fence": ["rustic_fence", "rustic_gate"],
-	"furniture": ["bench", "lantern", "signpost", "barrel_planter", "well", "chopping_block", "log_stack"],
+	"furniture": ["bench", "lantern", "signpost", "barrel_planter", "well", "chopping_block", "log_stack", "barrel_planter_herbs", "barrel_planter_light"],
 }
 const COMPOSITION_LIMIT := 96
 const COMPOSITION_MIN_SIZE := 0.125

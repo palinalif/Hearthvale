@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://dgxci55csgegp"
+path="res://.godot/imported/hearthvale_planter_light.vox-600b7e9c0c66f14abf93424359f2cef7.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_planter_light.vox"
+dest_files=["res://.godot/imported/hearthvale_planter_light.vox-600b7e9c0c66f14abf93424359f2cef7.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

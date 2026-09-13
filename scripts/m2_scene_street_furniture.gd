@@ -2,6 +2,7 @@ extends "res://scripts/m2_scene_hamlet_details.gd"
 
 const HamletVisual = preload("res://scripts/m2_hamlet_visual.gd")
 
+const PlanterFurniture = preload("res://scripts/m2_planter_assets.gd")
 const StarterFurniture = preload("res://scripts/m2_starter_props.gd")
 const FURNITURE_STYLES := {
 	"well": StarterFurniture.DEFINITIONS["well"],
@@ -10,9 +11,11 @@ const FURNITURE_STYLES := {
 	"bench": {"name": "Village bench", "size": Vector2(1.5, 0.625), "summary": "Slatted timber seat with a proper back"},
 	"lantern": {"name": "Path lantern", "size": Vector2(0.5, 0.5), "summary": "Small warm lantern on a dark village post"},
 	"signpost": {"name": "Wooden signpost", "size": Vector2(0.625, 0.625), "summary": "Two crooked direction boards on one post"},
-	"barrel_planter": {"name": "Barrel planter", "size": Vector2(0.75, 0.75), "summary": "Weathered barrel packed with greenery and flowers"},
+	"barrel_planter": PlanterFurniture.DEFINITIONS["barrel_planter"],
+	"barrel_planter_herbs": PlanterFurniture.DEFINITIONS["barrel_planter_herbs"],
+	"barrel_planter_light": PlanterFurniture.DEFINITIONS["barrel_planter_light"],
 }
-const FURNITURE_STYLE_ORDER: Array[String] = ["bench", "lantern", "signpost", "barrel_planter", "well", "chopping_block", "log_stack"]
+const FURNITURE_STYLE_ORDER: Array[String] = ["bench", "lantern", "signpost", "barrel_planter", "well", "chopping_block", "log_stack", "barrel_planter_herbs", "barrel_planter_light"]
 const FURNITURE_RANDOM_TURN_COUNT := 24
 const FURNITURE_RANDOM_STEP_DEGREES := 15.0
 
@@ -143,7 +146,7 @@ func _update_detail_preview() -> void:
 	var signature := "%s|%s|%s|%.1f|%s|%d" % [detail_kind, detail_style_id, point, detail_yaw_degrees, detail_placement_valid, _terrain_revision()]
 	if signature == _detail_preview_signature: return
 	_detail_preview_signature = signature
-	composition_visual.show_furniture_preview(detail_style_id, point, detail_size, detail_yaw_degrees, detail_placement_valid)
+	composition_visual.show_furniture_preview(detail_style_id, point, detail_size, detail_yaw_degrees, detail_placement_valid, _detail_selected_colour if _detail_edit_id > 0 else "")
 
 func _hide_detail_preview() -> void:
 	super._hide_detail_preview()

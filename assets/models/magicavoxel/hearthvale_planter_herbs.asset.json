@@ -1,0 +1,44 @@
+{
+  "asset": "hearthvale_planter_herbs",
+  "declared_dimensions": [
+    12,
+    14,
+    12
+  ],
+  "emitted_quads": 348,
+  "exposed_quads": 798,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      12,
+      12,
+      11
+    ],
+    "min": [
+      0,
+      0,
+      1
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    1,
+    2,
+    3,
+    4,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "source": "hearthvale_planter_herbs.vox",
+  "source_sha256": "4ab6593a7f9d891da7db3531298a3ff210fc2866ccd35f626feff0cc43aab59e",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 696,
+  "voxel_count": 544,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}
