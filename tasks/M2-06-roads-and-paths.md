@@ -1,63 +1,73 @@
 # M2-06 — Roads & Paths vertical slice
 
-**Status:** implemented and delivered on `feat/m2-hamlet-building` on 2026-09-09.
+**Status:** painted-region path system active on `feat/m2-path-ground-polish`; terrain-cut packed earth, safe restoration, brush sizing, erase mode, and first visual-polish pass are implemented.
 
 ## Player-facing result
 
-The global Build Catalogue now opens a real **Roads & paths** submenu with three
-styles: packed earth, cobblestone, and stepping stones. Choosing a style enters
-an in-world, read-only path preview. The existing camera remains usable while
-the cursor samples the native terrain surface.
+The Build Catalogue opens **Roads & paths** with packed earth, cobblestone, stepping stones, and the existing bridge entries. Choosing a path style enters a continuous terrain paint tool rather than the retired point/polyline workflow.
 
-Controller prompts are:
+Current controller grammar while a path tool is active:
 
-- A — add a point;
-- X — finish and confirm the path;
-- B — cancel without changing the world;
-- LB — remove the latest point;
+- hold A — paint continuously; release A commits one stroke;
+- X — toggle paint / erase mode;
+- D-pad left/right — shrink / grow the brush;
+- left-stick click precision mode — changes brush sizing from 0.25 m steps to 0.125 m steps;
+- B — cancel a live stroke, or close the path tool while idle;
+- LB — undo the latest committed stroke;
 - right stick — orbit; LT/RT — zoom.
 
-The preview renders the current polyline, a validity marker, and a plain-language
-reason when placement is blocked. A finished path is committed only after a
-second validation pass. Committing the path and clearing nearby planting is one
-landscape history transaction; cancel, pause, focus loss, disconnect, or stale
-revision rejection restores the exact pre-preview landscape without creating
-history.
+A live stroke is preview-only. Commit performs a second stale-world check before changing authority or terrain. Pause, focus loss, disconnect, cancellation, and stale-revision rejection cannot silently commit a path.
 
 ## Authoritative contract
 
-`LandscapeState` keeps `paths` optional for old saves. Each path has a stable ID,
-style ID, snapped width, and snapped X/Z points. Validation enforces:
+Paths are painted **structural-grid regions** on the 0.125 m world grid. Saved path records contain a stable ID, a style ID, and owned cells; committed path authority contains no centreline, polyline points, or saved width.
 
-- at most 32 paths;
-- 2–64 points per path;
-- widths from 0.25 to 3.0 world units;
-- native-grid point coordinates inside the 48-unit editable world;
-- meaningful non-zero segments;
-- a bounded estimated render-cell budget;
-- unique IDs shared with planting records.
+One painted cell belongs to at most one path style. Painting another style transfers ownership of overlapping cells. The latest paint wins. The global path-cell budget remains bounded by validation.
 
-Paths are presentation-only geometry. They never sculpt or rewrite native voxel
-terrain. Strict interior crossings of home footprints are rejected, while an
-endpoint touching an edge is allowed for a natural approach to a home.
+Brush width is interaction state only. It rasterizes circular brush stamps and swept strokes into authoritative cells. This permits tiny trails, ordinary roads, irregular courts, and broad town-square regions without inventing a centreline.
+
+## Packed-earth terrain profile
+
+Packed earth modifies native terrain. Depth is derived from distance to the **edge of the painted region**, not distance to a centreline:
+
+- edge ring — lawn grade, 0 voxels removed;
+- first interior rings — 1 structural voxel removed;
+- sufficiently broad interior — 2 structural voxels removed.
+
+The result is a stepped U-shaped cross-section with a level shoulder and a lowered packed centre. Broad plazas therefore develop a broad lowered centre rather than a bowl.
+
+Terrain edits use exact native voxel before/after values and participate in the same user-visible path history transaction as the painted authority.
+
+## Terrain ownership and restoration
+
+Every voxel removed by packed earth is recorded as path-owned terrain with its original material. The ownership data is saved with the world.
+
+When packed earth is erased or painted over by another material, only voxels still owned by the path system are restored. If a voxel has been independently changed after the path acquired it, restoration preserves that newer edit rather than overwriting it.
+
+Undo/redo restores both path authority and matching terrain ownership. Save/reload preserves the relationship between painted packed-earth cells and their excavated native terrain.
+
+## Presentation
+
+Saved authority remains on the 0.125 m structural grid. Packed-earth presentation may use the supported 0.0625 m detail grid.
+
+The current polish pass replaces the old solid brown cell boxes with deterministic half-cell wear patches. Lawn-grade shoulders deliberately break back into grass while lowered interior cells remain visually continuous. Packed-earth colour variation stays inside the existing two-material surface budget.
+
+Cobblestone and stepping-stone presentation still derive entirely from painted area masks and remain disposable rendering rather than authority.
 
 ## Verification
 
-- `tests/m2_path_state_test.gd`: 18 checks, 0 failures.
-- `tests/m2_path_placement_test.gd`: 30 checks, 0 failures.
-- `tests/m2_path_render_test.gd`: 14 headless checks and 16 actual-render checks, 0 failures.
-- `tests/m2_home_catalogue_test.gd`: 38 checks, 0 failures.
-- `tools/test-m1-placement.ps1`: passed with the new path gates included.
-- `tools/check.ps1`: passed.
-- Pinned Godot 4.7.2 import: passed.
-- Desktop Godot 4.7.2 Forward Mobile/D3D12 capture: [all three path styles](../reports/screenshots/m2-paths/all-styles.png).
+Current local path suite after erase-mode integration:
 
-Desktop Mobile output is visual-development evidence only. Physical Thor feel,
-performance, and player visual approval remain separate acceptance records.
+- `tests/m2_painted_path_region_test.gd`: 22 checks, 0 failures;
+- `tests/m2_painted_path_authority_test.gd`: 28 checks, 0 failures;
+- `tests/m2_path_terrain_excavation_test.gd`: 16 checks, 0 failures;
+- `tests/m2_path_placement_test.gd`: 52 checks, 0 failures;
+- `tests/m2_path_render_test.gd`: 35 checks, 0 failures.
 
-## Delivery
+The placement coverage includes continuous hold-to-paint, brush sizing, live-stroke size lock, terrain excavation, terrain ownership, save/reload, material overwrite, direct erase, player-facing X-toggle erase strokes, and atomic undo.
 
-Source commit `822ffaa6620436240e9dc22ba720869527c98be4` passed verified
-delivery run `34404866082`. The run produced and verified the isolated ARM64
-APK and Windows x86-64 playtest ZIP, then uploaded both packages and their
-receipts to private Google Drive.
+GitHub `cottage-paths` passed for the preceding polish commit `aedd32f80420109e6a8dcb9d6233b050af8d9b19`. The erase-mode commit is checked independently by the normal path CI shard.
+
+## Remaining polish
+
+The structural and terrain-safety contract is in place. Remaining work is primarily presentation and feel: richer packed-earth edge/grass contact, small stones and wear variation, further batching/mesh reduction where it improves Mobile cost, and physical-device visual approval.

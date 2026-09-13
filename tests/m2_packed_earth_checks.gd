@@ -33,6 +33,9 @@ static func inspect(checker: SceneTree, scene: Node, phase: String) -> void:
 	var stats: Dictionary = visual.stats().get("packed_earth", {})
 	checker._check(int(stats.get("cells", -1)) == cells.size(), "renderer accounts for every authoritative packed-earth cell: " + phase)
 	checker._check(int(stats.get("triangles", 0)) <= cells.size() * 12, "packed-earth cell presentation stays inside box-equivalent geometry budget: " + phase)
+	var polish: Dictionary = visual.stats().get("packed_earth_polish", {})
+	checker._check(int(polish.get("detail_patches", 0)) > 0 and int(polish.get("shoulder_omissions", 0)) > 0, "packed-earth polish keeps continuous wear plus broken grassy shoulders: " + phase)
+	checker._check(int(polish.get("stone_flecks", 0)) > 0 and is_equal_approx(float(polish.get("detail_unit", 0.0)), Grid.COTTAGE_DETAIL_UNIT), "packed-earth polish adds deterministic embedded stone flecks on the detail grid: " + phase)
 	var profile: Dictionary = Region.packed_earth_profile(cells)
 	var depths: Dictionary = stats.get("profile_depth_steps", {})
 	var expected_depths := {0: 0, 1: 0, 2: 0}
@@ -41,7 +44,7 @@ static func inspect(checker: SceneTree, scene: Node, phase: String) -> void:
 		expected_depths[step] = int(expected_depths.get(step, 0)) + 1
 	checker._check(depths == expected_depths, "packed-earth runtime uses the canonical distance-from-edge U profile: " + phase)
 	checker._check(JSON.stringify(scene.landscape_state.document()) == document, "painted rendering never mutates saved path authority: " + phase)
-	print("PACKED_EARTH_AUDIT " + JSON.stringify({"phase": phase, "cells": cells.size(), "profile": expected_depths, "opaque_surface_draws": visual.stats().opaque_surface_draws}))
+	print("PACKED_EARTH_AUDIT " + JSON.stringify({"phase": phase, "cells": cells.size(), "profile": expected_depths, "opaque_surface_draws": visual.stats().opaque_surface_draws, "polish": polish}))
 
 static func width_cases(checker: SceneTree, scene: Node) -> void:
 	# Width is now brush area rather than saved ribbon metadata. Exercise narrow,
