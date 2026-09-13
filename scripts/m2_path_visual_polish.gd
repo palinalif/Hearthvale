@@ -18,6 +18,7 @@ var _transition_cobble_chips := 0
 var _transition_step_stones := 0
 var _smoothed_surface_cache: Dictionary = {}
 var _smoothed_surface_quads := 0
+var _smoothing_authoritative_rebuild := false
 
 func rebuild(path_values: Array, terrain_backend: Node = null) -> void:
 	_style_lookup.clear()
@@ -29,7 +30,9 @@ func rebuild(path_values: Array, terrain_backend: Node = null) -> void:
 	for style_id in STYLE_ORDER:
 		for cell: Vector2i in _cells_for_style(path_values, style_id):
 			_style_lookup[cell] = style_id
+	_smoothing_authoritative_rebuild = true
 	super.rebuild(path_values, terrain_backend)
+	_smoothing_authoritative_rebuild = false
 
 func _append_cells(builder: Dictionary, style_id: String, cells: Array) -> void:
 	if style_id == "packed_earth":
@@ -356,12 +359,12 @@ func _append_rotated_top_quad(builder: Dictionary, center: Vector3, size: Vector
 	var half := size * 0.5
 	var basis := Basis(Vector3.UP, angle)
 	var base := vertices.size()
-	var use_smoothed_surface := _cache_surface_heights
+	var use_smoothed_surface: bool = _smoothing_authoritative_rebuild
 	var center_surface := _surface_height(Vector2(center.x, center.z)) if use_smoothed_surface else center.y
 	var lift := center.y - center_surface if use_smoothed_surface else 0.0
 	var quad_vertices: Array[Vector3] = []
 	for corner in [Vector3(-half.x, 0.0, -half.y), Vector3(half.x, 0.0, -half.y), Vector3(half.x, 0.0, half.y), Vector3(-half.x, 0.0, half.y)]:
-		var world_corner := center + basis * corner
+		var world_corner: Vector3 = center + basis * corner
 		if use_smoothed_surface:
 			world_corner.y = _smoothed_surface_height(Vector2(world_corner.x, world_corner.z)) + lift
 		quad_vertices.append(world_corner)
