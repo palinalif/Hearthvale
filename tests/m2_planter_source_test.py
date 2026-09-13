@@ -94,7 +94,15 @@ class PlanterSourceTest(unittest.TestCase):
                 self.assertLess(receipt["triangles"], 1000)
                 self.assertEqual(receipt, json.loads((MODELS / (name + ".asset.json")).read_text()))
                 for extension in (".obj", ".mtl"):
-                    self.assertEqual(output.with_suffix(extension).read_bytes(), (MODELS / (name + extension)).read_bytes())
+                    exported = output.with_suffix(extension).read_bytes()
+                    checked_out = (MODELS / (name + extension)).read_bytes()
+                    # Git's Windows core.autocrlf changes text checkout bytes.
+                    # Reverse only that transport change; do not parse, round,
+                    # reorder or otherwise relax exact geometry/material content.
+                    self.assertNotIn(b"\r", exported, "Exporter emits canonical LF")
+                    canonical = checked_out.replace(b"\r\n", b"\n")
+                    self.assertNotIn(b"\r", canonical, "Reject malformed line endings")
+                    self.assertEqual(exported, canonical)
 
 
 if __name__ == "__main__":
