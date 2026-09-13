@@ -158,6 +158,7 @@ switch ($Shard) {
         Invoke-ScriptCheck 'scripts/m2_scene_build_browser.gd'
         Invoke-NativeTests @(
             'm2_path_state_test',
+            'm2_path_history_test',
             'm2_painted_path_region_test',
             'm2_painted_path_authority_test',
             'm2_path_terrain_excavation_test',

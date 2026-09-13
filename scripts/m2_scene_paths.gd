@@ -133,11 +133,17 @@ func _input(event: InputEvent) -> void:
 				_reset_path_baseline()
 			get_viewport().set_input_as_handled()
 			return
+		if event.is_action_pressed("m1_redo"):
+			if not path_painting:
+				_redo()
+				_reset_path_baseline()
+			get_viewport().set_input_as_handled()
+			return
 		if event.is_action_pressed("m1_pause"):
 			_cancel_path_placement("Path painting closed by pause")
 			super._input(event)
 			return
-		if event.is_action_pressed("m1_mode_switch") or event.is_action_pressed("m1_view") or event.is_action_pressed("m1_redo") or event.is_action_pressed("m1_cycle_left") or event.is_action_pressed("m1_cycle_right") or event.is_action_pressed("m1_height_up") or event.is_action_pressed("m1_height_down") or event.is_action_pressed("m1_tools"):
+		if event.is_action_pressed("m1_mode_switch") or event.is_action_pressed("m1_view") or event.is_action_pressed("m1_cycle_left") or event.is_action_pressed("m1_cycle_right") or event.is_action_pressed("m1_height_up") or event.is_action_pressed("m1_height_down") or event.is_action_pressed("m1_tools"):
 			get_viewport().set_input_as_handled()
 			return
 	super._input(event)
