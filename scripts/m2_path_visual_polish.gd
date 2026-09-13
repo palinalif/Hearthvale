@@ -1,4 +1,5 @@
 extends "res://scripts/m2_path_visual.gd"
+# Presentation polish stays deterministic so CI review captures remain directly comparable.
 
 var _packed_detail_patches := 0
 var _packed_shoulder_omissions := 0
