@@ -11,6 +11,33 @@ var _valley_surround: Node3D
 var _starter_seeded := false
 var _surround_refresh_pending := false
 
+func _ready() -> void:
+	super._ready()
+	_apply_cozy_valley_lighting()
+
+func _apply_cozy_valley_lighting() -> void:
+	# Soften the inherited harsh midday setup without turning Hearthvale into a
+	# sunset scene: warmer direct light, stronger ambient fill, translucent
+	# shadows and a very light distance haze.
+	for node in find_children("*", "DirectionalLight3D", true, false):
+		var light := node as DirectionalLight3D
+		light.light_color = Color("#ffe3bd")
+		light.light_energy = 0.82
+		light.shadow_enabled = true
+		light.shadow_opacity = 0.72
+		light.light_angular_distance = 1.2
+	for node in find_children("*", "WorldEnvironment", true, false):
+		var world_environment := node as WorldEnvironment
+		var environment := world_environment.environment
+		if environment == null: continue
+		environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		environment.ambient_light_color = Color("#c8d4cf")
+		environment.ambient_light_energy = 0.72
+		environment.fog_enabled = true
+		environment.fog_light_color = Color("#ddd7c4")
+		environment.fog_light_energy = 0.62
+		environment.fog_density = 0.0022
+
 func _on_backend_ready(ready: bool) -> void:
 	var already_restored := _player_restored
 	super._on_backend_ready(ready)
