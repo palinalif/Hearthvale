@@ -16,51 +16,94 @@ func _ready() -> void:
 	_apply_cozy_valley_lighting()
 
 func _apply_cozy_valley_lighting() -> void:
-	# Deliberately strong storybook-miniature daylight. The previous pass was too
-	# subtle: this one creates a lower, warmer key with enough HDR headroom for
-	# visible bloom, while keeping the ambient floor lower so the glow can read.
+	# Clear-air miniature lighting: one warm shadowed key plus two extremely soft
+	# unshadowed fills. This gives forms a bright toy-diorama wrap without using
+	# global fog as a substitute for bounced light.
 	for node in find_children("*", "DirectionalLight3D", true, false):
 		var light := node as DirectionalLight3D
-		light.rotation_degrees = Vector3(-31.0, -30.0, 0.0)
-		light.light_color = Color("#ffcf96")
-		light.light_energy = 1.55
+		if light.name in ["CozySkyFill", "CozyWarmRim"]: continue
+		light.rotation_degrees = Vector3(-38.0, -32.0, 0.0)
+		light.light_color = Color("#ffd4a3")
+		light.light_energy = 1.28
 		light.shadow_enabled = true
-		light.shadow_opacity = 0.58
-		light.light_angular_distance = 3.4
+		light.shadow_opacity = 0.70
+		# Mobile does not use directional PCSS, so keep this modest rather than
+		# relying on angular distance as the main source of softness.
+		light.light_angular_distance = 0.6
+
+	_ensure_directional_fill(
+		"CozySkyFill",
+		Vector3(-58.0, 148.0, 0.0),
+		Color("#d8e5e2"),
+		0.16
+	)
+	_ensure_directional_fill(
+		"CozyWarmRim",
+		Vector3(-28.0, 92.0, 0.0),
+		Color("#ffd0a0"),
+		0.09
+	)
+
 	for node in find_children("*", "WorldEnvironment", true, false):
 		var world_environment := node as WorldEnvironment
 		var environment := world_environment.environment
 		if environment == null: continue
-		environment.background_color = Color("#e0dcc8")
+		environment.background_color = Color("#ddd9c9")
 		environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		environment.ambient_light_color = Color("#cfd3bd")
-		environment.ambient_light_energy = 0.46
+		environment.ambient_light_color = Color("#cbd4ca")
+		environment.ambient_light_energy = 0.34
 
-		# Strong filmic compression turns the boosted sun into creamy, luminous
-		# highlights rather than simply clipping roofs and grass to white.
+		# Keep the creamy shoulder from the earlier passes, but stop compressing the
+		# whole frame into the same pale value range.
 		environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-		environment.tonemap_exposure = 0.99
-		environment.tonemap_white = 1.10
+		environment.tonemap_exposure = 1.02
+		environment.tonemap_white = 1.42
 
-		# Push native Mobile glow hard enough to be unmistakable. A lower threshold
-		# lets sunlit grass, plaster, roofs and water all contribute to the halo.
+		# Tight highlight glow instead of screen-wide bloom. Mobile's limited HDR
+		# range benefits from a high threshold with stronger intensity, and weighting
+		# the small glow levels keeps halos close to bright roofs/walls/grass/water.
 		environment.glow_enabled = true
 		environment.glow_normalized = true
-		environment.glow_intensity = 0.92
-		environment.glow_strength = 1.30
-		environment.glow_mix = 0.07
-		environment.glow_bloom = 0.42
-		environment.glow_hdr_threshold = 0.38
-		environment.glow_hdr_scale = 2.05
+		environment.glow_intensity = 0.86
+		environment.glow_strength = 1.16
+		environment.glow_mix = 0.025
+		environment.glow_bloom = 0.02
+		environment.glow_hdr_threshold = 0.88
+		environment.glow_hdr_scale = 2.35
+		environment.set("glow_levels/1", 0.80)
+		environment.set("glow_levels/2", 0.62)
+		environment.set("glow_levels/3", 0.28)
+		environment.set("glow_levels/4", 0.06)
+		environment.set("glow_levels/5", 0.0)
+		environment.set("glow_levels/6", 0.0)
+		environment.set("glow_levels/7", 0.0)
 
-		# Warm scattering gives the air itself a sunlit quality, while keeping fog
-		# density low enough that distant terrain stays readable rather than milky.
-		environment.fog_enabled = true
-		environment.fog_light_color = Color("#efd8b5")
-		environment.fog_light_energy = 0.88
-		environment.fog_density = 0.0023
-		environment.fog_sun_scatter = 0.58
-		environment.fog_aerial_perspective = 0.18
+		# The previous pass's global fog was the source of the milky veil. Keep the
+		# air clear and let the fill lights + glow provide softness instead.
+		environment.fog_enabled = false
+
+	# A very small far-field blur gives distant hills a miniature-camera cue while
+	# leaving the editable village and foreground crisp enough for normal play.
+	if camera != null:
+		var attributes := CameraAttributesPractical.new()
+		attributes.dof_blur_far_enabled = true
+		attributes.dof_blur_far_distance = 44.0
+		attributes.dof_blur_far_transition = 20.0
+		attributes.dof_blur_near_enabled = false
+		attributes.dof_blur_amount = 0.055
+		camera.attributes = attributes
+
+func _ensure_directional_fill(fill_name: String, rotation: Vector3, color: Color, energy: float) -> void:
+	var fill := get_node_or_null(NodePath(fill_name)) as DirectionalLight3D
+	if fill == null:
+		fill = DirectionalLight3D.new()
+		fill.name = fill_name
+		add_child(fill)
+	fill.rotation_degrees = rotation
+	fill.light_color = color
+	fill.light_energy = energy
+	fill.shadow_enabled = false
+	fill.light_specular = 0.25
 
 func _on_backend_ready(ready: bool) -> void:
 	var already_restored := _player_restored
