@@ -1,7 +1,7 @@
 extends Node3D
 ## Controller-first M1 playtest: one cottage recipe beside a volumetric bank.
 
-const PATCH_SIZE := Vector3i(48, 32, 48)
+const PATCH_SIZE := Vector3i(preload("res://scripts/m2_world_bounds.gd").EXTENT)
 const BUILDING_ID := "building-1"
 const M1PatchGenerator = preload("res://scripts/m1_patch_generator.gd")
 const BuildingWorldScript = preload("res://scripts/building_world.gd")
@@ -66,6 +66,8 @@ var _shutting_down := false
 var _pause_buttons: Dictionary = {}
 var _tool_buttons: Dictionary = {}
 var _presentation_key := ""
+var _last_requested_cottage_revision := -1
+var _last_target_label_text := ""
 var _history_tags: Array[String] = []
 var _redo_tags: Array[String] = []
 var _building_dirty := false
@@ -90,6 +92,7 @@ var reference_plane: MeshInstance3D
 var terrain_hit_marker: MeshInstance3D
 var cursor_reticle: Node3D
 var river_water: MeshInstance3D
+var _river_water_spans: Array[Vector2i] = []
 var garden_visual: Node3D
 var landscape_state := LandscapeScript.new()
 var landscape_active := false
@@ -99,6 +102,10 @@ var _landscape_redo: Array[Dictionary] = []
 var _plant_elapsed := 0.0
 var _plant_last := Vector3.INF
 var _plant_sequence := 0
+var planting_yaw_degrees := 0.0
+
+const PLANT_ROTATION_COARSE_DEGREES := 15.0
+const PLANT_ROTATION_FINE_DEGREES := 1.0
 
 var _terrain_target_valid := false
 var _terrain_target_point := Vector3.ZERO
@@ -202,6 +209,10 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if view_context == "terrain":
+		if sculpt_tool in ["foliage", "tree"] and (event.is_action_pressed("m1_cycle_left") or event.is_action_pressed("m1_cycle_right")):
+			_rotate_plant_brush(-1 if event.is_action_pressed("m1_cycle_left") else 1)
+			get_viewport().set_input_as_handled()
+			return
 		if event.is_action_pressed("m1_cancel"):
 			_cancel_current_edit("Stroke cancelled")
 			get_viewport().set_input_as_handled()
@@ -335,6 +346,20 @@ func _build_river_water_mesh() -> ArrayMesh:
 	var mesh := ArrayMesh.new(); mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
 
+func _river_water_span_for_row(z: int, water_cell_y: int, support_cell_y: int) -> Vector2i:
+	var best_start := -1
+	var best_end := -1
+	var run_start := -1
+	for x in range(floori(37.5 / M1PatchGenerator.VOXEL_SCALE), M1PatchGenerator.PATCH_SIZE.x + 1):
+		var qualifies: bool = x < M1PatchGenerator.PATCH_SIZE.x and int(backend.voxel_at(Vector3i(x, water_cell_y, z))) == 0 and int(backend.voxel_at(Vector3i(x, support_cell_y, z))) != 0
+		if qualifies and run_start < 0: run_start = x
+		if not qualifies and run_start >= 0:
+			if x - run_start > best_end - best_start:
+				best_start = run_start
+				best_end = x
+			run_start = -1
+	return Vector2i(best_start, best_end)
+
 func _refresh_river_water_from_terrain() -> void:
 	if not river_water or not backend or not backend.has_method("voxel_at") or not backend.is_ready(): return
 	var vertices := PackedVector3Array()
@@ -343,14 +368,24 @@ func _refresh_river_water_from_terrain() -> void:
 	var unit := M1PatchGenerator.VOXEL_SCALE
 	var water_cell_y := floori(5.0 / unit) - 1
 	var support_cell_y := floori(3.0 / unit)
+	if _river_water_spans.size() != M1PatchGenerator.PATCH_SIZE.z:
+		_river_water_spans.resize(M1PatchGenerator.PATCH_SIZE.z)
+		for z in M1PatchGenerator.PATCH_SIZE.z:
+			_river_water_spans[z] = _river_water_span_for_row(z, water_cell_y, support_cell_y)
+	else:
+		var edit_bounds: AABB = backend.get_last_edit_bounds() if backend.has_method("get_last_edit_bounds") else AABB()
+		# Only edits within the water/support sampling band can alter the river
+		# surface. All other terrain work keeps the existing mesh untouched.
+		if edit_bounds.size == Vector3.ZERO or edit_bounds.end.x < 37.5 or edit_bounds.position.y >= 5.0 or edit_bounds.end.y <= 3.0:
+			return
+		var row_start := clampi(floori(edit_bounds.position.z / unit) - 1, 0, M1PatchGenerator.PATCH_SIZE.z - 1)
+		var row_end := clampi(ceili(edit_bounds.end.z / unit) + 1, 0, M1PatchGenerator.PATCH_SIZE.z - 1)
+		for z in range(row_start, row_end + 1):
+			_river_water_spans[z] = _river_water_span_for_row(z, water_cell_y, support_cell_y)
 	for z in M1PatchGenerator.PATCH_SIZE.z:
-		var best_start := -1; var best_end := -1; var run_start := -1
-		for x in range(floori(37.5 / unit), M1PatchGenerator.PATCH_SIZE.x + 1):
-			var qualifies: bool = x < M1PatchGenerator.PATCH_SIZE.x and int(backend.voxel_at(Vector3i(x, water_cell_y, z))) == 0 and int(backend.voxel_at(Vector3i(x, support_cell_y, z))) != 0
-			if qualifies and run_start < 0: run_start = x
-			if not qualifies and run_start >= 0:
-				if x - run_start > best_end - best_start: best_start = run_start; best_end = x
-				run_start = -1
+		var span := _river_water_spans[z]
+		var best_start := span.x
+		var best_end := span.y
 		if best_start < 0: continue
 		var base := vertices.size()
 		var x0 := float(best_start) * unit; var x1 := float(best_end) * unit
@@ -669,10 +704,17 @@ func _on_joy_connection_changed(_device: int, connected: bool) -> void:
 	_set_status("Controller disconnected; world paused")
 
 func _on_backend_changed() -> void:
+	var started := Time.get_ticks_usec()
 	_refresh_river_water_from_terrain()
+	var water_ms := float(Time.get_ticks_usec() - started) / 1000.0
+	started = Time.get_ticks_usec()
 	if garden_visual and garden_visual.has_method("refresh_terrain"):
 		garden_visual.refresh_terrain()
+	var garden_ms := float(Time.get_ticks_usec() - started) / 1000.0
+	started = Time.get_ticks_usec()
 	_update_presentation()
+	if OS.is_debug_build():
+		print("THOR_BACKEND_BASE " + JSON.stringify({"water_ms": water_ms, "garden_ms": garden_ms, "presentation_ms": float(Time.get_ticks_usec() - started) / 1000.0}))
 
 func _on_building_changed() -> void:
 	if not _restoring: _building_dirty = true
@@ -698,7 +740,7 @@ func _read_camera_and_cursor(delta: float) -> void:
 		else:
 			if not detail_move_active:
 				var speed := lerpf(2.5, 10.0, pow(magnitude, 0.85)); if precision_mode: speed *= 0.35
-				var forward := Vector3(sin(camera_yaw), 0, cos(camera_yaw)); var right := Vector3(forward.z, 0, -forward.x); cursor += (right * move.x + forward * move.y) * delta * speed; cursor.x = clampf(cursor.x, 0.5, 47.5); cursor.z = clampf(cursor.z, 0.5, 47.5)
+				var forward := Vector3(sin(camera_yaw), 0, cos(camera_yaw)); var right := Vector3(forward.z, 0, -forward.x); cursor += (right * move.x + forward * move.y) * delta * speed; cursor.x = clampf(cursor.x, 0.5, float(PATCH_SIZE.x) - 0.5); cursor.z = clampf(cursor.z, 0.5, float(PATCH_SIZE.z) - 0.5)
 	var orbit_x := Input.get_axis("m1_orbit_left", "m1_orbit_right"); var orbit_y := Input.get_axis("m1_orbit_up", "m1_orbit_down"); camera_yaw += orbit_x * delta * 2.2; camera_pitch = clampf(camera_pitch + orbit_y * delta * 1.5, 0.15, 1.25); var zoom := Input.get_axis("m1_zoom_out", "m1_zoom_in"); camera_distance = clampf(camera_distance - zoom * delta * 18.0, 8, 52)
 	if not detail_move_active and not resize_active and Input.is_action_just_pressed("m1_height_up"): cursor.y = clampf(cursor.y + 1.0, 0.0, 31.0)
 	if not detail_move_active and not resize_active and Input.is_action_just_pressed("m1_height_down"): cursor.y = clampf(cursor.y - 1.0, 0.0, 31.0)
@@ -966,7 +1008,9 @@ func _record_history(tag: String) -> void:
 func _update_presentation() -> void:
 	if not cottage_visual or not building_world: return
 	var revision: int = building_world.get_revision()
-	if cottage_visual.has_method("request_revision"): cottage_visual.request_revision(revision)
+	if revision != _last_requested_cottage_revision:
+		if cottage_visual.has_method("request_revision"): cottage_visual.request_revision(revision)
+		_last_requested_cottage_revision = revision
 	var key := "%d|%s|%s|%s" % [revision, str(resize_preview_dimensions if resize_active else Vector3.ZERO), selected_detail_id if detail_move_active else "", str(detail_move_position) if detail_move_active else ""]
 	if key != _presentation_key:
 		var presentation: Dictionary = building_world.get_building(selected_building_id)
@@ -1011,16 +1055,20 @@ func _update_presentation() -> void:
 					cottage_visuals.erase(existing_id)
 		_presentation_key = key
 	if target_label:
+		var next_target_text := ""
 		if view_context == "terrain":
 			var mode_name := sculpt_tool.capitalize()
 			var target_text := "%s target (%.1f, %.1f, %.1f)  •  radius %.1f" % [mode_name, preview_center.x, preview_center.y, preview_center.z, brush_radius] if _terrain_target_valid else "%s • NO TERRAIN TARGET" % mode_name
 			if sculpt_tool in ["level", "slope"] and stroke_reference.get("point", null) is Vector3:
 				target_text += "  •  locked y %.1f" % (stroke_reference["point"] as Vector3).y
-			target_label.text = "%s  •  str %.1f falloff %.1f  %s  •  A hold/release B cancel  R3 refocus" % [target_text, brush_strength, brush_falloff, "PRECISION" if precision_mode else "NORMAL"]
+			next_target_text = "%s  •  str %.1f falloff %.1f  %s  •  A hold/release B cancel  R3 refocus" % [target_text, brush_strength, brush_falloff, "PRECISION" if precision_mode else "NORMAL"]
 		else:
 			var cottage_text := "Cottage %s" % selected_building_id
 			if detail_move_active: cottage_text = "Move %s at (%.1f, %.1f, %.1f)" % [selected_detail_id, detail_move_position.x, detail_move_position.y, detail_move_position.z]
-			target_label.text = "%s  •  A resize  B cancel  •  sticks move/orbit  R3 refocus" % cottage_text
+			next_target_text = "%s  •  A resize  B cancel  •  sticks move/orbit  R3 refocus" % cottage_text
+		if next_target_text != _last_target_label_text:
+			target_label.text = next_target_text
+			_last_target_label_text = next_target_text
 	_update_resize_handles()
 
 func _update_resize_handles() -> void:
@@ -1049,7 +1097,13 @@ func _update_debug_overlay() -> void:
 	var native_stats: Dictionary = backend.stats() if backend and backend.has_method("stats") else {}
 	var renderer := RenderingServer.get_current_rendering_method()
 	var adapter := RenderingServer.get_video_adapter_name()
-	debug_label.text = "FPS %.0f  process %.2f ms\n%s / %s  %dx%d  draw %d  triangles %d\nStatic memory %s  sculpt %.2f ms\nNative mesh acknowledgement unavailable" % [Engine.get_frames_per_second(), process_ms, renderer, adapter, get_viewport().size.x, get_viewport().size.y, draw_calls, primitives, memory_text, float(native_stats.get("last_edit_ms", -1.0))]
+	var path_profile: Dictionary = {}
+	if has_method("path_profile_stats"):
+		path_profile = call("path_profile_stats")
+	var path_profile_text := ""
+	if path_profile is Dictionary and not path_profile.is_empty():
+		path_profile_text = "\nPath ms total %.2f  camera %.2f  brush %.2f  valid %.2f  preview %.2f  HUD %.2f" % [float(path_profile.get("path_process_total_ms", 0.0)), float(path_profile.get("camera_cursor_ms", 0.0)), float(path_profile.get("brush_preview_ms", 0.0)), float(path_profile.get("validity_ms", 0.0)), float(path_profile.get("preview_ms", 0.0)), float(path_profile.get("hud_ms", 0.0))]
+	debug_label.text = "FPS %.0f  process %.2f ms\n%s / %s  %dx%d  draw %d  triangles %d\nStatic memory %s  sculpt %.2f ms\nNative mesh acknowledgement unavailable%s" % [Engine.get_frames_per_second(), process_ms, renderer, adapter, get_viewport().size.x, get_viewport().size.y, draw_calls, primitives, memory_text, float(native_stats.get("last_edit_ms", -1.0)), path_profile_text]
 
 func _build_ui() -> void:
 	hud = CanvasLayer.new(); add_child(hud)
@@ -1158,9 +1212,9 @@ func _focus_selected_building() -> void:
 		var transform_value = view.get("transform", Transform3D.IDENTITY)
 		if transform_value is Transform3D:
 			cursor = transform_value * Vector3(0, 2, 0)
-		cursor.x = clampf(cursor.x, 0.5, 47.5)
+		cursor.x = clampf(cursor.x, 0.5, float(PATCH_SIZE.x) - 0.5)
 		cursor.y = clampf(cursor.y, 0.5, 31.5)
-		cursor.z = clampf(cursor.z, 0.5, 47.5)
+		cursor.z = clampf(cursor.z, 0.5, float(PATCH_SIZE.z) - 0.5)
 		cottage_cursor = cursor
 	camera_yaw = -1.1
 	camera_pitch = 0.66
@@ -1180,7 +1234,8 @@ func _tool_choice(choice: String) -> void:
 		sculpt_tool = {"Foliage brush": "foliage", "Tree brush": "tree", "Clear planting": "clear_planting"}[choice]
 		reference_mode = "ground"
 		tools_open = false; detail_open = false; tools_panel.visible = false
-		_set_status(choice + " • A hold and move / release to commit • B cancel")
+		var rotate_hint := " • left/right rotate" if sculpt_tool in ["foliage", "tree"] else ""
+		_set_status(choice + rotate_hint + " • A hold and move / release to commit • B cancel")
 		return
 	if choice in ["Raise", "Dig", "Level", "Slope", "Smooth"]:
 		if view_context != "terrain":
@@ -1427,6 +1482,12 @@ func _update_plant_stroke(delta: float) -> void:
 		_plant_elapsed -= 0.15
 		_paint_plant_sample()
 
+func _rotate_plant_brush(direction: int) -> void:
+	if direction == 0 or sculpt_tool not in ["tree", "foliage"]: return
+	var step := PLANT_ROTATION_FINE_DEGREES if precision_mode else PLANT_ROTATION_COARSE_DEGREES
+	planting_yaw_degrees = fposmod(planting_yaw_degrees + step * float(signi(direction)), 360.0)
+	_set_status("%s brush • rotation %.0f° • A hold and move / release to commit" % [sculpt_tool.capitalize(), planting_yaw_degrees])
+
 func _paint_plant_sample() -> void:
 	var center := _terrain_target_point if _terrain_target_valid else cursor
 	if sculpt_tool == "tree" and center.distance_to(_plant_last) < 2.8: return
@@ -1438,7 +1499,7 @@ func _paint_plant_sample() -> void:
 			var angle := rng.randf_range(0, TAU)
 			var radius := sqrt(rng.randf()) * brush_radius if sculpt_tool != "tree" else 0.0
 			var ground := _plant_ground(center + Vector3(cos(angle) * radius, 0, sin(angle) * radius))
-			if not ground.is_empty(): landscape_state.add(sculpt_tool, ground["point"], rng.randi_range(0, Flora.variant_count(sculpt_tool) - 1))
+			if not ground.is_empty(): landscape_state.add(sculpt_tool, ground["point"], rng.randi_range(0, Flora.variant_count(sculpt_tool) - 1), planting_yaw_degrees)
 	_plant_last = center; _plant_sequence += 1
 	garden_visual.apply_records(landscape_state.records)
 

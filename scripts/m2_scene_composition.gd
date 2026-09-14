@@ -280,8 +280,13 @@ func _restore_landscape(document: Dictionary) -> void:
 	_refresh_bridge_visual(true)
 
 func _on_backend_changed() -> void:
+	var started := Time.get_ticks_usec()
 	super._on_backend_changed()
+	var upstream_ms := float(Time.get_ticks_usec() - started) / 1000.0
+	started = Time.get_ticks_usec()
 	_refresh_bridge_visual(true)
+	if OS.is_debug_build():
+		print("THOR_BACKEND_BRIDGES " + JSON.stringify({"upstream_ms": upstream_ms, "bridges_ms": float(Time.get_ticks_usec() - started) / 1000.0, "items": landscape_state.bridges.size()}))
 
 func _refresh_bridge_visual(force: bool = false) -> void:
 	if not composition_visual: return

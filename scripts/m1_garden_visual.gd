@@ -49,10 +49,9 @@ func set_wind_enabled(enabled: bool) -> void:
 		material.set_shader_parameter("wind_strength", wind_strength(kind, variant) if wind_enabled else 0.0)
 
 func apply_records(records: Array) -> void:
-	# Trees return to quarter turns so their authored dense canopy views remain
-	# intact; arbitrary 15-degree yaw exposed intentional interior cavities.
-	# Foliage also keeps quarter turns, while per-instance colors vary foliage
-	# and rocks without extra draws.
+	# Existing records keep their authored quarter-turn variation. Newly brushed
+	# plants may also carry a saved yaw marker, which unlocks a deterministic
+	# random 15-degree sub-turn without reshuffling old scenery.
 	var batches := {}
 	for record: Dictionary in records:
 		var kind := str(record["kind"]); var variant := posmod(int(record["seed"]), Flora.variant_count(kind))
@@ -93,7 +92,11 @@ func reset_records(records: Array) -> void:
 static func planting_rotation(record: Dictionary) -> Basis:
 	if not str(record.get("kind", "")) in ["tree", "foliage"]: return Basis.IDENTITY
 	var step := TREE_ROTATION_STEP if str(record.get("kind", "")) == "tree" else PI * 0.5
-	return Basis(Vector3.UP, float(planting_turn(record)) * step)
+	var angle := float(planting_turn(record)) * step
+	if record.has("yaw_degrees"):
+		var fine_turn := posmod(floori(float(_variation_hash(record)) / 4.0), 6)
+		angle += deg_to_rad(float(fine_turn) * 15.0 + float(record.get("yaw_degrees", 0.0)))
+	return Basis(Vector3.UP, angle)
 
 static func planting_turn(record: Dictionary) -> int:
 	var count := TREE_TURN_COUNT if str(record.get("kind", "")) == "tree" else FOLIAGE_TURN_COUNT

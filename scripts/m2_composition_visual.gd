@@ -18,6 +18,13 @@ const FENCE_COLOURS := {
 	"rustic_fence": [Color("#806047"), Color("#5b4435"), Color("#9a7658")],
 	"rustic_gate": [Color("#806047"), Color("#5b4435"), Color("#9a7658")],
 }
+const DETAIL_TINTS := {
+	"natural": Color("#8b765f"),
+	"sage": Color("#69846f"),
+	"blue": Color("#617b8b"),
+	"berry": Color("#946775"),
+	"cream": Color("#d8c9a8"),
+}
 const BRIDGE_PLANK_TARGET := 0.28
 
 var backend: Node
@@ -62,28 +69,26 @@ func rebuild_bridges(bridge_values: Array, terrain_backend: Node = null) -> void
 func rebuild_gardens(composition_values: Array, terrain_backend: Node = null) -> void:
 	if terrain_backend != null: backend = terrain_backend
 	_clear_nodes(_garden_nodes)
-	var builders := {}
-	for style_id in GARDEN_COLOURS: builders[style_id] = _new_builder(4)
 	var count := 0
+	var cells := 0
 	for value in composition_values:
 		if not value is Dictionary: continue
 		var record: Dictionary = value
 		if str(record.get("kind", "")) != "garden": continue
 		var style_id := str(record.get("style_id", ""))
-		if not builders.has(style_id): continue
-		_append_garden(builders[style_id], record)
-		count += 1
-	var cells := 0
-	for style_id in GARDEN_COLOURS:
-		var builder: Dictionary = builders[style_id]
+		if not GARDEN_COLOURS.has(style_id): continue
+		var builder := _new_builder(4)
+		_append_garden(builder, record)
 		cells += _builder_cell_count(builder)
-		var mesh := _mesh_from_builder(builder, GARDEN_COLOURS[style_id])
+		var mesh := _mesh_from_builder(builder, _record_colours(GARDEN_COLOURS[style_id], record))
 		if mesh == null: continue
 		var node := MeshInstance3D.new()
-		node.name = "GardenBatch_" + style_id
+		node.name = "Garden_%s" % int(record.get("id", 0))
+		node.set_meta("composition_id", int(record.get("id", 0)))
 		node.mesh = mesh
 		add_child(node)
 		_garden_nodes.append(node)
+		count += 1
 	_stats["garden_count"] = count
 	_stats["garden_geometry_cells"] = cells
 	_update_total_cells()
@@ -91,28 +96,26 @@ func rebuild_gardens(composition_values: Array, terrain_backend: Node = null) ->
 func rebuild_fences(composition_values: Array, terrain_backend: Node = null) -> void:
 	if terrain_backend != null: backend = terrain_backend
 	_clear_nodes(_fence_nodes)
-	var builders := {}
-	for style_id in FENCE_COLOURS: builders[style_id] = _new_builder(3)
 	var count := 0
+	var cells := 0
 	for value in composition_values:
 		if not value is Dictionary: continue
 		var record: Dictionary = value
 		if str(record.get("kind", "")) != "fence": continue
 		var style_id := str(record.get("style_id", ""))
-		if not builders.has(style_id): continue
-		_append_fence(builders[style_id], record)
-		count += 1
-	var cells := 0
-	for style_id in FENCE_COLOURS:
-		var builder: Dictionary = builders[style_id]
+		if not FENCE_COLOURS.has(style_id): continue
+		var builder := _new_builder(3)
+		_append_fence(builder, record)
 		cells += _builder_cell_count(builder)
-		var mesh := _mesh_from_builder(builder, FENCE_COLOURS[style_id])
+		var mesh := _mesh_from_builder(builder, _record_colours(FENCE_COLOURS[style_id], record))
 		if mesh == null: continue
 		var node := MeshInstance3D.new()
-		node.name = "FenceBatch_" + style_id
+		node.name = "Fence_%s" % int(record.get("id", 0))
+		node.set_meta("composition_id", int(record.get("id", 0)))
 		node.mesh = mesh
 		add_child(node)
 		_fence_nodes.append(node)
+		count += 1
 	_stats["fence_count"] = count
 	_stats["fence_geometry_cells"] = cells
 	_update_total_cells()
@@ -191,6 +194,14 @@ func _preview_colours(base_values: Array, valid: bool) -> Array:
 	var tint := Color("#a7e0a0") if valid else Color("#ef8b78")
 	var result: Array = []
 	for colour_value in base_values: result.append((colour_value as Color).lerp(tint, 0.56))
+	return result
+
+func _record_colours(base_values: Array, record: Dictionary) -> Array:
+	var colour_id := str(record.get("colour_id", ""))
+	if not DETAIL_TINTS.has(colour_id): return base_values
+	var tint: Color = DETAIL_TINTS[colour_id]
+	var result: Array = []
+	for colour_value in base_values: result.append((colour_value as Color).lerp(tint, 0.42))
 	return result
 
 func _append_bridge(builder: Dictionary, style_id: String, width: float, start: Vector2, finish: Vector2) -> void:

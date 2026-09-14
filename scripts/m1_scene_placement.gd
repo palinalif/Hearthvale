@@ -34,7 +34,7 @@ var building_placement_ghost: Node3D
 const BUILDING_ROTATION_COARSE := deg_to_rad(15.0)
 const BUILDING_ROTATION_FINE := deg_to_rad(1.0)
 const BUILDING_WORLD_MIN := 0.25
-const BUILDING_WORLD_MAX := 47.75
+const BUILDING_WORLD_MAX := float(PATCH_SIZE.x) - BUILDING_WORLD_MIN
 const BUILDING_OVERLAP_CLEARANCE := 0.125
 
 func _ready() -> void:
@@ -191,8 +191,8 @@ func _begin_new_building_placement(design_id: String, wall_material_id: String =
 func _clamp_building_placement() -> void:
 	# Keep the cursor in the editable world, but do not hide invalid footprint
 	# states by forcing the whole house inside the boundary.
-	building_placement_target.x = clampf(building_placement_target.x, 0.0, 48.0)
-	building_placement_target.z = clampf(building_placement_target.z, 0.0, 48.0)
+	building_placement_target.x = clampf(building_placement_target.x, 0.0, float(PATCH_SIZE.x))
+	building_placement_target.z = clampf(building_placement_target.z, 0.0, float(PATCH_SIZE.z))
 
 func _snap_building_placement_to_ground() -> void:
 	if not backend or not backend.has_method("sample_surface_plane"): return

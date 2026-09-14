@@ -116,7 +116,12 @@ func _ready() -> void:
 		add_child(viewer)
 	voxels = generator_script.generate()
 	var full_area := AABB(Vector3.ZERO, Vector3(patch_size))
-	var initialization_budget_ms := initialization_budget_override_ms if initialization_budget_override_ms > 0 else (45000 if patch_size.x > 96 else 15000)
+	# The expanded 512-cell valley has 78% more native data than the previous
+	# 384-cell map. Keep a bounded cold-start allowance on slower devices, not
+	# just in test_mode; M0 and the previous map retain their original limits.
+	var default_budget_ms := 45000 if patch_size.x > 96 else 15000
+	if patch_size.x > 384 or patch_size.z > 384: default_budget_ms = 90000
+	var initialization_budget_ms := initialization_budget_override_ms if initialization_budget_override_ms > 0 else default_budget_ms
 	var load_deadline := Time.get_ticks_msec() + initialization_budget_ms
 	var tool = terrain.get_voxel_tool()
 	while not tool.is_area_editable(full_area) and Time.get_ticks_msec() < load_deadline:
@@ -194,6 +199,74 @@ func apply_sphere(center: Vector3, radius: float, remove: bool) -> bool:
 	_revision += 1
 	_dirty = true
 	_last_edit_ms = (Time.get_ticks_usec() - started) / 1000.0
+	_last_edit_submitted_at_ms = Time.get_ticks_msec()
+	_error = ""
+	changed.emit()
+	return true
+
+## Apply an exact set of native-grid voxel replacements as one ordinary terrain
+## history command. Each change must provide position, before and after. The
+## optimistic before check prevents a stale path plan from overwriting terrain
+## that changed between planning and commit.
+func apply_voxel_changes(changes: Array) -> bool:
+	if _stroke_active or not _backend_ready or voxels == null or changes.is_empty():
+		return false
+	var unique := {}
+	var min_pos := patch_size
+	var max_pos := Vector3i.ZERO
+	for value in changes:
+		if not value is Dictionary:
+			_error = "invalid voxel change"
+			return false
+		var change: Dictionary = value
+		if not change.get("position", null) is Vector3i:
+			_error = "voxel change position missing"
+			return false
+		var position: Vector3i = change["position"]
+		if position.x < 0 or position.y < 0 or position.z < 0 or position.x >= patch_size.x or position.y >= patch_size.y or position.z >= patch_size.z:
+			_error = "voxel change outside terrain bounds"
+			return false
+		var key := "%d:%d:%d" % [position.x, position.y, position.z]
+		if unique.has(key):
+			_error = "duplicate voxel change"
+			return false
+		var before := int(change.get("before", -1))
+		var after := int(change.get("after", -1))
+		if before < 0 or after < 0 or before > 65535 or after > 65535 or voxel_at(position) != before:
+			_error = "stale or invalid voxel change"
+			return false
+		unique[key] = {"position": position, "before": before, "after": after}
+		min_pos = min_pos.min(position)
+		max_pos = max_pos.max(position + Vector3i.ONE)
+	var region_size := max_pos - min_pos
+	if region_size.x <= 0 or region_size.y <= 0 or region_size.z <= 0: return false
+	var command_bytes := region_size.x * region_size.y * region_size.z * VOXEL_BYTES * 2
+	var redo_bytes := _stack_bytes(_redo)
+	var projected_bytes := _history_bytes - redo_bytes + command_bytes
+	if _undo.size() >= MAX_HISTORY:
+		projected_bytes -= _command_bytes(_undo[0])
+	if projected_bytes > MAX_HISTORY_BYTES:
+		_error = "terrain history budget exceeded"
+		return false
+	var before_region: Object = _clone_region(voxels, min_pos, max_pos)
+	var after_region: Object = _clone_region(voxels, min_pos, max_pos)
+	for change: Dictionary in unique.values():
+		var position: Vector3i = change["position"]
+		after_region.set_voxel(int(change["after"]), position.x - min_pos.x, position.y - min_pos.y, position.z - min_pos.z, PatchGenerator.CHANNEL_TYPE)
+	var terrain_tool = terrain.get_voxel_tool()
+	terrain_tool.paste(min_pos, after_region, 1)
+	for change: Dictionary in unique.values():
+		var position: Vector3i = change["position"]
+		voxels.set_voxel(int(change["after"]), position.x, position.y, position.z, PatchGenerator.CHANNEL_TYPE)
+	_redo.clear()
+	_history_bytes -= redo_bytes
+	_undo.append({"min": min_pos, "size": region_size, "before": before_region, "after": after_region})
+	_last_edit_command = _undo.back()
+	_history_bytes += command_bytes
+	if _undo.size() > MAX_HISTORY:
+		_history_bytes -= _command_bytes(_undo.pop_front())
+	_revision += 1
+	_dirty = true
 	_last_edit_submitted_at_ms = Time.get_ticks_msec()
 	_error = ""
 	changed.emit()
@@ -454,15 +527,29 @@ func load_world() -> bool:
 	var source_store: RefCounted = _checkpoint
 	var migrated := false
 	if loaded == null and initial_generator == M1Generator and generator_id == M1Generator.GENERATOR_ID and patch_size == M1Generator.PATCH_SIZE and is_equal_approx(voxel_scale, M1Generator.VOXEL_SCALE):
-		var legacy_store := CheckpointStore.new(checkpoint_root)
-		legacy_store.expected_dimensions = M1Generator.LEGACY_PATCH_SIZE
-		legacy_store.expected_generator_id = M1Generator.LEGACY_GENERATOR_ID
-		legacy_store.require_building_document = require_building_document
-		var legacy: Object = legacy_store.load()
-		if legacy != null:
-			loaded = _upsample_legacy_m1(legacy)
-			source_store = legacy_store
+		# Validate both older envelopes before touching any authoritative data.
+		# CheckpointStore keeps other generator generations out of its GC domain.
+		var previous_store := CheckpointStore.new(checkpoint_root)
+		previous_store.expected_dimensions = M1Generator.Bounds.PREVIOUS_NATIVE_SIZE
+		previous_store.expected_generator_id = M1Generator.Bounds.PREVIOUS_GENERATOR_ID
+		previous_store.require_building_document = require_building_document
+		var previous: Object = previous_store.load()
+		if previous != null:
+			# Reload must also discard unsaved edits in the newly added land.
+			# Build off to the side; do not mutate the live buffer during migration.
+			loaded = M1Generator.expand_previous(previous)
+			source_store = previous_store
 			migrated = loaded != null
+		else:
+			var legacy_store := CheckpointStore.new(checkpoint_root)
+			legacy_store.expected_dimensions = M1Generator.LEGACY_PATCH_SIZE
+			legacy_store.expected_generator_id = M1Generator.LEGACY_GENERATOR_ID
+			legacy_store.require_building_document = require_building_document
+			var legacy: Object = legacy_store.load()
+			if legacy != null:
+				loaded = _upsample_legacy_m1(legacy)
+				source_store = legacy_store
+				migrated = loaded != null
 	if loaded == null:
 		_save_status = "error"; _error = _checkpoint.last_error; return false
 	var loaded_revision: int = source_store.loaded_revision
@@ -480,9 +567,11 @@ func load_world() -> bool:
 
 func _upsample_legacy_m1(source: Object) -> Object:
 	if source == null or source.get_size() != M1Generator.LEGACY_PATCH_SIZE: return null
-	var result: Object = ClassDB.instantiate("VoxelBuffer")
-	result.create(M1Generator.PATCH_SIZE.x, M1Generator.PATCH_SIZE.y, M1Generator.PATCH_SIZE.z)
+	var result: Object = M1Generator.generate()
 	result.set_channel_depth(PatchGenerator.CHANNEL_TYPE, source.get_channel_depth(PatchGenerator.CHANNEL_TYPE))
+	# Clear the ENTIRE old volume before copying runs, so saved excavations and
+	# air do not get refilled by the new starter generator.
+	result.fill_area(0, Vector3i.ZERO, M1Generator.Bounds.PREVIOUS_NATIVE_SIZE, PatchGenerator.CHANNEL_TYPE)
 	# Expand every vertical material run, including caves and disconnected
 	# overhangs. No sampling, surface reconstruction or save rewrite occurs.
 	var dimensions: Vector3i = source.get_size()

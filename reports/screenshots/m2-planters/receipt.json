@@ -1,0 +1,50 @@
+{
+	"assets": {
+		"barrel_planter": {
+			"mesh": "res://assets/models/magicavoxel/hearthvale_planter_flowers.res",
+			"mesh_sha256": "948cb829f4d7ddb1206efc81d90ebb670a6fb0d54351b6382842caed80bf58ec"
+		},
+		"barrel_planter_herbs": {
+			"mesh": "res://assets/models/magicavoxel/hearthvale_planter_herbs.res",
+			"mesh_sha256": "85e92e91cfa8f2c5add7d148bb1acafb09f49d9dca2a2262a9e5e94f3400f1a2"
+		},
+		"barrel_planter_light": {
+			"mesh": "res://assets/models/magicavoxel/hearthvale_planter_light.res",
+			"mesh_sha256": "993785d6ab14df5f7f58052e808d98284364661d24663f97d602bb471f145498"
+		}
+	},
+	"captures": [
+		"res://reports/screenshots/m2-planters/starter-normal.png",
+		"res://reports/screenshots/m2-planters/starter-planter-close.png",
+		"res://reports/screenshots/m2-planters/family-normal.png",
+		"res://reports/screenshots/m2-planters/family-close.png",
+		"res://reports/screenshots/m2-planters/family-reverse.png",
+		"res://reports/screenshots/m2-planters/catalogue.png",
+		"res://reports/screenshots/m2-planters/placement-preview.png",
+		"res://reports/screenshots/m2-planters/garden-kitchen-inspection.png",
+		"res://reports/screenshots/m2-planters/garden-flowers-inspection.png",
+		"res://reports/screenshots/m2-planters/garden-herbs-inspection.png"
+	],
+	"checkpoint_root": "user://m2-planter-render-3502785",
+	"engine": {
+		"build": "official",
+		"hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+		"hex": 263938,
+		"major": 4,
+		"minor": 7,
+		"patch": 2,
+		"status": "stable",
+		"string": "4.7.2-stable (official)",
+		"timestamp": 0
+	},
+	"gpu": "NVIDIA GeForce RTX 3070",
+	"messages": [],
+	"ok": true,
+	"physical_thor": false,
+	"renderer": "mobile",
+	"size": [
+		1280,
+		720
+	],
+	"visual_approval": false
+}

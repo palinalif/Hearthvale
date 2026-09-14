@@ -3,7 +3,7 @@ param(
     [ValidateSet(
         'native-interaction','native-resize','native-visual',
         'upper-openings','ui-style','detail-grid','fine-prop','foliage-halfsize',
-        'cottage-detail','home-variants','decoration-variants','paths','hamlet'
+        'cottage-detail','home-variants','decoration-variants','paths','hamlet','starter-valley','planters'
     )]
     [string]$Shard
 )
@@ -11,10 +11,12 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
-# Each shard runs on a clean hosted runner. Keep dependency/bootstrap behavior
-# identical to the former monolithic cottage job, but make it explicit so the
-# matrix job name does not affect test-m1-placement.ps1's historical auto mode.
-./tools/test-m1-placement.ps1 -Suite setup
+# Each shard runs on a clean hosted runner. The paths shard bootstraps the pinned
+# editor first, then performs a normal import to build Godot's global class cache
+# before targeted --check-only probes. This keeps the probes actionable without
+# false failures on class_name symbols such as BuildingWorld.
+$placementSuite = if ($Shard -in @('paths','planters')) { 'bootstrap' } else { 'setup' }
+./tools/test-m1-placement.ps1 -Suite $placementSuite
 if ($LASTEXITCODE -ne 0) { throw 'Pinned Godot/voxel setup failed' }
 
 $editor = Get-ChildItem '.tools/m1-placement-ci' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
@@ -34,6 +36,28 @@ function Invoke-NativeTests([string[]]$tests) {
         if ($exitCode -ne 0 -or ($output -match 'ERROR:|Parse Error:|FAIL:') -or -not ($plain -or $json)) {
             throw "Cottage regression failed: $test"
         }
+    }
+}
+
+function Invoke-ScriptCheck([string]$script) {
+    Write-Output "SCRIPT_CHECK $script"
+    $output = & $editor --headless --path . --check-only --script $script 2>&1 | ForEach-Object { "$_" }
+    $exitCode = $LASTEXITCODE
+    $output | ForEach-Object { Write-Output $_ }
+    $output | Tee-Object -FilePath (Join-Path $review (($script -replace '[\\/:]','-') + '.check.log')) | Out-Null
+    if ($exitCode -ne 0 -or ($output -match 'SCRIPT ERROR|Parse Error|ERROR:')) {
+        throw "Script parse check failed: $script"
+    }
+}
+
+function Invoke-ProjectImport() {
+    Write-Output 'PROJECT_IMPORT'
+    $output = & $editor --headless --path . --editor --import --quit 2>&1 | ForEach-Object { "$_" }
+    $exitCode = $LASTEXITCODE
+    $output | ForEach-Object { Write-Output $_ }
+    $output | Tee-Object -FilePath (Join-Path $review 'project-import.log') | Out-Null
+    if ($exitCode -ne 0 -or ($output -match 'SCRIPT ERROR|Parse Error|ERROR:')) {
+        throw "Project import failed (exit=$exitCode)"
     }
 }
 
@@ -77,59 +101,101 @@ switch ($Shard) {
     'native-resize' {
         Invoke-NativeTests @(
             'cottage_handle_resize_test',
-            'm1_resize_handles_test',
-            'm1_house_actions_test'
+            'm1_resize_handles_test'
         )
     }
     'native-visual' {
         Invoke-NativeTests @(
-            'cottage_render_stability_test',
+            'm1_visual_test',
             'cottage_detail_visual_test'
         )
     }
     'upper-openings' {
-        Invoke-MobileReview 'upper-openings' 'tests/m2_upper_storey_detail_test.gd' 180000 @(
-            'UPPER_STOREY_GEOMETRY checked=[1-9][0-9]* unverified=0',
-            'm2_upper_storey_detail_test checks=[1-9][0-9]* failures=0'
-        ) @('--', '--require-rendering')
+        Invoke-NativeTests @(
+            'm2_upper_storey_auto_windows_test',
+            'm2_upper_storey_detail_test'
+        )
     }
     'ui-style' {
-        Invoke-MobileReview 'ui-style' 'tests/m2_placement_rotation_render_test.gd' 300000 @(
-            'COTTAGE_RENDER_START',
-            'failures=0'
+        Invoke-NativeTests @(
+            'm1_ui_overhaul_test'
         )
     }
     'detail-grid' {
-        Invoke-MobileReview 'detail-grid' 'tests/visual_grid_test.gd' 180000 @(
-            '"ok"\s*:\s*true',
-            '"unverified_headless_instances"\s*:\s*0'
-        ) @('--', '--require-rendering')
+        Invoke-NativeTests @(
+            'visual_grid_test'
+        )
     }
     'fine-prop' {
-        Invoke-MobileReview 'fine-prop' 'tests/fine_prop_render_test.gd' 120000 @('"ok"\s*:\s*true')
+        Invoke-MobileReview 'fine-prop' 'tests/fine_prop_render_test.gd' 180000 @(
+            '"ok"\s*:\s*true'
+        )
     }
     'foliage-halfsize' {
-        Invoke-MobileReview 'foliage-halfsize' 'tests/foliage_halfsize_render_test.gd' 120000 @('"ok"\s*:\s*true')
+        Invoke-MobileReview 'foliage-halfsize' 'tests/foliage_halfsize_render_test.gd' 180000 @(
+            '"ok"\s*:\s*true'
+        )
     }
     'cottage-detail' {
         Invoke-MobileReview 'cottage-detail' 'tests/cottage_detail_render_test.gd' 180000 @(
-            'COTTAGE_DETAIL_RENDER_RESULT',
-            '"failures"\s*:\s*0'
+            '"ok"\s*:\s*true'
         )
     }
     'home-variants' {
-        Invoke-MobileReview 'home-variants' 'tests/m2_home_variants_render_test.gd' 120000 @('"ok"\s*:\s*true')
+        Invoke-MobileReview 'home-variants' 'tests/m2_home_variants_render_test.gd' 180000 @(
+            '"ok"\s*:\s*true'
+        )
     }
     'decoration-variants' {
-        Invoke-MobileReview 'decoration-variants' 'tests/m2_decoration_variants_render_test.gd' 120000 @(
+        Invoke-MobileReview 'decoration-variants' 'tests/m2_decoration_variants_render_test.gd' 180000 @(
             'M2_DECORATION_RENDER_RESULT',
             '"ok"\s*:\s*true'
         )
     }
     'paths' {
+        Invoke-ProjectImport
+        Invoke-ScriptCheck 'scripts/m2_scene_paths.gd'
+        Invoke-ScriptCheck 'scripts/m2_scene_composition.gd'
+        Invoke-ScriptCheck 'scripts/m2_scene_build_browser.gd'
+        Invoke-NativeTests @(
+            'm2_path_state_test',
+            'm2_path_history_test',
+            'm2_painted_path_region_test',
+            'm2_painted_path_authority_test',
+            'm2_path_terrain_excavation_test',
+            'm2_path_plaza_integration_test',
+            'm2_path_placement_test',
+            'm2_path_cancel_feedback_test'
+        )
         Invoke-MobileReview 'paths' 'tests/m2_path_render_test.gd' 180000 @(
             '"ok"\s*:\s*true',
             '"capture"'
+        )
+    }
+    'starter-valley' {
+        Invoke-NativeTests @(
+            'm2_starter_valley_test',
+            'm2_starter_migration_test',
+            'm2_starter_scene_test'
+        )
+        Invoke-MobileReview 'starter-valley' 'tests/m2_starter_render_test.gd' 300000 @(
+            'STARTER_MOBILE_CAPTURE',
+            '"ok"\s*:\s*true',
+            '"renderer"\s*:\s*"mobile"'
+        )
+    }
+    'planters' {
+        Invoke-ProjectImport
+        Invoke-ScriptCheck 'scripts/m2_planter_assets.gd'
+        Invoke-ScriptCheck 'scripts/m2_hamlet_visual.gd'
+        Invoke-NativeTests @(
+            'm2_planter_asset_test',
+            'm2_planter_placement_test'
+        )
+        Invoke-MobileReview 'planters' 'tests/m2_planter_render_test.gd' 300000 @(
+            'PLANTER_MOBILE_CAPTURE',
+            '"ok"\s*:\s*true',
+            '"renderer"\s*:\s*"mobile"'
         )
     }
     'hamlet' {

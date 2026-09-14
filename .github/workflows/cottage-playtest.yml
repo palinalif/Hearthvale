@@ -35,6 +35,8 @@ jobs:
           - decoration-variants
           - paths
           - hamlet
+          - starter-valley
+          - planters
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -66,12 +68,11 @@ jobs:
             reports/screenshots/m2-home-catalogue/
             reports/screenshots/m2-paths/
             reports/screenshots/m2-hamlet/
+            reports/screenshots/m2-starter-valley/
+            reports/screenshots/m2-planters/
           if-no-files-found: error
           retention-days: 14
 
-  # Packaging is speculative: Android and Windows exports run beside the test
-  # shards. The caller still gates Drive delivery on the entire reusable workflow,
-  # so no build can be delivered unless every cottage shard also succeeds.
-  build-repair-apk:
-    if: github.event_name != 'pull_request'
-    uses: ./.github/workflows/thor-repair-apk.yml
+  # Packaging is owned by the caller and can run independently. Private Drive
+  # delivery depends on this entire regression workflow as well as package
+  # verification; a failed shard must block delivery.

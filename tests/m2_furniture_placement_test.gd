@@ -29,14 +29,21 @@ func _initialize() -> void:
 	scene._hamlet_catalogue_buttons[5].grab_focus()
 	await _press(JOY_BUTTON_A)
 	_check(scene.furniture_placement_active and scene.furniture_style_id == "bench" and scene.view_context == "terrain", "bench selection enters world placement")
+	var random_yaw := float(scene.furniture_yaw_degrees)
+	_check(is_equal_approx(random_yaw, snappedf(random_yaw, 15.0)), "furniture starts on a randomized 15-degree facing")
 	_aim(Vector2(36.0, 34.0))
 	_check(scene.furniture_placement_valid and scene.composition_visual.stats().preview_cells >= 0, "bench gets a valid live placement preview")
 	scene._rotate_furniture(1)
-	_check(scene.furniture_yaw_quarters == 1 and scene.landscape_state.document() == before, "furniture rotation remains preview-only")
+	_check(is_equal_approx(scene.furniture_yaw_degrees, fposmod(random_yaw + 15.0, 360.0)) and scene.landscape_state.document() == before, "furniture keeps gentle manual nudging from its randomized facing")
+	scene.precision_mode = true
+	scene._rotate_furniture(1)
+	var committed_yaw := fposmod(random_yaw + 16.0, 360.0)
+	_check(is_equal_approx(scene.furniture_yaw_degrees, committed_yaw) and scene.landscape_state.document() == before, "precision mode gives furniture one-degree adjustment")
+	scene.precision_mode = false
 	await _press(JOY_BUTTON_A)
 	_check(not scene.furniture_placement_active and scene.landscape_state.composition.size() == 1, "A commits the bench")
 	var bench: Dictionary = scene.landscape_state.composition[0]
-	_check(bench.kind == "furniture" and bench.style_id == "bench" and int(bench.yaw_quarters) == 1, "bench saves kind style and orientation")
+	_check(bench.kind == "furniture" and bench.style_id == "bench" and is_equal_approx(float(bench.yaw_degrees), committed_yaw), "bench saves randomized precise orientation")
 	_check(scene._history_tags.size() == history_before + 1, "bench placement is one landscape undo transaction")
 	_check(scene.composition_visual.stats().furniture_count == 1 and scene.composition_visual.stats().furniture_geometry_cells > 0, "bench builds fine disposable presentation")
 
@@ -50,6 +57,7 @@ func _initialize() -> void:
 		scene.furniture_size = entry[1]
 		scene.furniture_yaw_quarters = 0
 		scene._begin_furniture_placement()
+		_check(is_equal_approx(scene.furniture_yaw_degrees, snappedf(scene.furniture_yaw_degrees, 15.0)), "%s gets a randomized fine-step facing" % entry[0])
 		_aim(entry[2])
 		_check(scene.furniture_placement_valid, "%s has a valid placement target" % entry[0])
 		_check(scene._commit_furniture(), "%s commits through the shared placement transaction" % entry[0])

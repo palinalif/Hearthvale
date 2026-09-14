@@ -2,18 +2,28 @@ extends "res://scripts/m2_scene_hamlet_details.gd"
 
 const HamletVisual = preload("res://scripts/m2_hamlet_visual.gd")
 
+const PlanterFurniture = preload("res://scripts/m2_planter_assets.gd")
+const StarterFurniture = preload("res://scripts/m2_starter_props.gd")
 const FURNITURE_STYLES := {
+	"well": StarterFurniture.DEFINITIONS["well"],
+	"chopping_block": StarterFurniture.DEFINITIONS["chopping_block"],
+	"log_stack": StarterFurniture.DEFINITIONS["log_stack"],
 	"bench": {"name": "Village bench", "size": Vector2(1.5, 0.625), "summary": "Slatted timber seat with a proper back"},
 	"lantern": {"name": "Path lantern", "size": Vector2(0.5, 0.5), "summary": "Small warm lantern on a dark village post"},
 	"signpost": {"name": "Wooden signpost", "size": Vector2(0.625, 0.625), "summary": "Two crooked direction boards on one post"},
-	"barrel_planter": {"name": "Barrel planter", "size": Vector2(0.75, 0.75), "summary": "Weathered barrel packed with greenery and flowers"},
+	"barrel_planter": PlanterFurniture.DEFINITIONS["barrel_planter"],
+	"barrel_planter_herbs": PlanterFurniture.DEFINITIONS["barrel_planter_herbs"],
+	"barrel_planter_light": PlanterFurniture.DEFINITIONS["barrel_planter_light"],
 }
-const FURNITURE_STYLE_ORDER: Array[String] = ["bench", "lantern", "signpost", "barrel_planter"]
+const FURNITURE_STYLE_ORDER: Array[String] = ["bench", "lantern", "signpost", "barrel_planter", "well", "chopping_block", "log_stack", "barrel_planter_herbs", "barrel_planter_light"]
+const FURNITURE_RANDOM_TURN_COUNT := 24
+const FURNITURE_RANDOM_STEP_DEGREES := 15.0
 
 var furniture_placement_active := false
 var furniture_style_id := "bench"
 var furniture_size := Vector2(1.5, 0.625)
 var furniture_yaw_quarters := 0
+var furniture_yaw_degrees := 0.0
 var furniture_placement_valid := false
 var furniture_placement_reason := ""
 var _furniture_render_signature := ""
@@ -41,7 +51,7 @@ func _install_hamlet_catalogue() -> void:
 		var style: Dictionary = FURNITURE_STYLES[style_id]
 		_add_catalogue_button(box, _hamlet_catalogue_buttons, "%s\n%s" % [style["name"], style["summary"]], _choose_furniture_style.bind(style_id))
 
-	# This catalogue is deliberately bounded to nine choices, so keep it all on
+	# This catalogue is deliberately bounded to twelve choices, so keep it all on
 	# one 720p handheld page rather than adding scrolling. The selected item's
 	# placement HUD still carries the descriptive context once it enters world
 	# placement; this menu only needs fast, readable names.
@@ -69,10 +79,23 @@ func _choose_furniture_style(style_id: String) -> void:
 	furniture_style_id = style_id
 	furniture_size = FURNITURE_STYLES[style_id]["size"]
 	furniture_yaw_quarters = 0
+	furniture_yaw_degrees = 0.0
 	_begin_detail_placement("furniture", furniture_style_id, furniture_size, furniture_yaw_quarters)
+	_apply_random_furniture_yaw()
 
 func _begin_furniture_placement() -> void:
 	_begin_detail_placement("furniture", furniture_style_id, furniture_size, furniture_yaw_quarters)
+	_apply_random_furniture_yaw()
+
+func _apply_random_furniture_yaw() -> void:
+	if not detail_placement_active or detail_kind != "furniture": return
+	var turn := posmod(int(landscape_state.next_id) * 17 + int(detail_style_id.hash()), FURNITURE_RANDOM_TURN_COUNT)
+	detail_yaw_degrees = float(turn) * FURNITURE_RANDOM_STEP_DEGREES
+	detail_yaw_quarters = posmod(roundi(detail_yaw_degrees / 90.0), 4)
+	_detail_preview_signature = ""
+	_update_detail_validity()
+	_update_detail_preview()
+	_sync_detail_aliases()
 
 func _rotate_furniture(direction: int) -> void:
 	if detail_placement_active and detail_kind == "furniture": _rotate_detail(direction)
@@ -107,6 +130,7 @@ func _sync_detail_aliases() -> void:
 		furniture_style_id = detail_style_id
 		furniture_size = detail_size
 		furniture_yaw_quarters = detail_yaw_quarters
+		furniture_yaw_degrees = detail_yaw_degrees
 		furniture_placement_valid = detail_placement_valid
 		furniture_placement_reason = detail_placement_reason
 
@@ -119,10 +143,10 @@ func _update_detail_preview() -> void:
 	if not point.is_finite():
 		composition_visual.hide_furniture_preview()
 		return
-	var signature := "%s|%s|%s|%d|%s|%d" % [detail_kind, detail_style_id, point, detail_yaw_quarters, detail_placement_valid, _terrain_revision()]
+	var signature := "%s|%s|%s|%.1f|%s|%d" % [detail_kind, detail_style_id, point, detail_yaw_degrees, detail_placement_valid, _terrain_revision()]
 	if signature == _detail_preview_signature: return
 	_detail_preview_signature = signature
-	composition_visual.show_furniture_preview(detail_style_id, point, detail_size, detail_yaw_quarters, detail_placement_valid)
+	composition_visual.show_furniture_preview(detail_style_id, point, detail_size, detail_yaw_degrees, detail_placement_valid, _detail_selected_colour if _detail_edit_id > 0 else "")
 
 func _hide_detail_preview() -> void:
 	super._hide_detail_preview()

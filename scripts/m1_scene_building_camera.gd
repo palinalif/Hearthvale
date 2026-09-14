@@ -6,8 +6,10 @@ extends "res://scripts/m1_scene_terrain_ux.gd"
 const BUILDING_CAMERA_MIN_DISTANCE := 3.5
 const BUILDING_CAMERA_MAX_DISTANCE := 28.0
 const BUILDING_CAMERA_MARGIN := 1.22
+const CameraBoundary = preload("res://scripts/m2_camera_boundary.gd")
 
 var _terrain_camera_state: Dictionary = {}
+var _bounded_camera_focus := Vector3.INF
 
 func _process(delta: float) -> void:
 	if _shutting_down: return
@@ -63,8 +65,19 @@ func _update_camera() -> void:
 	if view_context == "building":
 		target = _selected_building_camera_target()
 	var offset := Vector3(sin(camera_yaw) * cos(camera_pitch), sin(camera_pitch), cos(camera_yaw) * cos(camera_pitch)) * camera_distance
-	camera.position = target + offset
-	camera.look_at(target, Vector3.UP)
+	_position_bounded_camera(target, offset)
+
+func _position_bounded_camera(target: Vector3, offset: Vector3) -> void:
+	var extent := Vector3(PATCH_SIZE)
+	if backend and backend.has_method("world_size"):
+		extent = backend.world_size()
+	var bounded := CameraBoundary.frame(target, offset, extent)
+	_bounded_camera_focus = bounded["target"]
+	camera.position = bounded["position"]
+	var direction: Vector3 = bounded["target"] - camera.position
+	if direction.length_squared() > 0.000001:
+		var up := Vector3.FORWARD if absf(direction.normalized().dot(Vector3.UP)) > 0.9999 else Vector3.UP
+		camera.look_at(bounded["target"], up)
 
 func _selected_building_camera_target() -> Vector3:
 	if not building_world:

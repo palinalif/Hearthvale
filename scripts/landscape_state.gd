@@ -4,7 +4,8 @@ class_name LandscapeState
 const LIMIT := 320
 const TREE_LIMIT := 24
 const PATH_STYLE_IDS: Array[String] = ["packed_earth", "cobblestone", "stepping_stones"]
-const PATH_LIMIT := 32
+# Transitional caller-only limits while the scene tool is cut from point routes
+# to hold-to-paint strokes. Saved path documents never use width or points.
 const PATH_MIN_POINTS := 2
 const PATH_MAX_POINTS := 64
 const PATH_MIN_WIDTH := 0.25
@@ -21,14 +22,17 @@ const BRIDGE_RENDER_CELL_LIMIT := 8000
 const COMPOSITION_STYLE_IDS := {
 	"garden": ["cottage_flowers", "kitchen_rows", "herb_garden"],
 	"fence": ["rustic_fence", "rustic_gate"],
-	"furniture": ["bench", "lantern", "signpost", "barrel_planter"],
+	"furniture": ["bench", "lantern", "signpost", "barrel_planter", "well", "chopping_block", "log_stack", "barrel_planter_herbs", "barrel_planter_light"],
 }
 const COMPOSITION_LIMIT := 96
 const COMPOSITION_MIN_SIZE := 0.125
 const COMPOSITION_MAX_SIZE := 6.0
 const COMPOSITION_RENDER_CELL_LIMIT := 24000
-const EDITABLE_WORLD_SIZE := 48.0
+const EDITABLE_WORLD_SIZE := preload("res://scripts/m2_world_bounds.gd").SIZE
 const Grid = preload("res://scripts/visual_grid.gd")
+const PathRegion = preload("res://scripts/m2_painted_path_region.gd")
+const PathAuthority = preload("res://scripts/m2_painted_path_authority.gd")
+
 var records: Array = []
 var paths: Array = []
 var bridges: Array = []
@@ -42,7 +46,8 @@ static func validate(value: Dictionary) -> bool:
 	if not _integer(value.get("version", null)) or int(value["version"]) != 1 or not value.get("records", null) is Array: return false
 	if value["records"].size() > LIMIT or not _integer(value.get("next_id", null)) or int(value["next_id"]) < 1: return false
 	var path_values = value.get("paths", [])
-	if not path_values is Array or path_values.size() > PATH_LIMIT: return false
+	if not path_values is Array or not PathAuthority.validate(path_values): return false
+	if PathAuthority.total_cells(path_values) > PATH_RENDER_CELL_LIMIT: return false
 	var bridge_values = value.get("bridges", [])
 	if not bridge_values is Array or bridge_values.size() > BRIDGE_LIMIT: return false
 	var composition_values = value.get("composition", [])
@@ -53,6 +58,9 @@ static func validate(value: Dictionary) -> bool:
 		if not record is Dictionary: return false
 		if not str(record.get("kind", "")) in ["tree", "foliage", "rock"]: return false
 		if not _integer(record.get("seed", null)) or not _integer(record.get("id", null)): return false
+		if record.has("yaw_degrees"):
+			var record_yaw = record.get("yaw_degrees", null)
+			if not (record_yaw is int or record_yaw is float) or not is_finite(float(record_yaw)): return false
 		var id := int(record.get("id", 0))
 		if id < 1 or id >= int(value["next_id"]) or ids.has(id): return false
 		ids[id] = true
@@ -60,18 +68,14 @@ static func validate(value: Dictionary) -> bool:
 		if not p is Array or p.size() != 3: return false
 		for number in p:
 			if not (number is float or number is int) or not is_finite(float(number)): return false
-		if float(p[0]) < 0 or float(p[0]) > 48 or float(p[2]) < 0 or float(p[2]) > 48 or float(p[1]) < 0 or float(p[1]) > 32: return false
+		if float(p[0]) < 0 or float(p[0]) > EDITABLE_WORLD_SIZE or float(p[2]) < 0 or float(p[2]) > EDITABLE_WORLD_SIZE or float(p[1]) < 0 or float(p[1]) > 32: return false
 		if record["kind"] == "tree": trees += 1
 	if trees > TREE_LIMIT: return false
-	var rendered_cells := 0
 	for path_value in path_values:
-		if not _validate_path_record(path_value): return false
 		var path: Dictionary = path_value
 		var id := int(path["id"])
 		if id < 1 or id >= int(value["next_id"]) or ids.has(id): return false
 		ids[id] = true
-		rendered_cells += _estimated_render_cells(path)
-		if rendered_cells > PATH_RENDER_CELL_LIMIT: return false
 	var bridge_cells := 0
 	for bridge_value in bridge_values:
 		if not _validate_bridge_record(bridge_value): return false
@@ -99,9 +103,6 @@ func restore(value: Dictionary) -> bool:
 	bridges = value.get("bridges", []).duplicate(true)
 	composition = value.get("composition", []).duplicate(true)
 	next_id = int(value["next_id"])
-	# JSON has no integer/float distinction on reload. Reassert the integer
-	# identity fields so deterministic documents keep the same serialization
-	# shape as documents created in memory.
 	for record_value in records:
 		var record: Dictionary = record_value
 		record["id"] = int(record["id"])
@@ -109,6 +110,9 @@ func restore(value: Dictionary) -> bool:
 	for path_value in paths:
 		var path: Dictionary = path_value
 		path["id"] = int(path["id"])
+		for cell_value in path["cells"]:
+			cell_value[0] = int(cell_value[0])
+			cell_value[1] = int(cell_value[1])
 	for bridge_value in bridges:
 		var bridge: Dictionary = bridge_value
 		bridge["id"] = int(bridge["id"])
@@ -116,42 +120,84 @@ func restore(value: Dictionary) -> bool:
 		var object: Dictionary = object_value
 		object["id"] = int(object["id"])
 		object["yaw_quarters"] = int(object["yaw_quarters"])
+		if object.has("yaw_degrees"): object["yaw_degrees"] = float(object["yaw_degrees"])
 	return true
 
 static func position_of(record: Dictionary) -> Vector3:
 	var p: Array = record["position"]
 	return Vector3(p[0], p[1], p[2])
 
-func add(kind: String, point: Vector3, seed_value: int) -> bool:
-	if not kind in ["tree", "foliage", "rock"] or records.size() >= LIMIT or not point.is_finite() or point.y <= 5.05 or point.y > 32 or point.x < 0 or point.x > 48 or point.z < 0 or point.z > 48: return false
+func add(kind: String, point: Vector3, seed_value: int, yaw_degrees: float = NAN) -> bool:
+	if not kind in ["tree", "foliage", "rock"] or records.size() >= LIMIT or not point.is_finite() or point.y <= 5.05 or point.y > 32 or point.x < 0 or point.x > EDITABLE_WORLD_SIZE or point.z < 0 or point.z > EDITABLE_WORLD_SIZE: return false
 	var trees := 0
 	for other in records:
 		if other["kind"] == "tree": trees += 1
 		var separation := 2.8 if kind == "tree" and other["kind"] == "tree" else (0.5 if kind == "foliage" else 0.8)
 		if Vector2(point.x, point.z).distance_to(Vector2(other["position"][0], other["position"][2])) < separation: return false
 	if kind == "tree" and trees >= TREE_LIMIT: return false
-	records.append({"id": next_id, "kind": kind, "position": [point.x, point.y, point.z], "seed": seed_value})
+	var record := {"id": next_id, "kind": kind, "position": [point.x, point.y, point.z], "seed": seed_value}
+	if is_finite(yaw_degrees) and kind in ["tree", "foliage"]: record["yaw_degrees"] = fposmod(yaw_degrees, 360.0)
+	records.append(record)
 	next_id += 1
 	return true
 
-## Add a composition path and return its shared stable landscape ID. A
-## negative result means the candidate failed the same validation used for
-## save/reload. Points are accepted as Vector2 values or [x, z] pairs so
-## controller code and headless state tests can use the same API.
+## Temporary caller bridge during the interaction rewrite. Point routes are
+## rasterized immediately and never enter the saved document schema.
 func add_path(style_id: String, width: float, point_values: Array) -> int:
-	var normalized: Array = []
-	for point_value in point_values:
-		var point := _point_array(point_value)
+	if not PATH_STYLE_IDS.has(style_id) or point_values.size() < PATH_MIN_POINTS or point_values.size() > PATH_MAX_POINTS: return -1
+	var safe_width := snappedf(clampf(width, PATH_MIN_WIDTH, PATH_MAX_WIDTH), Grid.UNIT)
+	var points: Array[Vector2] = []
+	for value in point_values:
+		var point := _point_array(value)
 		if point.is_empty(): return -1
-		normalized.append(point)
-	var candidate := {"id": next_id, "style_id": style_id, "width": snappedf(width, Grid.UNIT), "points": normalized}
+		var parsed := Vector2(float(point[0]), float(point[1]))
+		if parsed.x < 0.0 or parsed.x > EDITABLE_WORLD_SIZE or parsed.y < 0.0 or parsed.y > EDITABLE_WORLD_SIZE: return -1
+		points.append(parsed)
+	var cells: Array = []
+	for index in range(1, points.size()):
+		if points[index - 1].distance_to(points[index]) < PATH_MIN_SEGMENT - 0.000001: return -1
+		cells = PathRegion.union_cells(cells, PathRegion.stroke_cells(points[index - 1], points[index], safe_width * 0.5, EDITABLE_WORLD_SIZE), EDITABLE_WORLD_SIZE)
+	return paint_path_cells(style_id, cells)
+
+## Same temporary bridge for planting clearance. The authoritative operation is
+## still cell-based, so removing this adapter later does not change save data.
+func clear_records_along_path(point_values: Array, width: float) -> bool:
+	if point_values.size() < PATH_MIN_POINTS: return false
+	var safe_width := snappedf(clampf(width, PATH_MIN_WIDTH, PATH_MAX_WIDTH), Grid.UNIT)
+	var points: Array[Vector2] = []
+	for value in point_values:
+		var point := _point_array(value)
+		if point.is_empty(): return false
+		points.append(Vector2(float(point[0]), float(point[1])))
+	var cells: Array = []
+	for index in range(1, points.size()):
+		cells = PathRegion.union_cells(cells, PathRegion.stroke_cells(points[index - 1], points[index], safe_width * 0.5, EDITABLE_WORLD_SIZE), EDITABLE_WORLD_SIZE)
+	return clear_records_in_path_cells(cells)
+
+## Paint authoritative structural-grid cells. Repainting the same material
+## merges into its region; painting another material transfers ownership.
+func paint_path_cells(style_id: String, cell_values: Array) -> int:
+	var result := PathAuthority.paint(paths, next_id, style_id, cell_values)
+	if not bool(result.get("changed", false)): return int(result.get("path_id", -1))
 	var proposed := document()
-	(proposed["paths"] as Array).append(candidate)
-	proposed["next_id"] = next_id + 1
+	proposed["paths"] = result["paths"]
+	proposed["next_id"] = int(result["next_id"])
 	if not validate(proposed): return -1
-	paths.append(candidate)
-	next_id += 1
-	return int(candidate["id"])
+	paths = (result["paths"] as Array).duplicate(true)
+	next_id = int(result["next_id"])
+	return int(result["path_id"])
+
+func erase_path_cells(cell_values: Array) -> bool:
+	var result := PathAuthority.erase(paths, cell_values)
+	if not bool(result.get("changed", false)): return false
+	var proposed := document()
+	proposed["paths"] = result["paths"]
+	if not validate(proposed): return false
+	paths = (result["paths"] as Array).duplicate(true)
+	return true
+
+func path_cells(style_id: String) -> Array:
+	return PathAuthority.cells_for_style(paths, style_id)
 
 func erase_path(path_id: int) -> bool:
 	for index in paths.size():
@@ -160,9 +206,34 @@ func erase_path(path_id: int) -> bool:
 		return true
 	return false
 
+## Painted path cells clear planting from the occupied ground plus a small root
+## margin. This remains part of the surrounding landscape undo transaction.
+func clear_records_in_path_cells(cell_values: Array, margin_cells: int = 2) -> bool:
+	var painted := PathRegion.normalize_cells(cell_values)
+	if painted.is_empty(): return false
+	var occupied := {}
+	for cell: Vector2i in painted: occupied[cell] = true
+	var kept: Array = []
+	var changed := false
+	for record_value in records:
+		var record: Dictionary = record_value
+		var point := position_of(record)
+		var root := Vector2i(floori(point.x / Grid.UNIT), floori(point.z / Grid.UNIT))
+		var reach := maxi(0, margin_cells) + (3 if str(record.get("kind", "")) == "tree" else 1)
+		var affected := false
+		for z in range(-reach, reach + 1):
+			for x in range(-reach, reach + 1):
+				if occupied.has(root + Vector2i(x, z)):
+					affected = true
+					break
+			if affected: break
+		if affected: changed = true
+		else: kept.append(record)
+	if changed: records = kept
+	return changed
+
 ## Simple bridges remain separate composition authority instead of being baked
-## into terrain or path meshes. The two saved X/Z points define orientation;
-## generated supports, rails, and planks are disposable presentation.
+## into terrain or path meshes.
 func add_bridge(style_id: String, width: float, point_values: Array) -> int:
 	if point_values.size() != 2: return -1
 	var normalized: Array = []
@@ -186,13 +257,12 @@ func erase_bridge(bridge_id: int) -> bool:
 		return true
 	return false
 
-## Gardens, fences, and furniture share one bounded placement record. Their
-## generated meshes are disposable; saved authority is kind/style/footprint/yaw.
-func add_composition(kind: String, style_id: String, point_value: Variant, size_value: Variant, yaw_quarters: int) -> int:
+func add_composition(kind: String, style_id: String, point_value: Variant, size_value: Variant, yaw_quarters: int, yaw_degrees: float = NAN) -> int:
 	var point := _point_array(point_value)
 	var size := _size_array(size_value)
 	if point.is_empty() or size.is_empty(): return -1
 	var candidate := {"id": next_id, "kind": kind, "style_id": style_id, "position": point, "size": size, "yaw_quarters": posmod(yaw_quarters, 4)}
+	if is_finite(yaw_degrees): candidate["yaw_degrees"] = fposmod(yaw_degrees, 360.0)
 	var proposed := document()
 	(proposed["composition"] as Array).append(candidate)
 	proposed["next_id"] = next_id + 1
@@ -208,34 +278,33 @@ func erase_composition(object_id: int) -> bool:
 		return true
 	return false
 
-## Paths are composition data, so removing a plant here is still reversible by
-## the surrounding landscape history entry. Trees use a wider root clearance;
-## rocks and foliage are kept clear of the walking surface as well.
-func clear_records_along_path(point_values: Array, width: float) -> bool:
-	if point_values.size() < PATH_MIN_POINTS: return false
-	var kept: Array = []
-	var clearance := maxf(width * 0.5, PATH_MIN_WIDTH * 0.5) + 0.25
-	var changed := false
-	for record_value in records:
-		var record: Dictionary = record_value
-		var point := position_of(record)
-		var radius := clearance + (0.45 if str(record.get("kind", "")) == "tree" else 0.12)
-		if _distance_to_polyline_squared(Vector2(point.x, point.z), point_values) <= radius * radius:
-			changed = true
-		else:
-			kept.append(record)
-	if changed: records = kept
-	return changed
+func update_composition(object_id: int, position_value: Variant, yaw_quarters: int, yaw_degrees: float = NAN, colour_id: String = "") -> bool:
+	for index in composition.size():
+		var current: Dictionary = composition[index]
+		if int(current.get("id", -1)) != object_id: continue
+		var point := _point_array(position_value)
+		if point.is_empty(): return false
+		var candidate: Dictionary = current.duplicate(true)
+		candidate["position"] = point
+		candidate["yaw_quarters"] = posmod(yaw_quarters, 4)
+		if is_finite(yaw_degrees): candidate["yaw_degrees"] = fposmod(yaw_degrees, 360.0)
+		elif candidate.has("yaw_degrees"): candidate.erase("yaw_degrees")
+		if colour_id.is_empty(): candidate.erase("colour_id")
+		else: candidate["colour_id"] = colour_id
+		var proposed := document()
+		(proposed["composition"] as Array)[index] = candidate
+		if not validate(proposed): return false
+		composition[index] = candidate
+		return true
+	return false
 
-## Clearing planting inside a placed object is part of the same surrounding
-## landscape undo transaction. Quarter turns keep the footprint exact and cheap.
-func clear_records_in_footprint(point_value: Variant, size_value: Variant, yaw_quarters: int, margin: float = 0.0) -> bool:
+func clear_records_in_footprint(point_value: Variant, size_value: Variant, yaw_quarters: int, margin: float = 0.0, yaw_degrees: float = NAN) -> bool:
 	var point_array := _point_array(point_value)
 	var size_array := _size_array(size_value)
 	if point_array.is_empty() or size_array.is_empty(): return false
 	var center := Vector2(float(point_array[0]), float(point_array[1]))
 	var size := Vector2(float(size_array[0]), float(size_array[1]))
-	var angle := -float(posmod(yaw_quarters, 4)) * PI * 0.5
+	var angle := -deg_to_rad(fposmod(yaw_degrees, 360.0)) if is_finite(yaw_degrees) else -float(posmod(yaw_quarters, 4)) * PI * 0.5
 	var cosine := cos(angle)
 	var sine := sin(angle)
 	var kept: Array = []
@@ -263,7 +332,6 @@ func erase_brush(point: Vector3, radius: float) -> bool:
 	return changed
 
 func clear_edited_cells(cells: Array, cell_size: float) -> bool:
-	# Roots intersect changed native cells, not the enclosing stroke rectangle.
 	var lookup := {}
 	for point: Vector3 in cells: lookup[Vector3i(floor(point / cell_size))] = true
 	var kept: Array = []
@@ -310,30 +378,6 @@ static func _size_array(value: Variant) -> Array:
 	if not is_finite(float(x)) or not is_finite(float(z)): return []
 	return [snappedf(float(x), Grid.UNIT), snappedf(float(z), Grid.UNIT)]
 
-static func _validate_path_record(value: Variant) -> bool:
-	if not value is Dictionary: return false
-	var path: Dictionary = value
-	if not _integer(path.get("id", null)) or int(path["id"]) < 1: return false
-	if not PATH_STYLE_IDS.has(str(path.get("style_id", ""))): return false
-	if not (path.get("width", null) is int or path.get("width", null) is float): return false
-	var width := float(path["width"])
-	if not is_finite(width) or width < PATH_MIN_WIDTH or width > PATH_MAX_WIDTH: return false
-	if not is_equal_approx(width, snappedf(width, Grid.UNIT)): return false
-	var point_values = path.get("points", null)
-	if not point_values is Array or point_values.size() < PATH_MIN_POINTS or point_values.size() > PATH_MAX_POINTS: return false
-	var previous := Vector2.ZERO
-	for index in point_values.size():
-		var point_value = point_values[index]
-		if not point_value is Array or point_value.size() != 2: return false
-		for coordinate in point_value:
-			if not (coordinate is int or coordinate is float) or not is_finite(float(coordinate)): return false
-		var point := Vector2(float(point_value[0]), float(point_value[1]))
-		if point.x < 0.0 or point.x > EDITABLE_WORLD_SIZE or point.y < 0.0 or point.y > EDITABLE_WORLD_SIZE: return false
-		if not is_equal_approx(point.x, snappedf(point.x, Grid.UNIT)) or not is_equal_approx(point.y, snappedf(point.y, Grid.UNIT)): return false
-		if index > 0 and point.distance_to(previous) < PATH_MIN_SEGMENT - 0.000001: return false
-		previous = point
-	return true
-
 static func _validate_bridge_record(value: Variant) -> bool:
 	if not value is Dictionary: return false
 	var bridge: Dictionary = value
@@ -367,6 +411,12 @@ static func _validate_composition_record(value: Variant) -> bool:
 	if not _integer(object.get("yaw_quarters", null)): return false
 	var yaw := int(object["yaw_quarters"])
 	if yaw < 0 or yaw > 3: return false
+	var yaw_degrees := float(yaw) * 90.0
+	if object.has("yaw_degrees"):
+		var yaw_value = object.get("yaw_degrees", null)
+		if not (yaw_value is int or yaw_value is float) or not is_finite(float(yaw_value)): return false
+		yaw_degrees = fposmod(float(yaw_value), 360.0)
+	if object.has("colour_id") and str(object.get("colour_id", "")) not in ["natural", "sage", "blue", "berry", "cream"]: return false
 	var position = object.get("position", null)
 	var size = object.get("size", null)
 	if not position is Array or position.size() != 2 or not size is Array or size.size() != 2: return false
@@ -379,20 +429,10 @@ static func _validate_composition_record(value: Variant) -> bool:
 	if dimensions.x < COMPOSITION_MIN_SIZE or dimensions.y < COMPOSITION_MIN_SIZE or dimensions.x > COMPOSITION_MAX_SIZE or dimensions.y > COMPOSITION_MAX_SIZE: return false
 	if not is_equal_approx(center.x, snappedf(center.x, Grid.UNIT)) or not is_equal_approx(center.y, snappedf(center.y, Grid.UNIT)): return false
 	if not is_equal_approx(dimensions.x, snappedf(dimensions.x, Grid.UNIT)) or not is_equal_approx(dimensions.y, snappedf(dimensions.y, Grid.UNIT)): return false
-	var rotated := Vector2(dimensions.y, dimensions.x) if yaw % 2 == 1 else dimensions
-	var half := rotated * 0.5
+	var angle := deg_to_rad(yaw_degrees)
+	var cosine := absf(cos(angle)); var sine := absf(sin(angle))
+	var half := Vector2(dimensions.x * cosine + dimensions.y * sine, dimensions.x * sine + dimensions.y * cosine) * 0.5
 	return center.x - half.x >= 0.0 and center.x + half.x <= EDITABLE_WORLD_SIZE and center.y - half.y >= 0.0 and center.y + half.y <= EDITABLE_WORLD_SIZE
-
-static func _estimated_render_cells(path: Dictionary) -> int:
-	var points: Array = path["points"]
-	var width := float(path["width"])
-	var samples := 0
-	for index in range(1, points.size()):
-		var a := Vector2(float(points[index - 1][0]), float(points[index - 1][1]))
-		var b := Vector2(float(points[index][0]), float(points[index][1]))
-		samples += maxi(1, ceili(a.distance_to(b) / 0.5))
-	var width_cells := ceili(width / Grid.UNIT)
-	return samples * maxi(1, width_cells) * (3 if str(path["style_id"]) == "stepping_stones" else 2)
 
 static func _estimated_bridge_render_cells(bridge: Dictionary) -> int:
 	var points: Array = bridge["points"]
@@ -406,16 +446,6 @@ static func _estimated_composition_render_cells(object: Dictionary) -> int:
 	var size: Array = object["size"]
 	var area := float(size[0]) * float(size[1])
 	var base := 24 if str(object["kind"]) == "furniture" else (48 if str(object["kind"]) == "fence" else 72)
+	# The roofed stone well has 204 merged voxel runs at its fixed scale.
+	if str(object.get("style_id", "")) == "well": base = 224
 	return base + ceili(area * 24.0)
-
-static func _distance_to_polyline_squared(point: Vector2, point_values: Array) -> float:
-	var best := INF
-	for index in range(1, point_values.size()):
-		var a_value = point_values[index - 1]
-		var b_value = point_values[index]
-		var a: Vector2 = a_value if a_value is Vector2 else Vector2(float(a_value[0]), float(a_value[1]))
-		var b: Vector2 = b_value if b_value is Vector2 else Vector2(float(b_value[0]), float(b_value[1]))
-		var segment: Vector2 = b - a
-		var amount := clampf((point - a).dot(segment) / maxf(segment.length_squared(), 0.000001), 0.0, 1.0)
-		best = minf(best, point.distance_squared_to(a.lerp(b, amount)))
-	return best

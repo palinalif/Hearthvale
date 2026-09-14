@@ -1,5 +1,8 @@
 extends SceneTree
 
+## Focused controller contract for painted-path cancellation. A live stroke is
+## preview-only: B cancels that stroke and keeps the tool open; B again while
+## idle closes the path tool. Neither action may mutate saved authority/history.
 var checks := 0
 var failures := 0
 var scene: Node
@@ -19,31 +22,38 @@ func _initialize() -> void:
 	var before := JSON.stringify(scene.landscape_state.document())
 	var history_before: int = scene._history_tags.size()
 
+	scene.path_style_id = "packed_earth"
+	scene.path_width = 0.75
 	scene._begin_path_placement()
-	_check(scene.path_placement_active and scene.path_point_active, "path starts with a live prospective point")
+	_check(scene.path_placement_active and not scene.path_painting, "path tool opens idle with no live stroke")
 	_aim(Vector2(34.0, 34.0))
-	await _press(JOY_BUTTON_A)
-	_check(scene.path_points.size() == 1 and scene.path_point_active, "confirming a point immediately starts the next prospective point")
+	await _button_down(JOY_BUTTON_A)
+	_check(scene.path_painting and not scene.path_cells.is_empty(), "holding A starts a live painted-cell stroke")
+	_aim(Vector2(35.0, 34.0))
+	_check(scene._sample_path_stroke() and scene.path_cells.size() > 1, "moving while held extends the live stroke")
+	_check(JSON.stringify(scene.landscape_state.document()) == before and scene._history_tags.size() == history_before, "live stroke remains preview-only")
 
 	await _press(JOY_BUTTON_B)
-	_check(scene.path_placement_active, "first B keeps road placement mode active")
-	_check(not scene.path_point_active, "first B stops only the live prospective point")
-	_check(scene.path_points.size() == 1, "first B keeps confirmed road points")
-	_check(JSON.stringify(scene.landscape_state.document()) == before and scene._history_tags.size() == history_before, "stopping a point does not mutate authority or history")
+	_check(scene.path_placement_active, "first B keeps path painting mode active")
+	_check(not scene.path_painting and scene.path_cells.is_empty(), "first B cancels only the live stroke")
+	_check(JSON.stringify(scene.landscape_state.document()) == before and scene._history_tags.size() == history_before, "stroke cancellation changes neither authority nor history")
+	await _button_up(JOY_BUTTON_A)
+	_check(scene.path_placement_active and JSON.stringify(scene.landscape_state.document()) == before, "late A release after cancellation cannot commit the discarded stroke")
 
-	await _press(JOY_BUTTON_A)
-	_check(scene.path_placement_active and scene.path_point_active and scene.path_points.size() == 1, "A resumes extending the same confirmed route")
+	await _button_down(JOY_BUTTON_A)
+	_check(scene.path_painting and not scene.path_cells.is_empty(), "A can immediately start another stroke after cancellation")
 	await _press(JOY_BUTTON_B)
-	_check(scene.path_placement_active and not scene.path_point_active, "B can stop the resumed prospective point")
+	_check(scene.path_placement_active and not scene.path_painting, "B cancels a replacement live stroke")
+	await _button_up(JOY_BUTTON_A)
 	await _press(JOY_BUTTON_B)
-	_check(not scene.path_placement_active, "second B exits when no point is actively being placed")
-	_check(JSON.stringify(scene.landscape_state.document()) == before and scene._history_tags.size() == history_before, "two-stage exit leaves the world unchanged")
+	_check(not scene.path_placement_active, "B while idle closes painted-path mode")
+	_check(JSON.stringify(scene.landscape_state.document()) == before and scene._history_tags.size() == history_before, "cancel then close leaves the world unchanged")
 
 	scene._begin_path_placement()
+	_check(scene.path_placement_active and not scene.path_painting, "path tool can reopen after close")
 	await _press(JOY_BUTTON_B)
-	_check(scene.path_placement_active and not scene.path_point_active, "B first pauses even before the first point is confirmed")
-	await _press(JOY_BUTTON_B)
-	_check(not scene.path_placement_active, "B again exits an empty paused path")
+	_check(not scene.path_placement_active, "idle B closes an empty path tool in one press")
+	_check(JSON.stringify(scene.landscape_state.document()) == before and scene._history_tags.size() == history_before, "empty-tool close is read-only")
 	_finish()
 
 func _aim(point: Vector2) -> void:
@@ -52,19 +62,25 @@ func _aim(point: Vector2) -> void:
 	scene._update_brush_preview()
 	scene._update_path_validity()
 
+func _button_down(button: JoyButton) -> void:
+	var event := InputEventJoypadButton.new()
+	event.button_index = button
+	event.pressed = true
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	await process_frame
+
+func _button_up(button: JoyButton) -> void:
+	var event := InputEventJoypadButton.new()
+	event.button_index = button
+	event.pressed = false
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+	await process_frame
+
 func _press(button: JoyButton) -> void:
-	var down := InputEventJoypadButton.new()
-	down.button_index = button
-	down.pressed = true
-	Input.parse_input_event(down)
-	Input.flush_buffered_events()
-	await process_frame
-	var up := InputEventJoypadButton.new()
-	up.button_index = button
-	up.pressed = false
-	Input.parse_input_event(up)
-	Input.flush_buffered_events()
-	await process_frame
+	await _button_down(button)
+	await _button_up(button)
 
 func _check(condition: bool, label: String) -> void:
 	checks += 1
@@ -73,6 +89,7 @@ func _check(condition: bool, label: String) -> void:
 		print("FAIL: " + label)
 
 func _finish() -> void:
+	Input.action_release("m1_accept")
 	if scene and is_instance_valid(scene):
 		scene._shutting_down = true
 		scene.queue_free()

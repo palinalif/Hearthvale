@@ -1,0 +1,17 @@
+{
+	"captures": [
+		"res://reports/screenshots/m2-starter-valley/opening-ui.png",
+		"res://reports/screenshots/m2-starter-valley/normal.png",
+		"res://reports/screenshots/m2-starter-valley/commons-close.png",
+		"res://reports/screenshots/m2-starter-valley/woodcutters-close.png",
+		"res://reports/screenshots/m2-starter-valley/reverse.png",
+		"res://reports/screenshots/m2-starter-valley/edge-before.png",
+		"res://reports/screenshots/m2-starter-valley/edge-edited.png"
+	],
+	"failures": 0,
+	"messages": [],
+	"ok": true,
+	"production_start": true,
+	"renderer": "mobile",
+	"size": "1280x720"
+}

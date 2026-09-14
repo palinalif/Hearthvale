@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - run: python -m unittest tests/upload_google_drive_test.py tests/ci_performance_dependency_test.py
+      - run: python -m unittest tests/upload_google_drive_test.py tests/ci_performance_dependency_test.py tests/ci_delivery_regression_gate_test.py
 
   sculpt-feedback:
     uses: ./.github/workflows/sculpt-feedback.yml
@@ -37,15 +37,19 @@ jobs:
   performance:
     uses: ./.github/workflows/m2-performance.yml
 
-  # Cottage regressions now fan out across independent Windows runners. The
-  # reusable workflow packages Android and Windows in parallel only after all
-  # cottage shards pass.
+  # Candidate packaging may run in parallel, but private delivery requires every
+  # regression and package verification to pass for this exact source commit.
+  # A valid APK is not evidence that gameplay/visual regressions passed.
   cottage-and-apk:
     uses: ./.github/workflows/cottage-playtest.yml
 
+  build-candidates:
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/thor-repair-apk.yml
+
   drive-apk:
     name: Upload verified Android build to private Google Drive
-    needs: [delivery-contract, sculpt-feedback, terrain-ux, placement, performance, cottage-and-apk]
+    needs: [delivery-contract, build-candidates, sculpt-feedback, terrain-ux, placement, performance, cottage-and-apk]
     if: vars.GOOGLE_DRIVE_UPLOAD_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -91,7 +95,7 @@ jobs:
 
   drive-pc:
     name: Upload verified Windows build to private Google Drive
-    needs: [delivery-contract, sculpt-feedback, terrain-ux, placement, performance, cottage-and-apk]
+    needs: [delivery-contract, build-candidates, sculpt-feedback, terrain-ux, placement, performance, cottage-and-apk]
     if: vars.GOOGLE_DRIVE_UPLOAD_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
