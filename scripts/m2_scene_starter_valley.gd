@@ -16,50 +16,51 @@ func _ready() -> void:
 	_apply_cozy_valley_lighting()
 
 func _apply_cozy_valley_lighting() -> void:
-	# Warm miniature daylight inspired by Station to Station / Town to City.
-	# The glow needs contrast to read: keep the ambient floor restrained, let a
-	# warmer grazing key create real HDR highlights, then bloom those highlights
-	# instead of raising the whole frame toward white.
+	# Deliberately strong storybook-miniature daylight. The previous pass was too
+	# subtle: this one creates a lower, warmer key with enough HDR headroom for
+	# visible bloom, while keeping the ambient floor lower so the glow can read.
 	for node in find_children("*", "DirectionalLight3D", true, false):
 		var light := node as DirectionalLight3D
-		light.rotation_degrees = Vector3(-40.0, -34.0, 0.0)
-		light.light_color = Color("#ffd7a0")
-		light.light_energy = 1.10
+		light.rotation_degrees = Vector3(-31.0, -30.0, 0.0)
+		light.light_color = Color("#ffcf96")
+		light.light_energy = 1.55
 		light.shadow_enabled = true
-		light.shadow_opacity = 0.68
-		light.light_angular_distance = 2.5
+		light.shadow_opacity = 0.58
+		light.light_angular_distance = 3.4
 	for node in find_children("*", "WorldEnvironment", true, false):
 		var world_environment := node as WorldEnvironment
 		var environment := world_environment.environment
 		if environment == null: continue
-		environment.background_color = Color("#d8ddca")
+		environment.background_color = Color("#e0dcc8")
 		environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		environment.ambient_light_color = Color("#cfd6c4")
-		environment.ambient_light_energy = 0.68
+		environment.ambient_light_color = Color("#cfd3bd")
+		environment.ambient_light_energy = 0.46
 
-		# Filmic rolloff compresses the stronger key into creamy highlights while
-		# preserving a darker midtone range underneath the bloom.
+		# Strong filmic compression turns the boosted sun into creamy, luminous
+		# highlights rather than simply clipping roofs and grass to white.
 		environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-		environment.tonemap_exposure = 1.0
-		environment.tonemap_white = 1.45
+		environment.tonemap_exposure = 0.99
+		environment.tonemap_white = 1.10
 
-		# Native Mobile glow is deliberately stronger here, but thresholded so it
-		# belongs to sunlit walls, roofs, grass and water rather than every midtone.
+		# Push native Mobile glow hard enough to be unmistakable. A lower threshold
+		# lets sunlit grass, plaster, roofs and water all contribute to the halo.
 		environment.glow_enabled = true
 		environment.glow_normalized = true
-		environment.glow_intensity = 0.52
-		environment.glow_strength = 0.90
-		environment.glow_mix = 0.04
-		environment.glow_bloom = 0.18
-		environment.glow_hdr_threshold = 0.62
-		environment.glow_hdr_scale = 1.60
+		environment.glow_intensity = 0.92
+		environment.glow_strength = 1.30
+		environment.glow_mix = 0.07
+		environment.glow_bloom = 0.42
+		environment.glow_hdr_threshold = 0.38
+		environment.glow_hdr_scale = 2.05
 
+		# Warm scattering gives the air itself a sunlit quality, while keeping fog
+		# density low enough that distant terrain stays readable rather than milky.
 		environment.fog_enabled = true
-		environment.fog_light_color = Color("#e7d5b8")
-		environment.fog_light_energy = 0.72
-		environment.fog_density = 0.0021
-		environment.fog_sun_scatter = 0.26
-		environment.fog_aerial_perspective = 0.12
+		environment.fog_light_color = Color("#efd8b5")
+		environment.fog_light_energy = 0.88
+		environment.fog_density = 0.0023
+		environment.fog_sun_scatter = 0.58
+		environment.fog_aerial_perspective = 0.18
 
 func _on_backend_ready(ready: bool) -> void:
 	var already_restored := _player_restored
