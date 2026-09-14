@@ -139,7 +139,6 @@ func _disconnect_tracked_signals() -> void:
 
 func _exit_tree() -> void:
 	_disconnect_tracked_signals()
-	super._exit_tree()
 
 func _ready() -> void:
 	get_window().title = "Hearthvale — M1"
