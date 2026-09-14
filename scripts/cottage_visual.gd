@@ -124,6 +124,7 @@ func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 
 func _build_roof_tile_batches(dimensions: Vector3, _roof_angle: float) -> void:
 	var buckets: Array = [[], [], []]
+	var tints: Array = [[], [], []]
 	var run := dimensions.z * 0.5 + 0.5
 	var rise := dimensions.y * _roof_rise_ratio
 	var dx := _detail_unit.x * 2.0
@@ -132,6 +133,10 @@ func _build_roof_tile_batches(dimensions: Vector3, _roof_angle: float) -> void:
 	var nx := ceili(span / dx)
 	var nz := ceili(run / dz)
 	for side in [-1.0, 1.0]:
+		# The roof is a staircase of horizontal voxel courses, so global lighting
+		# cannot create a strong two-plane read on its own. Preserve the authored
+		# palette, but multiply it by a broad warm-lit/cool-shadowed side tint.
+		var plane_tint := Color(0.60, 0.66, 0.70, 1.0) if side < 0.0 else Color(1.0, 0.97, 0.91, 1.0)
 		for row in nz:
 			var z := (float(row) + 0.5) * dz
 			var height := snappedf(dimensions.y + rise * (1.0 - z / run), _detail_unit.y)
@@ -140,7 +145,8 @@ func _build_roof_tile_batches(dimensions: Vector3, _roof_angle: float) -> void:
 				# Preserve the broad, quiet colour rhythm while doubling geometry resolution.
 				var shade := (column / 18 + row / 14) % 3
 				buckets[shade].append(_piece(Vector3(x, height, side * z), Vector3(dx, _detail_unit.y * 2.0, dz)))
-	for shade in 3: _add_detail_boxes("RoofTiles_%d" % shade, buckets[shade], _roof_tile_colors[shade])
+				tints[shade].append(plane_tint)
+	for shade in 3: _add_roof_detail_boxes("RoofTiles_%d" % shade, buckets[shade], _roof_tile_colors[shade], tints[shade])
 
 func _build_corner_quoin_batch(dimensions: Vector3) -> void:
 	# Corner stones straddle both wall planes. Sub-cell widths rounded inward
@@ -653,6 +659,31 @@ func _add_detail_boxes(node_name: String, boxes: Array, color: Color, basis := B
 	var node := _make_instanced_boxes(node_name, boxes, color, unit)
 	node.set_meta("cottage_detail_grid", Grid.COTTAGE_DETAIL_UNIT)
 	node.transform = Transform3D(basis, anchor.snapped(_detail_unit))
+	return node
+
+func _add_roof_detail_boxes(node_name: String, boxes: Array, color: Color, tints: Array) -> MultiMeshInstance3D:
+	var cube := BoxMesh.new()
+	cube.size = Vector3.ONE
+	var multi := MultiMesh.new()
+	multi.transform_format = MultiMesh.TRANSFORM_3D
+	multi.use_colors = true
+	multi.mesh = cube
+	multi.instance_count = boxes.size()
+	for i in boxes.size():
+		var piece: Dictionary = boxes[i]
+		var basis: Basis = piece["basis"]
+		var q := Grid.quantized_box(piece["center"], piece["size"], _detail_unit)
+		multi.set_instance_transform(i, Transform3D(basis.scaled_local(q["size"]), q["center"]))
+		multi.set_instance_color(i, tints[i] as Color)
+	var node := MultiMeshInstance3D.new()
+	node.name = node_name
+	node.multimesh = multi
+	node.set_meta("cottage_detail_grid", Grid.COTTAGE_DETAIL_UNIT)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.vertex_color_use_as_albedo = true
+	node.material_override = material
+	add_child(node)
 	return node
 
 func _make_instanced_boxes(node_name: String, boxes: Array, color: Color, unit: Vector3) -> MultiMeshInstance3D:
