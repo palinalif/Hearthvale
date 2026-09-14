@@ -16,32 +16,33 @@ func _ready() -> void:
 	_apply_cozy_valley_lighting()
 
 func _apply_cozy_valley_lighting() -> void:
-	# Clear-air miniature lighting: one warm shadowed key plus two extremely soft
-	# unshadowed fills. This pass keeps the glow but restores deeper grounding and
-	# stronger plane separation, especially on roofs viewed from above.
+	# Clear-air miniature lighting: use a more directional, lower warm key so
+	# pitched roofs read as distinct light and shadow planes from the overhead
+	# camera. Keep the fills deliberately restrained so they do not erase that
+	# shape contrast again.
 	for node in find_children("*", "DirectionalLight3D", true, false):
 		var light := node as DirectionalLight3D
 		if light.name in ["CozySkyFill", "CozyWarmRim"]: continue
-		light.rotation_degrees = Vector3(-34.0, -32.0, 0.0)
-		light.light_color = Color("#ffd4a3")
-		light.light_energy = 1.38
+		light.rotation_degrees = Vector3(-27.0, -58.0, 0.0)
+		light.light_color = Color("#ffd09a")
+		light.light_energy = 1.46
 		light.shadow_enabled = true
-		light.shadow_opacity = 0.78
+		light.shadow_opacity = 0.80
 		# Mobile does not use directional PCSS, so keep this modest rather than
 		# relying on angular distance as the main source of softness.
 		light.light_angular_distance = 0.6
 
 	_ensure_directional_fill(
 		"CozySkyFill",
-		Vector3(-58.0, 148.0, 0.0),
+		Vector3(-54.0, 136.0, 0.0),
 		Color("#d8e5e2"),
-		0.13
+		0.08
 	)
 	_ensure_directional_fill(
 		"CozyWarmRim",
-		Vector3(-28.0, 92.0, 0.0),
+		Vector3(-24.0, 102.0, 0.0),
 		Color("#ffd0a0"),
-		0.10
+		0.07
 	)
 
 	for node in find_children("*", "WorldEnvironment", true, false):
@@ -51,7 +52,7 @@ func _apply_cozy_valley_lighting() -> void:
 		environment.background_color = Color("#ddd9c9")
 		environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 		environment.ambient_light_color = Color("#cbd4ca")
-		environment.ambient_light_energy = 0.24
+		environment.ambient_light_energy = 0.18
 
 		# Keep the creamy shoulder from the earlier passes, but stop compressing the
 		# whole frame into the same pale value range.
