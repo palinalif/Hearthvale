@@ -138,8 +138,13 @@ func _build_roof_tile_batches(dimensions: Vector3, _roof_angle: float) -> void:
 			var height := snappedf(dimensions.y + rise * (1.0 - z / run), _detail_unit.y)
 			for column in nx:
 				var x := -snappedf(span * 0.5, _detail_unit.x) + (column + 0.5) * dx
-				# Preserve the broad, quiet colour rhythm while doubling geometry resolution.
-				var shade := (column / 18 + row / 14) % 3
+				# Keep most tiles near the middle value, but let individual bricks
+				# visibly break up the plane. The previous 18x14-cell patches read as
+				# one flat slab once the broad lit/shadow split was added.
+				var tile_code := posmod(column * 7 + row * 11 + posmod(_craft_seed, 17), 16)
+				var shade := 1
+				if tile_code in [0, 5, 13]: shade = 0
+				elif tile_code in [3, 9, 15]: shade = 2
 				var piece := _piece(Vector3(x, height, side * z), Vector3(dx, _detail_unit.y * 2.0, dz))
 				if side < 0.0:
 					shadow_buckets[shade].append(piece)
@@ -149,8 +154,16 @@ func _build_roof_tile_batches(dimensions: Vector3, _roof_angle: float) -> void:
 	# renderer path did not produce a perceptible plane split with the latter.
 	for shade in 3:
 		var base: Color = _roof_tile_colors[shade]
-		var shadow_color := base.darkened(0.30).lerp(Color("#667386"), 0.16)
-		var lit_color := base.lightened(0.08).lerp(Color("#e5bb8c"), 0.06)
+		# Preserve the broad plane split, but give the authored three-colour tile
+		# palette enough local value range to remain legible from gameplay height.
+		var shadow_color := base.darkened(0.22).lerp(Color("#667386"), 0.10)
+		var lit_color := base.lightened(0.05).lerp(Color("#e5bb8c"), 0.04)
+		if shade == 0:
+			shadow_color = shadow_color.darkened(0.11)
+			lit_color = lit_color.darkened(0.10)
+		elif shade == 2:
+			shadow_color = shadow_color.lightened(0.12)
+			lit_color = lit_color.lightened(0.13)
 		_add_detail_boxes("RoofTiles_Shadow_%d" % shade, shadow_buckets[shade], shadow_color)
 		_add_detail_boxes("RoofTiles_Lit_%d" % shade, lit_buckets[shade], lit_color)
 
