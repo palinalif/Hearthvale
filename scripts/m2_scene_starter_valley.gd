@@ -17,16 +17,16 @@ func _ready() -> void:
 
 func _apply_cozy_valley_lighting() -> void:
 	# Clear-air miniature lighting: one warm shadowed key plus two extremely soft
-	# unshadowed fills. This gives forms a bright toy-diorama wrap without using
-	# global fog as a substitute for bounced light.
+	# unshadowed fills. This pass pushes radiance and light wrap a little further
+	# without bringing the old milky fog back.
 	for node in find_children("*", "DirectionalLight3D", true, false):
 		var light := node as DirectionalLight3D
 		if light.name in ["CozySkyFill", "CozyWarmRim"]: continue
 		light.rotation_degrees = Vector3(-38.0, -32.0, 0.0)
 		light.light_color = Color("#ffd4a3")
-		light.light_energy = 1.28
+		light.light_energy = 1.38
 		light.shadow_enabled = true
-		light.shadow_opacity = 0.70
+		light.shadow_opacity = 0.66
 		# Mobile does not use directional PCSS, so keep this modest rather than
 		# relying on angular distance as the main source of softness.
 		light.light_angular_distance = 0.6
@@ -35,13 +35,13 @@ func _apply_cozy_valley_lighting() -> void:
 		"CozySkyFill",
 		Vector3(-58.0, 148.0, 0.0),
 		Color("#d8e5e2"),
-		0.16
+		0.20
 	)
 	_ensure_directional_fill(
 		"CozyWarmRim",
 		Vector3(-28.0, 92.0, 0.0),
 		Color("#ffd0a0"),
-		0.09
+		0.13
 	)
 
 	for node in find_children("*", "WorldEnvironment", true, false):
@@ -51,25 +51,24 @@ func _apply_cozy_valley_lighting() -> void:
 		environment.background_color = Color("#ddd9c9")
 		environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 		environment.ambient_light_color = Color("#cbd4ca")
-		environment.ambient_light_energy = 0.34
+		environment.ambient_light_energy = 0.31
 
 		# Keep the creamy shoulder from the earlier passes, but stop compressing the
 		# whole frame into the same pale value range.
 		environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-		environment.tonemap_exposure = 1.02
+		environment.tonemap_exposure = 1.03
 		environment.tonemap_white = 1.42
 
-		# Tight highlight glow instead of screen-wide bloom. Mobile's limited HDR
-		# range benefits from a high threshold with stronger intensity, and weighting
-		# the small glow levels keeps halos close to bright roofs/walls/grass/water.
+		# Tight highlight glow instead of screen-wide bloom. Nudge it harder while
+		# keeping the threshold high enough that the whole frame stays clear.
 		environment.glow_enabled = true
 		environment.glow_normalized = true
-		environment.glow_intensity = 0.86
-		environment.glow_strength = 1.16
+		environment.glow_intensity = 1.02
+		environment.glow_strength = 1.28
 		environment.glow_mix = 0.025
 		environment.glow_bloom = 0.02
-		environment.glow_hdr_threshold = 0.88
-		environment.glow_hdr_scale = 2.35
+		environment.glow_hdr_threshold = 0.84
+		environment.glow_hdr_scale = 2.50
 		environment.set("glow_levels/1", 0.80)
 		environment.set("glow_levels/2", 0.62)
 		environment.set("glow_levels/3", 0.28)
@@ -78,19 +77,18 @@ func _apply_cozy_valley_lighting() -> void:
 		environment.set("glow_levels/6", 0.0)
 		environment.set("glow_levels/7", 0.0)
 
-		# The previous pass's global fog was the source of the milky veil. Keep the
-		# air clear and let the fill lights + glow provide softness instead.
+		# Keep the air clear and let the fill lights + glow provide softness.
 		environment.fog_enabled = false
 
-	# A very small far-field blur gives distant hills a miniature-camera cue while
-	# leaving the editable village and foreground crisp enough for normal play.
+	# Push the miniature-camera cue slightly further while keeping the playable
+	# village crisp and reserving most of the blur for distant hills.
 	if camera != null:
 		var attributes := CameraAttributesPractical.new()
 		attributes.dof_blur_far_enabled = true
-		attributes.dof_blur_far_distance = 44.0
-		attributes.dof_blur_far_transition = 20.0
+		attributes.dof_blur_far_distance = 40.0
+		attributes.dof_blur_far_transition = 18.0
 		attributes.dof_blur_near_enabled = false
-		attributes.dof_blur_amount = 0.055
+		attributes.dof_blur_amount = 0.070
 		camera.attributes = attributes
 
 func _ensure_directional_fill(fill_name: String, rotation: Vector3, color: Color, energy: float) -> void:
