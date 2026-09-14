@@ -17,16 +17,16 @@ func _ready() -> void:
 
 func _apply_cozy_valley_lighting() -> void:
 	# Clear-air miniature lighting: one warm shadowed key plus two extremely soft
-	# unshadowed fills. This pass pushes radiance and light wrap a little further
-	# without bringing the old milky fog back.
+	# unshadowed fills. This pass keeps the glow but restores deeper grounding and
+	# stronger plane separation, especially on roofs viewed from above.
 	for node in find_children("*", "DirectionalLight3D", true, false):
 		var light := node as DirectionalLight3D
 		if light.name in ["CozySkyFill", "CozyWarmRim"]: continue
-		light.rotation_degrees = Vector3(-38.0, -32.0, 0.0)
+		light.rotation_degrees = Vector3(-34.0, -32.0, 0.0)
 		light.light_color = Color("#ffd4a3")
 		light.light_energy = 1.38
 		light.shadow_enabled = true
-		light.shadow_opacity = 0.66
+		light.shadow_opacity = 0.78
 		# Mobile does not use directional PCSS, so keep this modest rather than
 		# relying on angular distance as the main source of softness.
 		light.light_angular_distance = 0.6
@@ -35,13 +35,13 @@ func _apply_cozy_valley_lighting() -> void:
 		"CozySkyFill",
 		Vector3(-58.0, 148.0, 0.0),
 		Color("#d8e5e2"),
-		0.20
+		0.13
 	)
 	_ensure_directional_fill(
 		"CozyWarmRim",
 		Vector3(-28.0, 92.0, 0.0),
 		Color("#ffd0a0"),
-		0.13
+		0.10
 	)
 
 	for node in find_children("*", "WorldEnvironment", true, false):
@@ -51,7 +51,7 @@ func _apply_cozy_valley_lighting() -> void:
 		environment.background_color = Color("#ddd9c9")
 		environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 		environment.ambient_light_color = Color("#cbd4ca")
-		environment.ambient_light_energy = 0.31
+		environment.ambient_light_energy = 0.24
 
 		# Keep the creamy shoulder from the earlier passes, but stop compressing the
 		# whole frame into the same pale value range.
