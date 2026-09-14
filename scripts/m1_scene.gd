@@ -113,6 +113,34 @@ var _terrain_target_normal := Vector3.UP
 var _terrain_action_labels: Array[String] = ["Raise", "Dig", "Level", "Slope", "Smooth", "Foliage brush", "Tree brush", "Clear planting", "Radius +", "Radius -", "Strength +", "Strength -", "Falloff +", "Falloff -", "Height snap: off", "Reference: ground", "Reference: wall", "Reference: ceiling", "Resample reference", "Keep reference"]
 var _cottage_action_labels: Array[String] = ["Move selected window", "Support: next", "Support: previous", "Replace selected", "Suppress / restore", "Reattach selected", "Add flower box", "Add shutter", "Delete selected surface", "Material: warm plaster", "Miniature scale", "Duplicate cottage", "Close"]
 
+## Tracked signal bookkeeping. Every connection the scene makes goes through
+## _track_connect so _exit_tree can disconnect each one exactly once when the
+## scene leaves the tree. Entries: {emitter: Object, signal: String, callable: Callable}.
+var _signal_teardown: Array = []
+
+func _track_connect(emitter: Object, signal_name: String, callable: Callable) -> void:
+	if emitter == null or not emitter.has_signal(signal_name):
+		return
+	if emitter.is_connected(signal_name, callable):
+		return
+	emitter.connect(signal_name, callable)
+	_signal_teardown.append({"emitter": emitter, "signal": signal_name, "callable": callable})
+
+func _disconnect_tracked_signals() -> void:
+	for entry in _signal_teardown:
+		if not (entry is Dictionary):
+			continue
+		var emitter: Object = entry.get("emitter")
+		var signal_name: String = str(entry.get("signal", ""))
+		var callable_value: Variant = entry.get("callable")
+		if emitter != null and emitter.has_signal(signal_name) and callable_value is Callable and emitter.is_connected(signal_name, callable_value):
+			emitter.disconnect(signal_name, callable_value)
+	_signal_teardown.clear()
+
+func _exit_tree() -> void:
+	_disconnect_tracked_signals()
+	super._exit_tree()
+
 func _ready() -> void:
 	get_window().title = "Hearthvale — M1"
 	_setup_input_map()
@@ -124,10 +152,10 @@ func _ready() -> void:
 	_last_focus = get_window().has_focus()
 	_update_camera()
 	_set_status(status_text)
-	if backend and backend.has_signal("ready_changed"): backend.ready_changed.connect(_on_backend_ready)
-	if backend and backend.has_signal("changed"): backend.changed.connect(_on_backend_changed)
-	if Input.has_signal("joy_connection_changed"): Input.joy_connection_changed.connect(_on_joy_connection_changed)
-	if building_world and building_world.has_signal("changed"): building_world.changed.connect(_on_building_changed)
+	_track_connect(backend, "ready_changed", _on_backend_ready)
+	_track_connect(backend, "changed", _on_backend_changed)
+	_track_connect(Input, "joy_connection_changed", _on_joy_connection_changed)
+	_track_connect(building_world, "changed", _on_building_changed)
 	if backend and backend.has_method("is_ready") and backend.is_ready(): _on_backend_ready(true)
 
 func _process(delta: float) -> void:
@@ -1119,7 +1147,7 @@ func _build_pause_panel() -> void:
 	pause_panel = PanelContainer.new(); pause_panel.position = Vector2(430, 120); pause_panel.size = Vector2(430, 460); pause_panel.visible = false; hud.add_child(pause_panel)
 	var box := VBoxContainer.new(); pause_panel.add_child(box); var title := Label.new(); title.text = "PAUSED\nWorld input suspended"; title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; title.add_theme_font_size_override("font_size", 28); box.add_child(title)
 	for label in ["Save", "Reload", "Resume", "Quit"]:
-		var button := Button.new(); button.text = label; button.focus_mode = Control.FOCUS_ALL; button.custom_minimum_size = Vector2(0, 56); button.add_theme_font_size_override("font_size", 24); button.pressed.connect(_pause_choice.bind(label)); box.add_child(button); _pause_buttons[label] = button
+		var button := Button.new(); button.text = label; button.focus_mode = Control.FOCUS_ALL; button.custom_minimum_size = Vector2(0, 56); button.add_theme_font_size_override("font_size", 24); _track_connect(button, "pressed", _pause_choice.bind(label)); box.add_child(button); _pause_buttons[label] = button
 
 func _build_tools_panel() -> void:
 	tools_panel = PanelContainer.new(); tools_panel.position = Vector2(330, 80); tools_panel.size = Vector2(560, 560); tools_panel.visible = false; hud.add_child(tools_panel)
@@ -1130,7 +1158,7 @@ func _build_tools_panel() -> void:
 	for label in _cottage_action_labels:
 		if not all_labels.has(label): all_labels.append(label)
 	for label in all_labels:
-		var button := Button.new(); button.text = label; button.focus_mode = Control.FOCUS_ALL; button.custom_minimum_size = Vector2(0, 42); button.pressed.connect(_tool_choice.bind(label)); box.add_child(button); _tool_buttons[label] = button
+		var button := Button.new(); button.text = label; button.focus_mode = Control.FOCUS_ALL; button.custom_minimum_size = Vector2(0, 42); _track_connect(button, "pressed", _tool_choice.bind(label)); box.add_child(button); _tool_buttons[label] = button
 	_update_action_buttons()
 
 func _handle_menu_input(event: InputEvent) -> void:
