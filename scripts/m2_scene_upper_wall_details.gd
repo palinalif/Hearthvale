@@ -110,7 +110,23 @@ const HAMLET_SCENERY_COLOURS := [
 	Color("#546f43"),  # far range
 	Color("#c8b894"),  # farm wall
 	Color("#7e4f3c"),  # farm roof
+	Color("#5d7040"),  # outer valley floor (step 4)
 ]
+
+## ---- Step 4 (2026-09-15): close the drop-off beyond the editable rim ----
+## The editable terrain is a finite 48x48 slab; the camera orbits outside it, so
+## the view past the rim showed void (measured: 20-36% of the frame in all 8
+## directions, tools/bob_void_scan.gd). This is the "lightweight mountain
+## backdrop outside it" the design allows: a continuous terraced outer valley
+## floor that STARTS at the editable terrain's own boundary height (so the rim
+## joins with no step) and rolls down and away to a lower floor, with the
+## existing hill ring rising from it. Voxel-consistent stepped boxes, one static
+## merged mesh, no collision, no per-frame work, +1 draw call.
+const OUTER_FLOOR_COLOUR_INDEX := 4
+const OUTER_FLOOR_CELL := 4.0
+const OUTER_FLOOR_MARGIN := 120.0
+const OUTER_FLOOR_FALL := 26.0
+const OUTER_FLOOR_LEVEL := 2.6
 
 var _massing_surface_sync_revision := -1
 var distant_scenery: MeshInstance3D
@@ -455,18 +471,19 @@ func _build_distant_scenery() -> MeshInstance3D:
 	for _colour in HAMLET_SCENERY_COLOURS:
 		surfaces.append({"vertices": [] as Array[Vector3], "normals": [] as Array[Vector3], "indices": [] as Array[int]})
 	var centre := Vector2(24.0, 24.0)
+	_append_outer_floor(surfaces)
 	for ridge_value in HAMLET_HILL_RING:
 		var ridge: Dictionary = ridge_value
 		var angle := deg_to_rad(float(ridge["angle"]))
 		var radius := float(ridge["radius"])
 		var point := centre + Vector2(cos(angle), sin(angle)) * radius
-		_append_mound(surfaces, int(ridge.get("material", 0)), Vector3(point.x, 0.0, point.y), float(ridge["width"]), float(ridge["depth"]), float(ridge["height"]), Basis(Vector3.UP, angle))
+		_append_mound(surfaces, int(ridge.get("material", 0)), Vector3(point.x, 0.0, point.y), float(ridge["width"]), float(ridge["depth"]), float(ridge["height"]), Basis(Vector3.UP, angle), _outer_floor_height(point.x, point.y))
 	for farm_value in HAMLET_FARMSTEADS:
 		var farm: Dictionary = farm_value
 		var angle := deg_to_rad(float(farm["angle"]))
 		var radius := float(farm["radius"])
 		var point := centre + Vector2(cos(angle), sin(angle)) * radius
-		_append_farmstead(surfaces, Vector3(point.x, 0.0, point.y), float(farm.get("scale", 1.0)), Basis(Vector3.UP, deg_to_rad(float(farm.get("yaw", 0.0)))))
+		_append_farmstead(surfaces, Vector3(point.x, 0.0, point.y), float(farm.get("scale", 1.0)), Basis(Vector3.UP, deg_to_rad(float(farm.get("yaw", 0.0)))), _outer_floor_height(point.x, point.y))
 	var mesh := ArrayMesh.new()
 	var geometry_added := false
 	for index in surfaces.size():
@@ -490,16 +507,46 @@ func _build_distant_scenery() -> MeshInstance3D:
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return node
 
+## Height of the outer valley floor at a world point. Inside the editable patch
+## the caller uses the terrain itself; outside, this continues from the terrain
+## height on the nearest boundary point (so the rim joins with no step) and rolls
+## down and away to OUTER_FLOOR_LEVEL. Deterministic sines, quantised to whole
+## units so the floor reads as voxel-stepped terraces, not a smooth low-poly fill.
+func _outer_floor_height(x: float, z: float) -> float:
+	var inset_x: float = clampf(x, 0.05, M1PatchGenerator.EXTENT.x - 0.05)
+	var inset_z: float = clampf(z, 0.05, M1PatchGenerator.EXTENT.y - 0.05)
+	var boundary_height: float = M1PatchGenerator.terrain_height(inset_x, inset_z)
+	var outside_x: float = maxf(maxf(-x, x - M1PatchGenerator.EXTENT.x), 0.0)
+	var outside_z: float = maxf(maxf(-z, z - M1PatchGenerator.EXTENT.y), 0.0)
+	var outside := sqrt(outside_x * outside_x + outside_z * outside_z)
+	var blend := smoothstep(0.0, 1.0, clampf(outside / OUTER_FLOOR_FALL, 0.0, 1.0))
+	var roll := 1.0 + blend * (0.22 * sin(x * 0.07 + 0.6) + 0.16 * sin(z * 0.055 + 2.1) + 0.12 * sin((x + z) * 0.11 + 1.7))
+	return maxf(1.0, floor(lerpf(boundary_height, OUTER_FLOOR_LEVEL, blend) * roll))
+
+## One terraced box per grid cell of the ring outside the editable patch. Only
+## cells whose centre is inside the patch in BOTH axes are skipped (the terrain is
+## there); the strips directly north/south/east/west of the patch are covered.
+func _append_outer_floor(surfaces: Array) -> void:
+	var span: float = M1PatchGenerator.EXTENT.x + 2.0 * OUTER_FLOOR_MARGIN
+	var cells := int(ceil(span / OUTER_FLOOR_CELL))
+	for cell_x in cells:
+		var px: float = -OUTER_FLOOR_MARGIN + (float(cell_x) + 0.5) * OUTER_FLOOR_CELL
+		for cell_z in cells:
+			var pz: float = -OUTER_FLOOR_MARGIN + (float(cell_z) + 0.5) * OUTER_FLOOR_CELL
+			if px > 0.0 and px < M1PatchGenerator.EXTENT.x and pz > 0.0 and pz < M1PatchGenerator.EXTENT.y: continue
+			var height := _outer_floor_height(px, pz)
+			_append_box(surfaces, OUTER_FLOOR_COLOUR_INDEX, Vector3(px, height * 0.5, pz), Vector3(OUTER_FLOOR_CELL, height, OUTER_FLOOR_CELL), Basis())
+
 ## Three stacked boxes = a stepped mound silhouette. Cheap, voxel-consistent, and
 ## legible as a rolling hill once the fog gets to it.
-func _append_mound(surfaces: Array, material_index: int, base_center: Vector3, width: float, depth: float, height: float, basis: Basis) -> void:
+func _append_mound(surfaces: Array, material_index: int, base_center: Vector3, width: float, depth: float, height: float, basis: Basis, base_height: float = 0.0) -> void:
 	var layers := [
 		{"height": 0.38, "width": 1.0, "depth": 1.0},
 		{"height": 0.28, "width": 0.76, "depth": 0.80},
 		{"height": 0.20, "width": 0.52, "depth": 0.58},
 		{"height": 0.14, "width": 0.28, "depth": 0.34},
 	]
-	var y := 0.0
+	var y := base_height
 	for layer_value in layers:
 		var layer: Dictionary = layer_value
 		var layer_height: float = height * float(layer["height"])
@@ -507,11 +554,11 @@ func _append_mound(surfaces: Array, material_index: int, base_center: Vector3, w
 			Vector3(width * float(layer["width"]), layer_height, depth * float(layer["depth"])), basis)
 		y += layer_height
 
-func _append_farmstead(surfaces: Array, base_center: Vector3, scale_value: float, basis: Basis) -> void:
+func _append_farmstead(surfaces: Array, base_center: Vector3, scale_value: float, basis: Basis, base_height: float = 0.0) -> void:
 	var wall := Vector3(6.0, 3.4, 4.4) * scale_value
 	var roof := Vector3(6.8, 1.5, 5.0) * scale_value
-	_append_box(surfaces, 2, Vector3(base_center.x, wall.y * 0.5, base_center.z), wall, basis)
-	_append_box(surfaces, 3, Vector3(base_center.x, wall.y + roof.y * 0.5, base_center.z), roof, basis)
+	_append_box(surfaces, 2, Vector3(base_center.x, base_height + wall.y * 0.5, base_center.z), wall, basis)
+	_append_box(surfaces, 3, Vector3(base_center.x, base_height + wall.y + roof.y * 0.5, base_center.z), roof, basis)
 
 func _append_box(surfaces: Array, material_index: int, center: Vector3, size: Vector3, basis: Basis) -> void:
 	if material_index < 0 or material_index >= surfaces.size(): return

@@ -11,6 +11,13 @@ const LEGACY_GENERATOR_ID := "m1_cottage_pad_v1"
 const CHANNEL_TYPE := 0
 const GENERATOR_ID := "m1_cottage_pad_v2"
 
+## Step 4 valley rim (see terrain_height). EXTENT is the authored horizontal
+## world size in world units: PATCH_SIZE.x * VOXEL_SCALE == PATCH_SIZE.z *
+## VOXEL_SCALE == 48.
+const EXTENT := Vector2(48.0, 48.0)
+const VALLEY_RIM_WIDTH := 10.0
+const VALLEY_FLOOR := 5.2
+
 static func river_center_x(world_z: float) -> float:
 	return snappedf(40.75 + sin(world_z * 0.19) * 0.9 + sin(world_z * 0.43 + 1.2) * 0.3, VOXEL_SCALE)
 
@@ -25,6 +32,19 @@ static func terrain_height(world_x: float, world_z: float) -> float:
 	var low_bank := 5.65 + sin(world_z * 0.31 + world_x * 0.07) * 0.3
 	if world_x > 31.0:
 		height = lerpf(height, low_bank, smoothstep(31.0, 36.5, world_x))
+	# Step 4 (2026-09-15): the explicit, shaped valley rim. The editable patch is
+	# a finite slab; an unshaped boundary reads from inside as a flat vertical
+	# cut with nothing beyond. The ground now rolls DOWN to a lower outer valley
+	# floor as it nears any boundary, so the edge is a soft lip the distant
+	# scenery continues from instead of a cliff. The rim starts VALLEY_RIM_WIDTH
+	# inside the boundary, and the nearest point of the flat cottage pad is 11u
+	# from a boundary, so the pad, the pond carve and the river channel are
+	# untouched. VALLEY_FLOOR (5.2) stays above the water surface (5.0) and the
+	# river bank blend floor (5.125), so both shorelines stay dry and the bed
+	# (4.375) stays below water; see tests/m1_riverbank_visual_test.gd.
+	var edge := minf(minf(world_x, EXTENT.x - world_x), minf(world_z, EXTENT.y - world_z))
+	if edge < VALLEY_RIM_WIDTH:
+		height = lerpf(height, VALLEY_FLOOR, smoothstep(0.0, 1.0, 1.0 - edge / VALLEY_RIM_WIDTH))
 	var distance := absf(world_x - river_center_x(world_z))
 	var half_width := river_half_width(world_z)
 	if distance <= half_width:

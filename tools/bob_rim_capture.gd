@@ -94,6 +94,7 @@ func _run() -> void:
 		print("RIM_DIR name=%s yaw=%.3f cam=(%.1f,%.1f,%.1f) void_px=%d (%.2f%%) void_lower_third=%d" % [
 			name, yaw, position.x, position.y, position.z, void_pixels,
 			100.0 * float(void_pixels) / float(mask.get_width() * mask.get_height()), void_lower])
+		_compare_model(scene, mask)
 	scene._shutting_down = true
 	scene.queue_free()
 	await process_frame
@@ -129,8 +130,51 @@ func _count_magenta(image: Image) -> int:
 	for y in image.get_height():
 		for x in image.get_width():
 			var pixel := image.get_pixel(x, y)
-			if pixel.r > 0.80 and pixel.g < 0.20 and pixel.b > 0.80: total += 1
+			if pixel.r > 0.70 and pixel.b > 0.70 and pixel.g < 0.60: total += 1
 	return total
+
+## Cross-check: march the analytic geometry model (terrain height field inside the
+## patch, the live _outer_floor_height outside) along the ENGINE's own projected
+## rays and compare with the rendered magenta mask. Disagreements mean the scene's
+## actual geometry differs from the model used to design it.
+func _compare_model(scene: Node, mask: Image) -> void:
+	var width := mask.get_width()
+	var height := mask.get_height()
+	var disagree := 0
+	var samples := 0
+	var examples := 0
+	for row in 12:
+		var y := int((float(row) + 0.5) * float(height) / 12.0)
+		for column in 24:
+			var x := int((float(column) + 0.5) * float(width) / 24.0)
+			var pixel := mask.get_pixel(x, y)
+			var rendered_void: bool = pixel.r > 0.70 and pixel.b > 0.70 and pixel.g < 0.60
+			var origin: Vector3 = scene.camera.project_ray_origin(Vector2(x, y))
+			var direction: Vector3 = scene.camera.project_ray_normal(Vector2(x, y))
+			var hit := _march(origin, direction)
+			samples += 1
+			if hit == rendered_void:
+				disagree += 1
+				if examples < 4:
+					examples += 1
+					print("  MODEL_MISMATCH px=(%d,%d) rendered_void=%s model_hit=%s origin=%s dir=(%.2f,%.2f,%.2f)" % [x, y, rendered_void, hit, str(origin), direction.x, direction.y, direction.z])
+	print("  MODEL_CHECK samples=%d disagreements=%d camera_fov=%.1f keep_aspect=%d viewport=%s" % [samples, disagree, scene.camera.fov, scene.camera.keep_aspect, str(root.size)])
+
+func _march(origin: Vector3, direction: Vector3) -> bool:
+	var t := 0.5
+	while t < 600.0:
+		var point := origin + direction * t
+		if point.y < 0.0: return false
+		if point.x > -140.0 and point.x < 188.0 and point.z > -140.0 and point.z < 188.0:
+			if point.y <= _probe_surface(point.x, point.z):
+				return true
+		t += 0.6
+	return false
+
+func _probe_surface(x: float, z: float) -> float:
+	if x > 0.0 and x < Generator.EXTENT.x and z > 0.0 and z < Generator.EXTENT.y:
+		return Generator.terrain_height(x, z)
+	return scene._outer_floor_height(x, z)
 
 func _count_magenta_band(image: Image, from_fraction: float, to_fraction: float) -> int:
 	var y0 := int(float(image.get_height()) * from_fraction)

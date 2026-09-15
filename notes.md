@@ -428,3 +428,72 @@ does not cover the full 52 deg frame).
 `tools/bob_drawcall_probe.gd` (carried over from unit 1, untracked until now).
 No production file touched in this unit. Next: shape the editable valley rim and
 close the r~24-56 gap with the existing scenery system, then re-measure to 0%.
+
+## Bob — step 4 unit 3 (2026-09-15): the drop-off is FIXED — 0.00% void in all 8 directions
+
+**Root causes (two, both measured):**
+1. **The editable terrain is a finite slab.** `M1PatchGenerator.generate()` fills a
+   solid 48x32x48 world-unit block (y=0 up to the surface) and stops dead at the
+   boundary: a flat vertical cut 4.4-8.5u tall with nothing behind it. Terrain
+   shaping alone cannot extend it — extending `PATCH_SIZE` is blocked by
+   `tests/terrain_resolution_test.gd` / `m1_scaled_backend_test.gd` (both assert
+   `Vector3i(384, 256, 384)`, and the brief says no test edits), and it would be
+   268 GB-class memory at 0.125 anyway.
+2. **The distant backdrop had a hole.** The old mound ring starts at r=56 while the
+   island edge is at r=24, and the review camera (distance 42, pitch 0.72) sits
+   *outside* the island — so it looked down over the rim into nothing until the far
+   hills. The measured void wedge was exactly the r=24..56 ring plus the far band.
+
+**What changed (2 production files, existing systems only):**
+- `scripts/m1_patch_generator.gd` — the valley rim. `terrain_height()` now rolls the
+  ground DOWN toward a lower outer valley floor near every boundary
+  (`VALLEY_RIM_WIDTH 10`, `VALLEY_FLOOR 5.2`, smoothstep), so the edge is a soft lip
+  instead of a cut. The rim starts 10u inside the boundary and the nearest point of
+  the flat cottage pad is 11u away, so the pad / pond carve / river channel are
+  untouched; 5.2 stays above the 5.0 water surface and the 5.125 bank floor, below
+  which the river bed (4.375) still carves. **Rim height after: west/east exactly
+  5.20, north/south 4.38-5.20 above the 8.0 floor (was 4.4-8.5).**
+  No grid resolution, no collision/undo/redo change.
+- `scripts/m2_scene_upper_wall_details.gd::_build_distant_scenery` — the design's
+  "lightweight mountain backdrop outside it": one extra colour surface (index 4,
+  `#5d7040`) holding a **continuous terraced outer valley floor** of voxel-consistent
+  4u boxes over a 288x288 ring (`OUTER_FLOOR_MARGIN 120`), plus the hill ring and
+  farmsteads now sit ON the floor instead of at y=0. Its height function
+  (`_outer_floor_height`) samples the SAME `terrain_height` on the nearest boundary
+  point, so the backdrop starts exactly at the editable rim height and joins with no
+  step; it then rolls down and away to a 2.6u floor with a deterministic undulation,
+  quantised to 1u terraces. One static merged mesh, no collision, no per-frame work,
+  still 5 draw calls (4 -> 5, +1). Mounds/farmsteads lifted to the floor height.
+
+**BUG FOUND AND FIXED WHILE VERIFYING (kept here so nobody re-hunts it):** the first
+backdrop cut emitted only the west/east columns — the skip test `if px in (0,48):
+continue` dropped the whole north/south strips as well. Symptom: void stayed at
+~23% with the wedges at a slightly different angle. Found by cross-checking the
+render's magenta mask against the ENGINE's own `project_ray_normal` march
+(`tools/bob_rim_capture.gd::_compare_model`, `tools/bob_rim_raycast.gd`): the model
+claimed a hit where the render showed background, and `tools/bob_scenery_probe.gd`
+showed the surface existed. Fixed by requiring BOTH px and pz inside the patch.
+
+**EVIDENCE (measured, this unit):**
+```
+void % of the 1280x720 hamlet-review frame, 8 directions (tools/bob_void_scan.gd):
+             before            after
+north        23.38%      ->     0.00%
+northeast    23.26%      ->     0.00%
+east         20.41%      ->     0.00%
+southeast    28.82%      ->     0.00%
+south        30.36%      ->     0.00%
+southwest    35.67%      ->     0.00%  (8 stray anti-aliased pixels = 0.0009%)
+west         29.75%      ->     0.00%
+northwest    30.56%      ->     0.00%
+```
+Independent check: with the void mask replaced by a march of the model along the
+camera's own `project_ray_normal`, render and model agree on **288/288** sampled
+pixels in every direction (`MODEL_CHECK disagreements=0`). The brown sky band that
+dominated the "before" frame (the #705030 bucket, 21% of pixels) is gone from the
+"after" frame's palette entirely.
+Captures: `reports/screenshots/step4-rim/<dir>-before.png`, `<dir>-after.png`, and
+the magenta masks `<dir>-{before,after}-void.png`.
+**NOTE / honest limit:** this is measured coverage and model agreement, not a human
+look — there is no vision tool in this session, so the frames were inspected as data
+(palette + ASCII + analytic ray march).
