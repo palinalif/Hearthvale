@@ -82,6 +82,16 @@ ACCEPTANCE:
      gentle near/far falloff (dof/near/blur + far/blur), NOT a full blur
   3) determinism gate still passes (DOF is a deterministic blur; VERIFY)
 
+**DEBUG LOG (2026-09-15):** SSAO is NOT the culprit — removing it from
+m1_scene.gd (commit 3d8d5dd) left the failure in place (checks=33
+failures=1). KEY FINDING: the saved PNGs (03 vs 04) are pixel-identical in
+8-bit, so the drift is SUB-QUANTIZATION in the float framebuffer (the test
+compares Image.get_data of the live render, not the PNG bytes). Suspects:
+procedural-sky pass, ambient-from-sky, glow, ACES tonemap — anything with
+per-frame evaluation on the mobile renderer. tools/det_env_probe.gd runs the
+same minimal scene twice per flag and reports drift pixels per flag
+(--glow / --tonemap / --fog / --sky / --ambient-sky combos).
+
 **Rules (unchanged from before, still in force):** commit+push first empty
 commit before edits; explicit high timeout (≥400s) on every godot command;
 bounded reads (grep, no >500-line dumps); commit every unit + update this

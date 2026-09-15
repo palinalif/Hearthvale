@@ -100,5 +100,5 @@ func ready() -> void:
 	await process_frame
 	var data_a := await _grab()
 	var data_b := await _grab()
-	print("DETPROBE flags=[%s] drift_pixels=%d" % [flags.join(","), _drift(data_a, data_b)])
+	print("DETPROBE flags=[%s] drift_pixels=%d" % [",".join(flags), _drift(data_a, data_b)])
 	quit(0)
