@@ -379,3 +379,52 @@ prints the next_id values that satisfy it, so the next person can keep it honest
 The check count is per-batch-loop driven and the batch/variant coverage is unchanged
 from HEAD (all 11 foliage variants + 3 rock + 3 tree variants were already in use), so
 this is the same check set as HEAD. No test file was modified (no loosening).
+
+## Bob — step 4 unit 2 (2026-09-15): drop-off diagnosis — terrain ENDS at 48u
+
+Base HEAD `8991a4c` (LOCAL; remote was at `c53a886` — the step-4-1 commits were never
+pushed, push with this unit). Priority 1 of Pali's revised brief: the world "randomly
+drops off". Measured, not inferred.
+
+**WHERE THE TERRAIN ENDS (measured, `tools/bob_rim_capture.gd`):** the live chain
+finally builds the world through `scripts/m2_scene_upper_wall_details.gd::_build_world`
+(it overrides m1_scene's and never calls super), but the *terrain grid* comes from
+`scripts/m1_scene.gd::_create_backend` → `M1PatchGenerator.PATCH_SIZE = Vector3i(384,
+256, 384)` at `VOXEL_SCALE = 0.125` → a **48 x 32 x 48 world-unit slab**, solid from
+y=0 to the surface. There is no terrain past x=0/x=48/z=0/z=48; the boundary is a
+vertical cut of the slab. From the hamlet review target (25,8,25) the edges are
+**25.0u west (x0), 23.0u east (xmax), 25.0u north (z0), 23.0u south (zmax)** — the
+camera itself sits past the boundary at any distance>~34u.
+Rim height above the 8.0 hamlet floor, per boundary:
+```
+west  x0    rim 6.85..7.65   ->  -1.15..-0.35 below floor
+east  xmax  rim 5.35..5.95   ->  -2.65..-2.05  (low river bank)
+north z0    rim 4.38..8.22   ->  -3.62..+0.22  (river carve at x~41)
+south zmax  rim 4.50..8.53   ->  -3.50..+0.53
+```
+so the boundary is a 4.4-8.5u vertical face all the way round, with the river
+notching the N/S edges.
+
+**VOID MEASUREMENT (objective, no vision tool):** the probe renders the real Mobile
+scene twice per direction — once normally, once with the world background forced to
+flat magenta. The step-3 pitch clamp keeps the sky out of frame (0 sky pixels at 0.62
+/ 0.72), so a magenta pixel is a **hole in the world**. Result at the hamlet review
+framing (pitch 0.72, distance 42), 8 directions:
+```
+north 23.38%  northeast 23.26%  east 20.41%  southeast 28.82%
+south 30.36%  southwest 35.67%  west 29.75%  northwest 30.56%
+```
+= **20-36% of the frame is void in EVERY direction.** Row profile puts the worst band
+at rows 5-17 of 24 (30-60% void) on the left and right flanks — that is the gap
+between the island edge (r~24) and the distant hill ring (nearest mound r=56): the
+camera looks over the rim and sees nothing until the far mounds, exactly Pali's
+"looks straight off the map". The top band is also partly void (the far ridge ring
+does not cover the full 52 deg frame).
+
+**TOOLS COMMITTED (read-only):** `tools/bob_rim_capture.gd` (boots the real scene,
+3-home fixture, captures from-hamlet in 8 directions + the magenta void frame,
+`reports/screenshots/step4-rim/<dir>-before.png` / `-before-void.png`);
+`tools/bob_void_scan.gd` (void % + 24-row profile + ASCII hole map per frame);
+`tools/bob_drawcall_probe.gd` (carried over from unit 1, untracked until now).
+No production file touched in this unit. Next: shape the editable valley rim and
+close the r~24-56 gap with the existing scenery system, then re-measure to 0%.
