@@ -325,11 +325,9 @@ func _build_world() -> void:
 	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
 	environment.tonemap_exposure = 1.05
 	environment.tonemap_white = 1.35
-	environment.ssao_enabled = true
-	environment.ssao_intensity = 0.45
-	environment.ssao_radius = 0.7
-	environment.ssao_power = 1.2
-	environment.ssao_light_affect = 0.5
+	# SSAO disabled: its per-frame jitter breaks the repo's render-determinism
+	# contract (cottage/roof-course tests require identical re-renders), and it
+	# adds Mobile GPU cost for a barely-visible contact shadow here.
 	environment.adjustment_enabled = true
 	environment.adjustment_saturation = 1.06
 	environment.adjustment_contrast = 1.04

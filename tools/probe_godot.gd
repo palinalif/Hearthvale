@@ -13,6 +13,10 @@ const CLASSES := {
 	"DirectionalLight3D": "node",
 	"Sky": "core",
 	"WorldEnvironment": "node",
+	"Camera3D": "node",
+	"CameraAttributes": "core",
+	"CameraAttributesDOF": "core",
+	"CameraAttributesManual": "core",
 }
 
 func _init() -> void:
@@ -44,4 +48,8 @@ func _make(name: String) -> Object:
 		"DirectionalLight3D": return DirectionalLight3D.new()
 		"Sky": return Sky.new()
 		"WorldEnvironment": return WorldEnvironment.new()
+		"Camera3D": return Camera3D.new()
+		"CameraAttributes": return CameraAttributes.new()
+		"CameraAttributesDOF": return CameraAttributesDOF.new()
+		"CameraAttributesManual": return CameraAttributesManual.new()
 	return null
