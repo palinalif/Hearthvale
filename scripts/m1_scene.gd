@@ -315,15 +315,14 @@ func _build_world() -> void:
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	environment.ambient_light_sky_contribution = 1.0
 	environment.fog_enabled = true
-	environment.fog_light_color = Color("#e8b878")
-	# 2026-09-15 wide-shot pass: the old 0.0038 density + 150-unit depth made
-	# the hamlet read as a beige fog wall in wide framing (~half the frame a
-	# flat cream veil, no sky gradient). Cut density ~58% and pull the depth
-	# range in so mid-ground terrain stays readable and sky shows through.
-	environment.fog_density = 0.0028
-	environment.fog_sky_affect = 0.45
-	environment.fog_depth_begin = 10.0
-	environment.fog_depth_end = 95.0
+	# v5 (2026-09-15): synced with the live block in m2_scene_upper_wall_details.gd
+	# (that environment is what actually renders in the m1.tscn chain) — see v5.1
+	# notes there. Fog: soft amber, low density, minimal sky tint.
+	environment.fog_light_color = Color("#e6c193")
+	environment.fog_density = 0.0021
+	environment.fog_sky_affect = 0.12
+	environment.fog_depth_begin = 14.0
+	environment.fog_depth_end = 130.0
 	environment.glow_enabled = true
 	environment.glow_intensity = 0.5
 	environment.glow_bloom = 0.14
@@ -335,9 +334,12 @@ func _build_world() -> void:
 	# contract (cottage/roof-course tests require identical re-renders), and it
 	# adds Mobile GPU cost for a barely-visible contact shadow here.
 	environment.adjustment_enabled = true
-	environment.adjustment_saturation = 1.12
-	environment.adjustment_contrast = 1.04
-	environment.adjustment_brightness = 1.02
+	# v4: saturation/contrast up so terrain greens read punchy and shadows keep
+	# depth against the lighter ground (ref: docs/art/wide-shot-target — punchy
+	# greens, strong contrast, no flat wash).
+	environment.adjustment_saturation = 1.20
+	environment.adjustment_contrast = 1.15
+	environment.adjustment_brightness = 1.00
 	environment_node.environment = environment
 	add_child(environment_node)
 	river_water = MeshInstance3D.new(); river_water.name = "RiverWater"; river_water.mesh = _build_river_water_mesh(); river_water.position.y = 5.0
@@ -805,14 +807,17 @@ func _update_depth_of_field(target: Vector3) -> void:
 	if not (camera.attributes is CameraAttributesPractical):
 		camera.attributes = CameraAttributesPractical.new()
 	var attributes: CameraAttributesPractical = camera.attributes
-	# Focus band sits on the hamlet: near edge 6u in front of target, far 18u behind.
+	# v4 (2026-09-15): DOF must READ on the wide shot — village (<= ~44u) stays
+	# sharp, far ground beyond ~60u clearly soft. Old values focused the band ON
+	# the hamlet with amount 0.5, so almost nothing blurred (Pali: "don't see the
+	# DOF at all"). Sharper near edge, pulled-in far start, stronger amount.
 	attributes.dof_blur_near_enabled = true
 	attributes.dof_blur_near_distance = maxf(1.0, camera_distance - 2.0)
-	attributes.dof_blur_near_transition = 14.0
+	attributes.dof_blur_near_transition = 10.0
 	attributes.dof_blur_far_enabled = true
-	attributes.dof_blur_far_distance = camera_distance + 14.0
-	attributes.dof_blur_far_transition = 38.0
-	attributes.dof_blur_amount = 0.5
+	attributes.dof_blur_far_distance = camera_distance + 12.0
+	attributes.dof_blur_far_transition = 30.0
+	attributes.dof_blur_amount = 0.7
 
 func _set_view_context(next_context: String, reason: String = "Context changed") -> bool:
 	var normalized := "terrain" if next_context == "terrain" else "building"

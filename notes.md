@@ -117,7 +117,32 @@ file; never guess Godot API — use the probe.
   save both PNGs, diff must be visible in far band only, 3) fix repair test per Pali's
   disk-compare ask, 4) full gate, push, post frames.
 
-**NEW ACCEPTANCE CRITERION (Pali, 2026-09-15 mid-run):** the closeup
+## Hermes continued (2026-09-15, post-Nerine handoff) — v5.3 committed + next run
+- **v5.3 state committed this turn** (scripts/m1_scene.gd + m2_scene_upper_wall_details.gd
+  live env, cottage_detail_render_test tolerance, re-rendered screenshots, tool scripts).
+  Grade = baseline sat 1.06 / contrast 1.04; sky_top #7f9db5, horizon #e8c98e;
+  fog #e6c193 density 0.0021 sky_affect 0.12 depth 14-130.
+- **TEST EVIDENCE (measured, not inherited):** cottage_detail 33/0, facade 54/0,
+  m2_hamlet 12/0, scene_boot 4/0 | headless backend 83/0, visual_lighting 50/0,
+  m1_acceptance 112/0, foliage 57/0, magicavoxel 141/0.
+  `joined_roof_course_render_test` = **80 checks / 4 fails AT HEAD 186707f (stashed,
+  clean tree)** — PRE-EXISTING sub-quant drift, NOT a v5.3 regression. Same family as
+  the cottage identity flake. Open: deterministic re-render (see roof_head_check.sh).
+- **CRITICAL MAP (why DOF is invisible in the live game):**
+  - main_scene = scenes/m1.tscn -> scripts/m2_scene_style_preview_stability.gd (chain top).
+  - LIVE Camera3D created at `scripts/m2_scene_upper_wall_details.gd:88` (camera.fov=52,
+    NO attributes — this is the hamlet camera that needs DOF + pitch clamp).
+  - LIVE WorldEnvironment (sky/fog/glow/grade) built in `m2_scene_upper_wall_details.gd::_build_world`.
+  - `scripts/m1_scene.gd` (where _update_depth_of_field + dof_blur_* live) is **DEAD CODE**:
+    not referenced by the live chain. Its env edits don't affect the running game. Keep it
+    in sync for tests that load it, but the LIVE look/DOF must be changed in the m2 chain.
+  - Camera pitch clamps across chain: house_editing 0.08-1.40, pc_input 0.08-1.40,
+    roof_accessories 0.15-1.25. Pali's ask = clamp so camera can't tilt to expose sky.
+- **Next run (Bob brief, this handoff's step 3):** (a) clamp hamlet camera so it can't
+  expose sky, (b) extend hamlet cluster (content), (c) scatter distant farm/hill masses to
+  kill the "warm void", (d) wire REAL DOF into the LIVE m2 camera (m2_scene_upper_wall_details),
+  (e) keep grade at v5.3 baseline. Do NOT add new archetypes (Pali's asset list).
+- **NEW ACCEPTANCE CRITERION (Pali, 2026-09-15 mid-run):** the closeup
 cottage look is APPROVED ("very good up close"), but the WIDE shot
 (m2_hamlet_composition full hamlet) "is just hazy" — the fog is swamping
 the buildings. Fix: significantly reduce fog depth/density in the live

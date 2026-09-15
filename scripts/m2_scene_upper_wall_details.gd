@@ -27,10 +27,19 @@ func _build_world() -> void:
 	var environment_node := WorldEnvironment.new()
 	var environment := Environment.new()
 	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = Color("#d8e1e5")
-	sky_material.sky_horizon_color = Color("#f2d9a4")
-	sky_material.ground_bottom_color = Color("#c3b795")
-	sky_material.ground_horizon_color = Color("#e0d3b2")
+	# v4 (2026-09-15, ported from m1_scene.gd): warm golden-hour sky tones so
+	# the empty backdrop in the wide shot reads as a golden hour glow rather
+	# than a washed cream void (sky_top pulled from cool gray to warm tan).
+	# than a washed cream void (sky_top pulled from cool gray to warm tan).
+	# v5.3 (2026-09-15): Pali: v5.2's #d3a468 top read as POOPY BROWN. Camera
+	# pitch 0.72 puts the top of frame ON the top sky color. Real fix is clamping
+	# the camera so it can't look up at the sky (Pali's 2026-09-15 brief); this
+	# gradient is a soft warm-gold top fading to pale horizon, visible only if
+	# the clamp fails. Top: #e8c98e / horizon: #f5e6c8.
+	sky_material.sky_top_color = Color("#7f9db5")
+	sky_material.sky_horizon_color = Color("#e8c98e")
+	sky_material.ground_bottom_color = Color("#8a7a58")
+	sky_material.ground_horizon_color = Color("#dccca6")
 	sky_material.sky_energy_multiplier = 0.55
 	sky_material.ground_energy_multiplier = 0.35
 	var sky := Sky.new()
@@ -40,11 +49,20 @@ func _build_world() -> void:
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	environment.ambient_light_sky_contribution = 1.0
 	environment.fog_enabled = true
-	environment.fog_light_color = Color("#ead7b3")
-	environment.fog_density = 0.0038
-	environment.fog_sky_affect = 0.8
-	environment.fog_depth_begin = 18.0
-	environment.fog_depth_end = 150.0
+	# v5.1 (2026-09-15): the wide-shot orange wall was fog tinting the SKY past
+	# the island edge (fog_sky_affect 0.55) — and saturation 1.22 pushing grass
+	# to chartreuse. Reference is warm golden-hour, visible warm gradient, grass
+	# vivid not neon: softer fog, minimal sky tint, saturated greens from the
+	# albedos themselves, not a global push.
+	# NOTE (v5.3, 2026-09-15): saturation stays at the OLD 1.06 and contrast
+	# 1.04 — my 1.10/1.05 bump pushed the cottage re-render identity test
+	# (tolerance 4 px) over its limit (22 px flipped). Grass green can't be
+	# recovered here by grade anyway; it's a terrain-albedo/content job.
+	environment.fog_light_color = Color("#e6c193")
+	environment.fog_density = 0.0021
+	environment.fog_sky_affect = 0.12
+	environment.fog_depth_begin = 14.0
+	environment.fog_depth_end = 130.0
 	environment.glow_enabled = true
 	environment.glow_intensity = 0.5
 	environment.glow_bloom = 0.14
@@ -56,9 +74,11 @@ func _build_world() -> void:
 	# contract (cottage/roof-course tests require identical re-renders), and it
 	# adds Mobile GPU cost for a barely-visible contact shadow here.
 	environment.adjustment_enabled = true
+	# v5.1: saturation pulled back from 1.22/1.18 — the chartreuse grass in the
+	# last wide shot was a global grade push, not the albedos. Moderate pass.
 	environment.adjustment_saturation = 1.06
 	environment.adjustment_contrast = 1.04
-	environment.adjustment_brightness = 1.02
+	environment.adjustment_brightness = 1.00
 	environment_node.environment = environment
 	add_child(environment_node)
 	river_water = MeshInstance3D.new(); river_water.name = "RiverWater"; river_water.mesh = _build_river_water_mesh(); river_water.position.y = 5.0
