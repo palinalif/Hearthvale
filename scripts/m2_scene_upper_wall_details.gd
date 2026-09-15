@@ -6,7 +6,72 @@ extends "res://scripts/m2_scene_multi_floor.gd"
 const M2BuildingWorldScript = preload("res://scripts/m2_building_world.gd")
 const MassingSurfaces = preload("res://scripts/m2_massing_wall_surfaces.gd")
 
+## ---- Step 3 (2026-09-15): camera limit, distant hamlet, real DOF ----
+
+## The live hamlet camera must never tilt up far enough to frame the sky.
+## `camera_pitch` is the camera's ELEVATION above the look target
+## (offset = (sin(yaw)·cos(pitch), sin(pitch), cos(yaw)·cos(pitch)) · distance,
+## see m1_scene._update_camera), so tilting UP (pad stick up / drag) DECREASES
+## pitch, and the frame's top edge sits (fov/2 - pitch) above the look axis.
+## With this camera's 52° fov the horizon (0° elevation, i.e. the sky) enters
+## the top edge at pitch = 26° = 0.4538 rad. 0.55 rad holds the top edge 5.5°
+## BELOW the horizon at every zoom/zoom-out, so no sky colour can be framed.
+## Measured before/after with tools/bob_clamp_probe.gd:
+##   HEAD: min 0.0800 / max 1.4000  ->  after: min 0.5500 / max 1.4000.
+## The downward end is deliberately untouched (top-down limit unchanged).
+const HAMLET_PITCH_MIN := 0.55
+
+## Depth of field is DISTANCE-GATED: only the wide framing — the one Pali asked
+## for DOF on — reads a depth band. Every close/mid framing (the approved cottage
+## closeup and the render gates that capture it) keeps both blur stages disabled,
+## so those captures stay pixel-stable. Focus band = [distance-22, distance+6]:
+## at the 42u review framing the homes (~29-36u out) stay sharp while the near
+## foreground and the far hills soften.
+const HAMLET_DOF_MIN_DISTANCE := 32.0
+const HAMLET_DOF_NEAR_OFFSET := 22.0
+const HAMLET_DOF_FAR_OFFSET := 6.0
+const HAMLET_DOF_NEAR_TRANSITION := 12.0
+const HAMLET_DOF_FAR_TRANSITION := 26.0
+const HAMLET_DOF_AMOUNT := 0.4
+
+## Static distant scenery (presentation only: no landscape records, no archetypes,
+## no scene files, no per-frame work). The island is 48×48 world units with its
+## surface at y≈7.5 and its slab spanning y 0..32; these mounds sit on the valley
+## floor (y=0) beyond the island edge so the wide shot's horizon reads "further
+## village + rolling hills in the fog" instead of an empty warm plane.
+## angle: degrees around the hamlet centre (24,24), 0° = +x, 90° = +z.
+const HAMLET_HILL_RING := [
+	# --- far hill range (fills the top of the review framing) ---
+	{"angle": -30.0, "radius": 118.0, "width": 54.0, "depth": 20.0, "height": 19.0, "material": 1},
+	{"angle": -62.0, "radius": 132.0, "width": 46.0, "depth": 18.0, "height": 15.0, "material": 1},
+	{"angle": -8.0, "radius": 126.0, "width": 40.0, "depth": 17.0, "height": 14.0, "material": 1},
+	# --- mid ring: rolling farm hills just beyond the island ---
+	{"angle": -31.0, "radius": 82.0, "width": 34.0, "depth": 14.0, "height": 11.5, "material": 0},
+	{"angle": -55.0, "radius": 74.0, "width": 26.0, "depth": 12.0, "height": 8.0, "material": 0},
+	{"angle": 62.0, "radius": 86.0, "width": 32.0, "depth": 14.0, "height": 10.5, "material": 0},
+	{"angle": 132.0, "radius": 90.0, "width": 30.0, "depth": 15.0, "height": 12.0, "material": 0},
+	{"angle": 196.0, "radius": 84.0, "width": 28.0, "depth": 13.0, "height": 9.0, "material": 0},
+	{"angle": 268.0, "radius": 92.0, "width": 34.0, "depth": 15.0, "height": 11.0, "material": 0},
+	{"angle": 330.0, "radius": 88.0, "width": 30.0, "depth": 13.0, "height": 9.5, "material": 0},
+]
+
+## Far farmsteads: a lit wall + a terracotta roof at the foot of two hills, so the
+## horizon reads "more of the village", not just terrain.
+const HAMLET_FARMSTEADS := [
+	{"angle": -44.0, "radius": 66.0, "yaw": 20.0, "scale": 1.0},
+	{"angle": 48.0, "radius": 72.0, "yaw": -35.0, "scale": 0.85},
+	{"angle": 210.0, "radius": 70.0, "yaw": 15.0, "scale": 0.9},
+]
+
+const HAMLET_SCENERY_COLOURS := [
+	Color("#6f8a52"),  # hill body
+	Color("#7c9463"),  # far range (hazier green)
+	Color("#cfc2a2"),  # farm wall
+	Color("#a4664c"),  # farm roof
+]
+
 var _massing_surface_sync_revision := -1
+var distant_scenery: MeshInstance3D
 
 func _build_world() -> void:
 	# Golden-hour lighting (ported from m1_scene.gd, which the live M2 chain
@@ -85,7 +150,10 @@ func _build_world() -> void:
 	var water_material := StandardMaterial3D.new(); water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; water_material.albedo_color = Color(0.30, 0.57, 0.56, 0.86); water_material.metallic = 0.05; water_material.roughness = 0.42; river_water.material_override = water_material; add_child(river_water)
 	decor_root = Node3D.new(); decor_root.name = "GardenDecor"; add_child(decor_root)
 	garden_visual = GardenVisualScript.new(); garden_visual.name = "M1GardenVisual"; garden_visual.set_wind_enabled(not test_mode); decor_root.add_child(garden_visual)
-	camera = Camera3D.new(); camera.current = true; camera.fov = 52; add_child(camera)
+	camera = Camera3D.new(); camera.current = true; camera.fov = 52; camera.attributes = _build_camera_attributes(); add_child(camera)
+	# Static distant scenery: one merged mesh (4 colour surfaces) beyond the
+	# island so the wide shot has a horizon. Never rebuilt, never animated.
+	distant_scenery = _build_distant_scenery(); add_child(distant_scenery)
 	resize_handles = Node3D.new(); resize_handles.name = "ResizeHandles"; resize_handles.visible = false; add_child(resize_handles)
 	for axis_name in ["width", "depth", "height"]:
 		var handle := MeshInstance3D.new(); handle.name = "Handle_%s" % axis_name
@@ -253,3 +321,149 @@ func _cycle_attachment_surface(direction: int) -> void:
 
 func _update_presentation_target_label() -> void:
 	pass
+
+## ---- Step 3 (2026-09-15): live DOF, live pitch limit, distant scenery ----
+
+## The live input clamp. `_read_camera_and_cursor` is resolved on the live chain
+## (m2_scene_house_editing -> ... -> this file -> ... -> m1_scene); every link
+## applies its own per-file pitch clamp through super, and this override is the
+## most-derived one that runs AFTER them in the normal path, so the floor below
+## is the effective limit the player can reach. Verified with
+## tools/bob_clamp_probe.gd (min 0.0800 before -> 0.5500 after; max 1.4000
+## unchanged). m2_scene_house_editing (portion placement) and m2_scene_pc_input
+## (mouse drag) clamp outside this path and carry the same 0.55 floor.
+func _read_camera_and_cursor(delta: float) -> void:
+	super._read_camera_and_cursor(delta)
+	_enforce_hamlet_pitch_limit()
+
+func _enforce_hamlet_pitch_limit() -> void:
+	if camera_pitch < HAMLET_PITCH_MIN:
+		camera_pitch = HAMLET_PITCH_MIN
+
+## Real depth of field on the LIVE camera. m1_scene.gd's _update_depth_of_field
+## is bypassed by this override (the live _update_camera in m1_scene.gd calls it
+## every frame, so this is where the live camera's DOF is driven from).
+func _update_depth_of_field(_target: Vector3) -> void:
+	if not camera: return
+	var attributes := camera.attributes as CameraAttributesPractical
+	if attributes == null:
+		attributes = _build_camera_attributes()
+		camera.attributes = attributes
+	if camera_distance < HAMLET_DOF_MIN_DISTANCE:
+		# Close/mid framings (the approved cottage closeup and the close-up
+		# render gates): both stages off, so the DOF pass is skipped entirely and
+		# those captures stay exactly as sharp/stable as before it was wired.
+		attributes.dof_blur_near_enabled = false
+		attributes.dof_blur_far_enabled = false
+		return
+	attributes.dof_blur_near_enabled = true
+	attributes.dof_blur_near_distance = maxf(4.0, camera_distance - HAMLET_DOF_NEAR_OFFSET)
+	attributes.dof_blur_near_transition = HAMLET_DOF_NEAR_TRANSITION
+	attributes.dof_blur_far_enabled = true
+	attributes.dof_blur_far_distance = camera_distance + HAMLET_DOF_FAR_OFFSET
+	attributes.dof_blur_far_transition = HAMLET_DOF_FAR_TRANSITION
+	attributes.dof_blur_amount = HAMLET_DOF_AMOUNT
+
+func _build_camera_attributes() -> CameraAttributesPractical:
+	var attributes := CameraAttributesPractical.new()
+	attributes.dof_blur_near_enabled = camera_distance > HAMLET_DOF_MIN_DISTANCE
+	attributes.dof_blur_far_enabled = camera_distance > HAMLET_DOF_MIN_DISTANCE
+	attributes.dof_blur_amount = HAMLET_DOF_AMOUNT
+	if attributes.dof_blur_near_enabled:
+		attributes.dof_blur_near_distance = maxf(4.0, camera_distance - HAMLET_DOF_NEAR_OFFSET)
+		attributes.dof_blur_near_transition = HAMLET_DOF_NEAR_TRANSITION
+		attributes.dof_blur_far_distance = camera_distance + HAMLET_DOF_FAR_OFFSET
+		attributes.dof_blur_far_transition = HAMLET_DOF_FAR_TRANSITION
+	return attributes
+
+## One merged static mesh for the whole distant ring: 4 colour surfaces, 4 draw
+## calls, no shadow pass, no per-frame update. Hardcoded (deterministic) so the
+## render-determinism gates are unaffected.
+func _build_distant_scenery() -> MeshInstance3D:
+	var surfaces: Array[Dictionary] = []
+	for _colour in HAMLET_SCENERY_COLOURS:
+		surfaces.append({"vertices": [] as Array[Vector3], "normals": [] as Array[Vector3], "indices": [] as Array[int]})
+	var centre := Vector2(24.0, 24.0)
+	for ridge_value in HAMLET_HILL_RING:
+		var ridge: Dictionary = ridge_value
+		var angle := deg_to_rad(float(ridge["angle"]))
+		var radius := float(ridge["radius"])
+		var point := centre + Vector2(cos(angle), sin(angle)) * radius
+		_append_mound(surfaces, int(ridge.get("material", 0)), Vector3(point.x, 0.0, point.y), float(ridge["width"]), float(ridge["depth"]), float(ridge["height"]), Basis(Vector3.UP, angle))
+	for farm_value in HAMLET_FARMSTEADS:
+		var farm: Dictionary = farm_value
+		var angle := deg_to_rad(float(farm["angle"]))
+		var radius := float(farm["radius"])
+		var point := centre + Vector2(cos(angle), sin(angle)) * radius
+		_append_farmstead(surfaces, Vector3(point.x, 0.0, point.y), float(farm.get("scale", 1.0)), Basis(Vector3.UP, deg_to_rad(float(farm.get("yaw", 0.0)))))
+	var mesh := ArrayMesh.new()
+	var geometry_added := false
+	for index in surfaces.size():
+		var surface: Dictionary = surfaces[index]
+		if (surface["vertices"] as Array).is_empty(): continue
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array(surface["vertices"])
+		arrays[Mesh.ARRAY_NORMAL] = PackedVector3Array(surface["normals"])
+		arrays[Mesh.ARRAY_INDEX] = PackedInt32Array(surface["indices"])
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var material := StandardMaterial3D.new()
+		material.albedo_color = HAMLET_SCENERY_COLOURS[index]
+		material.roughness = 0.95
+		material.specular = 0.0
+		mesh.surface_set_material(mesh.get_surface_count() - 1, material)
+		geometry_added = true
+	var node := MeshInstance3D.new()
+	node.name = "DistantHamlet"
+	node.mesh = mesh if geometry_added else null
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return node
+
+## Three stacked boxes = a stepped mound silhouette. Cheap, voxel-consistent, and
+## legible as a rolling hill once the fog gets to it.
+func _append_mound(surfaces: Array, material_index: int, base_center: Vector3, width: float, depth: float, height: float, basis: Basis) -> void:
+	var layers := [
+		{"height": 0.44, "width": 1.0, "depth": 1.0},
+		{"height": 0.32, "width": 0.70, "depth": 0.74},
+		{"height": 0.24, "width": 0.40, "depth": 0.46},
+	]
+	var y := 0.0
+	for layer_value in layers:
+		var layer: Dictionary = layer_value
+		var layer_height: float = height * float(layer["height"])
+		_append_box(surfaces, material_index, Vector3(base_center.x, y + layer_height * 0.5, base_center.z),
+			Vector3(width * float(layer["width"]), layer_height, depth * float(layer["depth"])), basis)
+		y += layer_height
+
+func _append_farmstead(surfaces: Array, base_center: Vector3, scale_value: float, basis: Basis) -> void:
+	var wall := Vector3(6.0, 3.4, 4.4) * scale_value
+	var roof := Vector3(6.8, 1.5, 5.0) * scale_value
+	_append_box(surfaces, 2, Vector3(base_center.x, wall.y * 0.5, base_center.z), wall, basis)
+	_append_box(surfaces, 3, Vector3(base_center.x, wall.y + roof.y * 0.5, base_center.z), roof, basis)
+
+func _append_box(surfaces: Array, material_index: int, center: Vector3, size: Vector3, basis: Basis) -> void:
+	if material_index < 0 or material_index >= surfaces.size(): return
+	var surface: Dictionary = surfaces[material_index]
+	var vertices: Array = surface["vertices"]
+	var normals: Array = surface["normals"]
+	var indices: Array = surface["indices"]
+	var half := size * 0.5
+	var faces := [
+		[Vector3.UP, [Vector3(-half.x, half.y, -half.z), Vector3(half.x, half.y, -half.z), Vector3(half.x, half.y, half.z), Vector3(-half.x, half.y, half.z)]],
+		[Vector3.DOWN, [Vector3(-half.x, -half.y, half.z), Vector3(half.x, -half.y, half.z), Vector3(half.x, -half.y, -half.z), Vector3(-half.x, -half.y, -half.z)]],
+		[Vector3.FORWARD, [Vector3(-half.x, -half.y, -half.z), Vector3(half.x, -half.y, -half.z), Vector3(half.x, half.y, -half.z), Vector3(-half.x, half.y, -half.z)]],
+		[Vector3.BACK, [Vector3(half.x, -half.y, half.z), Vector3(-half.x, -half.y, half.z), Vector3(-half.x, half.y, half.z), Vector3(half.x, half.y, half.z)]],
+		[Vector3.LEFT, [Vector3(-half.x, -half.y, half.z), Vector3(-half.x, -half.y, -half.z), Vector3(-half.x, half.y, -half.z), Vector3(-half.x, half.y, half.z)]],
+		[Vector3.RIGHT, [Vector3(half.x, -half.y, -half.z), Vector3(half.x, -half.y, half.z), Vector3(half.x, half.y, half.z), Vector3(half.x, half.y, -half.z)]],
+	]
+	for face in faces:
+		var normal: Vector3 = basis * (face[0] as Vector3)
+		var base := vertices.size()
+		for corner in face[1]:
+			vertices.append(center + basis * (corner as Vector3))
+			normals.append(normal)
+		indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
+	surface["vertices"] = vertices
+	surface["normals"] = normals
+	surface["indices"] = indices
+	surfaces[material_index] = surface

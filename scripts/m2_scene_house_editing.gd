@@ -106,7 +106,11 @@ func _process(delta: float) -> void:
 
 func _read_part_orbit(delta: float) -> void:
 	camera_yaw += Input.get_axis("m1_orbit_left", "m1_orbit_right") * delta * 2.2
-	camera_pitch = clampf(camera_pitch + Input.get_axis("m1_orbit_up", "m1_orbit_down") * delta * 1.5, 0.08, 1.40)
+	# Pitch floor 0.55 (was 0.08): keep in sync with HAMLET_PITCH_MIN in
+	# m2_scene_upper_wall_details.gd. This file clamps pitch OUTSIDE the
+	# _read_camera_and_cursor cascade (portion placement skips the super chain),
+	# so the live floor is enforced here too — step 3, 2026-09-15.
+	camera_pitch = clampf(camera_pitch + Input.get_axis("m1_orbit_up", "m1_orbit_down") * delta * 1.5, 0.55, 1.40)
 	camera_distance = clampf(camera_distance - Input.get_axis("m1_zoom_out", "m1_zoom_in") * delta * 18, BUILDING_CAMERA_MIN_DISTANCE, BUILDING_CAMERA_MAX_DISTANCE)
 
 func _input(event: InputEvent) -> void:

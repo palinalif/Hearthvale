@@ -57,7 +57,9 @@ func _input(event: InputEvent) -> void:
 		var motion := event as InputEventMouseMotion
 		if _mouse_orbiting and not menu_open:
 			camera_yaw -= motion.relative.x * PC_ORBIT_SENSITIVITY
-			camera_pitch = clampf(camera_pitch - motion.relative.y * PC_ORBIT_SENSITIVITY, 0.08, 1.40)
+			# Mouse-drag pitch floor 0.55 (was 0.08) — same live limit as
+			# HAMLET_PITCH_MIN in m2_scene_upper_wall_details.gd (step 3).
+			camera_pitch = clampf(camera_pitch - motion.relative.y * PC_ORBIT_SENSITIVITY, 0.55, 1.40)
 			get_viewport().set_input_as_handled()
 			return
 		if not menu_open and not tools_open and not detail_open:
