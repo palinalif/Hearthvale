@@ -28,5 +28,6 @@
 
 ## Run log
 - run 5 (00:43-01:53, died compression): produced 2b441d4 + 47a3067. 31 api calls, 70min.
-- run 6 (02:03-03:20, died Ollama 500 "no user query found in messages" at ~52k tokens):
-  zero new commits. LESSON: it spent ~40min re-reading files before editing. READ THIS FILE FIRST.
+- run 6 (02:03-03:20, died Ollama 500 "no user query found in messages" at ~52k tokens): zero new commits. LESSON: it spent ~40min re-reading files before editing. READ THIS FILE FIRST.
+- run 7 (03:39-05:42, 2h05m in, 83 api calls, ~64k tokens, died: xhigh REASONING ate the ENTIRE output-token budget every turn — "no visible answer produced, model hit output-token limit on every continuation"). It had left `scripts/m1_scene.gd` with a STAGED REVERT of the golden-hour look (removed the warm env for a flat 2-line one) + an uncommitted `tools/bob_gate.sh`. I RESTORED m1_scene.gd to HEAD (golden-hour is safe in b754f61) and kept ONLY bob_gate.sh. DO NOT revert the lighting. If you change the look, it must be a deliberate improvement over b754f61's golden-hour, not a flattening.
+- NEXT RUN: the golden-hour lighting is landed (47a3067/b754f61). Areas (b)–(e) still open: terrain warmth/slope banding, foliage variety+density, building palettes/detail, hamlet composition, updated visual_lighting_profile_test expectation, before/after capture, full gate, PR.
