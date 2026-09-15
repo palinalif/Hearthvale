@@ -31,3 +31,45 @@
 - run 6 (02:03-03:20, died Ollama 500 "no user query found in messages" at ~52k tokens): zero new commits. LESSON: it spent ~40min re-reading files before editing. READ THIS FILE FIRST.
 - run 7 (03:39-05:42, 2h05m in, 83 api calls, ~64k tokens, died: xhigh REASONING ate the ENTIRE output-token budget every turn — "no visible answer produced, model hit output-token limit on every continuation"). It had left `scripts/m1_scene.gd` with a STAGED REVERT of the golden-hour look (removed the warm env for a flat 2-line one) + an uncommitted `tools/bob_gate.sh`. I RESTORED m1_scene.gd to HEAD (golden-hour is safe in b754f61) and kept ONLY bob_gate.sh. DO NOT revert the lighting. If you change the look, it must be a deliberate improvement over b754f61's golden-hour, not a flattening.
 - NEXT RUN: the golden-hour lighting is landed (47a3067/b754f61). Areas (b)–(e) still open: terrain warmth/slope banding, foliage variety+density, building palettes/detail, hamlet composition, updated visual_lighting_profile_test expectation, before/after capture, full gate, PR.
+
+## === 2026-09-15 session (Hermes + Pali) — read before anything else ===
+
+**BREAKING CHANGE vs the old entries above:** the golden-hour lighting was in
+`scripts/m1_scene.gd` — a file NOTHING in the repo references. The real game
+(run/main_scene = scenes/m1.tscn) runs the m2_scene_* chain ending in
+`scripts/m2_scene_upper_wall_details.gd`, whose `_build_world()` overrode the
+environment. It is NOW fixed (commit 00dabd6): verified golden-hour block
+(Sky resource + warm sun #ffd9a0 e1.72 + fog + additive glow + ACES + grade)
+is in the live `_build_world`. Evidence: scene_boot_gate_test 4/0, m2_hamlet
+12/0, backend 83/0, visual_lighting_profile 50/0, m1_acceptance 112/0.
+
+**OPEN BUG (your job):** render-determinism gate failures
+- `cottage_detail_render_test`: 33 checks / 1 FAIL: "unchanged recipe
+  renders identically" (line 102: two captures, same camera, byte-equal
+  expected). Pixel diff concentrated in the upper sky region.
+- `joined_roof_course_render_test`: 80 / 4 FAIL (same family).
+- SSAO already removed from the live block; STILL fails on cottage test →
+  suspect Sky/glow/ACES background pass on mobile renderer.
+- METHOD: flip ONE environment property at a time, re-run
+  `cottage_detail_render_test` (~1-2 min), find the culprit. Verify whether
+  it also fails on commit 47a3067 (pre-golden-hour) to establish
+  pre-existing vs introduced — report the exact command + output either way.
+- HARD RULE (Pali): do NOT edit tests or loosen the byte-equality check.
+  Make the scene deterministic.
+
+**New ground-truth tools (verified working):**
+- `tools/probe_godot.gd` — ask the installed 4.7.2 engine for valid props:
+  `godot --headless --max-fps 60 --path . --script tools/probe_godot.gd -- Environment`
+- `tests/scene_boot_gate_test.gd` — boots the REAL m1.tscn, hard-fail if
+  WorldEnvironment/sky/fog/glow not live. Both wired into `tools/bob_gate.sh`.
+
+**Env:** engine /opt/data/tools/godot/Godot_v4.7.2-stable_linux.x86_64;
+render tests need Xvfb :99 (start if absent) + LIBGL_ALWAYS_SOFTWARE=1;
+full suite: `GATE_RENDER=1 bash tools/bob_gate.sh`.
+Branch task/visual-overhaul-1; push via
+`GITHUB_TOKEN="$(cat /opt/data/cred/github-token)"`.
+
+**Rules (unchanged from before, still in force):** commit+push first empty
+commit before edits; explicit high timeout (≥400s) on every godot command;
+bounded reads (grep, no >500-line dumps); commit every unit + update this
+file; never guess Godot API — use the probe.
