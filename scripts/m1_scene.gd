@@ -314,10 +314,14 @@ func _build_world() -> void:
 	environment.ambient_light_sky_contribution = 1.0
 	environment.fog_enabled = true
 	environment.fog_light_color = Color("#ead7b3")
-	environment.fog_density = 0.0038
-	environment.fog_sky_affect = 0.8
-	environment.fog_depth_begin = 18.0
-	environment.fog_depth_end = 150.0
+	# 2026-09-15 wide-shot pass: the old 0.0038 density + 150-unit depth made
+	# the hamlet read as a beige fog wall in wide framing (~half the frame a
+	# flat cream veil, no sky gradient). Cut density ~58% and pull the depth
+	# range in so mid-ground terrain stays readable and sky shows through.
+	environment.fog_density = 0.0016
+	environment.fog_sky_affect = 0.45
+	environment.fog_depth_begin = 10.0
+	environment.fog_depth_end = 95.0
 	environment.glow_enabled = true
 	environment.glow_intensity = 0.5
 	environment.glow_bloom = 0.14
