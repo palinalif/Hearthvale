@@ -243,3 +243,85 @@ joined_roof_course_render_test        exit=1  checks=80  failures=4   <- known p
 more distant mounds or a sky-ground colour change — the latter is grade work and
 needs his approval; (c) the APK/export + Drive delivery per AGENTS.md is still
 outstanding for this branch.
+
+## Bob — step 3b run (2026-09-15): the "next run (step 3b)" item — nav-test break fixed
+
+**This is the step-3b follow-up.** The step-3 map above is intact and still correct
+(HAMLET_PITCH_MIN 0.62, DistantHamlet ring, live DOF hook, grade v5.3). Step 3b
+changed exactly ONE thing: where the pitch floor is allowed to apply.
+
+**ROOT CAUSE (measured, not inferred) — `scripts/m2_scene_upper_wall_details.gd`:**
+the clamp `ccdfce7` added applies the floor to the ABSOLUTE `camera_pitch` on every
+read, so it rewrites camera elevations that are not the player tilting the view:
+```
+_read_camera_and_cursor(delta):        # override added by ccdfce7
+    super._read_camera_and_cursor(delta)
+    _enforce_hamlet_pitch_limit()
+func _enforce_hamlet_pitch_limit() -> void:
+    if camera_pitch < HAMLET_PITCH_MIN:      # <- THE REGRESSION LINE
+        camera_pitch = HAMLET_PITCH_MIN      # ccdfce7: :340-341, HAMLET_PITCH_MIN 0.55 (:22)
+                                             # 3723c9d: :382-383, HAMLET_PITCH_MIN 0.62 (:27)
+```
+`m1_terrain_navigation_test` puts the terrain/navigation camera at `camera_pitch
+0.45`, `camera_distance 15` and then drives `_read_camera_and_cursor` through its
+`_tick()`: the floor rewrote 0.45 -> 0.55 (ccdfce7) / 0.62 (3723c9d), and the live
+camera elevation is `target.y + sin(camera_pitch) * distance`, so `camera.position.y`
+jumped by **1.316u** (0.55) / **2.191u** (0.62) against the test's 1e-4 tolerance —
+"stationary held Raise does not move camera height", "moving Raise retains its
+starting camera elevation" and "release and repeated camera updates never chase the
+new summit" all fail from that one line. Nothing else in step 3 moves the camera:
+the DOF override only attaches/parameterises `camera.attributes`, and the distant
+scenery is a static mesh.
+Same line, second victim: `m1_resize_handles_test` (pitch 0.55, "cancel restores the
+original framing") = 53/1 before, 53/0 after. Both tests are in the cottage-playtest
+CI job; no other test in the suite drives `_read_camera_and_cursor` (the render
+shards all call `scene.set_process(false)` first).
+
+**FIX (one file, two added lines — no test, no gate script, no look touched):** the
+floor now limits the player's TILT INPUT instead of the current elevation —
+`_enforce_hamlet_pitch_limit()` returns early when
+`Input.get_axis("m1_orbit_up", "m1_orbit_down")` is zero. `camera_pitch` only ever
+moves through that axis (plus the mouse drag, which carries the same 0.62 floor in
+`m2_scene_pc_input.gd:62`, and portion placement in `m2_scene_house_editing.gd:113`),
+so the player-facing limit is unchanged: holding "orbit up" still stops at 0.62 and
+the sky band stays unreachable.
+
+**EVIDENCE (local, this run):**
+- `m1_terrain_navigation_test` **21/3 -> 21/0** (exit 0); `m1_resize_handles_test`
+  **53/1 -> 53/0**. `tools/bob_clamp_probe.gd` (real chain, `m1_orbit_up` held 240
+  frames): min **0.6200** / max **1.4000** — identical before and after the fix, so
+  the floor still binds.
+- 6 required gates, all exit 0 / failures 0: backend **83/0**, visual_lighting_profile
+  **50/0**, m1_acceptance **112/0**, cottage_detail_render **33/0**,
+  m2_hamlet_composition_render **12/0**, facade_depth_render **54/0**; foliage_asset
+  **57/0** extra.
+- `tools/roof_head_check.sh`: `joined_roof_course_render_test` = 80 checks / **4**
+  failures, `"unchanged roof remains pixel-stable"` — the known pre-existing
+  sub-quantisation drift; measured **identical in a clean `d357e5c` worktree**
+  (/tmp/base-joined.log), i.e. not from step 3 or 3b. Unchanged and not chased.
+- Look untouched: every grade/sky/fog/glow/tonemap/ambient line in `scripts/` +
+  `shaders/` is byte-identical between `d357e5c` and this HEAD (97 matching lines,
+  `diff` empty) — the only diff hits were comment text.
+
+**CI truth for the other red jobs (fetched from the Actions API + job logs, not
+guessed):** `placement-roof`, `placement-catalogue`, `placement-joined-roof`,
+`placement-facade` fail with `FAIL: <...> scene ready` — the tests' own 65s
+`_player_restored` gate never opens on the Windows/Basic-Render-Driver host — and the
+shard harness then throws on `ERROR:`. Those four already failed with the same text
+**before step 3**: at `186707f` catalogue/roof/joined-roof failed identically (facade
+passed there, it failed at every run after), and at `f47599c` all four failed the same
+way. They are a pre-existing CI scene-boot problem, not the clamp, and not something
+these tests can be de-flaked by a look change. The only step-3 CI regression was the
+cottage-playtest job's "Test exported scene against Thor failures" step (that step
+passed at `186707f`), i.e. `m1_terrain_navigation_test` — fixed above.
+Noise note: step 3 also made every scene build print 4x `WARNING: Godot 3.x
+SpatialMaterial remapped parameter not found: specular` from
+`_build_distant_scenery` (`:466` — Godot 4 has no `StandardMaterial3D.specular`; the
+assignment is a no-op). Log noise only, no harness matches it; a one-line removal is a
+candidate follow-up.
+
+**Next run (step 3b leftovers):** (a) the APK/export + Drive delivery for this branch
+is still outstanding; (b) decide whether to chase the CI "scene ready" shard flake
+(separate workstream from the look); (c) optionally delete the no-op
+`material.specular` line to clean the logs; (d) still open from step 3: the warm-void
+corners in the wide shot need grade work (Pali's approval).

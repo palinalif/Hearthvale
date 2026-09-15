@@ -371,16 +371,34 @@ func _update_presentation_target_label() -> void:
 ## applies its own per-file pitch clamp through super, and this override is the
 ## most-derived one that runs AFTER them in the normal path, so the floor below
 ## is the effective limit the player can reach. Verified with
-## tools/bob_clamp_probe.gd (min 0.0800 before -> 0.5500 after; max 1.4000
+## tools/bob_clamp_probe.gd (min 0.0800 before -> 0.6200 after; max 1.4000
 ## unchanged). m2_scene_house_editing (portion placement) and m2_scene_pc_input
-## (mouse drag) clamp outside this path and carry the same 0.55 floor.
+## (mouse drag) clamp outside this path and carry the same floor.
 func _read_camera_and_cursor(delta: float) -> void:
 	super._read_camera_and_cursor(delta)
 	_enforce_hamlet_pitch_limit()
 
+## STEP 3b (2026-09-15): the floor is applied to the player's TILT INPUT, not to
+## whatever `camera_pitch` happens to hold. Step 3 clamped the absolute value on
+## every read, so every read rewrote pitches that are not the player tilting the
+## view up: a directly assigned pitch (test fixtures, the review framing) and the
+## terrain navigator's elevation angle (m1_scene_thor_retest freezes the camera
+## height during a Raise stroke, not the tilt). That rewrite is what broke the
+## accepted terrain-navigation contract: m1_terrain_navigation_test sets pitch 0.45
+## and asserts the camera height never moves while raising, and 0.45 -> 0.62 lifts
+## camera.y by (sin 0.62 - sin 0.45) * distance = 2.19u at distance 15 (3
+## assertions); m1_resize_handles_test's "cancel restores the original framing"
+## (pitch 0.55) failed the same way. The player-facing limit is unchanged: pitch
+## only ever moves through the orbit axis (the only path that changes it besides
+## the mouse drag, which carries the same 0.62 floor in m2_scene_pc_input.gd), so
+## holding "orbit up" still stops at HAMLET_PITCH_MIN — tools/bob_clamp_probe.gd
+## still measures min 0.6200 / max 1.4000 after this change.
 func _enforce_hamlet_pitch_limit() -> void:
-	if camera_pitch < HAMLET_PITCH_MIN:
-		camera_pitch = HAMLET_PITCH_MIN
+	if camera_pitch >= HAMLET_PITCH_MIN:
+		return
+	if is_zero_approx(Input.get_axis("m1_orbit_up", "m1_orbit_down")):
+		return
+	camera_pitch = HAMLET_PITCH_MIN
 
 ## Real depth of field on the LIVE camera.
 ## m1_scene.gd's `_update_depth_of_field` is NEVER reached on the live chain:
