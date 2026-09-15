@@ -280,8 +280,60 @@ func _key(action: String, key: Key) -> void:
 	var event := InputEventKey.new(); event.keycode = key; InputMap.action_add_event(action, event)
 
 func _build_world() -> void:
-	var sun := DirectionalLight3D.new(); sun.rotation_degrees = Vector3(-52, -28, 0); sun.light_color = Color("#fff0d5"); sun.light_energy = 1.25; sun.shadow_enabled = true; add_child(sun)
-	var environment_node := WorldEnvironment.new(); var environment := Environment.new(); environment.background_mode = Environment.BG_COLOR; environment.background_color = Color("#c3d2c5"); environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR; environment.ambient_light_color = Color("#c2d5e0"); environment.ambient_light_energy = 0.55; environment.fog_enabled = false; environment.fog_light_color = Color("#9aaeb7"); environment.fog_density = 0.003; environment_node.environment = environment; add_child(environment_node)
+	# M2 lighting polish -> golden-hour overhaul. Warm low sun for long,
+	# directional contrast; warm hazy procedural sky with depth; ordinary fog
+	# for atmospheric perspective; modest glow for a soft golden bloom; ACES
+	# + a light warm grade; a restrained SSAO pass for contact/AO softness.
+	# All Mobile-renderer-safe; no volumetrics, SDFGI, or SSR.
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-33, -46, 0)
+	sun.light_color = Color("#ffd9a0")
+	sun.light_energy = 1.72
+	sun.shadow_enabled = true
+	sun.shadow_max_distance = 150.0
+	sun.shadow_bias = 0.028
+	sun.shadow_normal_bias = 0.02
+	add_child(sun)
+
+	var environment_node := WorldEnvironment.new()
+	var environment := Environment.new()
+	var sky_material := ProceduralSkyMaterial.new()
+	sky_material.sky_top_color = Color("#d8e1e5")
+	sky_material.sky_horizon_color = Color("#f2d9a4")
+	sky_material.ground_top_color = Color("#c3b795")
+	sky_material.ground_horizon_color = Color("#e0d3b2")
+	sky_material.sky_energy_multiplier = 0.55
+	sky_material.ground_energy_multiplier = 0.35
+	environment.sky = sky_material
+	environment.background_mode = Environment.BG_SKY
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	environment.ambient_light_sky_contribution = 1.0
+	environment.fog_enabled = true
+	environment.fog_light_color = Color("#ead7b3")
+	environment.fog_density = 0.0038
+	environment.fog_sky_affect = 0.8
+	environment.fog_depth_begin = 18.0
+	environment.fog_depth_end = 150.0
+	environment.glow_enabled = true
+	environment.glow_intensity = 0.5
+	environment.glow_bloom = 0.14
+	environment.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
+	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
+	environment.tonemap_exposure = 1.05
+	environment.tonemap_white = 1.35
+	environment.ssao_enabled = true
+	environment.ssao_intensity = 0.45
+	environment.ssao_radius = 0.7
+	environment.ssao_power = 1.2
+	environment.ssao_light_affect = 0.5
+	environment.ssao_deitter_enabled = true
+	environment.adjustment_enabled = true
+	environment.adjustment_saturation = 1.06
+	environment.adjustment_contrast = 1.04
+	environment.adjustment_brightness = 1.02
+	environment.adjustment_gamma = Color(1.0, 0.985, 0.94)
+	environment_node.environment = environment
+	add_child(environment_node)
 	river_water = MeshInstance3D.new(); river_water.name = "RiverWater"; river_water.mesh = _build_river_water_mesh(); river_water.position.y = 5.0
 	var water_material := StandardMaterial3D.new(); water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; water_material.albedo_color = Color(0.30, 0.57, 0.56, 0.86); water_material.metallic = 0.05; water_material.roughness = 0.42; river_water.material_override = water_material; add_child(river_water)
 	decor_root = Node3D.new(); decor_root.name = "GardenDecor"; add_child(decor_root)
