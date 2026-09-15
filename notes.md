@@ -69,6 +69,19 @@ full suite: `GATE_RENDER=1 bash tools/bob_gate.sh`.
 Branch task/visual-overhaul-1; push via
 `GITHUB_TOKEN="$(cat /opt/data/cred/github-token)"`.
 
+**ART TARGET (Pali 2026-09-15):** reference image at
+`docs/art/wide-shot-target-2026-09-15.png` — crisp saturated wide shot,
+NO atmospheric wash even at distance: punchy greens, strong roof/wall
+contrast, legible buildings far away. THIS RUN = LIGHTING ONLY (asset
+variety is on Pali's own list — do NOT add new archetypes).
+ACCEPTANCE:
+  1) wide shot (m2_hamlet) matches that crispness: haze gone, saturation/
+     contrast up, keep the warm sky/sun
+  2) subtle DOF: attach `CameraAttributes` (Godot 4.7: Camera3D.camera_attributes)
+     to the hamlet camera — focus distance at the middle cottage (~15-25u),
+     gentle near/far falloff (dof/near/blur + far/blur), NOT a full blur
+  3) determinism gate still passes (DOF is a deterministic blur; VERIFY)
+
 **Rules (unchanged from before, still in force):** commit+push first empty
 commit before edits; explicit high timeout (≥400s) on every godot command;
 bounded reads (grep, no >500-line dumps); commit every unit + update this
