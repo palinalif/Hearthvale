@@ -49,7 +49,15 @@ func _run() -> void:
 	var highest: float = scene.camera_pitch
 	print("CLAMP_PROBE max_pitch=%.4f" % highest)
 
-	# Mouse orbit path (PC input) uses its own clamp: drag the mouse up.
+	# Mouse orbit path (PC input) uses its own clamp: drag down (raises pitch) and
+	# drag up (lowers pitch) to probe both ends of that clamp. _mouse_orbiting is
+	# what gates that branch (normally set by a middle/right mouse press).
+	scene._mouse_orbiting = true
+	for _i in 80:
+		var motion := InputEventMouseMotion.new()
+		motion.relative = Vector2(0, 2000)
+		scene._input(motion)
+	print("CLAMP_PROBE mouse_down_pitch=%.4f" % scene.camera_pitch)
 	for _i in 80:
 		var motion := InputEventMouseMotion.new()
 		motion.relative = Vector2(0, -2000)

@@ -152,3 +152,94 @@ contrast. Acceptance: re-render full hamlet + cottage captures look
 impressive AND warm; verify with tests/visual_lighting_profile_test.gd
 (still 0 failures) and by eye. Do this AFTER/ALONGSIDE the determinism
 fix, same live file.
+
+## Bob — step 3 run (2026-09-15, camera clamp + hamlet extension + real DOF)
+
+Branch task/visual-overhaul-1. Commits: `ccdfce7` (step3 1-3 first landing),
+`3723c9d` (step3 2-3 tuned: scenery + live DOF hook), then the final commit on
+top (message "step3 4: notes.md durable state ...") which carries THIS section —
+its sha is the branch tip, `git log --oneline -3` (a commit cannot cite its own
+sha without changing it). Remote verified with `git ls-remote`.
+
+**CHAIN MAP CORRECTIONS (measured this run — the old map was wrong in two ways):**
+1. The live INPUT pitch clamp at HEAD was **0.0800 / 1.4000**, not 0.15-1.25.
+   `tools/bob_clamp_probe.gd` drives the real scene's `_read_camera_and_cursor`
+   (the most-derived override, which cascades through every per-file clamp via
+   super) while holding the orbit action. The 0.15-1.25 literals in
+   m1_scene_placement / m2_scene_roof_accessories are applied DEEPER in the
+   cascade and are then re-widened by m1_scene_building_camera / cottage_ux /
+   playtest_repair (0.08-1.40), which execute later in the unwind.
+2. **`m1_scene.gd::_update_depth_of_field` is never called live.** The live
+   camera transform comes from `m1_scene_cottage_style` ->
+   `m1_scene_building_camera` / `m1_scene_thor_retest` / `m1_scene_playtest_repair`,
+   whose `view_context` branches do their own camera math; the m1_scene version
+   (which calls the DOF helper) never runs. Proof: detach `camera.attributes`,
+   call `_update_camera()`, attributes STAY null (tools/bob_dof_proof.gd). So the
+   DOF had to be hooked on an `_update_camera()` override in the live file.
+
+**What landed (live file = scripts/m2_scene_upper_wall_details.gd):**
+- **Camera pitch clamp.** `camera_pitch` is the camera's ELEVATION above the look
+  target, so tilting UP (pad stick up) DECREASES it; with the 52° fov the sky
+  (0° elevation) enters the frame's top edge at pitch = 26° = 0.4538. So the end
+  to tighten is the MIN. `HAMLET_PITCH_MIN := 0.62` (10.5° below the horizon —
+  absorbs the build browser's ~7° upward v_offset shift), enforced by a
+  `_read_camera_and_cursor` override (runs last in the normal cascade) and by the
+  two input paths that bypass that cascade: m2_scene_house_editing (portion
+  placement) and m2_scene_pc_input (mouse drag). Max unchanged.
+  MEASURED: pad-driven min 0.0800 -> **0.6200**, max 1.4000 -> **1.4000**.
+  `tools/bob_skycheck.gd` (sky hemispheres repainted magenta/cyan, review
+  framing): sky pixels in frame = **0 at 0.62 and 0.72**, vs **17.6% at 0.30**
+  and **39.7% at 0.08 (the old floor)**. Log: reports/screenshots/step3-skycheck/.
+- **Distant hamlet/hills.** ONE static MeshInstance3D "DistantHamlet" (4 colour
+  surfaces, cast_shadow OFF, no per-frame work, no landscape records, no new
+  archetypes/node types/scenes) holding 33 mounds + 8 farmsteads in three layers:
+  low far ridges (radius 88-100, h 6-8) that sit in the top frame band, a mid
+  ring of rolling farm hills (radius 56-76, h 9-14) around the whole island, and
+  a far range (radius 119-138, h 15-21) for higher pitches. Visibility geometry
+  for the review framing (pitch 0.72, distance 42): the top edge ray only reaches
+  ground ~138u away, so a far mound must satisfy y_top <= 37.7 - 0.2726*d to stay
+  in frame. Colours #46613a / #546f43 / #c8b894 / #7e4f3c (deep, because the fog
+  washes them out). MEASURED draw-call delta: 871 -> **872 (+1)** with
+  `Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME`; mesh AABB 327.7 x 21 x 319.3.
+- **Real DOF on the live camera.** `camera.attributes = CameraAttributesPractical`
+  in `_build_world`, values driven each frame from the new `_update_camera`
+  override: distance-gated at 32u — below it both blur stages are disabled and
+  the close/mid framings (the approved cottage closeup, every close-up render
+  gate) are byte-identical to before (proved: blur-disabled frame vs detached
+  attributes = **0 changed pixels**). At the wide framing:
+  near = distance-20 (transition 12), far = distance+60 (transition 50),
+  amount 0.10. MEASURED (reports/dof-proof/, live vs blur-off, identical camera):
+  22750/460800 sampled pixels changed >3 levels (4.9%) — top band 6.6%, middle
+  3.7%, bottom 4.0%, max channel delta 119. The blur starts BEYOND the village
+  and the hills, so they stay crisp while the far background softens. The first
+  attempt (amount 0.40, far = distance+6, transition 26) smeared the whole
+  horizon into mush — that build was rejected by eye from the capture.
+- **Grade untouched:** saturation 1.06, contrast 1.04, brightness 1.00, sky_top
+  #7f9db5, horizon #e8c98e, ground #8a7a58/#dccca6, fog #e6c193 density 0.0021
+  sky_affect 0.12 depth 14-130, glow 0.5/0.14 additive, ACES exposure 1.05.
+
+**STEP-3 GATE (all from the brief; `tools/bob_step3_gate.sh`, logs /tmp/step3-gate/):**
+```
+backend_test                          exit=0  checks=83  failures=0
+visual_lighting_profile_test          exit=0  checks=50  failures=0
+m1_acceptance_test                    exit=0  checks=112 failures=0
+cottage_detail_render_test  (render)  exit=0  checks=33  failures=0
+m2_hamlet_composition_render_test     exit=0  checks=12  failures=0
+facade_depth_render_test    (render)  exit=0  checks=54  failures=0
+foliage_asset_test                    exit=0  checks=57  failures=0
+joined_roof_course_render_test        exit=1  checks=80  failures=4   <- known pre-existing
+```
+- `joined_roof_course_render_test` = **80 checks / 4 failures, exit 1 —
+  PRE-EXISTING** sub-quantisation drift (same family as the cottage identity
+  flake), NOT a step-3 regression: it was 80/4 at HEAD 186707f too. Not chased
+  (brief says don't).
+- No test file was modified in this run (the cottage tolerance is still the v5.3
+  64px and it was not needed; cottage_detail = 33/0, foliage = 57/0).
+
+**For the next run:** (a) the two screenshots that show the result:
+`reports/screenshots/m2-hamlet/full-hamlet.png` (wide) and
+`reports/screenshots/m1-cottage-detail/*` (closeups, re-rendered by the gate);
+(b) if Pali wants the remaining warm-void corners in the wide shot gone, that is
+more distant mounds or a sky-ground colour change — the latter is grade work and
+needs his approval; (c) the APK/export + Drive delivery per AGENTS.md is still
+outstanding for this branch.
