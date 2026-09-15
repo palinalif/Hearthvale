@@ -97,6 +97,26 @@ commit before edits; explicit high timeout (≥400s) on every godot command;
 bounded reads (grep, no >500-line dumps); commit every unit + update this
 file; never guess Godot API — use the probe.
 
+## Hermes pass (2026-09-15, after Pali's wide-shot complaint)
+- Pushed commits (branch task/visual-overhaul-1, remote live): a96a49c de-haze fog,
+  4bc2b01 horizon warm push, 44a4dee distance-gated DOF, f47599c sky_top warm to #c9b89a,
+  be85bd8 v3: fog_density 0.0028, fog_light #e8b878, adjustment_saturation 1.12,
+  DOF far_start +14u / transition 38 / amount 0.5.
+- Pali verdict on f47599c-era frame: cottage closeup GREAT; wide hamlet STILL washed out;
+  DOF NOT VISIBLE. Diagnosis: wide shot top-of-frame is far GROUND (cam pitch 0.72 down,
+  distance 42u) not sky; old DOF focused ON the hamlet (near_start 36u) so almost nothing
+  blurred. The far field needs: richer fog color (toward #d89a4f if needed), density up,
+  saturation/contrast pass, DOF far blur strong enough to read (amount 0.6-0.8) —
+  while m1_playtest_repair (cottage detail) and m2-hamlet stay sharp.
+- KNOWN OPEN: m1_playtest_repair_render_test 33/1 — "unchanged recipe renders identically"
+  in-frame float drift (pre-existing per 029fc46 probe: animation-element baseline, not the
+  lighting family). Pali asked: make it compare the PNGs ON DISK (that's what he sees)
+  instead of float readback — do this after the visual pass.
+- Next run (Bob): 1) backdrop saturation pass on wide shot (see Pali's reference
+  docs/art/wide-shot-target-2026-09-15.png), 2) DOF proof: render hamlet with DOF on/off,
+  save both PNGs, diff must be visible in far band only, 3) fix repair test per Pali's
+  disk-compare ask, 4) full gate, push, post frames.
+
 **NEW ACCEPTANCE CRITERION (Pali, 2026-09-15 mid-run):** the closeup
 cottage look is APPROVED ("very good up close"), but the WIDE shot
 (m2_hamlet_composition full hamlet) "is just hazy" — the fog is swamping
