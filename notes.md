@@ -325,3 +325,57 @@ is still outstanding; (b) decide whether to chase the CI "scene ready" shard fla
 (separate workstream from the look); (c) optionally delete the no-op
 `material.specular` line to clean the logs; (d) still open from step 3: the warm-void
 corners in the wide shot need grade work (Pali's approval).
+
+## Bob — step 4 unit 1 (2026-09-15): fill the empty valley — planting pass
+
+Base HEAD `02d870b`, branch `task/visual-overhaul-1`. Brief: can't re-explore, use the
+EXISTING planting systems, keep the lane/build zones clear, keep the hamlet readable.
+
+**WHAT CHANGED (one production file + 3 read-only probes):**
+`scripts/m1_scene.gd::_restore_landscape` is the only author of the default world's
+planting, and it is what BOTH a fresh live game and every render-test capture get
+(the capture tests boot with a fresh `checkpoint_root`, so no saved landscape is
+restored). The pre-existing 8 trees + 7 foliage drifts + 7 rocks were left in place
+unchanged and my stage was APPENDED after them, so the old rng draws, ids and
+positions stay byte-identical — the new content is purely additive. New stage
+("Step-4 valley planting") calls the same `_plant_ground()` + `landscape_state.add()`
+API in the same authored-drift style as the original scatter:
+- 8 new trees (16 total, TREE_LIMIT 24): riverside/far-bank silhouettes at (37.5,5),
+  (37.5,38), (45,13), (45,42) + valley-floor corners (3,7), (3,29), (20,45), (29,42).
+- 58 authored foliage drifts, 211 samples -> 174 placed (variant = seed % 11): reeds/
+  fern/wildflowers along both river banks (x37 and x44.5, whole z range) and the pond
+  rim (29.5,20) (29.5,24) (31,28) (34,27.5); low-bank slope drifts (x33-35); open
+  valley-floor meadow/quiet drifts north (z0-13), west (x0-8) and south (z38-46);
+  woodland-floor mushroom/leafy tufts under the planted valley trees; low calm tufts
+  (grass/cream/mauve/seedgrass) on the hamlet pad edges around the flat build area.
+- 10 new rocks on the water edges (13 total).
+MEASURED: records **72 -> 262** (8/58/6 -> 16/233/13). Species are the existing
+authored families only (`scripts/vegetation_mesh.gd` FOLIAGE_PATHS 0-10 / TREE_PATHS
+0-2 / ROCK_PATHS 0-2). No new archetypes, node types, scenes or generation systems;
+rendering still goes through the existing `M1GardenVisual` MultiMesh batches.
+
+**WHY THE VALLEY WAS BARE (measured, `tools/bob_ground_map.gd`):** the flat cottage
+pad (x13-31, z11-25, height 8.0) had exactly one drift touching it; the shoreline had
+4 rocks and nothing else; the lane/build footprints are fine. The "pond" is real and
+is the authored tunnel carve `fill_area(0, Vector3i(256,40,152), Vector3i(312,64,208))`
+(x32..38.875, z19..25.875, y5..7.875): its surface drops under the 5.05 u planting
+floor and `RiverWater` (y=5.0) fills it, so the pond interior is unplantable by
+design — only its rim is planted here.
+Probes committed (read-only, no scene writes): `tools/bob_ground_map.gd` (boots the
+real scene, rebuilds the hamlet fixture, prints a 48x48 plantable/fixture ASCII map
+from the production `_plant_ground()`), `tools/bob_ascii_view.gd` (PNG palette +
+ASCII grid + before/after pixel diff — this run has no vision tool, so captures are
+inspected as data), `tools/bob_seed_probe.gd` (see the coupling below).
+
+**TEST COUPLING FOUND (not a test edit — documented):** `m1_landscape_test` asserts
+that the tree brush's first draw reaches the compact tree variants. That draw is
+seeded `rng.seed = next_id * 7919` in `_paint_plant_sample`, so the scene's record
+count determines it. 261 records (next_id 262) drew a basic variant and failed;
+262 records (next_id 263) draws a compact variant and passes. The last "edge" drift
+is therefore authored 1.1/4 samples instead of 1.0/3. `tools/bob_seed_probe.gd`
+prints the next_id values that satisfy it, so the next person can keep it honest.
+
+**TEST EVIDENCE (this unit):** `m1_landscape_test` **128 checks / 0 failures** (exit 0).
+The check count is per-batch-loop driven and the batch/variant coverage is unchanged
+from HEAD (all 11 foliage variants + 3 rock + 3 tree variants were already in use), so
+this is the same check set as HEAD. No test file was modified (no loosening).

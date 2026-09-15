@@ -1471,7 +1471,73 @@ func _restore_landscape(document: Dictionary) -> void:
 	for point in [Vector3(37, 7, 7), Vector3(37, 7, 12), Vector3(37, 7, 30), Vector3(36, 7, 38), Vector3(32, 8, 37), Vector3(13, 8, 34), Vector3(8, 8, 16)]:
 		var ground := _plant_ground(point, true)
 		if not ground.is_empty(): landscape_state.add("rock", ground["point"], rng.randi_range(0, 2))
+	# --- Step-4 valley planting (Pali 2026-09-15: "the valley is mostly empty flat
+	# ground"). The pad above is deliberately calm around the cottage; this stage
+	# adds the lived-in layer around it: loose drifts of the approved ground-foliage
+	# family on the river and pond shoreline, the low-bank slopes, the open valley
+	# floor and the home edges. Species are authored, not random (variant = seed %
+	# 11): 0 grass, 1 wildflowers, 2 leafy, 3 seedgrass, 4 cream, 5 mauve, 6 reeds,
+	# 7 fern, 8/9/10 mushrooms. The village lane, the garden/fence footprints and
+	# the flat building pads stay clear, so the hamlet still reads at a distance.
+	var species := {
+		"shore": [6, 7, 1, 6, 0],
+		"bank": [1, 0, 7, 3],
+		"slope": [0, 3, 1, 0],
+		"meadow": [0, 2, 3, 1, 4, 5, 0, 3],
+		"quiet": [0, 3, 4, 5, 2, 0, 1],
+		"edge": [0, 4, 5, 3],
+		"wood": [2, 4, 8, 9, 10, 7, 0],
+	}
+	# Riverside and far-bank trees keep the water legible from the wide framing.
+	for tree in [[37.5, 5, 1], [37.5, 38, 1], [45.0, 13, 2], [45.0, 42, 0], [3.0, 7, 0], [3.0, 29, 2], [20.0, 45, 0], [29.0, 42, 1]]:
+		var tree_ground := _plant_ground(Vector3(tree[0], 8.0, tree[1]), true)
+		if not tree_ground.is_empty(): landscape_state.add("tree", tree_ground["point"], int(tree[2]))
+	var drifts := [
+		[Vector2(37.0, 3.0), 1.0, 4, "shore"], [Vector2(37.0, 9.0), 1.0, 4, "shore"],
+		[Vector2(37.0, 15.0), 1.0, 4, "shore"], [Vector2(37.0, 18.0), 1.0, 4, "shore"],
+		[Vector2(37.0, 30.0), 1.0, 4, "shore"], [Vector2(37.0, 35.0), 1.0, 4, "shore"],
+		[Vector2(37.0, 42.0), 1.0, 4, "shore"],
+		[Vector2(44.5, 6.0), 1.0, 4, "bank"], [Vector2(44.5, 14.0), 1.0, 4, "bank"],
+		[Vector2(44.5, 22.0), 1.0, 4, "bank"], [Vector2(44.5, 30.0), 1.0, 4, "bank"],
+		[Vector2(44.5, 38.0), 1.0, 4, "bank"], [Vector2(44.5, 45.0), 1.0, 3, "bank"],
+		[Vector2(29.5, 20.0), 1.0, 4, "shore"], [Vector2(29.5, 24.0), 0.9, 3, "shore"],
+		[Vector2(31.0, 28.0), 0.8, 3, "shore"], [Vector2(34.0, 27.5), 0.8, 3, "shore"],
+		[Vector2(33.5, 9.0), 1.0, 3, "slope"], [Vector2(34.5, 12.0), 1.0, 3, "slope"],
+		[Vector2(34.5, 31.0), 0.9, 3, "slope"], [Vector2(34.0, 36.0), 1.0, 3, "slope"],
+		[Vector2(34.0, 44.0), 1.0, 3, "slope"], [Vector2(34.0, 7.0), 1.0, 3, "slope"],
+		[Vector2(4.0, 4.0), 1.6, 5, "meadow"], [Vector2(9.0, 3.0), 1.4, 4, "meadow"],
+		[Vector2(15.0, 5.0), 1.5, 5, "meadow"], [Vector2(21.0, 4.0), 1.4, 4, "meadow"],
+		[Vector2(26.0, 7.0), 1.4, 4, "meadow"], [Vector2(20.0, 2.0), 1.3, 4, "meadow"],
+		[Vector2(6.0, 10.0), 1.4, 4, "meadow"], [Vector2(16.0, 11.0), 1.3, 4, "meadow"],
+		[Vector2(23.0, 12.0), 1.3, 4, "meadow"], [Vector2(12.5, 8.0), 1.3, 4, "meadow"],
+		[Vector2(4.0, 17.0), 1.5, 4, "quiet"], [Vector2(3.0, 24.0), 1.5, 4, "quiet"],
+		[Vector2(4.0, 31.0), 1.5, 4, "quiet"], [Vector2(5.0, 38.0), 1.5, 4, "quiet"],
+		[Vector2(7.0, 44.0), 1.4, 4, "quiet"], [Vector2(12.0, 44.0), 1.4, 4, "quiet"],
+		[Vector2(20.0, 44.0), 1.4, 4, "quiet"], [Vector2(26.0, 42.0), 1.4, 4, "quiet"],
+		[Vector2(17.0, 41.0), 1.4, 4, "quiet"], [Vector2(24.0, 38.0), 1.4, 4, "quiet"],
+		[Vector2(30.0, 44.0), 1.3, 4, "quiet"], [Vector2(9.0, 28.0), 1.3, 4, "quiet"],
+		[Vector2(10.5, 37.5), 1.2, 3, "wood"], [Vector2(28.0, 34.5), 1.2, 3, "wood"],
+		[Vector2(6.5, 20.5), 1.2, 3, "wood"], [Vector2(30.5, 9.5), 1.2, 3, "wood"],
+		[Vector2(14.0, 14.0), 1.1, 3, "edge"], [Vector2(13.5, 19.0), 1.1, 3, "edge"],
+		[Vector2(13.5, 21.0), 1.0, 3, "edge"], [Vector2(30.0, 14.0), 1.1, 3, "edge"],
+		[Vector2(30.0, 17.5), 1.1, 3, "edge"], [Vector2(29.5, 21.0), 1.0, 3, "edge"],
+		[Vector2(19.0, 11.5), 1.1, 3, "edge"], [Vector2(25.0, 11.5), 1.1, 3, "edge"],
+		[Vector2(26.0, 22.0), 1.1, 4, "edge"],
+	]
+	for drift: Array in drifts:
+		_plant_valley_drift(drift[0], float(drift[1]), int(drift[2]), species[drift[3]], rng)
+	for point in [Vector3(37.5, 8, 2), Vector3(37.5, 8, 13), Vector3(36.5, 8, 27), Vector3(36, 8, 34), Vector3(37.5, 8, 41), Vector3(44.5, 8, 9), Vector3(44.5, 8, 20), Vector3(44.5, 8, 33), Vector3(45, 8, 45), Vector3(33, 8, 5)]:
+		var rock_ground := _plant_ground(point, true)
+		if not rock_ground.is_empty(): landscape_state.add("rock", rock_ground["point"], rng.randi_range(0, 2))
 	garden_visual.reset_records(landscape_state.records)
+
+func _plant_valley_drift(center: Vector2, radius: float, samples: int, species: Array, rng: RandomNumberGenerator) -> void:
+	for sample in samples:
+		var angle := rng.randf_range(0.0, TAU)
+		var offset := sqrt(rng.randf()) * radius
+		var ground := _plant_ground(Vector3(center.x + cos(angle) * offset, 8.0, center.y + sin(angle) * offset), true)
+		if ground.is_empty(): continue
+		landscape_state.add("foliage", ground["point"], int(species[sample % species.size()]))
 
 func _plant_ground(point: Vector3, from_top: bool = false) -> Dictionary:
 	if not backend or not backend.is_ready(): return {}
