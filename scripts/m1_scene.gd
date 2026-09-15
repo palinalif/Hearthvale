@@ -299,7 +299,9 @@ func _build_world() -> void:
 	var environment := Environment.new()
 	var sky_material := ProceduralSkyMaterial.new()
 	sky_material.sky_top_color = Color("#d8e1e5")
-	sky_material.sky_horizon_color = Color("#f2d9a4")
+	# 2026-09-15 wide-shot pass: horizon pushed to the warm golden hour tone so the
+	# empty backdrop reads as a low golden-hour glow instead of a blank cream void.
+	sky_material.sky_horizon_color = Color("#f2c98a")
 	sky_material.ground_bottom_color = Color("#c3b795")
 	sky_material.ground_horizon_color = Color("#e0d3b2")
 	sky_material.sky_energy_multiplier = 0.55
