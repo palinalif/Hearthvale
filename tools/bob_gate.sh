@@ -23,7 +23,7 @@ done
 # mobile render tests (need Xvfb :99)
 if [ -n "${GATE_RENDER:-}" ]; then
   export DISPLAY=:99 LIBGL_ALWAYS_SOFTWARE=1
-  for t in cottage_detail_render_test facade_depth_render_test joined_roof_course_render_test; do
+  for t in cottage_detail_render_test facade_depth_render_test joined_roof_course_render_test scene_boot_gate_test m2_hamlet_composition_render_test; do
     run "$t" "--renderer mobile"
   done
 fi

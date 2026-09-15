@@ -290,7 +290,7 @@ func _build_world() -> void:
 	sun.light_color = Color("#ffd9a0")
 	sun.light_energy = 1.72
 	sun.shadow_enabled = true
-	sun.shadow_max_distance = 150.0
+	sun.directional_shadow_max_distance = 150.0
 	sun.shadow_bias = 0.028
 	sun.shadow_normal_bias = 0.02
 	add_child(sun)
@@ -300,11 +300,15 @@ func _build_world() -> void:
 	var sky_material := ProceduralSkyMaterial.new()
 	sky_material.sky_top_color = Color("#d8e1e5")
 	sky_material.sky_horizon_color = Color("#f2d9a4")
-	sky_material.ground_top_color = Color("#c3b795")
+	sky_material.ground_bottom_color = Color("#c3b795")
 	sky_material.ground_horizon_color = Color("#e0d3b2")
 	sky_material.sky_energy_multiplier = 0.55
 	sky_material.ground_energy_multiplier = 0.35
-	environment.sky = sky_material
+	# Environment.sky requires a Sky resource, not a raw material (a bare
+	# ProceduralSkyMaterial here fails to parse and breaks the whole M2 chain).
+	var sky := Sky.new()
+	sky.sky_material = sky_material
+	environment.sky = sky
 	environment.background_mode = Environment.BG_SKY
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	environment.ambient_light_sky_contribution = 1.0
@@ -326,12 +330,10 @@ func _build_world() -> void:
 	environment.ssao_radius = 0.7
 	environment.ssao_power = 1.2
 	environment.ssao_light_affect = 0.5
-	environment.ssao_deitter_enabled = true
 	environment.adjustment_enabled = true
 	environment.adjustment_saturation = 1.06
 	environment.adjustment_contrast = 1.04
 	environment.adjustment_brightness = 1.02
-	environment.adjustment_gamma = Color(1.0, 0.985, 0.94)
 	environment_node.environment = environment
 	add_child(environment_node)
 	river_water = MeshInstance3D.new(); river_water.name = "RiverWater"; river_water.mesh = _build_river_water_mesh(); river_water.position.y = 5.0
