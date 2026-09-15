@@ -14,12 +14,17 @@ const MassingSurfaces = preload("res://scripts/m2_massing_wall_surfaces.gd")
 ## see m1_scene._update_camera), so tilting UP (pad stick up / drag) DECREASES
 ## pitch, and the frame's top edge sits (fov/2 - pitch) above the look axis.
 ## With this camera's 52° fov the horizon (0° elevation, i.e. the sky) enters
-## the top edge at pitch = 26° = 0.4538 rad. 0.55 rad holds the top edge 5.5°
-## BELOW the horizon at every zoom/zoom-out, so no sky colour can be framed.
-## Measured before/after with tools/bob_clamp_probe.gd:
-##   HEAD: min 0.0800 / max 1.4000  ->  after: min 0.5500 / max 1.4000.
+## the top edge at pitch = 26° = 0.4538 rad.
+## MEASURED (tools/bob_skycheck.gd, sky hemispheres repainted magenta/cyan,
+## hamlet review framing): sky pixels in frame = 0 at 0.72 and at 0.62, while the
+## old floor framed a sky band — 39.5% of the frame at 0.08, 17.6% at 0.30.
+## 0.62 rad keeps the top edge 10.5° below the horizon, which also absorbs the
+## build browser's ~7° upward v_offset framing shift (m2_scene_build_browser),
+## so the sky stays out of frame with the browser open too.
 ## The downward end is deliberately untouched (top-down limit unchanged).
-const HAMLET_PITCH_MIN := 0.55
+## Before/after (tools/bob_clamp_probe.gd, real scene, pad-driven):
+##   HEAD: min 0.0800 / max 1.4000  ->  after: min 0.6200 / max 1.4000.
+const HAMLET_PITCH_MIN := 0.62
 
 ## Depth of field is DISTANCE-GATED: only the wide framing — the one Pali asked
 ## for DOF on — reads a depth band. Every close/mid framing (the approved cottage
@@ -28,11 +33,11 @@ const HAMLET_PITCH_MIN := 0.55
 ## at the 42u review framing the homes (~29-36u out) stay sharp while the near
 ## foreground and the far hills soften.
 const HAMLET_DOF_MIN_DISTANCE := 32.0
-const HAMLET_DOF_NEAR_OFFSET := 22.0
-const HAMLET_DOF_FAR_OFFSET := 6.0
+const HAMLET_DOF_NEAR_OFFSET := 20.0
+const HAMLET_DOF_FAR_OFFSET := 60.0
 const HAMLET_DOF_NEAR_TRANSITION := 12.0
-const HAMLET_DOF_FAR_TRANSITION := 26.0
-const HAMLET_DOF_AMOUNT := 0.4
+const HAMLET_DOF_FAR_TRANSITION := 50.0
+const HAMLET_DOF_AMOUNT := 0.10
 
 ## Static distant scenery (presentation only: no landscape records, no archetypes,
 ## no scene files, no per-frame work). The island is 48×48 world units with its
@@ -41,33 +46,70 @@ const HAMLET_DOF_AMOUNT := 0.4
 ## village + rolling hills in the fog" instead of an empty warm plane.
 ## angle: degrees around the hamlet centre (24,24), 0° = +x, 90° = +z.
 const HAMLET_HILL_RING := [
-	# --- far hill range (fills the top of the review framing) ---
-	{"angle": -30.0, "radius": 118.0, "width": 54.0, "depth": 20.0, "height": 19.0, "material": 1},
-	{"angle": -62.0, "radius": 132.0, "width": 46.0, "depth": 18.0, "height": 15.0, "material": 1},
-	{"angle": -8.0, "radius": 126.0, "width": 40.0, "depth": 17.0, "height": 14.0, "material": 1},
-	# --- mid ring: rolling farm hills just beyond the island ---
-	{"angle": -31.0, "radius": 82.0, "width": 34.0, "depth": 14.0, "height": 11.5, "material": 0},
-	{"angle": -55.0, "radius": 74.0, "width": 26.0, "depth": 12.0, "height": 8.0, "material": 0},
-	{"angle": 62.0, "radius": 86.0, "width": 32.0, "depth": 14.0, "height": 10.5, "material": 0},
-	{"angle": 132.0, "radius": 90.0, "width": 30.0, "depth": 15.0, "height": 12.0, "material": 0},
-	{"angle": 196.0, "radius": 84.0, "width": 28.0, "depth": 13.0, "height": 9.0, "material": 0},
-	{"angle": 268.0, "radius": 92.0, "width": 34.0, "depth": 15.0, "height": 11.0, "material": 0},
-	{"angle": 330.0, "radius": 88.0, "width": 30.0, "depth": 13.0, "height": 9.5, "material": 0},
+	# --- far range: long overlapping ridges just inside the frame's top edge ---
+	{"angle": -72.0, "radius": 132.0, "width": 66.0, "depth": 26.0, "height": 20.0, "material": 1},
+	{"angle": -52.0, "radius": 124.0, "width": 62.0, "depth": 24.0, "height": 17.0, "material": 1},
+	{"angle": -32.0, "radius": 119.0, "width": 66.0, "depth": 25.0, "height": 21.0, "material": 1},
+	{"angle": -12.0, "radius": 126.0, "width": 58.0, "depth": 24.0, "height": 16.0, "material": 1},
+	{"angle": 08.0, "radius": 134.0, "width": 60.0, "depth": 26.0, "height": 18.0, "material": 1},
+	{"angle": 34.0, "radius": 138.0, "width": 64.0, "depth": 26.0, "height": 15.0, "material": 1},
+	{"angle": 96.0, "radius": 128.0, "width": 60.0, "depth": 24.0, "height": 17.0, "material": 1},
+	{"angle": 176.0, "radius": 132.0, "width": 62.0, "depth": 25.0, "height": 18.0, "material": 1},
+	{"angle": 252.0, "radius": 126.0, "width": 60.0, "depth": 24.0, "height": 16.0, "material": 1},
+	# --- low far ridges: they sit in the top frame band at the review framing,
+	# where the camera's top edge ray only reaches ground ~138u away, so a mound
+	# there has to stay low (y_top <= 37.7 - 0.2726*distance) to remain in frame.
+	{"angle": -34.0, "radius": 88.0, "width": 76.0, "depth": 20.0, "height": 8.0, "material": 1},
+	{"angle": -47.0, "radius": 92.0, "width": 68.0, "depth": 20.0, "height": 7.0, "material": 1},
+	{"angle": -16.0, "radius": 96.0, "width": 72.0, "depth": 20.0, "height": 6.0, "material": 1},
+	{"angle": -2.0, "radius": 100.0, "width": 70.0, "depth": 20.0, "height": 6.0, "material": 1},
+	{"angle": 64.0, "radius": 98.0, "width": 68.0, "depth": 20.0, "height": 7.0, "material": 1},
+	{"angle": 140.0, "radius": 100.0, "width": 68.0, "depth": 20.0, "height": 7.0, "material": 1},
+	{"angle": 214.0, "radius": 96.0, "width": 66.0, "depth": 20.0, "height": 6.0, "material": 1},
+	{"angle": 288.0, "radius": 100.0, "width": 68.0, "depth": 20.0, "height": 7.0, "material": 1},
+	# --- mid ring: rolling farm hills just beyond the island edge ---
+	{"angle": -80.0, "radius": 56.0, "width": 42.0, "depth": 17.0, "height": 12.0, "material": 0},
+	{"angle": -100.0, "radius": 58.0, "width": 44.0, "depth": 18.0, "height": 13.0, "material": 0},
+	{"angle": -120.0, "radius": 62.0, "width": 40.0, "depth": 17.0, "height": 11.0, "material": 0},
+	{"angle": -140.0, "radius": 66.0, "width": 38.0, "depth": 16.0, "height": 10.0, "material": 0},
+	{"angle": -160.0, "radius": 70.0, "width": 36.0, "depth": 16.0, "height": 9.5, "material": 0},
+	{"angle": 34.0, "radius": 60.0, "width": 40.0, "depth": 17.0, "height": 12.0, "material": 0},
+	{"angle": 70.0, "radius": 62.0, "width": 38.0, "depth": 16.0, "height": 11.0, "material": 0},
+	{"angle": 92.0, "radius": 66.0, "width": 36.0, "depth": 16.0, "height": 10.0, "material": 0},
+	{"angle": 240.0, "radius": 60.0, "width": 38.0, "depth": 16.0, "height": 11.0, "material": 0},
+	{"angle": 300.0, "radius": 58.0, "width": 40.0, "depth": 17.0, "height": 12.0, "material": 0},
+	{"angle": -65.0, "radius": 70.0, "width": 40.0, "depth": 17.0, "height": 13.0, "material": 0},
+	{"angle": -45.0, "radius": 64.0, "width": 34.0, "depth": 15.0, "height": 10.0, "material": 0},
+	{"angle": -25.0, "radius": 74.0, "width": 42.0, "depth": 18.0, "height": 14.0, "material": 0},
+	{"angle": -5.0, "radius": 66.0, "width": 32.0, "depth": 14.0, "height": 9.5, "material": 0},
+	{"angle": 16.0, "radius": 76.0, "width": 38.0, "depth": 16.0, "height": 12.0, "material": 0},
+	{"angle": 52.0, "radius": 70.0, "width": 34.0, "depth": 15.0, "height": 10.5, "material": 0},
+	{"angle": 118.0, "radius": 76.0, "width": 36.0, "depth": 16.0, "height": 12.0, "material": 0},
+	{"angle": 200.0, "radius": 68.0, "width": 30.0, "depth": 14.0, "height": 9.0, "material": 0},
+	{"angle": 275.0, "radius": 74.0, "width": 34.0, "depth": 15.0, "height": 11.0, "material": 0},
+	{"angle": 330.0, "radius": 66.0, "width": 32.0, "depth": 14.0, "height": 9.5, "material": 0},
 ]
 
-## Far farmsteads: a lit wall + a terracotta roof at the foot of two hills, so the
-## horizon reads "more of the village", not just terrain.
+## Far farmsteads: a lit wall + a terracotta roof on the valley floor beyond the
+## island, so the horizon reads "more of the village", not just terrain.
 const HAMLET_FARMSTEADS := [
-	{"angle": -44.0, "radius": 66.0, "yaw": 20.0, "scale": 1.0},
-	{"angle": 48.0, "radius": 72.0, "yaw": -35.0, "scale": 0.85},
-	{"angle": 210.0, "radius": 70.0, "yaw": 15.0, "scale": 0.9},
+	{"angle": -58.0, "radius": 70.0, "yaw": 22.0, "scale": 1.15},
+	{"angle": -38.0, "radius": 63.0, "yaw": -18.0, "scale": 1.0},
+	{"angle": -18.0, "radius": 74.0, "yaw": 34.0, "scale": 1.25},
+	{"angle": 6.0, "radius": 66.0, "yaw": -30.0, "scale": 0.9},
+	{"angle": 78.0, "radius": 72.0, "yaw": 12.0, "scale": 1.05},
+	{"angle": 150.0, "radius": 68.0, "yaw": -40.0, "scale": 0.95},
+	{"angle": 228.0, "radius": 71.0, "yaw": 25.0, "scale": 1.1},
+	{"angle": 302.0, "radius": 66.0, "yaw": -12.0, "scale": 0.9},
 ]
 
+## Fog washes distance out of these, so the albedos are deliberately deeper than
+## the island's grass: they must still read as green hills, not pale slabs.
 const HAMLET_SCENERY_COLOURS := [
-	Color("#6f8a52"),  # hill body
-	Color("#7c9463"),  # far range (hazier green)
-	Color("#cfc2a2"),  # farm wall
-	Color("#a4664c"),  # farm roof
+	Color("#46613a"),  # mid-ring hill body
+	Color("#546f43"),  # far range
+	Color("#c8b894"),  # farm wall
+	Color("#7e4f3c"),  # farm roof
 ]
 
 var _massing_surface_sync_revision := -1
@@ -340,10 +382,21 @@ func _enforce_hamlet_pitch_limit() -> void:
 	if camera_pitch < HAMLET_PITCH_MIN:
 		camera_pitch = HAMLET_PITCH_MIN
 
-## Real depth of field on the LIVE camera. m1_scene.gd's _update_depth_of_field
-## is bypassed by this override (the live _update_camera in m1_scene.gd calls it
-## every frame, so this is where the live camera's DOF is driven from).
-func _update_depth_of_field(_target: Vector3) -> void:
+## Real depth of field on the LIVE camera.
+## m1_scene.gd's `_update_depth_of_field` is NEVER reached on the live chain:
+## the live camera transform is produced further up the chain (m1_scene_cottage_style
+## -> m1_scene_building_camera / m1_scene_thor_retest / m1_scene_playtest_repair,
+## whose `view_context` branches do their own camera math and do not call the
+## m1_scene version). Proved with tools/bob_dof_proof.gd: after detaching the
+## attributes and calling `_update_camera()`, they stayed detached, i.e. nothing
+## live called m1_scene's helper. So the live DOF is driven from this override,
+## which runs after the whole `_update_camera` cascade (every link calls super and
+## this is one of the most-derived definitions reached).
+func _update_camera() -> void:
+	super._update_camera()
+	_apply_hamlet_depth_of_field()
+
+func _apply_hamlet_depth_of_field() -> void:
 	if not camera: return
 	var attributes := camera.attributes as CameraAttributesPractical
 	if attributes == null:
@@ -423,9 +476,10 @@ func _build_distant_scenery() -> MeshInstance3D:
 ## legible as a rolling hill once the fog gets to it.
 func _append_mound(surfaces: Array, material_index: int, base_center: Vector3, width: float, depth: float, height: float, basis: Basis) -> void:
 	var layers := [
-		{"height": 0.44, "width": 1.0, "depth": 1.0},
-		{"height": 0.32, "width": 0.70, "depth": 0.74},
-		{"height": 0.24, "width": 0.40, "depth": 0.46},
+		{"height": 0.38, "width": 1.0, "depth": 1.0},
+		{"height": 0.28, "width": 0.76, "depth": 0.80},
+		{"height": 0.20, "width": 0.52, "depth": 0.58},
+		{"height": 0.14, "width": 0.28, "depth": 0.34},
 	]
 	var y := 0.0
 	for layer_value in layers:
