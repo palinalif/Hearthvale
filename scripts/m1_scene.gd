@@ -1529,6 +1529,45 @@ func _restore_landscape(document: Dictionary) -> void:
 	for point in [Vector3(37.5, 8, 2), Vector3(37.5, 8, 13), Vector3(36.5, 8, 27), Vector3(36, 8, 34), Vector3(37.5, 8, 41), Vector3(44.5, 8, 9), Vector3(44.5, 8, 20), Vector3(44.5, 8, 33), Vector3(45, 8, 45), Vector3(33, 8, 5)]:
 		var rock_ground := _plant_ground(point, true)
 		if not rock_ground.is_empty(): landscape_state.add("rock", rock_ground["point"], rng.randi_range(0, 2))
+	# --- Step-4b valley planting (Pali 2026-09-15, revised brief priority 2:
+	# "the valley is mostly empty ground"; use the new rim slopes as natural
+	# planting lines so the transition to the distance is hidden). Completes the
+	# pass started in the stage above: (a) a sparse rim tree line, (b) the rim
+	# slopes on the west/north/south sides, (c) the open ground at the home pad
+	# edges, (d) the pond rim and the river's dry far bank. Same systems and
+	# species families as every other stage in this function, appended AFTER the
+	# earlier stages so their rng draws and record ids stay byte-identical.
+	#
+	# These are EXPLICIT authored samples rather than RNG drifts for two reasons:
+	# LandscapeState.LIMIT is a hard 320 records and only a few dozen slots remain,
+	# so the scatter has to be a known size; and every sample is hand-placed on dry
+	# ground (the pond interior and the river channel are below the 5.05 planting
+	# floor and would silently drop). The lane corridor (z 24-28) and the three home
+	# footprints stay clear so the hamlet still reads at distance.
+	for tree in [[5.0, 9.0, 1], [6.0, 22.0, 2], [4.5, 36.0, 0], [12.0, 3.5, 1], [30.0, 3.0, 2]]:
+		var rim_tree_ground := _plant_ground(Vector3(tree[0], 8.0, tree[1]), true)
+		if not rim_tree_ground.is_empty(): landscape_state.add("tree", rim_tree_ground["point"], int(tree[2]))
+	var rim_samples := {
+		# west rim slope (the ground now falls from ~7 to the 5.2 outer floor)
+		"quiet": [Vector2(2.5, 4.0), Vector2(3.0, 11.5), Vector2(2.5, 18.5), Vector2(3.0, 26.0), Vector2(2.5, 34.0)],
+		"meadow": [Vector2(4.5, 7.5), Vector2(6.0, 15.0), Vector2(5.0, 22.0), Vector2(4.5, 30.0), Vector2(5.0, 38.5),
+			Vector2(13.0, 45.0), Vector2(20.0, 45.0), Vector2(27.0, 45.0),
+			Vector2(13.5, 5.0), Vector2(20.5, 5.5), Vector2(27.5, 5.0),
+			Vector2(4.0, 11.0), Vector2(5.5, 19.5), Vector2(3.5, 28.0), Vector2(5.0, 33.5), Vector2(4.5, 41.5)],
+		"slope": [Vector2(9.5, 42.0), Vector2(16.5, 42.5), Vector2(23.5, 42.5), Vector2(30.5, 43.0),
+			Vector2(10.0, 3.0), Vector2(17.0, 3.0), Vector2(24.0, 3.5), Vector2(31.0, 3.5)],
+		"bank": [Vector2(44.5, 8.0), Vector2(45.0, 14.0), Vector2(44.5, 20.0), Vector2(45.0, 27.0), Vector2(44.5, 36.0)],
+		"shore": [Vector2(29.5, 17.5), Vector2(29.0, 26.5)],
+		"edge": [Vector2(12.5, 13.0), Vector2(31.5, 13.0), Vector2(12.5, 22.0)],
+	}
+	for family: String in rim_samples:
+		var family_variants: Array = species[family]
+		var family_index := 0
+		for sample_point: Vector2 in rim_samples[family]:
+			var sample_ground := _plant_ground(Vector3(sample_point.x, 8.0, sample_point.y), true)
+			if sample_ground.is_empty(): continue
+			landscape_state.add("foliage", sample_ground["point"], int(family_variants[family_index % family_variants.size()]))
+			family_index += 1
 	garden_visual.reset_records(landscape_state.records)
 
 func _plant_valley_drift(center: Vector2, radius: float, samples: int, species: Array, rng: RandomNumberGenerator) -> void:

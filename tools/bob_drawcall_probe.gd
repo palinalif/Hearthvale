@@ -41,7 +41,7 @@ func _run() -> void:
 	scene.camera_distance = 42.0
 	scene._update_camera()
 	for _frame in 24: await RenderingServer.frame_post_draw
-	var metrics: Dictionary = Performance.get_custom_monitor_names()
+	var metrics: Array = Performance.get_custom_monitor_names()
 	var draw_calls := int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
 	var primitives := int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
 	var objects := int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME))
@@ -53,6 +53,12 @@ func _run() -> void:
 		batches += 1
 		multimesh_nodes += 1
 		instances += node.multimesh.instance_count
+	var kinds := {}
+	for record_value in scene.landscape_state.records:
+		var record: Dictionary = record_value
+		var kind: String = str(record.get("kind", record.get("type", "?")))
+		kinds[kind] = int(kinds.get(kind, 0)) + 1
+	print("DRAWCALL_KINDS " + JSON.stringify(kinds))
 	print("DRAWCALL_PROBE " + JSON.stringify({
 		"renderer": RenderingServer.get_current_rendering_method(),
 		"adapter": RenderingServer.get_video_adapter_name(),

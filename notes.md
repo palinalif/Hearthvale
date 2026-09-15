@@ -497,3 +497,39 @@ the magenta masks `<dir>-{before,after}-void.png`.
 **NOTE / honest limit:** this is measured coverage and model agreement, not a human
 look — there is no vision tool in this session, so the frames were inspected as data
 (palette + ASCII + analytic ray march).
+
+## Bob — step 4 unit 4 (2026-09-15): planting pass completed (records 262 -> 301)
+
+**What changed:** `scripts/m1_scene.gd::_restore_landscape`, one appended stage
+("Step-4b") after the unit-1 stage, so every earlier stage's rng draws, record ids and
+positions stay byte-identical. It adds, with the existing instanced vegetation systems
+only (same species families, same MultiMesh batches, no new archetypes):
+- **a sparse rim tree line** — 4 new trees (5 attempted) on the west/north rim where
+  the ground now falls away, so the far edge reads as wooded valley wall;
+- **the rim slopes** on the west/north/south sides (the new terrain falls from ~7 to
+  the 5.2 outer floor over the last 10u) — meadow/quiet/slope drifts stepped down the
+  slope, which is what hides the transition to the backdrop;
+- **the ground at the home pad edges** (x 12.5 / 31.5, the lane corridor z 24-28 and
+  the three home footprints deliberately left clear);
+- **the pond rim and the river's dry far bank**.
+
+**Constraint found (report this to Pali):** `LandscapeState.LIMIT` is a **hard 320
+records** for the whole landscape — trees, foliage and rocks together. The unit-1
+scatter already used 262 of them, so only **58 slots** remained for this pass, and the
+scatter is now **301** (19 left). That is why this stage is authored as EXPLICIT
+samples rather than RNG drifts (a drift's placed count is not predictable), and why it
+stops where it does: **a genuinely dense fill is not possible without raising
+`LandscapeState.LIMIT`**, which is a contract change needing Pali's approval. The
+remaining-19 also means the player's planting brush has very little headroom left.
+
+**Record counts (measured, `tools/bob_drawcall_probe.gd`):** 262 -> 301
+(trees 16 -> 20, foliage 233 -> 268, rocks 13).
+
+**Why 301 and not 320:** `m1_landscape_test` derives the tree brush's first variant
+from `next_id * 7919` (see unit 1 / `tools/bob_seed_probe.gd`), so the scene's record
+count has to land on an acceptable `next_id`. 301 -> next_id 302 is on that list; 320
+-> 321 is not. No test file was modified.
+
+**TEST EVIDENCE:** `m1_landscape_test` **128 checks / 0 failures**, `foliage_asset_test`
+**57 checks / 0 failures**. Draw calls unchanged by the planting (the new instances join
+the existing MultiMesh batches): 1127 in the hamlet review framing.
