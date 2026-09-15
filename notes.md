@@ -73,3 +73,14 @@ Branch task/visual-overhaul-1; push via
 commit before edits; explicit high timeout (≥400s) on every godot command;
 bounded reads (grep, no >500-line dumps); commit every unit + update this
 file; never guess Godot API — use the probe.
+
+**NEW ACCEPTANCE CRITERION (Pali, 2026-09-15 mid-run):** the closeup
+cottage look is APPROVED ("very good up close"), but the WIDE shot
+(m2_hamlet_composition full hamlet) "is just hazy" — the fog is swamping
+the buildings. Fix: significantly reduce fog depth/density in the live
+_build_world so buildings read crisply across the hamlet — KEEP the warm
+sky gradient + soft low warm sun, push horizon warmth, keep distance
+contrast. Acceptance: re-render full hamlet + cottage captures look
+impressive AND warm; verify with tests/visual_lighting_profile_test.gd
+(still 0 failures) and by eye. Do this AFTER/ALONGSIDE the determinism
+fix, same live file.
