@@ -791,6 +791,28 @@ func _read_detail_move(delta: float) -> void:
 func _update_camera() -> void:
 	if not camera: return
 	var target := cursor + Vector3(0, 2, 0); var offset := Vector3(sin(camera_yaw) * cos(camera_pitch), sin(camera_pitch), cos(camera_yaw) * cos(camera_pitch)) * camera_distance; camera.position = target + offset; camera.look_at(target, Vector3.UP)
+	_update_depth_of_field(target)
+
+## 2026-09-15 wide-shot pass: subtle DOF for distance framing (camera_distance > 30),
+## keeping close-up detail passes completely sharp (distance-gated, so every
+## existing 7-10u capture is untouched). Godot 4.7 CameraAttributesPractical
+## properties as dumped from this build: dof_blur_near_*/far_*/amount.
+func _update_depth_of_field(target: Vector3) -> void:
+	if not camera: return
+	if camera_distance <= 30.0:
+		# Leave any existing attributes untouched (tests configure their own).
+		return
+	if not (camera.attributes is CameraAttributesPractical):
+		camera.attributes = CameraAttributesPractical.new()
+	var attributes: CameraAttributesPractical = camera.attributes
+	# Focus band sits on the hamlet: near edge 6u in front of target, far 18u behind.
+	attributes.dof_blur_near_enabled = true
+	attributes.dof_blur_near_distance = maxf(1.0, camera_distance - 6.0)
+	attributes.dof_blur_near_transition = 18.0
+	attributes.dof_blur_far_enabled = true
+	attributes.dof_blur_far_distance = camera_distance + 12.0
+	attributes.dof_blur_far_transition = 24.0
+	attributes.dof_blur_amount = 0.22
 
 func _set_view_context(next_context: String, reason: String = "Context changed") -> bool:
 	var normalized := "terrain" if next_context == "terrain" else "building"
