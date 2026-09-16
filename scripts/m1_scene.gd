@@ -498,6 +498,10 @@ func _create_backend() -> void:
 	# Keep the same world bounds; native grid and asset cells share one edge.
 	backend.set("patch_size", M1PatchGenerator.PATCH_SIZE)
 	backend.set("voxel_scale", M1PatchGenerator.VOXEL_SCALE)
+	# Startup only waits for the initial cottage/play area to mesh; the full
+	# 64-unit valley remains authoritative, editable and continues streaming.
+	backend.set("startup_mesh_focus_world", Vector3(24.0, 8.0, 22.0))
+	backend.set("startup_mesh_radius_world", 20.0)
 	if test_mode: backend.set("initialization_budget_override_ms", 90000)
 	add_child(backend)
 	if garden_visual and garden_visual.has_method("attach_backend"):

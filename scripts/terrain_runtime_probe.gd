@@ -62,11 +62,12 @@ func _backend_phase(backend: Variant, ready: bool) -> String:
 	if not patch_size_value is Vector3i:
 		return "unknown"
 	var full_area := AABB(Vector3.ZERO, Vector3(patch_size_value))
+	var mesh_area := backend.initial_mesh_area() if backend.has_method("initial_mesh_area") else full_area
 	if terrain.has_method("get_voxel_tool"):
 		var tool: Variant = terrain.get_voxel_tool()
 		if tool != null and tool.has_method("is_area_editable") and not tool.is_area_editable(full_area):
 			return "waiting_editable"
-	if terrain.has_method("is_area_meshed") and not terrain.is_area_meshed(full_area):
+	if terrain.has_method("is_area_meshed") and not terrain.is_area_meshed(mesh_area):
 		return "waiting_meshed"
 	return "finalizing"
 
