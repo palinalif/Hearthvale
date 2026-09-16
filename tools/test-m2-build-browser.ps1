@@ -16,13 +16,19 @@ if ($Phase -eq 'capture') {
     $extra += '--require-rendering'
 }
 
+# Controller/state/history coverage stays in the exhaustive browser test.
+# Actual-Mobile CI capture uses a focused render smoke test: one real model per
+# category through the production thumbnail pipeline. This keeps software D3D12
+# from turning seven screenshots into an exhaustive catalogue GPU benchmark.
+$script = if ($Phase -eq 'capture') { 'tests/m2_build_browser_capture_test.gd' } else { 'tests/m2_build_browser_test.gd' }
+
 # Only the capture/all phases need the actual Mobile renderer. The behavior
 # shard contains controller/state/history assertions only, so keep it headless
 # instead of spending minutes on Microsoft's software D3D12 rasterizer.
 if ($Phase -eq 'behavior') {
-    $arguments = @('--headless','--path','.','--audio-driver','Dummy','--script','tests/m2_build_browser_test.gd','--') + $extra
+    $arguments = @('--headless','--path','.','--audio-driver','Dummy','--script',$script,'--') + $extra
 } else {
-    $arguments = @('--path','.','--rendering-method','mobile','--rendering-driver','d3d12','--audio-driver','Dummy','--max-fps','30','--script','tests/m2_build_browser_test.gd','--') + $extra
+    $arguments = @('--path','.','--rendering-method','mobile','--rendering-driver','d3d12','--audio-driver','Dummy','--max-fps','30','--script',$script,'--') + $extra
 }
 
 # The full local phase keeps the historical slow-host watchdog. CI fans capture
