@@ -12,6 +12,7 @@ const LEGACY_GENERATOR_ID := "m1_cottage_pad_v1"
 const CHANNEL_TYPE := 0
 const GENERATOR_ID := "m2_starter_valley_v3"
 const GRASS_SHADER := preload("res://scripts/terrain_grass.gdshader")
+const GrassTone = preload("res://scripts/grass_tone.gd")
 
 static func river_center_x(world_z: float) -> float:
 	return snappedf(40.75 + sin(world_z * 0.19) * 0.9 + sin(world_z * 0.43 + 1.2) * 0.3, VOXEL_SCALE)
@@ -70,6 +71,16 @@ static func expand_previous(source: Object, destination: Object = null) -> Objec
 	result.copy_channel_from_area(source, Vector3i.ZERO, Bounds.PREVIOUS_NATIVE_SIZE, Vector3i.ZERO, CHANNEL_TYPE)
 	return result
 
+## Ground material shared by the native grass model. Palette and patch scales
+## come from GrassTone (the same model the tuft renderer and the determinism
+## tests use), so the GPU field and the CPU model have one source of truth.
+static func grass_material() -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = GRASS_SHADER
+	for parameter: String in GrassTone.shader_uniforms():
+		material.set_shader_parameter(parameter, GrassTone.shader_uniforms()[parameter])
+	return material
+
 static func build_library() -> Object:
 	var library: Object = ClassDB.instantiate("VoxelBlockyLibrary")
 	var empty: Object = ClassDB.instantiate("VoxelBlockyModelEmpty")
@@ -79,9 +90,7 @@ static func build_library() -> Object:
 	stone_material.vertex_color_use_as_albedo = true
 	stone.set_material_override(0, stone_material)
 	var grass: Object = ClassDB.instantiate("VoxelBlockyModelCube")
-	var grass_material := ShaderMaterial.new()
-	grass_material.shader = GRASS_SHADER
-	grass.set_material_override(0, grass_material)
+	grass.set_material_override(0, grass_material())
 	library.add_model(empty)
 	library.add_model(stone)
 	library.add_model(grass)
