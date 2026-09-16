@@ -26,6 +26,52 @@ const MassingSurfaces = preload("res://scripts/m2_massing_wall_surfaces.gd")
 ##   HEAD: min 0.0800 / max 1.4000  ->  after: min 0.6200 / max 1.4000.
 const HAMLET_PITCH_MIN := 0.62
 
+## ---- Step 5 (2026-09-15): keep the blocky rim out of the player's frame ----
+## Pali: "we just need to limit the camera so we don't really see the blocky
+## parts." MEASURED before changing anything (tools/bob_block_scan.gd boots the
+## real Mobile scene + the hamlet review fixture, then reports the share of the
+## frame whose pixels change when the DistantHamlet node is hidden, and the share
+## that is surface 4 — the step-4 terraced outer valley floor, i.e. the 4u stepped
+## boxes, repainted flat magenta):
+##   pitch 0.62 (max tilt up) / distance 52 (old max dolly): 62.2% distant,
+##     31.7% terraced floor, 1.7% background leak at the top edge
+##   pitch 0.66 / distance 36 (the game's own default framing):  45.6% / 21.7% / 0%
+##   pitch 0.72 / distance 12 (the approved cottage closeup):     9.5% /  6.9% / 0%
+## So the exposure is DOLLY-driven, not tilt-driven:
+##   * the tilt end that reveals sky is already clamped (HAMLET_PITCH_MIN, step 3)
+##     and at 0.62 the frame holds 0 sky except at the extreme dolly, where the
+##     1.7% leak above appears;
+##   * RAISING that floor makes it worse, not better — a higher camera sees a
+##     wider patch of the ring: measured 29.3% terraced floor at pitch 0.80 /
+##     distance 40 vs 19.2% at pitch 0.62 / distance 34. The floor stays 0.62.
+## 36 is the game's own default hamlet framing (m1_scene.gd camera_distance),
+## so the dolly-out stop now is "as wide as the default hamlet view": the extreme
+## starts at 45.6% distant / 21.7% floor and the 1.7% background leak goes to 0.
+const HAMLET_DISTANCE_MAX := 36.0
+
+## Rim-range distance haze — MEASURED, NOT SHIPPED (step 5, 2026-09-15). The
+## obvious companion to the dolly ceiling is a depth fade so the ring reads hazy
+## rather than blocky, and it was tried: FOG_MODE_DEPTH with begin 38 / end 165
+## (inside 38u = 0 haze, so the homes, which are <=41u from the camera, are
+## untouched; 50u: 9%, 70u: 25%, 90u: 41%, 165u: 100%). Result at pitch 0.62 /
+## distance 36 north, measured with tools/bob_block_scan.gd on identical framings
+## (360-degree-equivalent sample of the terraced-floor mask; luma / std / mean
+## |dLuma| per 2px):
+##              near field (<50u)          far field (>=50u)
+##   old fog    0.558 / 0.071 / 0.0066     0.624 / 0.053 / 0.0023
+##   depth fog  0.473 / 0.102 / 0.0091     0.636 / 0.120 / 0.0032
+## The far band does get hazier (luma rises toward the fog colour #e6c193), and
+## the step-to-step albedo contrast at 50-90u is compressed 2.4x harder than the
+## old exponential (density 0.0021 gave only 10-17% there vs 20-40%) — but the
+## IMAGE gradient energy rises in BOTH bands, i.e. this cannot be shown to make
+## the terrace read less blocky, and it changes a look the owner has approved
+## twice as crisp (he rejected atmospheric wash on the buildings, and the far
+## ridge going 72-100% fogged risks the earlier "warm void" complaint). So the
+## fog stayed EXACTLY as approved (exponential, density 0.0021) and the camera
+## clamp below does the work. If Pali wants the haze, the two constants are the
+## whole change: set fog_mode = Environment.FOG_MODE_DEPTH and
+## fog_depth_begin/end = 38.0/165.0 in _build_world.
+
 ## Depth of field is DISTANCE-GATED: only the wide framing — the one Pali asked
 ## for DOF on — reads a depth band. Every close/mid framing (the approved cottage
 ## closeup and the render gates that capture it) keeps both blur stages disabled,
@@ -182,6 +228,10 @@ func _build_world() -> void:
 	# (tolerance 4 px) over its limit (22 px flipped). Grass green can't be
 	# recovered here by grade anyway; it's a terrain-albedo/content job.
 	environment.fog_light_color = Color("#e6c193")
+	# Step 5 (2026-09-15): deliberately UNCHANGED. A depth-linear rim fade
+	# (FOG_MODE_DEPTH, 38 -> 165u) was measured on identical framings and could
+	# not be shown to make the terraced ring read less blocky — see the note at
+	# HAMLET_DISTANCE_MAX — so the approved exponential fog stays exactly as it was.
 	environment.fog_density = 0.0021
 	environment.fog_sky_affect = 0.12
 	environment.fog_depth_begin = 14.0
@@ -393,6 +443,7 @@ func _update_presentation_target_label() -> void:
 func _read_camera_and_cursor(delta: float) -> void:
 	super._read_camera_and_cursor(delta)
 	_enforce_hamlet_pitch_limit()
+	_enforce_hamlet_distance_limit()
 
 ## STEP 3b (2026-09-15): the floor is applied to the player's TILT INPUT, not to
 ## whatever `camera_pitch` happens to hold. Step 3 clamped the absolute value on
@@ -415,6 +466,23 @@ func _enforce_hamlet_pitch_limit() -> void:
 	if is_zero_approx(Input.get_axis("m1_orbit_up", "m1_orbit_down")):
 		return
 	camera_pitch = HAMLET_PITCH_MIN
+
+## STEP 5 (2026-09-15): the same pattern for the DOLLY-OUT stop, and the same
+## reason for it: the ceiling is applied to the player's zoom INPUT, not to
+## whatever `camera_distance` happens to hold. A directly assigned distance (the
+## review framings `--review-far` = 52, every render gate's capture framing, the
+## hamlet composition test's 42u) is NOT rewritten, so no capture or test changes
+## because of this clamp — only the player's own zoom-out stops early.
+## Why 36: measured (see HAMLET_DISTANCE_MAX) the frame stops being dominated by
+## the blocky terraced ring at the default hamlet framing; the mouse-wheel path in
+## m2_scene_pc_input.gd and the portion-placement path in m2_scene_house_editing.gd
+## clamp outside this cascade and carry the same ceiling or a tighter one.
+func _enforce_hamlet_distance_limit() -> void:
+	if camera_distance <= HAMLET_DISTANCE_MAX:
+		return
+	if is_zero_approx(Input.get_axis("m1_zoom_out", "m1_zoom_in")):
+		return
+	camera_distance = HAMLET_DISTANCE_MAX
 
 ## Real depth of field on the LIVE camera.
 ## m1_scene.gd's `_update_depth_of_field` is NEVER reached on the live chain:

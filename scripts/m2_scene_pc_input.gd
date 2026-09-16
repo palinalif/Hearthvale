@@ -44,7 +44,10 @@ func _input(event: InputEvent) -> void:
 			if not menu_open and not tools_open and not detail_open:
 				var direction := 1.0 if button.button_index == MOUSE_BUTTON_WHEEL_UP else -1.0
 				var low := BUILDING_CAMERA_MIN_DISTANCE if view_context == "building" and not building_placement_active else 3.5
-				var high := BUILDING_CAMERA_MAX_DISTANCE if view_context == "building" and not building_placement_active else 52.0
+				# Wheel dolly ceiling 36 (was 52) — same live limit as
+				# HAMLET_DISTANCE_MAX in m2_scene_upper_wall_details.gd (step 5,
+				# 2026-09-15): this path bypasses the _read_camera_and_cursor cascade.
+				var high := BUILDING_CAMERA_MAX_DISTANCE if view_context == "building" and not building_placement_active else 36.0
 				camera_distance = clampf(camera_distance - direction * PC_WHEEL_STEP, low, high)
 				get_viewport().set_input_as_handled()
 				return

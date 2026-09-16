@@ -589,3 +589,130 @@ pre-existing `joined_roof_course_render_test` 80/4 float drift (unchanged, not c
 (b) `LandscapeState.LIMIT` 320 is now the binding constraint on how full the valley can
 look — approve a raise if a denser scatter is wanted; (c) the APK/export + Drive
 delivery for this branch is still outstanding.
+
+## Bob — step 5 run (2026-09-15): limit the camera so the blocky rim is never really in frame
+
+Branch `task/visual-overhaul-1`, base HEAD `8612e5e` (remote `git ls-remote` was at the
+same sha before the run — no empty commit needed). **This section's commit is the pushed
+tip** (a commit cannot cite its own sha); `git log --oneline -3` + `git ls-remote` confirm.
+Brief: Pali — "we just need to limit the camera so we don't really see the blocky parts".
+
+**THE EXPOSURE IS REAL AND MEASURED, NOT GUESSED.** New read-only probe
+`tools/bob_block_scan.gd` boots the real Mobile scene + the 3-home hamlet fixture
+(identical to `tests/m2_hamlet_composition_render_test.gd`) and per framing reports:
+`distant%` = pixels that change when the `DistantHamlet` node is hidden; `floor%` = pixels
+of **surface 4 alone** = the step-4 terraced outer valley floor (the 4u stepped boxes, the
+genuinely blocky thing) repainted flat magenta with fog off; `bg%` = world background
+(sky/void) share; plus a 64x24 ASCII map of each mask and a per-pixel ray-march distance
+histogram. At HEAD, at what the player could actually reach (pitch 0.62 = `HAMLET_PITCH_MIN`,
+distance 52 = the old dolly max), target (25,8,25), the three-home fixture:
+```
+north  distant 62.16%  terraced floor 31.72%  background 1.70%
+east   distant 62.70%  terraced floor 27.09%  background 1.09%
+```
+= **a third of the frame was literally the 4u terrace boxes**, the top 8 of 24 rows were
+83-100% backdrop, and the frame held a 1.1-1.7% sky/void leak at the top edge. Controls
+from the same probe: the game's own default framing (0.66/36) = 45.57% / 21.72% / 0%;
+the approved cottage closeup (0.72/12) = 9.46% / 6.93% / 0%.
+
+**WHAT CHANGED — 2 production files, no tests, no new systems, no new deps:**
+1. `scripts/m2_scene_upper_wall_details.gd` — new `HAMLET_DISTANCE_MAX := 36.0` (:50)
+   enforced by `_enforce_hamlet_distance_limit()` (:480) which is called from the existing
+   `_read_camera_and_cursor` override right next to `_enforce_hamlet_pitch_limit()` (:446).
+   Same step-3b pattern and the same reason: **the ceiling applies to the player's zoom
+   INPUT only**, never to the transform, so a directly assigned distance (the `--review-far`
+   52, every render gate's capture framing, the hamlet test's 42u) is NOT rewritten.
+2. `scripts/m2_scene_pc_input.gd:50` — the mouse-wheel dolly path (which bypasses that
+   cascade entirely) `52.0 -> 36.0`, exactly as that file already carries the 0.62 pitch
+   floor for mouse drag.
+36 = the game's own default hamlet framing (`m1_scene.gd:33 camera_distance := 36.0`), so
+the zoom-out stop is now "as wide as the default hamlet view".
+
+**MEASURED CLAMP (`tools/bob_clamp_probe.gd`, real chain, pad-driven, 240 frames):**
+```
+before: min_pitch 0.6200  max_pitch 1.4000  max_distance 52.0000  min_distance 3.5000
+after:  min_pitch 0.6200  max_pitch 1.4000  max_distance 36.0000  min_distance 3.5000
+```
+
+**THE TILT END WAS ALREADY COVERED — and raising it would have made the exposure WORSE.**
+The brief's item 1 (a ceiling on the upward tilt) is the *floor* on `camera_pitch` and
+step 3 already set it to 0.62; measured with the same probe, raising it INCREASES the
+terraced-floor share, because a higher camera looks down over a wider patch of the ring:
+**29.32% terraced floor at pitch 0.80 / distance 40 vs 19.21% at pitch 0.62 / distance 34**.
+So `HAMLET_PITCH_MIN` stays 0.62 and the dolly is the lever. (The 1.7% background leak at
+distance 52 is the only sky exposure left at that framing, and the dolly cap closes it: 0.00%.)
+
+**AFTER (all reached with the new limits):**
+```
+framing                  distant   terraced floor   background
+0.62 / 52  north (old max, NOT reachable any more)  62.16%  31.72%  1.70%
+0.62 / 36  north (new max)                          46.23%  20.96%  0.00%
+0.62 / 52  east  (old max, NOT reachable any more)  62.70%  27.09%  1.09%
+0.62 / 36  east  (new max)                          46.83%  19.49%  0.01%
+1.40 / 52  north (old top-down max, not reachable)  57.84%  55.13%  0.00%
+1.40 / 36  north (new top-down max)                 32.06%  32.06%  0.00%
+0.66 / 36  north (game default, still reachable)    45.57%  21.72%  0.00%
+0.72 / 36  hamlet (composition yaw, new wider max)  43.70%  21.70%  0.00%
+0.72 / 42  hamlet (the capture/step-4 framing)      52.25%  26.26%  0.00%
+```
+= the worst frame a player can now compose is **46% backdrop / 21% terrace (was 62/32)**,
+the worst top-down **32/32 (was 58/55)**, and the background leak is gone.
+
+**DISTANCE HISTOGRAM of the terrace pixels** (ray march, 10u bins, camera->surface): at the
+old max 96.8% of them were beyond 50u (bulk 50-90u), at the default framing 79.4% — i.e.
+the blocky band the player sees is mid/far field, which is why the dolly, not the tilt,
+is the lever.
+
+**FOG: TRIED, MEASURED, DELIBERATELY NOT SHIPPED.** The brief's optional item is a rim-range
+fade, and it was implemented and measured (`Environment.FOG_MODE_DEPTH` is 1, exponential 0;
+API confirmed with a throwaway probe, since `probe_godot.gd` prints properties but not enum
+values): depth fog begin 38 / end 165 (inside 38u = zero haze, so the homes — <=41u from the
+camera at every reachable framing — are untouched), on identical framings:
+```
+                 near field (<50u)           far field (>=50u)
+  old fog        0.558 / 0.071 / 0.0066       0.624 / 0.053 / 0.0023
+  depth fog      0.473 / 0.102 / 0.0091       0.636 / 0.120 / 0.0032   (luma / std / edge)
+```
+The far band does get hazier (luma rises toward `#e6c193`) and the step-to-step contrast at
+50-90u is compressed 2.4x harder than the old exponential (10-17% -> 20-40%), **but the
+image gradient energy rises in BOTH bands, so this cannot be shown to make the terrace read
+less blocky**, and it changes a look the owner approved twice as crisp (he rejected
+atmospheric wash on the buildings; the far ridge going 72-100% fogged also risks his earlier
+"warm void" complaint). Reverted: the fog is byte-for-byte the approved exponential density
+0.0021. The whole change is 2 lines if Pali wants it — documented at `HAMLET_DISTANCE_MAX`.
+
+**CAPTURES (regenerated, 1280x720, Mobile renderer):** `reports/screenshots/step5-block/`
+`<tag>-before.png` (at HEAD, via a path-scoped `git stash push` of the two production files)
+vs `<tag>-after.png` (this tip), tag = `p<pitch*100>-d<distance>-<dir>`:
+`p062-d52-{north,east}` old max, `p062-d36-{north,east}` new max, `p140-d52-north` /
+`p140-d36-north` top-down, `p066-d36-north` default, `p072-{42,36}-hamlet` full hamlet, and
+`p072-d42-{north,east}-step4frame.png` = the **exact step-4 rim framing** for a direct diff
+against `reports/screenshots/step4-rim/<dir>-after.png`.
+**PROOF THE LOOK DID NOT CHANGE:** all 9 before/after pairs are `cmp`-identical byte for
+byte — at a given framing this work changes nothing about what is rendered (the same probe
+numbers reproduce exactly), only how far out the player can pull.
+
+**DRAW CALLS: delta 0.** `tools/bob_drawcall_probe.gd` at the hamlet framing (0.72/42/-1.04)
+= **1127 draw calls, 1210 objects, 3,142,238 primitives, 67 plant batches, 1189 instances,
+301 records** — the same numbers step 4 recorded at `8612e5e`. No geometry, no new systems.
+
+**GATES (all green, NO test file touched):**
+```
+bash tools/run_render_gate.sh --quick
+  m1_terrain_navigation_test        exit=0  checks=21 failures=0
+  scene_boot_gate_test              exit=0  checks=4  failures=0
+  cottage_detail_render_test        exit=0  checks=33 failures=0
+  m2_hamlet_composition_render_test exit=0  checks=12 failures=0 (ok=true, 3 buildings)
+m1_riverbank_visual_test            exit=0  checks=204 failures=0 (ok=true, headless)
+m2_pc_input_test                    exit=0  failures=0 (ok=true) — the wheel path edited here
+```
+`joined_roof_course_render_test` 80/4 is the known pre-existing float drift, not re-chased.
+
+**STILL OPEN / FOR PALI:** the dolly cap removes the *extreme*, but a mid frame still carries
+the ring on the flanks — at the new max 21% of the frame is terraced floor, essentially all
+of it 50-90u away on the left/right of the island. If that still reads blocky to him, the
+options are the measured depth fog above, or content (fewer/flatter terrace steps at the
+near ring), not more camera clamping — the camera is now bounded by the default framing.
+Also unchanged from step 4: `LandscapeState.LIMIT` 320, the APK/export + Drive delivery, and
+the two already-dirty `reports/screenshots/m1-cottage-detail/0{4,6}*.png` in the worktree
+(dirty BEFORE this run; deliberately not committed here).

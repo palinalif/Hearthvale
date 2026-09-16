@@ -49,6 +49,21 @@ func _run() -> void:
 	var highest: float = scene.camera_pitch
 	print("CLAMP_PROBE max_pitch=%.4f" % highest)
 
+	# Step 5: the dolly. Hold zoom OUT to the stop, then zoom IN to the stop,
+	# in the terrain (hamlet) view — this is the distance the player can reach.
+	scene.camera_distance = 36.0
+	Input.action_press("m1_zoom_out", 1.0)
+	for _i in HOLD_FRAMES:
+		scene._read_camera_and_cursor(STEP)
+	Input.action_release("m1_zoom_out")
+	print("CLAMP_PROBE max_distance=%.4f" % scene.camera_distance)
+	Input.action_press("m1_zoom_in", 1.0)
+	for _i in HOLD_FRAMES:
+		scene._read_camera_and_cursor(STEP)
+	Input.action_release("m1_zoom_in")
+	print("CLAMP_PROBE min_distance=%.4f" % scene.camera_distance)
+	scene.camera_distance = 36.0
+
 	# Mouse orbit path (PC input) uses its own clamp: drag down (raises pitch) and
 	# drag up (lowers pitch) to probe both ends of that clamp. _mouse_orbiting is
 	# what gates that branch (normally set by a middle/right mouse press).
