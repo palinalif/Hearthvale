@@ -25,10 +25,7 @@ func _initialize() -> void:
 	scene._set_view_context("building", "test")
 	scene._open_building_panel()
 	await process_frame
-	var labels: Array[String] = []
-	for button in scene._building_buttons: labels.append(button.text)
-	check("Roof decor" in labels, "home options expose roof decor separately from roof design")
-	check(scene._building_panel.get_global_rect().end.y <= scene._prompt_bar.get_global_rect().position.y + 1.0, "roof decor row keeps compact home options above prompt bar")
+	check(scene._building_panel.get_global_rect().end.y <= scene._prompt_bar.get_global_rect().position.y + 1.0, "compact home options stay above prompt bar")
 	scene._close_building_panel()
 
 	scene._open_roof_decor_picker()

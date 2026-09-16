@@ -54,7 +54,7 @@ func _run() -> void:
 	check(scene._browser_open and scene._build_browser.visible, "physical X opens the build browser")
 	await _press(JOY_BUTTON_Y)
 	check(scene._building_panel.visible, "physical Y opens compact house management from the browser")
-	var expected_rows := ["Duplicate", "House shape", "Wall colour", "Roof colour", "Needs placement", "Close"]
+	var expected_rows := ["Duplicate", "House shape", "Wall colour", "Roof colour", "Accent colour", "Needs placement", "Close"]
 	var actual_rows: Array[String] = []
 	for button: Button in scene._building_buttons:
 		actual_rows.append(button.text)
