@@ -56,7 +56,7 @@ class DeliveryRegressionGateTest(unittest.TestCase):
         build = job_block(workflow, "build-windows")
         self.assertIn("terrain-ready.json", build)
         self.assertIn("TERRAIN_RUNTIME_READY", build)
-        self.assertRegex(build, r"terrain-ready\.json.*ConvertFrom-Json|ConvertFrom-Json.*terrain-ready\.json")
+        self.assertIn("Get-Content $receipt -Raw | ConvertFrom-Json", build)
         self.assertRegex(build, r"if \(-not \$.*\.ok\)")
         project = (ROOT / "project.godot").read_text(encoding="utf-8")
         self.assertIn('TerrainRuntimeProbe="*res://scripts/terrain_runtime_probe.gd"', project)
