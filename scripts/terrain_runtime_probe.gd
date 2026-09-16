@@ -34,8 +34,25 @@ func _process(_delta: float) -> void:
 
 func _snapshot(backend: Variant, ok: bool) -> Dictionary:
 	var error := ""
-	if backend != null and backend.has_method("stats"):
-		error = str((backend.stats() as Dictionary).get("error", ""))
+	var terrain_statistics: Dictionary = {}
+	var startup_area := AABB()
+	var viewer_info: Array[Dictionary] = []
+	if backend != null:
+		if backend.has_method("stats"):
+			error = str((backend.stats() as Dictionary).get("error", ""))
+		if backend.has_method("initial_mesh_area"):
+			startup_area = backend.initial_mesh_area()
+		var terrain: Variant = backend.get("terrain")
+		if terrain != null and terrain.has_method("get_statistics"):
+			terrain_statistics = terrain.get_statistics()
+		for child in backend.get_children():
+			if child != null and child.get_class() == "VoxelViewer":
+				viewer_info.append({
+					"position": str((child as Node3D).position),
+					"global_position": str((child as Node3D).global_position),
+					"view_distance": int(child.get("view_distance")),
+					"requires_visuals": bool(child.get("requires_visuals")),
+				})
 	return {
 		"ok": ok,
 		"elapsed_ms": Time.get_ticks_msec() - _started_ms,
@@ -45,6 +62,12 @@ func _snapshot(backend: Variant, ok: bool) -> Dictionary:
 		"error": error,
 		"renderer": RenderingServer.get_current_rendering_method(),
 		"display": DisplayServer.get_name(),
+		"startup_mesh_area": {
+			"position": str(startup_area.position),
+			"size": str(startup_area.size),
+		},
+		"terrain_statistics": terrain_statistics,
+		"viewers": viewer_info,
 	}
 
 func _backend_phase(backend: Variant, ready: bool) -> String:
