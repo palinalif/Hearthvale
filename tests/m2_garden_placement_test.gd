@@ -60,7 +60,7 @@ func _initialize() -> void:
 	scene._rotate_garden(1)
 	_check(scene.garden_yaw_quarters == 1 and scene.landscape_state.document() == before, "garden rotation changes preview without touching authority")
 	await _press(JOY_BUTTON_A)
-	var garden_committed := not scene.garden_placement_active and scene.landscape_state.composition.size() == 1
+	var garden_committed: bool = not scene.garden_placement_active and scene.landscape_state.composition.size() == 1
 	_check(garden_committed, "A commits a garden")
 	if not garden_committed:
 		_finish()

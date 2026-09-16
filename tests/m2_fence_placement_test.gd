@@ -48,7 +48,7 @@ func _initialize() -> void:
 	scene._rotate_fence(1)
 	_check(scene.fence_yaw_quarters == 1 and scene.landscape_state.document() == before, "fence quarter-turn is preview-only")
 	await _press(JOY_BUTTON_A)
-	var fence_committed := not scene.fence_placement_active and scene.landscape_state.composition.size() == 1
+	var fence_committed: bool = not scene.fence_placement_active and scene.landscape_state.composition.size() == 1
 	_check(fence_committed, "A commits rustic fence")
 	if not fence_committed:
 		_finish()

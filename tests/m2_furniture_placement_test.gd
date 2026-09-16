@@ -60,7 +60,7 @@ func _initialize() -> void:
 	_check(is_equal_approx(scene.furniture_yaw_degrees, committed_yaw) and scene.landscape_state.document() == before, "precision mode gives furniture one-degree adjustment")
 	scene.precision_mode = false
 	await _press(JOY_BUTTON_A)
-	var bench_committed := not scene.furniture_placement_active and scene.landscape_state.composition.size() == 1
+	var bench_committed: bool = not scene.furniture_placement_active and scene.landscape_state.composition.size() == 1
 	_check(bench_committed, "A commits the bench")
 	if not bench_committed:
 		_finish()
