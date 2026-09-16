@@ -113,17 +113,28 @@ func _ready() -> void:
 		terrain.generator = generator
 	add_child(terrain)
 	if ClassDB.class_exists("VoxelViewer"):
-		var viewer: Node3D = ClassDB.instantiate("VoxelViewer")
-		var viewer_focus := _world_size() * 0.5
-		var viewer_distance := 64.0
-		if startup_mesh_radius_world > 0.0 and is_finite(startup_mesh_radius_world) and startup_mesh_focus_world.is_finite():
-			viewer_focus = startup_mesh_focus_world
-			viewer_distance = minf(64.0, startup_mesh_radius_world)
-		viewer.position = viewer_focus
-		# VoxelViewer view_distance is measured in world-space units. Keep cold
-		# start demand aligned with the bounded startup readiness region.
-		viewer.view_distance = viewer_distance
-		add_child(viewer)
+		var bounded_startup := startup_mesh_radius_world > 0.0 and is_finite(startup_mesh_radius_world) and startup_mesh_focus_world.is_finite()
+		if bounded_startup:
+			# Keep all authoritative data resident so the complete finite valley can
+			# become editable and receive the full deterministic paste, but do not
+			# ask this viewer to build visuals/collisions for the entire map at boot.
+			var data_viewer: Node3D = ClassDB.instantiate("VoxelViewer")
+			data_viewer.position = _world_size() * 0.5
+			data_viewer.view_distance = 64.0
+			data_viewer.requires_visuals = false
+			data_viewer.requires_collisions = false
+			add_child(data_viewer)
+
+			# Visual startup demand stays local to the initial cottage/play area.
+			var visual_viewer: Node3D = ClassDB.instantiate("VoxelViewer")
+			visual_viewer.position = startup_mesh_focus_world
+			visual_viewer.view_distance = minf(64.0, startup_mesh_radius_world)
+			add_child(visual_viewer)
+		else:
+			var viewer: Node3D = ClassDB.instantiate("VoxelViewer")
+			viewer.position = _world_size() * 0.5
+			viewer.view_distance = 64.0
+			add_child(viewer)
 	voxels = generator_script.generate()
 	var full_area := AABB(Vector3.ZERO, Vector3(patch_size))
 	var mesh_area := initial_mesh_area()
