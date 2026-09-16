@@ -12,6 +12,7 @@ const FURNITURE_COLOURS := {
 	"chopping_block": StarterProps.COLOURS["chopping_block"],
 	"log_stack": StarterProps.COLOURS["log_stack"],
 	"bench": [Color("#7d5b43"), Color("#594337"), Color("#9a795c"), Color("#6b6f64")],
+	"village_table": [Color("#7d5b43"), Color("#594337"), Color("#9a795c"), Color("#6b6f64")],
 	"lantern": [Color("#454a47"), Color("#655344"), Color("#d7a85e"), Color("#8c765c")],
 	"signpost": [Color("#72543f"), Color("#4e3d32"), Color("#967556"), Color("#d1c29b")],
 	"barrel_planter": Planters.SWATCHES,
@@ -109,6 +110,7 @@ func _append_furniture(builder: Dictionary, record: Dictionary) -> void:
 	var center := Vector3(point.x, _surface_height(point), point.y)
 	match style_id:
 		"bench": _append_bench(builder, center, basis)
+		"village_table": _append_village_table(builder, center, basis)
 		"lantern": _append_lantern(builder, center, basis)
 		"signpost": _append_signpost(builder, center, basis)
 		"well", "chopping_block", "log_stack": StarterProps.append(self, builder, center, basis, style_id)
@@ -125,6 +127,19 @@ func _append_bench(builder: Dictionary, center: Vector3, basis: Basis) -> void:
 		_append_box(builder, center + basis * Vector3(x, 0.68, 0.23), Vector3(0.08, 0.58, 0.08), basis, 1)
 	for y in [0.60, 0.78]:
 		_append_box(builder, center + basis * Vector3(0, y, 0.24), Vector3(1.38, 0.075, 0.09), basis, 2)
+
+func _append_village_table(builder: Dictionary, center: Vector3, basis: Basis) -> void:
+	# A square gathering table with backless benches on either side, reusing the
+	# bench's slatted timber palette and seat height so the set reads as one family.
+	for x in [-0.5, 0.5]:
+		for z in [-0.5, 0.5]:
+			_append_box(builder, center + basis * Vector3(x, 0.235, z), Vector3(0.1, 0.47, 0.1), basis, 1)
+	_append_box(builder, center + basis * Vector3(0, 0.52, 0), Vector3(1.25, 0.1, 1.25), basis, 2)
+	for z in [-0.95, 0.95]:
+		for x in [-0.48, 0.48]:
+			_append_box(builder, center + basis * Vector3(x, 0.2, z), Vector3(0.08, 0.4, 0.08), basis, 1)
+		for dz in [-0.09, 0.09]:
+			_append_box(builder, center + basis * Vector3(0, 0.42, z + dz), Vector3(1.15, 0.075, 0.14), basis, 0)
 
 func _append_lantern(builder: Dictionary, center: Vector3, basis: Basis) -> void:
 	_append_box(builder, center + Vector3.UP * 0.05, Vector3(0.30, 0.10, 0.30), basis, 1)

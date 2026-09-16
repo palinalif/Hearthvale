@@ -9,13 +9,14 @@ const FURNITURE_STYLES := {
 	"chopping_block": StarterFurniture.DEFINITIONS["chopping_block"],
 	"log_stack": StarterFurniture.DEFINITIONS["log_stack"],
 	"bench": {"name": "Village bench", "size": Vector2(1.5, 0.625), "summary": "Slatted timber seat with a proper back"},
+	"village_table": {"name": "Gathering table and benches", "size": Vector2(1.35, 2.0), "summary": "Square timber table with a backless bench on each side"},
 	"lantern": {"name": "Path lantern", "size": Vector2(0.5, 0.5), "summary": "Small warm lantern on a dark village post"},
 	"signpost": {"name": "Wooden signpost", "size": Vector2(0.625, 0.625), "summary": "Two crooked direction boards on one post"},
 	"barrel_planter": PlanterFurniture.DEFINITIONS["barrel_planter"],
 	"barrel_planter_herbs": PlanterFurniture.DEFINITIONS["barrel_planter_herbs"],
 	"barrel_planter_light": PlanterFurniture.DEFINITIONS["barrel_planter_light"],
 }
-const FURNITURE_STYLE_ORDER: Array[String] = ["bench", "lantern", "signpost", "barrel_planter", "well", "chopping_block", "log_stack", "barrel_planter_herbs", "barrel_planter_light"]
+const FURNITURE_STYLE_ORDER: Array[String] = ["bench", "village_table", "lantern", "signpost", "barrel_planter", "well", "chopping_block", "log_stack", "barrel_planter_herbs", "barrel_planter_light"]
 const FURNITURE_RANDOM_TURN_COUNT := 24
 const FURNITURE_RANDOM_STEP_DEGREES := 15.0
 
