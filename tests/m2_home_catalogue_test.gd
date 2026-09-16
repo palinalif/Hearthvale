@@ -47,7 +47,7 @@ func _initialize() -> void:
 	for design in catalogue:
 		var design_id := str(design["id"])
 		check(scene._catalogue_wall_choices.has(design_id) and str(scene._catalogue_wall_choices[design_id]) in scene.WALL_MATERIALS, "home browser prepares valid wall palette for " + design_id)
-		check(scene._catalogue_roof_choices.has(design_id) and str(scene._catalogue_roof_choices[design_id]) in scene.ROOF_MATERIALS, "home browser prepares valid roof palette for " + design_id)
+		check(scene._catalogue_roof_choices.has(design_id) and str(scene._catalogue_roof_choices[design_id]) in scene._roof_material_choices(), "home browser prepares valid roof palette for " + design_id)
 		check(scene._catalogue_accent_choices.has(design_id) and str(scene._catalogue_accent_choices[design_id]) in scene.ACCENT_MATERIALS, "home browser prepares valid accent palette for " + design_id)
 	var home_card := _card("woodland_lodge")
 	if home_card:
@@ -55,7 +55,7 @@ func _initialize() -> void:
 		check(str(item.get("kind", "")) == "home" and str(item.get("name", "")).contains("Woodland"), "home card carries player-facing name and home kind")
 	await _press(JOY_BUTTON_RIGHT_SHOULDER)
 	check(scene._build_browser.category == "paths", "RB reaches Paths & bridges")
-	check(_card("packed_earth") != null and _card("timber_footbridge") != null, "Paths exposes path and bridge choices")
+	check(_card("packed_earth") != null and _card("timber") != null, "Paths exposes path and bridge choices")
 	await _press(JOY_BUTTON_RIGHT_SHOULDER)
 	check(scene._build_browser.category == "outdoor", "RB reaches Outdoor")
 	check(_card("cottage_flowers") != null and _card("rustic_fence") != null and _card("bench") != null and _card("foliage") != null, "Outdoor exposes garden fence furniture and planting tools")
@@ -109,7 +109,7 @@ func _initialize() -> void:
 	check(first_surface != original_surface, "new design owns fresh surface identities")
 
 	var alternate_wall: String = _different_choice(scene.WALL_MATERIALS, chosen_wall)
-	var alternate_roof: String = _different_choice(scene.ROOF_MATERIALS, chosen_roof)
+	var alternate_roof: String = _different_choice(scene._roof_material_choices(), chosen_roof)
 	check(scene.building_world.set_wall_material(lodge_id, alternate_wall), "wall material changes independently")
 	check(scene.building_world.set_roof_material(lodge_id, alternate_roof), "roof material changes independently")
 	lodge = scene.building_world.get_building(lodge_id)
