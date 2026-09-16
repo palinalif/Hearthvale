@@ -502,6 +502,7 @@ func _create_backend() -> void:
 	# 64-unit valley remains authoritative, editable and continues streaming.
 	backend.set("startup_mesh_focus_world", Vector3(24.0, 8.0, 22.0))
 	backend.set("startup_mesh_radius_world", 20.0)
+	backend.set("startup_mesh_height_world", 16.0)
 	if test_mode: backend.set("initialization_budget_override_ms", 90000)
 	add_child(backend)
 	if garden_visual and garden_visual.has_method("attach_backend"):

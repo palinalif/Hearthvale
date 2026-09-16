@@ -46,6 +46,7 @@ var _checkpoint: RefCounted
 @export var initialization_budget_override_ms := 0
 @export var startup_mesh_focus_world := Vector3.ZERO
 @export var startup_mesh_radius_world := 0.0
+@export var startup_mesh_height_world := 0.0
 var loaded_building_document: Dictionary = {}
 
 var _stroke_active := false
@@ -142,7 +143,7 @@ func _ready() -> void:
 	_backend_ready = true
 	ready_changed.emit(true)
 
-static func startup_mesh_area(size: Vector3i, scale: float, focus_world: Vector3, radius_world: float) -> AABB:
+static func startup_mesh_area(size: Vector3i, scale: float, focus_world: Vector3, radius_world: float, height_world: float = 0.0) -> AABB:
 	var full_area := AABB(Vector3.ZERO, Vector3(size))
 	if scale <= 0.0 or not is_finite(scale) or radius_world <= 0.0 or not is_finite(radius_world) or not focus_world.is_finite():
 		return full_area
@@ -152,10 +153,13 @@ static func startup_mesh_area(size: Vector3i, scale: float, focus_world: Vector3
 	var min_z := clampi(floori(focus_cell.z - radius_cells), 0, maxi(0, size.z - 1))
 	var max_x := clampi(ceili(focus_cell.x + radius_cells), min_x + 1, size.x)
 	var max_z := clampi(ceili(focus_cell.z + radius_cells), min_z + 1, size.z)
-	return AABB(Vector3(min_x, 0, min_z), Vector3(max_x - min_x, size.y, max_z - min_z))
+	var max_y := size.y
+	if height_world > 0.0 and is_finite(height_world):
+		max_y = clampi(ceili(height_world / scale), 1, size.y)
+	return AABB(Vector3(min_x, 0, min_z), Vector3(max_x - min_x, max_y, max_z - min_z))
 
 func initial_mesh_area() -> AABB:
-	return startup_mesh_area(patch_size, voxel_scale, startup_mesh_focus_world, startup_mesh_radius_world)
+	return startup_mesh_area(patch_size, voxel_scale, startup_mesh_focus_world, startup_mesh_radius_world, startup_mesh_height_world)
 
 func is_ready() -> bool:
 	return _backend_ready
