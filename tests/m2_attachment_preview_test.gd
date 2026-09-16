@@ -43,10 +43,18 @@ func _run() -> void:
 	for id in [ids[1], ids[0], ids[1]]:
 		scene.selected_detail_id = id
 		var record: Dictionary = scene._selected_detail_record()
+		var record_ready: bool = not record.is_empty() and record.has("resolved_position") and record.get("resolved_position") is Vector3
+		check(record_ready, "move fixture resolves selected window")
+		if not record_ready:
+			await _finish()
+			return
 		check((record.get("anchor", {}) as Dictionary).get("local_position") is Array, "move fixture uses persisted array anchor")
 		var position: Vector3 = record["resolved_position"]
 		scene._begin_detail_move()
 		check(scene.detail_move_active and scene.selected_detail_id == id, "move keeps exact selected ID")
+		if not scene.detail_move_active:
+			await _finish()
+			return
 		check(scene.detail_move_position.is_equal_approx(position) and scene._detail_free_position.is_equal_approx(position), "move starts at selected window, never previous placement")
 		for frame in 3: scene._read_detail_move(0.1)
 		check(scene.detail_move_position.is_equal_approx(position), "idle pickup never aligns or jumps")
@@ -56,13 +64,26 @@ func _run() -> void:
 		check(scene.building_world.serialize_document() == before, "cancel leaves all windows and revision identical")
 	scene.selected_detail_id = ids[1]
 	var original: Dictionary = scene._selected_detail_record()
+	check(not original.is_empty(), "commit fixture resolves selected window")
+	if original.is_empty():
+		await _finish()
+		return
 	scene._begin_detail_move()
+	check(scene.detail_move_active, "commit fixture enters detail move")
+	if not scene.detail_move_active:
+		await _finish()
+		return
 	scene.detail_move_position += Vector3(0.5, 0, 0)
 	var intended: Vector3 = scene.detail_move_position
 	var revision: int = scene.building_world.get_revision()
 	check(scene._commit_detail_move(), "window move confirms")
 	check(scene.building_world.get_revision() == revision + 1, "window move is one edit")
-	check((scene._selected_detail_record()["resolved_position"] as Vector3).is_equal_approx(intended), "committed position matches preview")
+	var committed: Dictionary = scene._selected_detail_record()
+	check(committed.has("resolved_position") and committed["resolved_position"] is Vector3, "committed window still resolves")
+	if not committed.has("resolved_position") or not committed["resolved_position"] is Vector3:
+		await _finish()
+		return
+	check((committed["resolved_position"] as Vector3).is_equal_approx(intended), "committed position matches preview")
 	check(scene.building_world.undo(), "move undo succeeds")
 	check(scene._selected_detail_record() == original, "undo restores selected window exactly")
 	check(scene.building_world.redo(), "move redo succeeds")
@@ -71,12 +92,20 @@ func _run() -> void:
 	scene.selected_detail_id = ids[1]
 	scene.detail_move_position = Vector3(-50, -50, -50)
 	scene._begin_detail_move()
+	check(scene.detail_move_active, "reloaded window can be picked up")
+	if not scene.detail_move_active:
+		await _finish()
+		return
 	check(scene.detail_move_position.is_equal_approx(intended), "reloaded window pickup resolves its own array position")
 	scene._cancel_detail_move()
 
 	# Sequential moves must be invalidated by unrelated authoritative edits.
 	scene.selected_detail_id = ids[1]
 	scene._begin_detail_move()
+	check(scene.detail_move_active, "stale-preview fixture enters detail move")
+	if not scene.detail_move_active:
+		await _finish()
+		return
 	check(scene.building_world.suppress_detail(building_id, ids[0]), "separate edit changes revision during preview")
 	stable = scene.building_world.serialize_document()
 	check(not scene._commit_detail_move() and not scene.detail_move_active, "stale placement is cancelled")
@@ -99,9 +128,12 @@ func _check_ghost_geometry() -> void:
 			var house := Transform3D(Basis(Vector3.UP, 0.37).scaled(Vector3.ONE * 0.25), Vector3(10, 8, 4))
 			var position := Vector3(4, 10.5, -7.02)
 			ghost.show_attachment(house, orientation, position, record["kind"], record, half)
-			var top := ghost.get_node("FootprintTop") as MeshInstance3D
-			var right := ghost.get_node("FootprintRight") as MeshInstance3D
-			var body := ghost.get_node("OpeningPreview") as MeshInstance3D
+			var top := ghost.get_node_or_null("FootprintTop") as MeshInstance3D
+			var right := ghost.get_node_or_null("FootprintRight") as MeshInstance3D
+			var body := ghost.get_node_or_null("OpeningPreview") as MeshInstance3D
+			var nodes_ready: bool = top != null and right != null and body != null and top.mesh is BoxMesh and right.mesh is BoxMesh and body.mesh is BoxMesh
+			check(nodes_ready, "ghost creates footprint and body preview meshes")
+			if not nodes_ready: continue
 			check((top.mesh as BoxMesh).size.x == half.x * 2 and top.position.y == half.y, "ghost spans full reserved width/height")
 			check((right.mesh as BoxMesh).size.y == half.y * 2 and right.position.x == half.x, "ghost includes frame and trim clearance")
 			check((body.mesh as BoxMesh).size.x == size.x and (body.mesh as BoxMesh).size.y == size.y, "body preview uses actual resized window or door dimensions")
@@ -109,7 +141,8 @@ func _check_ghost_geometry() -> void:
 			check(ghost.basis.get_scale().is_equal_approx(Vector3.ONE * 0.25), "preview retains miniature scale")
 			var identity := top.get_instance_id()
 			ghost.show_attachment(house, orientation, position + Vector3.UP, record["kind"], record, half)
-			check(ghost.get_node("FootprintTop").get_instance_id() == identity, "moving unchanged preview does not rebuild meshes")
+			var moved_top := ghost.get_node_or_null("FootprintTop")
+			check(moved_top != null and moved_top.get_instance_id() == identity, "moving unchanged preview does not rebuild meshes")
 	ghost.show_attachment(Transform3D.IDENTITY, "front", Vector3.ZERO, "window", records[0], Vector2(1.375, 2.07), false)
 	check(ghost.has_node("InvalidMark"), "invalid placement has non-colour-only marker")
 	ghost.hide_attachment()

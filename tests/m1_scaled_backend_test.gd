@@ -12,6 +12,19 @@ var failures := 0
 var backend: Node
 
 func _initialize() -> void:
+	var focus_world := Vector3(24.0, 8.0, 22.0)
+	var startup_radius_world := 12.0
+	var startup_height_world := 16.0
+	var startup_area: AABB = Backend.startup_mesh_area(Generator.PATCH_SIZE, Generator.VOXEL_SCALE, focus_world, startup_radius_world, startup_height_world)
+	var full_area := AABB(Vector3.ZERO, Vector3(Generator.PATCH_SIZE))
+	var focus_cell := focus_world / Generator.VOXEL_SCALE
+	_check(startup_area != full_area, "large valley startup mesh is bounded")
+	_check(startup_area.has_point(focus_cell), "startup mesh contains initial play focus")
+	_check(startup_area.position.x >= 0.0 and startup_area.position.z >= 0.0, "startup mesh starts inside native bounds")
+	_check(startup_area.end.x <= Generator.PATCH_SIZE.x and startup_area.end.z <= Generator.PATCH_SIZE.z, "startup mesh ends inside native bounds")
+	_check(startup_area.size.x <= 256.0 and startup_area.size.z <= 256.0, "startup mesh stays within thirty-two world units")
+	_check(startup_area.position.y == 0.0 and startup_area.size.y == 128.0, "startup readiness is bounded to sixteen world metres vertically")
+
 	backend = Backend.new()
 	backend.patch_size = Generator.PATCH_SIZE
 	backend.voxel_scale = Generator.VOXEL_SCALE
@@ -19,7 +32,28 @@ func _initialize() -> void:
 	backend.generator_id = Generator.GENERATOR_ID
 	backend.checkpoint_root = "user://m1-scaled-backend-%d" % Time.get_ticks_usec()
 	backend.require_building_document = true
+	backend.startup_mesh_focus_world = focus_world
+	backend.startup_mesh_radius_world = startup_radius_world
+	backend.startup_mesh_height_world = startup_height_world
 	root.add_child(backend)
+	await process_frame
+	var viewer_nodes := backend.get_children().filter(func(child: Node) -> bool: return child.get_class() == "VoxelViewer")
+	_check(viewer_nodes.size() == 2, "scaled backend separates full-data and local-visual voxel viewers")
+	if viewer_nodes.size() == 2:
+		var visual_viewers := viewer_nodes.filter(func(child: Node) -> bool: return bool(child.get("requires_visuals")))
+		var data_viewers := viewer_nodes.filter(func(child: Node) -> bool: return not bool(child.get("requires_visuals")))
+		_check(visual_viewers.size() == 1, "scaled backend creates one visual voxel viewer")
+		_check(data_viewers.size() == 1, "scaled backend creates one data-only voxel viewer")
+		if visual_viewers.size() == 1:
+			var visual_viewer := visual_viewers[0] as Node3D
+			_check(visual_viewer.position.is_equal_approx(focus_world), "visual voxel viewer begins at the bounded play focus")
+			_check(is_equal_approx(float(visual_viewer.get("view_distance")), 16.0), "visual voxel viewer keeps one mesh block of startup headroom")
+			_check(is_equal_approx(float(visual_viewer.get("view_distance_vertical_ratio")), 0.75), "visual voxel viewer limits cold-start vertical demand")
+		if data_viewers.size() == 1:
+			var data_viewer := data_viewers[0] as Node3D
+			_check(data_viewer.position.is_equal_approx(Vector3(32.0, 16.0, 32.0)), "data-only voxel viewer stays at valley center")
+			_check(is_equal_approx(float(data_viewer.get("view_distance")), 64.0), "data-only voxel viewer keeps the full valley resident")
+			_check(not bool(data_viewer.get("requires_collisions")), "data-only voxel viewer does not request collision meshes")
 	var deadline := Time.get_ticks_msec() + 60000
 	while not backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame
 	_check(backend.is_ready(), "scaled native backend ready")
@@ -86,9 +120,6 @@ func _hash_buffer(buffer: Object) -> String:
 	return c.finish().hex_encode()
 
 func _changed_cells(before: Object, after: Object) -> int:
-	# Inspect the native stroke's changed region, then undo only those reported
-	# cells in a clone. Equality of the entire payload proves the report omitted
-	# no changes, without a 37-million-cell GDScript traversal.
 	var restored: Object = backend._clone_buffer(after)
 	var count := 0
 	var seen := {}

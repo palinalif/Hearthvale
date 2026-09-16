@@ -24,7 +24,7 @@ var _roof_overlay_signatures: Dictionary = {}
 
 func _ready() -> void:
 	super._ready()
-	_install_roof_design_action()
+	# Roof shape is edited by interacting with the roof itself.
 	_build_roof_design_picker()
 	_refresh_roof_overlays()
 

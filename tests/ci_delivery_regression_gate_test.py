@@ -51,6 +51,24 @@ class DeliveryRegressionGateTest(unittest.TestCase):
         self.assertIn("PLANTER_MOBILE_CAPTURE", block.group(1))
         self.assertNotIn("--promote", block.group(1), "CI validates canonical exports without private MCP staging")
 
+    def test_windows_candidate_proves_runtime_terrain_readiness(self):
+        workflow = (ROOT / ".github/workflows/thor-repair-apk.yml").read_text(encoding="utf-8")
+        build = job_block(workflow, "build-windows")
+        self.assertIn("terrain-ready.json", build)
+        self.assertIn("TERRAIN_RUNTIME_READY", build)
+        self.assertIn("Get-Content $receipt -Raw | ConvertFrom-Json", build)
+        self.assertRegex(build, r"if \(-not \$.*\.ok\)")
+        project = (ROOT / "project.godot").read_text(encoding="utf-8")
+        self.assertIn('TerrainRuntimeProbe="*res://scripts/terrain_runtime_probe.gd"', project)
+        self.assertTrue((ROOT / "scripts/terrain_runtime_probe.gd").is_file())
+
+    def test_backend_readiness_diagnostics_expose_initialization_phase_and_error(self):
+        helper = (ROOT / "tests/scene_readiness.gd").read_text(encoding="utf-8")
+        self.assertIn('"backend_phase"', helper)
+        self.assertIn('"backend_error"', helper)
+        self.assertIn("is_area_editable", helper)
+        self.assertIn("is_area_meshed", helper)
+
     def test_gate_contract_runs_in_delivery_prerequisite(self):
         source = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("tests/ci_delivery_regression_gate_test.py", job_block(source, "delivery-contract"))

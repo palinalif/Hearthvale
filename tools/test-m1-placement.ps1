@@ -38,16 +38,9 @@ $editor = Get-ChildItem $root -Filter '*_console.exe' | Select-Object -First 1 -
 if (-not $editor) { throw 'Pinned Godot console editor missing' }
 if ((& $editor --version | Out-String).Trim() -ne $lock.engine.version) { throw 'Unexpected Godot version' }
 
-function Invoke-Gate([string]$label, [string[]]$arguments) {
-    Write-Host "=== START $label ==="
-    $output = @(& $editor @arguments 2>&1 | ForEach-Object {
-        $line = "$_"
-        Write-Host $line
-        $line
-    })
-    $exitCode = $LASTEXITCODE
+function Assert-GateOutput([string]$label, [string[]]$output, [int]$exitCode) {
     Write-Host "=== END $label exit=$exitCode ==="
-    if ($exitCode -ne 0 -or ($output -match 'ERROR:|Parse Error:|FAIL:')) {
+    if ($exitCode -ne 0 -or ($output -match 'SCRIPT ERROR|ERROR:|Parse Error:|FAIL:')) {
         throw "Gate failed: $label (exit=$exitCode)"
     }
     if ($label -ne 'import') {
@@ -56,6 +49,39 @@ function Invoke-Gate([string]$label, [string[]]$arguments) {
         $json = $joined -match '"failures"\s*:\s*0' -and $joined -match '"ok"\s*:\s*true'
         if (-not ($plain -or $json)) { throw "Missing successful test receipt: $label" }
     }
+}
+
+function Invoke-Gate([string]$label, [string[]]$arguments, [int]$timeoutMs = 0) {
+    Write-Host "=== START $label ==="
+    if ($timeoutMs -le 0) {
+        $output = @(& $editor @arguments 2>&1 | ForEach-Object {
+            $line = "$_"
+            Write-Host $line
+            $line
+        })
+        Assert-GateOutput $label $output $LASTEXITCODE
+        return
+    }
+
+    $safe = $label -replace '[^A-Za-z0-9_-]', '-'
+    $out = Join-Path $root "$safe.out.log"
+    $err = Join-Path $root "$safe.err.log"
+    Remove-Item -LiteralPath $out,$err -Force -ErrorAction SilentlyContinue
+    $process = Start-Process -FilePath $editor -ArgumentList $arguments -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+    $timedOut = -not $process.WaitForExit($timeoutMs)
+    if ($timedOut) {
+        $process.Kill()
+        $process.WaitForExit()
+    }
+    $output = @()
+    if (Test-Path -LiteralPath $out) { $output += @(Get-Content -LiteralPath $out) }
+    if (Test-Path -LiteralPath $err) { $output += @(Get-Content -LiteralPath $err) }
+    $output | ForEach-Object { Write-Host "$_" }
+    if ($timedOut) {
+        Write-Host "=== END $label timeout=${timeoutMs}ms ==="
+        throw "Gate timed out: $label after ${timeoutMs}ms"
+    }
+    Assert-GateOutput $label $output $process.ExitCode
 }
 
 function Invoke-MobileReview(
@@ -124,7 +150,7 @@ $nativeUi = @(
 
 function Invoke-NativeGroup([string[]]$tests) {
     foreach ($test in $tests) {
-        Invoke-Gate $test @('--headless', '--path', '.', '--script', "tests/$test.gd")
+        Invoke-Gate $test @('--headless', '--path', '.', '--script', "tests/$test.gd") 120000
     }
 }
 

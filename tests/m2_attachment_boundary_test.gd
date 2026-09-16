@@ -13,8 +13,18 @@ func check(ok: bool, label: String) -> void:
 
 func _initialize() -> void:
 	var world := World.new()
-	var base: Dictionary = world.get_document()["buildings"][0]
-	var view: Dictionary = world.get_building(str(base["id"]))
+	var buildings: Array = world.get_document().get("buildings", [])
+	check(not buildings.is_empty(), "boundary fixture has a starter building")
+	if buildings.is_empty():
+		_finish()
+		return
+	var base: Dictionary = buildings[0]
+	var view: Dictionary = world.get_building(str(base.get("id", "")))
+	var view_ready: bool = not view.is_empty() and view.get("dimensions") is Vector3 and view.get("surfaces", []) is Array
+	check(view_ready, "boundary fixture resolves starter building geometry")
+	if not view_ready:
+		_finish()
+		return
 	var dimensions: Vector3 = view["dimensions"]
 	var cases: Array[Dictionary] = [
 		{"kind": "shutter", "asset_id": "shutter_wood"},
@@ -28,6 +38,9 @@ func _initialize() -> void:
 			if str(source.get("kind", "")) != "wall" or bool(source.get("deleted", false)): continue
 			var support: Dictionary = source.duplicate(true)
 			var geometry := Placement.wall_geometry(view, support)
+			var geometry_ready: bool = not geometry.is_empty() and geometry.has("bottom") and geometry.has("top") and support.has("id") and support.has("orientation")
+			check(geometry_ready, "wall boundary fixture resolves geometry")
+			if not geometry_ready: continue
 			if upper:
 				support.merge(geometry, true)
 				support["massing_wall"] = true
@@ -38,6 +51,9 @@ func _initialize() -> void:
 			fixture["surfaces"] = [support]
 			var placement_view := {"dimensions": dimensions, "surfaces": [support], "details": []}
 			geometry = Placement.wall_geometry(placement_view, support)
+			if geometry.is_empty() or not geometry.has("bottom") or not geometry.has("top"):
+				check(false, "placement wall fixture resolves geometry")
+				continue
 			var axis := 0 if str(support["orientation"]) in ["front", "back"] else 2
 			for spec in cases:
 				var half := Placement.footprint_for_detail(spec)
@@ -49,22 +65,29 @@ func _initialize() -> void:
 					else: direction[axis] = 1.0 if edge == "right" else -1.0
 					var candidate := Placement.clamp_to_wall(placement_view, str(support["id"]), middle + direction * 100.0, half)
 					var label := "%s/%s/%s/upper=%s" % [spec["kind"], support["orientation"], edge, upper]
-					check(not candidate.is_empty(), label + ": clamp supplies a placement")
-					if candidate.is_empty(): continue
+					check(not candidate.is_empty() and candidate.get("position") is Vector3, label + ": clamp supplies a placement")
+					if candidate.is_empty() or not candidate.get("position") is Vector3: continue
 					var position: Vector3 = candidate["position"]
 					var detail: Dictionary = spec.duplicate(true)
 					detail.merge({"id": "boundary-test", "state": "manual", "generated": false, "anchor": {"surface_id": support["id"], "policy": "surface_local", "local_position": [position.x, position.y, position.z]}}, true)
 					fixture["details"] = [detail]
 					var before := JSON.stringify(fixture)
 					check(Placement.position_available(placement_view, "boundary-test", str(support["id"]), position, half), label + ": preview accepts the edge")
-					var resolved: Dictionary = world._resolved_details(fixture)[0]
-					check(not bool(resolved["needs_placement"]), label + ": authority agrees at the exact clamped edge")
-					check((resolved["resolved_position"] as Vector3).is_equal_approx(position), label + ": authority does not nudge the attachment")
+					var resolved_values: Array = world._resolved_details(fixture)
+					check(not resolved_values.is_empty() and resolved_values[0] is Dictionary, label + ": authority resolves the attachment")
+					if resolved_values.is_empty() or not resolved_values[0] is Dictionary: continue
+					var resolved: Dictionary = resolved_values[0]
+					check(not bool(resolved.get("needs_placement", true)), label + ": authority agrees at the exact clamped edge")
+					check(resolved.get("resolved_position") is Vector3 and (resolved["resolved_position"] as Vector3).is_equal_approx(position), label + ": authority does not nudge the attachment")
 					check(JSON.stringify(fixture) == before, label + ": resolving is read-only")
 					# Much smaller than a 0.125 cell, but well beyond float rounding.
 					var outside := position + direction * 0.001
 					detail["anchor"]["local_position"] = [outside.x, outside.y, outside.z]
 					check(not Placement.position_available(placement_view, "boundary-test", str(support["id"]), outside, half), label + ": preview rejects a real overhang")
-					check(bool(world._resolved_details(fixture)[0]["needs_placement"]), label + ": authority still rejects a real overhang")
+					var outside_resolved: Array = world._resolved_details(fixture)
+					check(not outside_resolved.is_empty() and outside_resolved[0] is Dictionary and bool((outside_resolved[0] as Dictionary).get("needs_placement", false)), label + ": authority still rejects a real overhang")
+	_finish()
+
+func _finish() -> void:
 	print("m2_attachment_boundary_test checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures else 0)

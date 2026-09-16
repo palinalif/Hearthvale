@@ -13,7 +13,7 @@ func _initialize() -> void:
 	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
 	_check(scene._player_restored, "native street-furniture scene ready")
 	if not scene._player_restored:
-		_finish()
+		await _finish()
 		return
 	scene.set_process(false)
 	var before: Dictionary = scene.landscape_state.document()
@@ -22,13 +22,13 @@ func _initialize() -> void:
 	await _press(JOY_BUTTON_DPAD_UP)
 	_check(scene._browser_open and scene._build_browser.category == "homes", "D-pad Up opens the world build browser")
 	if not scene._browser_open:
-		_finish()
+		await _finish()
 		return
 	await _press(JOY_BUTTON_RIGHT_SHOULDER)
 	await _press(JOY_BUTTON_RIGHT_SHOULDER)
 	_check(scene._build_browser.category == "outdoor", "world build browser reaches Outdoor")
 	if scene._build_browser.category != "outdoor":
-		_finish()
+		await _finish()
 		return
 	var bench_card := _browser_card("bench")
 	var lantern_card := _browser_card("lantern")
@@ -36,7 +36,7 @@ func _initialize() -> void:
 	var barrel_card := _browser_card("barrel_planter")
 	_check(bench_card != null and lantern_card != null and signpost_card != null and barrel_card != null, "Outdoor browser exposes all four street-furniture choices")
 	if bench_card == null:
-		_finish()
+		await _finish()
 		return
 	if lantern_card != null and signpost_card != null and barrel_card != null:
 		var bench_item: Dictionary = bench_card.get_meta("item", {})
@@ -51,7 +51,8 @@ func _initialize() -> void:
 	var random_yaw := float(scene.furniture_yaw_degrees)
 	_check(is_equal_approx(random_yaw, snappedf(random_yaw, 15.0)), "furniture starts on a randomized 15-degree facing")
 	_aim(Vector2(36.0, 34.0))
-	_check(scene.furniture_placement_valid and scene.composition_visual.stats().preview_cells >= 0, "bench gets a valid live placement preview")
+	var preview_node := scene.composition_visual.get_node_or_null("FurniturePreview") as MeshInstance3D
+	_check(scene.furniture_placement_valid and preview_node != null and preview_node.mesh != null, "bench gets a valid live placement preview with real geometry")
 	scene._rotate_furniture(1)
 	_check(is_equal_approx(scene.furniture_yaw_degrees, fposmod(random_yaw + 15.0, 360.0)) and scene.landscape_state.document() == before, "furniture keeps gentle manual nudging from its randomized facing")
 	scene.precision_mode = true
@@ -63,7 +64,7 @@ func _initialize() -> void:
 	var bench_committed: bool = not scene.furniture_placement_active and scene.landscape_state.composition.size() == 1
 	_check(bench_committed, "A commits the bench")
 	if not bench_committed:
-		_finish()
+		await _finish()
 		return
 	var bench: Dictionary = scene.landscape_state.composition[0]
 	_check(bench.kind == "furniture" and bench.style_id == "bench" and is_equal_approx(float(bench.yaw_degrees), committed_yaw), "bench saves randomized precise orientation")
@@ -106,7 +107,7 @@ func _initialize() -> void:
 	await _press(JOY_BUTTON_A)
 	_check(scene.furniture_placement_active and scene.landscape_state.composition.size() == 4, "invalid home-overlap furniture cannot commit")
 	scene._cancel_furniture_placement()
-	_finish()
+	await _finish()
 
 func _browser_card(item_id: String) -> Button:
 	if not scene._build_browser:

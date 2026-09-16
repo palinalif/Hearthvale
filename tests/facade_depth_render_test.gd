@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Layout = preload("res://scripts/facade_depth_layout.gd")
+const SceneReadiness = preload("res://tests/scene_readiness.gd")
 const OUTPUT := ".tools/cottage-repair/facade-depth"
 var scene: Node
 var checks := 0
@@ -28,10 +29,9 @@ func _run() -> void:
 	scene.test_mode = true
 	scene.checkpoint_root = "user://facade-render-%s" % Time.get_ticks_usec()
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 65000
-	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
-	check(scene._player_restored, "facade Mobile scene ready")
-	if not scene._player_restored:
+	var scene_ready := await SceneReadiness.wait_for_player(self, scene)
+	check(scene_ready, "facade Mobile scene ready")
+	if not scene_ready:
 		await _finish()
 		return
 	scene.set_process(false)

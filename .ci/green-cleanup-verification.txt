@@ -1,0 +1,1 @@
+Verification trigger for roof/Home Details and camera-catalogue cleanup on db27400e1ee32f351a05c3c6de87e22b7a6df92b.

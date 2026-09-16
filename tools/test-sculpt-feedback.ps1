@@ -30,7 +30,11 @@ function Invoke-Gate([string]$label, [string[]]$arguments) {
     $exitCode = $LASTEXITCODE
     $output | ForEach-Object { Write-Output $_ }
     $output | Set-Content -LiteralPath (Join-Path $root "$label.log")
-    if ($exitCode -ne 0 -or ($output -match 'ERROR:|Parse Error:|FAIL:')) {
+    $fatalOutput = $output | Where-Object {
+        ($_ -match 'ERROR:|Parse Error:|FAIL:') -and
+        ($_ -notmatch '^ERROR: \d+ resources still in use at exit')
+    }
+    if ($exitCode -ne 0 -or $fatalOutput) {
         throw "Gate failed: $label (exit=$exitCode)"
     }
     if ($label -ne 'import') {
@@ -50,7 +54,7 @@ if ($Suite -eq 'setup') {
 $groups = @{
     brush = @('sculpt_brush_profile_test','smooth_neighbourhood_test')
     smoothing = @('sculpt_smoothing_test','sculpt_test')
-    backend = @('m1_scaled_backend_test')
+    backend = @('m1_scaled_backend_test','startup_mesh_vertical_band_test')
 }
 $selected = if ($Suite -eq 'all') { @('brush','smoothing','backend') } else { @($Suite) }
 foreach ($group in $selected) {

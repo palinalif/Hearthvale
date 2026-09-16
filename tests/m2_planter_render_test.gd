@@ -71,10 +71,18 @@ func _run() -> void:
 	await _capture("family-close")
 	_frame(Vector3(22.125, 8.4, 25), 1.6, 0.92, 4.5)
 	await _capture("family-reverse")
-	# Catalogue images come from the same runtime factory, not illustrations.
+	# Catalogue images still come from the production runtime thumbnail factory.
+	# Request only the three planter entries here so this visual gate does not
+	# benchmark unrelated outdoor catalogue assets on the software CI renderer.
 	_clean(false)
 	scene._open_build_browser("outdoor", true)
-	deadline = Time.get_ticks_msec() + 15000
+	var planter_entries: Array[Dictionary] = []
+	for item: Dictionary in scene._browser_entries:
+		if str(item.get("id", "")) in Planters.STYLE_IDS:
+			planter_entries.append(item)
+	scene._catalogue_thumbnails.stop()
+	scene._catalogue_thumbnails.request(planter_entries)
+	deadline = Time.get_ticks_msec() + 60000
 	while Time.get_ticks_msec() < deadline:
 		var complete := true
 		for style: String in Planters.STYLE_IDS:
@@ -83,6 +91,10 @@ func _run() -> void:
 		await process_frame
 	for style: String in Planters.STYLE_IDS:
 		_check(scene._catalogue_thumbnails.cache.has(style), "Real catalogue thumbnail " + style)
+	if not failures.is_empty():
+		scene._close_build_browser()
+		await _finish()
+		return
 	await _capture("catalogue")
 	scene._close_build_browser()
 	await _select_card("barrel_planter_herbs")

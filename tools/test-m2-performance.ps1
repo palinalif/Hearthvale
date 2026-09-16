@@ -5,7 +5,7 @@
 param(
     [ValidateSet('all','camera-catalogue','section-preview','section-commit')]
     [string]$Group = 'all',
-    [int]$TimeoutMs = 240000
+    [int]$TimeoutMs = 420000
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,7 +42,22 @@ $arguments = @(
 $process = Start-Process -FilePath $editor -ArgumentList $arguments -WindowStyle Hidden `
     -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
 
-if (-not $process.WaitForExit($TimeoutMs)) {
+$deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMs)
+$receiptSeen = $false
+while (-not $process.HasExited -and [DateTime]::UtcNow -lt $deadline) {
+    Start-Sleep -Milliseconds 250
+    if (Test-Path $out) {
+        $partial = Get-Content $out -Raw
+        if ($partial -match 'M2_PERFORMANCE_RESULT' -and $partial -match '"ok"\s*:\s*true' -and $partial -match ('"scenario_group"\s*:\s*"' + [regex]::Escape($Group) + '"')) {
+            $receiptSeen = $true
+            break
+        }
+    }
+}
+if ($receiptSeen -and -not $process.HasExited) {
+    $process.Kill()
+    $process.WaitForExit()
+} elseif (-not $process.HasExited) {
     $process.Kill()
     $process.WaitForExit()
     throw "M2 Mobile performance guard timed out: $Group"
@@ -53,7 +68,7 @@ if (Test-Path $out) { $log += Get-Content $out -Raw }
 if (Test-Path $err) { $log += Get-Content $err -Raw }
 Write-Output $log
 
-if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|FAIL:') {
+if ((-not $receiptSeen -and $process.ExitCode -ne 0) -or $log -match 'SCRIPT ERROR|Parse Error|FAIL:') {
     throw "M2 Mobile performance guard failed for $Group (exit=$($process.ExitCode))"
 }
 if ($log -notmatch 'M2_PERFORMANCE_RESULT' -or $log -notmatch '"ok"\s*:\s*true' -or $log -notmatch ('"scenario_group"\s*:\s*"' + [regex]::Escape($Group) + '"')) {

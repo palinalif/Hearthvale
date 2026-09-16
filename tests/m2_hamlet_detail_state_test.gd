@@ -17,7 +17,11 @@ func _initialize() -> void:
 	var furniture_id := state.add_composition("furniture", "bench", Vector2(22.0, 12.0), Vector2(1.5, 0.625), 2)
 	_check(furniture_id == 4, "street furniture shares the landscape identity sequence")
 	var document: Dictionary = state.document()
-	_check(State.validate(document) and document.composition.size() == 3, "valid hamlet detail document validates")
+	var composition_ready: bool = State.validate(document) and document.composition.size() == 3
+	_check(composition_ready, "valid hamlet detail document validates")
+	if not composition_ready:
+		_print_result()
+		return
 	_check(document.composition[0].position == [12.0, 12.0] and document.composition[0].yaw_quarters == 1, "detail position snaps and rotation is saved")
 	var restored := State.new()
 	_check(restored.restore(document) and JSON.stringify(restored.document()) == JSON.stringify(document), "hamlet detail document round-trips deterministically")

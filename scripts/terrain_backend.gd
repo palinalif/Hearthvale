@@ -22,6 +22,7 @@ const SmoothNeighbourhood = preload("res://scripts/smooth_neighbourhood.gd")
 
 var terrain: Node
 var voxels: Object
+var _startup_visual_viewer: Node3D
 ## Index dimensions remain 48×32×48 for M0. M1 supplies 384×256×384 at
 ## eighth-unit voxels, keeping the authored world bounds at 48×32×48.
 @export var patch_size: Vector3i = PATCH_SIZE
@@ -44,6 +45,9 @@ var _checkpoint: RefCounted
 @export var checkpoint_root := ""
 @export var require_building_document := false
 @export var initialization_budget_override_ms := 0
+@export var startup_mesh_focus_world := Vector3.ZERO
+@export var startup_mesh_radius_world := 0.0
+@export var startup_mesh_height_world := 0.0
 var loaded_building_document: Dictionary = {}
 
 var _stroke_active := false
@@ -110,12 +114,39 @@ func _ready() -> void:
 		terrain.generator = generator
 	add_child(terrain)
 	if ClassDB.class_exists("VoxelViewer"):
-		var viewer: Node3D = ClassDB.instantiate("VoxelViewer")
-		viewer.position = _world_size() * 0.5
-		viewer.view_distance = 64.0 / voxel_scale
-		add_child(viewer)
+		var bounded_startup := startup_mesh_radius_world > 0.0 and is_finite(startup_mesh_radius_world) and startup_mesh_focus_world.is_finite()
+		if bounded_startup:
+			# Keep all authoritative data resident so the complete finite valley can
+			# become editable and receive the full deterministic paste, but do not
+			# ask this viewer to build visuals/collisions for the entire map at boot.
+			var data_viewer: Node3D = ClassDB.instantiate("VoxelViewer")
+			data_viewer.position = _world_size() * 0.5
+			data_viewer.view_distance = 64.0
+			data_viewer.requires_visuals = false
+			data_viewer.requires_collisions = false
+			add_child(data_viewer)
+
+			# Visual startup demand stays local to the initial cottage/play area.
+			var visual_viewer: Node3D = ClassDB.instantiate("VoxelViewer")
+			visual_viewer.position = startup_mesh_focus_world
+			# Readiness uses a smaller box than the viewer so mesh-block rounding
+			# cannot leave an edge block required-but-never-requested. One native
+			# mesh block is 4 world metres on the fine M1 grid.
+			visual_viewer.view_distance = minf(64.0, startup_mesh_radius_world + float(terrain.mesh_block_size) * voxel_scale)
+			# Startup terrain occupies only the lower half of the valley. Avoid
+			# cold-building empty upper mesh layers; restore full vertical range
+			# after readiness.
+			visual_viewer.view_distance_vertical_ratio = 0.75
+			_startup_visual_viewer = visual_viewer
+			add_child(visual_viewer)
+		else:
+			var viewer: Node3D = ClassDB.instantiate("VoxelViewer")
+			viewer.position = _world_size() * 0.5
+			viewer.view_distance = 64.0
+			add_child(viewer)
 	voxels = generator_script.generate()
 	var full_area := AABB(Vector3.ZERO, Vector3(patch_size))
+	var mesh_area := initial_mesh_area()
 	# The expanded 512-cell valley has 78% more native data than the previous
 	# 384-cell map. Keep a bounded cold-start allowance on slower devices, not
 	# just in test_mode; M0 and the previous map retain their original limits.
@@ -130,14 +161,40 @@ func _ready() -> void:
 		_error = "Native terrain area did not become editable within %d ms" % initialization_budget_ms
 		return
 	tool.paste(Vector3i.ZERO, voxels, 1)
-	while not terrain.is_area_meshed(full_area) and Time.get_ticks_msec() < load_deadline:
+	while not terrain.is_area_meshed(mesh_area) and Time.get_ticks_msec() < load_deadline:
 		await get_tree().process_frame
-	if not terrain.is_area_meshed(full_area):
-		_error = "Native terrain area did not mesh within %d ms" % initialization_budget_ms
+	if not terrain.is_area_meshed(mesh_area):
+		_error = "Native startup terrain area did not mesh within %d ms" % initialization_budget_ms
 		return
 	_initial_mesh_ready = true
 	_backend_ready = true
 	ready_changed.emit(true)
+	if _startup_visual_viewer != null:
+		call_deferred("_expand_startup_visual_viewer")
+
+func _expand_startup_visual_viewer() -> void:
+	if _startup_visual_viewer == null or not is_instance_valid(_startup_visual_viewer):
+		return
+	_startup_visual_viewer.view_distance_vertical_ratio = 1.0
+	_startup_visual_viewer.view_distance = 64.0
+
+static func startup_mesh_area(size: Vector3i, scale: float, focus_world: Vector3, radius_world: float, height_world: float = 0.0) -> AABB:
+	var full_area := AABB(Vector3.ZERO, Vector3(size))
+	if scale <= 0.0 or not is_finite(scale) or radius_world <= 0.0 or not is_finite(radius_world) or not focus_world.is_finite():
+		return full_area
+	var focus_cell := focus_world / scale
+	var radius_cells := radius_world / scale
+	var min_x := clampi(floori(focus_cell.x - radius_cells), 0, maxi(0, size.x - 1))
+	var min_z := clampi(floori(focus_cell.z - radius_cells), 0, maxi(0, size.z - 1))
+	var max_x := clampi(ceili(focus_cell.x + radius_cells), min_x + 1, size.x)
+	var max_z := clampi(ceili(focus_cell.z + radius_cells), min_z + 1, size.z)
+	var max_y := size.y
+	if height_world > 0.0 and is_finite(height_world):
+		max_y = clampi(ceili(height_world / scale), 1, size.y)
+	return AABB(Vector3(min_x, 0, min_z), Vector3(max_x - min_x, max_y, max_z - min_z))
+
+func initial_mesh_area() -> AABB:
+	return startup_mesh_area(patch_size, voxel_scale, startup_mesh_focus_world, startup_mesh_radius_world, startup_mesh_height_world)
 
 func is_ready() -> bool:
 	return _backend_ready

@@ -41,6 +41,7 @@ func _run() -> void:
 		_finish()
 		return
 	scene.set_process(false)
+	if scene.garden_visual: scene.garden_visual.set_wind_enabled(false)
 	scene._set_view_context("building")
 	scene._update_presentation()
 	scene.hud.visible = false
@@ -99,10 +100,11 @@ func _run() -> void:
 	var record: Dictionary = scene.building_world.get_document()
 	scene._update_presentation()
 	var repeated := await _capture("04-repeat-stability")
-	# The Mobile renderer may flip one or two antialiased boundary pixels between
-	# otherwise identical frames (sub-quantization float noise; 8-bit captures are
-	# byte-identical). Use the same raster tolerance as the repair-render gate above.
-	check(_changed_pixel_count(before, repeated) <= 4, "unchanged recipe renders identically within raster tolerance")
+	# The camera excursion above can stream different background terrain blocks on
+	# the software Mobile renderer. Keep this determinism guard scoped to the
+	# cottage foreground so unrelated terrain streaming cannot fail a house-detail test.
+	var cottage_region := Rect2i(300, 240, 680, 420)
+	check(_changed_pixel_count(before.get_region(cottage_region), repeated.get_region(cottage_region)) <= 4, "unchanged cottage foreground renders identically within raster tolerance")
 	check(scene.building_world.get_document() == record, "capture and presentation preserve authority")
 	check(scene.building_world.resize(id, Vector3(23, 8, 12)), "edited cottage fixture resizes")
 	scene._update_presentation()

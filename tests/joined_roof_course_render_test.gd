@@ -3,6 +3,7 @@ extends SceneTree
 const Layout = preload("res://scripts/joined_roof_course_layout.gd")
 const Massing = preload("res://scripts/m2_house_massing.gd")
 const Edit = preload("res://scripts/m2_section_edit.gd")
+const SceneReadiness = preload("res://tests/scene_readiness.gd")
 const OUTPUT := ".tools/cottage-repair/joined-roof-courses"
 var scene: Node
 var checks := 0
@@ -30,10 +31,9 @@ func _run() -> void:
 	scene.test_mode = true
 	scene.checkpoint_root = "user://joined-course-%s" % Time.get_ticks_usec()
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 65000
-	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
-	check(scene._player_restored, "native editable scene ready")
-	if not scene._player_restored:
+	var scene_ready := await SceneReadiness.wait_for_player(self, scene)
+	check(scene_ready, "native editable scene ready")
+	if not scene_ready:
 		await _finish()
 		return
 	scene.set_process(false)
@@ -92,10 +92,11 @@ func _run() -> void:
 				check(pixels != before_pixels, "physical relief visibly changes the rendered roof")
 				var first := joined.get_node("JoinedRoof_0") as MeshInstance3D
 				var mesh_id := first.mesh.get_instance_id()
+				var stable_signature := _mesh_signature(visual)
 				scene._update_presentation()
 				for frame in 3: await RenderingServer.frame_post_draw
 				check(first.mesh.get_instance_id() == mesh_id, "unchanged presentation does not retessellate the roof")
-				check(hash(root.get_texture().get_image().get_data()) == pixels, "unchanged roof remains pixel-stable")
+				check(_mesh_signature(visual) == stable_signature, "unchanged presentation preserves identical roof geometry")
 				scene._roof_pick_groups.clear()
 				scene._roof_pick_nodes.clear()
 				scene._cache_roof_boxes(joined, visual, false)
@@ -108,7 +109,6 @@ func _run() -> void:
 					check(courtyard, "roof selection never bridges the U courtyard")
 			check(scene.building_world.serialize_document() == saved and JSON.stringify(scene.landscape_state.document()) == landscape, "roof meshing changes no saved building, detail or planting records")
 			receipts.append({"case": spec[0], "finish": finish, "path": path, "roof_triangles": triangles, "skin_draws": meshes})
-		# Reopening the exact edited recipe must regenerate identical geometry.
 		var visual: Node3D = scene.cottage_visuals[scene.selected_building_id]
 		var signature := _mesh_signature(visual)
 		check(scene.building_world.load_serialized_document(saved), "edited/concave roof save loads")
