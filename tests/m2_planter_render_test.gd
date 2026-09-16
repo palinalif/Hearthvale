@@ -72,9 +72,11 @@ func _run() -> void:
 	_frame(Vector3(22.125, 8.4, 25), 1.6, 0.92, 4.5)
 	await _capture("family-reverse")
 	# Catalogue images come from the same runtime factory, not illustrations.
+	# The outdoor category is intentionally broad, so on the software CI renderer
+	# these planter entries can sit late in the real thumbnail queue.
 	_clean(false)
 	scene._open_build_browser("outdoor", true)
-	deadline = Time.get_ticks_msec() + 15000
+	deadline = Time.get_ticks_msec() + 60000
 	while Time.get_ticks_msec() < deadline:
 		var complete := true
 		for style: String in Planters.STYLE_IDS:
