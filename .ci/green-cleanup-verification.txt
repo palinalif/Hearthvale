@@ -1,1 +1,1 @@
-Verification trigger for final GREEN fixes on ce992852900b22e5c1bf69d9b2649f1cd289a6a2.
+Verification trigger for roof/Home Details and camera-catalogue cleanup on db27400e1ee32f351a05c3c6de87e22b7a6df92b.
