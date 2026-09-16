@@ -13,14 +13,15 @@ var backend: Node
 
 func _initialize() -> void:
 	var focus_world := Vector3(24.0, 8.0, 22.0)
-	var startup_area: AABB = Backend.startup_mesh_area(Generator.PATCH_SIZE, Generator.VOXEL_SCALE, focus_world, 20.0)
+	var startup_radius_world := 16.0
+	var startup_area: AABB = Backend.startup_mesh_area(Generator.PATCH_SIZE, Generator.VOXEL_SCALE, focus_world, startup_radius_world)
 	var full_area := AABB(Vector3.ZERO, Vector3(Generator.PATCH_SIZE))
 	var focus_cell := focus_world / Generator.VOXEL_SCALE
 	_check(startup_area != full_area, "large valley startup mesh is bounded")
 	_check(startup_area.has_point(focus_cell), "startup mesh contains initial play focus")
 	_check(startup_area.position.x >= 0.0 and startup_area.position.z >= 0.0, "startup mesh starts inside native bounds")
 	_check(startup_area.end.x <= Generator.PATCH_SIZE.x and startup_area.end.z <= Generator.PATCH_SIZE.z, "startup mesh ends inside native bounds")
-	_check(startup_area.size.x <= 320.0 and startup_area.size.z <= 320.0, "startup mesh stays within forty world units")
+	_check(startup_area.size.x <= 256.0 and startup_area.size.z <= 256.0, "startup mesh stays within thirty-two world units")
 	_check(startup_area.position.y == 0.0 and startup_area.size.y == Generator.PATCH_SIZE.y, "startup mesh keeps full vertical authority")
 
 	backend = Backend.new()
@@ -31,7 +32,7 @@ func _initialize() -> void:
 	backend.checkpoint_root = "user://m1-scaled-backend-%d" % Time.get_ticks_usec()
 	backend.require_building_document = true
 	backend.startup_mesh_focus_world = focus_world
-	backend.startup_mesh_radius_world = 20.0
+	backend.startup_mesh_radius_world = startup_radius_world
 	root.add_child(backend)
 	var deadline := Time.get_ticks_msec() + 60000
 	while not backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame
@@ -45,7 +46,11 @@ func _initialize() -> void:
 	_check(backend.terrain.bounds.size == Vector3(Generator.PATCH_SIZE), "native bounds use index dimensions")
 	_check(backend.terrain.scale.is_equal_approx(Vector3.ONE * Generator.VOXEL_SCALE), "native terrain scales geometry uniformly")
 	var viewer_nodes := backend.get_children().filter(func(child: Node) -> bool: return child.get_class() == "VoxelViewer")
-	_check(viewer_nodes.size() == 1 and is_equal_approx(float(viewer_nodes[0].get("view_distance")), 64.0), "voxel viewer distance stays in world units")
+	_check(viewer_nodes.size() == 1, "scaled backend creates one voxel viewer")
+	if viewer_nodes.size() == 1:
+		var viewer := viewer_nodes[0] as Node3D
+		_check(viewer.position.is_equal_approx(focus_world), "startup voxel viewer begins at the bounded play focus")
+		_check(is_equal_approx(float(viewer.get("view_distance")), startup_radius_world), "startup voxel viewer only requests the bounded play radius")
 	_check(backend.voxel_at(Generator.PATCH_SIZE - Vector3i.ONE) >= 0 and backend.voxel_at(Generator.PATCH_SIZE) == 0, "index bounds are clamped")
 
 	var plane: Dictionary = backend.sample_surface_plane(Vector3(20.0, 8.0, 18.0), Vector3.UP, 3.0)
