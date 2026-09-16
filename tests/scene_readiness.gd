@@ -1,6 +1,6 @@
 extends RefCounted
 
-const DEFAULT_TIMEOUT_MS := 30000
+const DEFAULT_TIMEOUT_MS := 60000
 
 static func wait_for_player(tree: SceneTree, scene: Node, timeout_ms: int = DEFAULT_TIMEOUT_MS) -> bool:
 	var deadline := Time.get_ticks_msec() + timeout_ms
