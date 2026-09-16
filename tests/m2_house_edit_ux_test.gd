@@ -1,6 +1,7 @@
 extends SceneTree
 const Pick = preload("res://scripts/m2_house_part_pick.gd")
 const Edit = preload("res://scripts/m2_section_edit.gd")
+const SceneReadiness = preload("res://tests/scene_readiness.gd")
 var scene: Node
 var checks := 0
 var failures := 0
@@ -22,10 +23,9 @@ func _run() -> void:
 	scene.test_mode = true
 	scene.checkpoint_root = "user://house-edit-ux-%d" % Time.get_ticks_usec()
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + (120000 if rendering else 65000)
-	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
-	check(scene._player_restored, "house editing scene ready")
-	if not scene._player_restored: await _finish(); return
+	var scene_ready := await SceneReadiness.wait_for_player(self, scene)
+	check(scene_ready, "house editing scene ready")
+	if not scene_ready: await _finish(); return
 	scene.set_process(false)
 	scene._set_view_context("building")
 	check(scene._apply_house_shape_preset("u_shape"), "U house fixture built through edit API")
@@ -80,7 +80,6 @@ func _run() -> void:
 	check(scene.building_world.undo(), "section undo")
 	check(Edit.section(scene.building_world.get_building(id),upper_id) == original, "undo restores full original section")
 	if rendering:
-		# Pick an actual rendered roof: the cache reads real MultiMesh transforms.
 		scene._update_presentation(); scene._update_camera()
 		await _settle()
 		var roof_hit: Dictionary = {}
