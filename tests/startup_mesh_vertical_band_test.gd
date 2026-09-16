@@ -12,6 +12,8 @@ func _initialize() -> void:
 	backend.voxel_scale = Generator.VOXEL_SCALE
 	backend.startup_mesh_focus_world = Vector3(24.0, 8.0, 22.0)
 	backend.startup_mesh_radius_world = 20.0
+	# Startup readiness only needs the generated/interactive terrain band, not
+	# the unused upper half of the authoritative 32-metre world volume.
 	backend.set("startup_mesh_height_world", 16.0)
 
 	var area: AABB = backend.initial_mesh_area()
