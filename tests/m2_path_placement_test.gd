@@ -141,6 +141,8 @@ func _initialize() -> void:
 	await _press(JOY_BUTTON_B)
 	_check(scene.path_placement_active and not scene.path_painting and scene.path_cells.is_empty(), "B cancels only the live uncommitted stroke")
 	_check(JSON.stringify(scene.landscape_state.document()) == cancel_before and scene._history_tags.size() == history_after_reload, "stroke cancellation changes neither authority nor history")
+	await _button_up(JOY_BUTTON_A)
+	_check(scene.path_placement_active and not scene.path_painting and scene.path_cells.is_empty() and JSON.stringify(scene.landscape_state.document()) == cancel_before, "A release after stroke cancellation stays idle")
 	await _press(JOY_BUTTON_B)
 	_check(not scene.path_placement_active and JSON.stringify(scene.landscape_state.document()) == cancel_before, "B while idle closes path painting without document drift")
 
