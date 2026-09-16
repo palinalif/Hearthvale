@@ -42,6 +42,19 @@ func _process(_delta: float) -> void:
 		push_error("TERRAIN_RUNTIME_TIMEOUT " + JSON.stringify(receipt))
 		get_tree().quit(2)
 
+func _voxel_engine_snapshot() -> Dictionary:
+	if not Engine.has_singleton("VoxelEngine"):
+		return {"available": false}
+	var engine: Variant = Engine.get_singleton("VoxelEngine")
+	if engine == null:
+		return {"available": false}
+	return {
+		"available": true,
+		"thread_count": int(engine.get_thread_count()) if engine.has_method("get_thread_count") else -1,
+		"threaded_graphics": bool(engine.get_threaded_graphics_resource_building_enabled()) if engine.has_method("get_threaded_graphics_resource_building_enabled") else false,
+		"stats": engine.get_stats() if engine.has_method("get_stats") else {},
+	}
+
 func _snapshot(backend: Variant, ok: bool) -> Dictionary:
 	var error := ""
 	var terrain_statistics: Dictionary = {}
@@ -74,11 +87,9 @@ func _snapshot(backend: Variant, ok: bool) -> Dictionary:
 		"error": error,
 		"renderer": RenderingServer.get_current_rendering_method(),
 		"display": DisplayServer.get_name(),
-		"startup_mesh_area": {
-			"position": str(startup_area.position),
-			"size": str(startup_area.size),
-		},
+		"startup_mesh_area": {"position": str(startup_area.position), "size": str(startup_area.size)},
 		"terrain_statistics": terrain_statistics,
+		"voxel_engine": _voxel_engine_snapshot(),
 		"readback": readback,
 		"diagnostic_nudge": _nudge_info,
 		"viewers": viewer_info,
@@ -140,17 +151,15 @@ func _sync_mesher_probe(terrain: Variant, source: Variant, sample_pos: Vector3i)
 				var source_pos := source_origin + Vector3i(x, y, z)
 				if source_pos.x < 0 or source_pos.y < 0 or source_pos.z < 0 or source_pos.x >= source_size.x or source_pos.y >= source_size.y or source_pos.z >= source_size.z:
 					continue
-				var value := int(source.get_voxel(source_pos.x, source_pos.y, source_pos.z, 0))
-				buffer.set_voxel(value, x, y, z, 0)
+				buffer.set_voxel(int(source.get_voxel(source_pos.x, source_pos.y, source_pos.z, 0)), x, y, z, 0)
 	var started_us := Time.get_ticks_usec()
 	var mesh: Variant = mesher.build_mesh(buffer, library.get_materials())
-	var elapsed_us := Time.get_ticks_usec() - started_us
 	return {
 		"available": true,
 		"mesh_returned": mesh != null,
 		"mesh_class": mesh.get_class() if mesh != null else "",
 		"surface_count": int(mesh.get_surface_count()) if mesh != null and mesh.has_method("get_surface_count") else 0,
-		"elapsed_us": elapsed_us,
+		"elapsed_us": Time.get_ticks_usec() - started_us,
 		"minimum_padding": min_padding,
 		"maximum_padding": max_padding,
 		"buffer_size": str(buffer_size),
@@ -173,8 +182,7 @@ func _run_diagnostic_nudge(backend: Variant) -> Dictionary:
 	var stats_before: Dictionary = terrain.get_statistics() if terrain.has_method("get_statistics") else {}
 	var editable_before := bool(tool.is_area_editable(area)) if tool.has_method("is_area_editable") else false
 	var sync_mesher := _sync_mesher_probe(terrain, source, sample_pos)
-	# Deliberately write the same value back through VoxelTool. This should be a
-	# semantic no-op, but it exercises the normal single-voxel post-edit path.
+	var engine_before := _voxel_engine_snapshot()
 	tool.set_voxel(sample_pos, terrain_value_before)
 	var terrain_value_after := int(tool.get_voxel(sample_pos))
 	var stats_after: Dictionary = terrain.get_statistics() if terrain.has_method("get_statistics") else {}
@@ -189,6 +197,7 @@ func _run_diagnostic_nudge(backend: Variant) -> Dictionary:
 		"matches_source_before": source_value == terrain_value_before,
 		"editable_before": editable_before,
 		"sync_mesher": sync_mesher,
+		"voxel_engine_before": engine_before,
 		"statistics_before": stats_before,
 		"statistics_immediately_after": stats_after,
 	}
@@ -207,7 +216,7 @@ func _backend_phase(backend: Variant, ready: bool) -> String:
 	var patch_size_value: Variant = backend.get("patch_size")
 	if not patch_size_value is Vector3i:
 		return "unknown"
-	var full_area: AABB = AABB(Vector3.ZERO, Vector3(patch_size_value))
+	var full_area := AABB(Vector3.ZERO, Vector3(patch_size_value))
 	var mesh_area: AABB = backend.initial_mesh_area() if backend.has_method("initial_mesh_area") else full_area
 	if terrain.has_method("get_voxel_tool"):
 		var tool: Variant = terrain.get_voxel_tool()
