@@ -39,9 +39,14 @@ if (-not $editor) { throw 'Pinned Godot console editor missing' }
 if ((& $editor --version | Out-String).Trim() -ne $lock.engine.version) { throw 'Unexpected Godot version' }
 
 function Invoke-Gate([string]$label, [string[]]$arguments) {
-    $output = & $editor @arguments 2>&1 | ForEach-Object { "$_" }
+    Write-Host "=== START $label ==="
+    $output = @(& $editor @arguments 2>&1 | ForEach-Object {
+        $line = "$_"
+        Write-Host $line
+        $line
+    })
     $exitCode = $LASTEXITCODE
-    $output | ForEach-Object { Write-Output $_ }
+    Write-Host "=== END $label exit=$exitCode ==="
     if ($exitCode -ne 0 -or ($output -match 'ERROR:|Parse Error:|FAIL:')) {
         throw "Gate failed: $label (exit=$exitCode)"
     }
