@@ -20,13 +20,32 @@ func _initialize() -> void:
 	var history_before: int = scene._history_tags.size()
 
 	await _press(JOY_BUTTON_DPAD_UP)
-	scene._build_catalogue_buttons[3].grab_focus()
-	await _press(JOY_BUTTON_A)
-	_check(scene._hamlet_catalogue_open and scene._hamlet_catalogue_buttons.size() == 9, "Hamlet details exposes final nine composition choices")
-	_check(scene._hamlet_catalogue_buttons[5].text.begins_with("Village bench") and scene._hamlet_catalogue_buttons[6].text.begins_with("Path lantern") and scene._hamlet_catalogue_buttons[7].text.begins_with("Wooden signpost") and scene._hamlet_catalogue_buttons[8].text.begins_with("Barrel planter"), "all four street-furniture choices are visually named")
-	_check(scene._hamlet_catalogue_panel.get_global_rect().end.y <= scene._prompt_bar.get_global_rect().position.y + 1.0, "final nine-choice Hamlet catalogue stays above the controller prompt bar")
+	_check(scene._browser_open and scene._build_browser.category == "homes", "D-pad Up opens the world build browser")
+	if not scene._browser_open:
+		_finish()
+		return
+	await _press(JOY_BUTTON_RIGHT_SHOULDER)
+	await _press(JOY_BUTTON_RIGHT_SHOULDER)
+	_check(scene._build_browser.category == "outdoor", "world build browser reaches Outdoor")
+	if scene._build_browser.category != "outdoor":
+		_finish()
+		return
+	var bench_card := _browser_card("bench")
+	var lantern_card := _browser_card("lantern")
+	var signpost_card := _browser_card("signpost")
+	var barrel_card := _browser_card("barrel_planter")
+	_check(bench_card != null and lantern_card != null and signpost_card != null and barrel_card != null, "Outdoor browser exposes all four street-furniture choices")
+	if bench_card == null:
+		_finish()
+		return
+	if lantern_card != null and signpost_card != null and barrel_card != null:
+		var bench_item: Dictionary = bench_card.get_meta("item", {})
+		var lantern_item: Dictionary = lantern_card.get_meta("item", {})
+		var signpost_item: Dictionary = signpost_card.get_meta("item", {})
+		var barrel_item: Dictionary = barrel_card.get_meta("item", {})
+		_check(str(bench_item.get("name", "")).begins_with("Village bench") and str(lantern_item.get("name", "")).begins_with("Path lantern") and str(signpost_item.get("name", "")).begins_with("Wooden signpost") and str(barrel_item.get("name", "")).begins_with("Barrel planter"), "all four street-furniture choices are visually named")
 
-	scene._hamlet_catalogue_buttons[5].grab_focus()
+	bench_card.grab_focus()
 	await _press(JOY_BUTTON_A)
 	_check(scene.furniture_placement_active and scene.furniture_style_id == "bench" and scene.view_context == "terrain", "bench selection enters world placement")
 	var random_yaw := float(scene.furniture_yaw_degrees)
@@ -41,7 +60,11 @@ func _initialize() -> void:
 	_check(is_equal_approx(scene.furniture_yaw_degrees, committed_yaw) and scene.landscape_state.document() == before, "precision mode gives furniture one-degree adjustment")
 	scene.precision_mode = false
 	await _press(JOY_BUTTON_A)
-	_check(not scene.furniture_placement_active and scene.landscape_state.composition.size() == 1, "A commits the bench")
+	var bench_committed := not scene.furniture_placement_active and scene.landscape_state.composition.size() == 1
+	_check(bench_committed, "A commits the bench")
+	if not bench_committed:
+		_finish()
+		return
 	var bench: Dictionary = scene.landscape_state.composition[0]
 	_check(bench.kind == "furniture" and bench.style_id == "bench" and is_equal_approx(float(bench.yaw_degrees), committed_yaw), "bench saves randomized precise orientation")
 	_check(scene._history_tags.size() == history_before + 1, "bench placement is one landscape undo transaction")
@@ -84,6 +107,15 @@ func _initialize() -> void:
 	_check(scene.furniture_placement_active and scene.landscape_state.composition.size() == 4, "invalid home-overlap furniture cannot commit")
 	scene._cancel_furniture_placement()
 	_finish()
+
+func _browser_card(item_id: String) -> Button:
+	if not scene._build_browser:
+		return null
+	for card in scene._build_browser.cards:
+		var item: Dictionary = card.get_meta("item", {})
+		if str(item.get("id", "")) == item_id:
+			return card
+	return null
 
 func _aim(point: Vector2) -> void:
 	scene.cursor = Vector3(point.x, 8.0, point.y)

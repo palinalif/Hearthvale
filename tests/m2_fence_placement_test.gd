@@ -20,11 +20,27 @@ func _initialize() -> void:
 	var history_before: int = scene._history_tags.size()
 
 	await _press(JOY_BUTTON_DPAD_UP)
-	scene._build_catalogue_buttons[3].grab_focus()
-	await _press(JOY_BUTTON_A)
-	_check(scene._hamlet_catalogue_open and scene._hamlet_catalogue_buttons.size() == 9, "Hamlet details includes gardens, fences, and street furniture")
-	_check(scene._hamlet_catalogue_buttons[3].text.begins_with("Rustic timber fence") and scene._hamlet_catalogue_buttons[4].text.begins_with("Rustic garden gate"), "both rustic fence choices are visually named")
-	scene._hamlet_catalogue_buttons[3].grab_focus()
+	_check(scene._browser_open and scene._build_browser.category == "homes", "D-pad Up opens the world build browser")
+	if not scene._browser_open:
+		_finish()
+		return
+	await _press(JOY_BUTTON_RIGHT_SHOULDER)
+	await _press(JOY_BUTTON_RIGHT_SHOULDER)
+	_check(scene._build_browser.category == "outdoor", "world build browser reaches Outdoor")
+	if scene._build_browser.category != "outdoor":
+		_finish()
+		return
+	var fence_card := _browser_card("rustic_fence")
+	var gate_card := _browser_card("rustic_gate")
+	_check(fence_card != null and gate_card != null, "Outdoor browser exposes fence and gate choices")
+	if fence_card == null:
+		_finish()
+		return
+	if gate_card != null:
+		var fence_item: Dictionary = fence_card.get_meta("item", {})
+		var gate_item: Dictionary = gate_card.get_meta("item", {})
+		_check(str(fence_item.get("name", "")).begins_with("Rustic timber fence") and str(gate_item.get("name", "")).begins_with("Rustic garden gate"), "both rustic fence choices are visually named")
+	fence_card.grab_focus()
 	await _press(JOY_BUTTON_A)
 	_check(scene.fence_placement_active and scene.fence_style_id == "rustic_fence", "fence selection enters world placement")
 	_aim(Vector2(36.0, 36.0))
@@ -32,7 +48,11 @@ func _initialize() -> void:
 	scene._rotate_fence(1)
 	_check(scene.fence_yaw_quarters == 1 and scene.landscape_state.document() == before, "fence quarter-turn is preview-only")
 	await _press(JOY_BUTTON_A)
-	_check(not scene.fence_placement_active and scene.landscape_state.composition.size() == 1, "A commits rustic fence")
+	var fence_committed := not scene.fence_placement_active and scene.landscape_state.composition.size() == 1
+	_check(fence_committed, "A commits rustic fence")
+	if not fence_committed:
+		_finish()
+		return
 	var fence: Dictionary = scene.landscape_state.composition[0]
 	_check(fence.kind == "fence" and fence.style_id == "rustic_fence" and int(fence.yaw_quarters) == 1, "fence saves style and orientation")
 	_check(scene._history_tags.size() == history_before + 1, "fence placement is one undo transaction")
@@ -70,6 +90,15 @@ func _initialize() -> void:
 	_check(scene.fence_placement_active and scene.landscape_state.composition.size() == 2, "invalid home-overlap fence cannot commit")
 	scene._cancel_fence_placement()
 	_finish()
+
+func _browser_card(item_id: String) -> Button:
+	if not scene._build_browser:
+		return null
+	for card in scene._build_browser.cards:
+		var item: Dictionary = card.get_meta("item", {})
+		if str(item.get("id", "")) == item_id:
+			return card
+	return null
 
 func _aim(point: Vector2) -> void:
 	scene.cursor = Vector3(point.x, 8.0, point.y)

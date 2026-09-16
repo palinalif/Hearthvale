@@ -30,12 +30,27 @@ func _initialize() -> void:
 	var history_before: int = scene._history_tags.size()
 
 	await _press(JOY_BUTTON_DPAD_UP)
-	_check(scene._build_catalogue_open and scene._build_catalogue_buttons.size() == 4, "build catalogue includes Hamlet details")
-	scene._build_catalogue_buttons[3].grab_focus()
-	await _press(JOY_BUTTON_A)
-	_check(scene._hamlet_catalogue_open and scene._hamlet_catalogue_buttons.size() == 9, "Hamlet details opens the complete composition catalogue")
-	_check(scene._hamlet_catalogue_buttons[0].text.begins_with("Cottage flower garden") and scene._hamlet_catalogue_buttons[2].text.begins_with("Herb garden"), "garden choices are visually named")
-	scene._hamlet_catalogue_buttons[0].grab_focus()
+	_check(scene._browser_open and scene._build_browser.category == "homes", "D-pad Up opens the world build browser")
+	if not scene._browser_open:
+		_finish()
+		return
+	await _press(JOY_BUTTON_RIGHT_SHOULDER)
+	await _press(JOY_BUTTON_RIGHT_SHOULDER)
+	_check(scene._build_browser.category == "outdoor", "world build browser reaches Outdoor")
+	if scene._build_browser.category != "outdoor":
+		_finish()
+		return
+	var flower_card := _browser_card("cottage_flowers")
+	var herb_card := _browser_card("herb_garden")
+	_check(flower_card != null and herb_card != null, "Outdoor browser exposes garden choices")
+	if flower_card == null:
+		_finish()
+		return
+	if herb_card != null:
+		var flower_item: Dictionary = flower_card.get_meta("item", {})
+		var herb_item: Dictionary = herb_card.get_meta("item", {})
+		_check(str(flower_item.get("name", "")).begins_with("Cottage flower garden") and str(herb_item.get("name", "")).begins_with("Herb garden"), "garden choices are visually named")
+	flower_card.grab_focus()
 	await _press(JOY_BUTTON_A)
 	_check(scene.garden_placement_active and scene.garden_style_id == "cottage_flowers" and scene.view_context == "terrain", "garden selection enters world placement")
 	_check(scene.landscape_state.document() == before, "starting garden placement is preview-only")
@@ -45,7 +60,11 @@ func _initialize() -> void:
 	scene._rotate_garden(1)
 	_check(scene.garden_yaw_quarters == 1 and scene.landscape_state.document() == before, "garden rotation changes preview without touching authority")
 	await _press(JOY_BUTTON_A)
-	_check(not scene.garden_placement_active and scene.landscape_state.composition.size() == 1, "A commits a garden")
+	var garden_committed := not scene.garden_placement_active and scene.landscape_state.composition.size() == 1
+	_check(garden_committed, "A commits a garden")
+	if not garden_committed:
+		_finish()
+		return
 	var garden: Dictionary = scene.landscape_state.composition[0]
 	_check(garden.kind == "garden" and garden.style_id == "cottage_flowers" and int(garden.yaw_quarters) == 1, "garden commit preserves style and orientation")
 	_check(scene._history_tags.size() == history_before + 1, "garden commit is one landscape history entry")
@@ -84,6 +103,15 @@ func _initialize() -> void:
 	_check(scene.garden_placement_active and scene.landscape_state.composition.size() == 1, "invalid garden cannot commit")
 	scene._cancel_garden_placement()
 	_finish()
+
+func _browser_card(item_id: String) -> Button:
+	if not scene._build_browser:
+		return null
+	for card in scene._build_browser.cards:
+		var item: Dictionary = card.get_meta("item", {})
+		if str(item.get("id", "")) == item_id:
+			return card
+	return null
 
 func _aim(point: Vector2) -> void:
 	scene.cursor = Vector3(point.x, 8.0, point.y)
