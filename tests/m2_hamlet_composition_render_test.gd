@@ -50,7 +50,7 @@ func _run() -> void:
 	_check(main_path > 0 and cottage_path > 0 and lodge_path > 0 and gable_path > 0, "hamlet lane and home branches receive saved path IDs")
 	for path_value in scene.landscape_state.paths:
 		var path: Dictionary = path_value
-		scene.landscape_state.clear_records_along_path(path.points, float(path.width))
+		scene.landscape_state.clear_records_along_path(path["points"], float(path["width"]))
 
 	# The existing authored river runs around x=40.75. A timber bridge from the
 	# low west bank to the far bank makes the road network terminate somewhere
