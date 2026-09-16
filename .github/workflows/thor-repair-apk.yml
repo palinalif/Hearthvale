@@ -42,7 +42,7 @@ jobs:
           "JAVA_HOME=$env:JAVA_HOME" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$keystore" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=$env:GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
           $godot = '.\.tools\godot-4.7.2\Godot_v4.7.2-stable_win64_console.exe'
           & $godot --headless --path . --editor --quit
@@ -136,9 +136,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Windows playtest export failed' }
           $folder = (Resolve-Path 'builds/Hearthvale-M2-PC').Path
           $exe = Join-Path $folder 'Hearthvale.exe'
-          $process = Start-Process -FilePath $exe -ArgumentList @('--headless','--quit-after','60') -WorkingDirectory $folder -WindowStyle Hidden -PassThru
-          if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Windows playtest smoke test timed out' }
-          if ($process.ExitCode -ne 0) { throw "Windows playtest smoke test failed with exit $($process.ExitCode)" }
+          $receipt = Join-Path $folder 'terrain-ready.json'
+          $stdout = Join-Path $folder 'terrain-ready.stdout.log'
+          $stderr = Join-Path $folder 'terrain-ready.stderr.log'
+          $probeArg = '--terrain-ready-receipt=' + $receipt
+          $process = Start-Process -FilePath $exe -ArgumentList @('--quit-after','120','--',$probeArg) -WorkingDirectory $folder -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          if (-not $process.WaitForExit(100000)) {
+            $process.Kill()
+            throw 'Windows terrain readiness probe timed out'
+          }
+          $runtimeLog = ((Get-Content $stdout -Raw -ErrorAction SilentlyContinue) + "`n" + (Get-Content $stderr -Raw -ErrorAction SilentlyContinue))
+          Write-Output $runtimeLog
+          if ($process.ExitCode -ne 0) { throw "Windows terrain readiness probe failed with exit $($process.ExitCode)" }
+          if (-not (Test-Path $receipt)) { throw 'Windows terrain readiness receipt was not created' }
+          $terrainRecord = Get-Content $receipt -Raw | ConvertFrom-Json
+          if (-not $terrainRecord.ok) { throw ('Windows terrain backend did not become ready: ' + ($terrainRecord | ConvertTo-Json -Compress)) }
+          if ($runtimeLog -notmatch 'TERRAIN_RUNTIME_READY') { throw 'Windows terrain readiness marker was not emitted' }
           $short = $env:GITHUB_SHA.Substring(0, 8)
           Move-Item -LiteralPath 'builds/Hearthvale-M2-PC.zip' -Destination "builds/Hearthvale-M2-PC-$short.zip"
           python ./tools/verify-pc-build.py
@@ -151,5 +164,7 @@ jobs:
           path: |
             builds/Hearthvale-M2-PC-*.zip
             builds/Hearthvale-M2-PC-*.verification.json
+            builds/Hearthvale-M2-PC/terrain-ready.json
+            builds/Hearthvale-M2-PC/terrain-ready.*.log
           if-no-files-found: error
           retention-days: 14
