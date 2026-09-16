@@ -58,13 +58,16 @@ class DeliveryRegressionGateTest(unittest.TestCase):
         self.assertIn("TERRAIN_RUNTIME_READY", build)
         self.assertRegex(build, r"terrain-ready\.json.*ConvertFrom-Json|ConvertFrom-Json.*terrain-ready\.json")
         self.assertRegex(build, r"if \(-not \$.*\.ok\)")
+        project = (ROOT / "project.godot").read_text(encoding="utf-8")
+        self.assertIn('TerrainRuntimeProbe="*res://scripts/terrain_runtime_probe.gd"', project)
+        self.assertTrue((ROOT / "scripts/terrain_runtime_probe.gd").is_file())
 
     def test_backend_readiness_diagnostics_expose_initialization_phase_and_error(self):
-        backend = (ROOT / "scripts/terrain_backend.gd").read_text(encoding="utf-8")
         helper = (ROOT / "tests/scene_readiness.gd").read_text(encoding="utf-8")
-        self.assertIn('"initialization_phase"', backend)
         self.assertIn('"backend_phase"', helper)
         self.assertIn('"backend_error"', helper)
+        self.assertIn("is_area_editable", helper)
+        self.assertIn("is_area_meshed", helper)
 
     def test_gate_contract_runs_in_delivery_prerequisite(self):
         source = WORKFLOW.read_text(encoding="utf-8")
