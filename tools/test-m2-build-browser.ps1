@@ -48,8 +48,8 @@ Write-Output "BUILD_BROWSER_ELAPSED_SECONDS=$([math]::Round($stopwatch.Elapsed.T
 if ($process.ExitCode -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'BUILD_BROWSER_RESULT' -or $log -notmatch '"ok"\s*:\s*true') {
     throw "Build catalogue $Phase phase failed"
 }
-if ($Phase -in @('all','capture') -and $log -notmatch '"captures"\s*:\s*5') {
-    throw 'Build catalogue capture phase requires all five actual Mobile captures'
+if ($Phase -in @('all','capture') -and $log -notmatch '"captures"\s*:\s*7') {
+    throw 'Build catalogue capture phase requires all seven current house/world browser captures'
 }
 if ($Phase -eq 'behavior' -and $log -notmatch '"phase"\s*:\s*"behavior"') {
     throw 'Build catalogue behavior phase receipt missing'
