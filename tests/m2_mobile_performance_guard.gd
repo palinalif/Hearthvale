@@ -1,6 +1,7 @@
 extends SceneTree
 
 const HouseMassing = preload("res://scripts/m2_house_massing.gd")
+const SceneReadiness = preload("res://tests/scene_readiness.gd")
 const BASELINE_PATH := "res://tests/performance/m2_mobile_performance_baseline.json"
 # GitHub's Windows runner uses Microsoft Basic Render Driver for this Mobile
 # benchmark. Keep the same scenarios/budgets, but render a smaller target and
@@ -61,11 +62,9 @@ func _run() -> void:
 	scene.checkpoint_root = "user://m2-mobile-perf-%s-%d" % [group, Time.get_ticks_usec()]
 	root.add_child(scene)
 
-	var deadline := Time.get_ticks_msec() + 120000
-	while not scene._player_restored and Time.get_ticks_msec() < deadline:
-		await process_frame
-	check(scene._player_restored, "performance scene ready")
-	if not scene._player_restored:
+	var scene_ready := await SceneReadiness.wait_for_player(self, scene)
+	check(scene_ready, "performance scene ready")
+	if not scene_ready:
 		await _finish()
 		return
 
