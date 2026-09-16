@@ -72,6 +72,36 @@ what changed / checks=N failures=M / what is next.
     was edited to work around it.
 - next: push `task/house-wall-details`, open the PR via REST, GET-verify 200.
 
+## Status: unit 3 — CI detail-grid contract fix (Trim_ family) + PR #21
+- PR opened: `https://github.com/palinalif/Hearthvale/pull/21` (head `task/house-wall-details`,
+  base `master` 6ae02f9) — POST 201, GET 200 authenticated and unauthenticated,
+  URL in `captures/pr.txt`.
+- CI truth (REST): the `e41d05b` run failed `cottage-and-apk / cottage-detail-grid`
+  with a REAL regression, not host flake:
+  `FAIL: cottage 0.25 resize false/WallTone0 declares only permitted detail tier`
+  (5 tones x 6 fixtures). The other 17-19 failed shards are the pre-existing
+  Windows-host family ("FAIL: native scene ready", `ERROR: Production main scene
+  reached ready`) — master's own latest completed run (34880007728) fails the same
+  17 job names.
+- cause: `tests/visual_grid_test.gd` (the detail-grid shard — the only place the
+  contract lives) requires every direct child of `Visual` to declare the fine
+  0.0625 tier via the `cottage_detail_grid` meta ONLY when its node name is in its
+  fixed `DETAIL_PREFIXES` / `DETAIL_NAMES` allow-list. The layer named its batches
+  `WallTone0..4`, which is not in that list.
+- fix (no test or helper edited): the batches are now `Trim_WallTone0..4` — the
+  established wall-plane fine-detail family. Changed only
+  `scripts/cottage_visual.gd` and this branch's own new `tests/house_wall_detail_test.gd`
+  (TONE_PREFIX). It also puts the coursing in the native-shell family that the
+  joined-massing tests hide, so it disappears with the shell it belongs to.
+- checks: `visual_grid_test` headless → exit 0 `ok:true` (was exit 1, 20+ FAIL
+  lines); `visual_grid_test --require-rendering` (Xvfb + Mobile) → exit 0 `ok:true`;
+  `house_wall_detail_test` 25/0 headless and 28/0 Mobile; `cottage_detail_render_test`
+  33/0 exit 0; the 6 AFTER render frames are byte-identical before and after the
+  rename (pure scene-graph naming, no visual change).
+- next: nothing outstanding for this task. Follow-up for whoever owns `tests/`:
+  add a dedicated `WallTone_` prefix to `visual_grid_test.gd`'s allow-list so the
+  layer can stop borrowing the `Trim_` family name.
+
 ## Status: unit 0 — branch created (crash-resume artifact)
 - what changed: branch `task/house-wall-details` created off `master` (6ae02f9);
   notes.md stub added. No source edits yet.

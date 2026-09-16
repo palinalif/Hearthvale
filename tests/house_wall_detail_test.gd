@@ -12,7 +12,10 @@ extends SceneTree
 const CottageVisualScript = preload("res://scripts/cottage_visual.gd")
 const Grid = preload("res://scripts/visual_grid.gd")
 
-const TONE_PREFIX := "WallTone"
+## The tone batches use the Trim_ wall-detail family name: the fine 0.0625 tier is
+## only permitted for the families listed in tests/visual_grid_test.gd, which this
+## task may not edit.
+const TONE_PREFIX := "Trim_WallTone"
 const MINIATURE := BuildingWorld.MINIATURE_SCALE
 const BRICK_TONE_MIN := 4
 const BRICK_TONE_MAX := 7
