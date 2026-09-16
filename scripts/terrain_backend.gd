@@ -114,9 +114,15 @@ func _ready() -> void:
 	add_child(terrain)
 	if ClassDB.class_exists("VoxelViewer"):
 		var viewer: Node3D = ClassDB.instantiate("VoxelViewer")
-		viewer.position = _world_size() * 0.5
-		# VoxelViewer view_distance is already measured in world-space units.
-		viewer.view_distance = 64.0
+		var viewer_focus := _world_size() * 0.5
+		var viewer_distance := 64.0
+		if startup_mesh_radius_world > 0.0 and is_finite(startup_mesh_radius_world) and startup_mesh_focus_world.is_finite():
+			viewer_focus = startup_mesh_focus_world
+			viewer_distance = minf(64.0, startup_mesh_radius_world)
+		viewer.position = viewer_focus
+		# VoxelViewer view_distance is measured in world-space units. Keep cold
+		# start demand aligned with the bounded startup readiness region.
+		viewer.view_distance = viewer_distance
 		add_child(viewer)
 	voxels = generator_script.generate()
 	var full_area := AABB(Vector3.ZERO, Vector3(patch_size))

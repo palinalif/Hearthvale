@@ -14,7 +14,8 @@ var backend: Node
 func _initialize() -> void:
 	var focus_world := Vector3(24.0, 8.0, 22.0)
 	var startup_radius_world := 16.0
-	var startup_area: AABB = Backend.startup_mesh_area(Generator.PATCH_SIZE, Generator.VOXEL_SCALE, focus_world, startup_radius_world)
+	var startup_height_world := 16.0
+	var startup_area: AABB = Backend.startup_mesh_area(Generator.PATCH_SIZE, Generator.VOXEL_SCALE, focus_world, startup_radius_world, startup_height_world)
 	var full_area := AABB(Vector3.ZERO, Vector3(Generator.PATCH_SIZE))
 	var focus_cell := focus_world / Generator.VOXEL_SCALE
 	_check(startup_area != full_area, "large valley startup mesh is bounded")
@@ -22,7 +23,7 @@ func _initialize() -> void:
 	_check(startup_area.position.x >= 0.0 and startup_area.position.z >= 0.0, "startup mesh starts inside native bounds")
 	_check(startup_area.end.x <= Generator.PATCH_SIZE.x and startup_area.end.z <= Generator.PATCH_SIZE.z, "startup mesh ends inside native bounds")
 	_check(startup_area.size.x <= 256.0 and startup_area.size.z <= 256.0, "startup mesh stays within thirty-two world units")
-	_check(startup_area.position.y == 0.0 and startup_area.size.y == Generator.PATCH_SIZE.y, "startup mesh keeps full vertical authority")
+	_check(startup_area.position.y == 0.0 and startup_area.size.y == 128.0, "startup readiness is bounded to sixteen world metres vertically")
 
 	backend = Backend.new()
 	backend.patch_size = Generator.PATCH_SIZE
@@ -33,6 +34,7 @@ func _initialize() -> void:
 	backend.require_building_document = true
 	backend.startup_mesh_focus_world = focus_world
 	backend.startup_mesh_radius_world = startup_radius_world
+	backend.startup_mesh_height_world = startup_height_world
 	root.add_child(backend)
 	var deadline := Time.get_ticks_msec() + 60000
 	while not backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame
