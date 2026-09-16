@@ -50,7 +50,7 @@ if ($Suite -eq 'setup') {
 $groups = @{
     brush = @('sculpt_brush_profile_test','smooth_neighbourhood_test')
     smoothing = @('sculpt_smoothing_test','sculpt_test')
-    backend = @('m1_scaled_backend_test')
+    backend = @('m1_scaled_backend_test','startup_mesh_vertical_band_test')
 }
 $selected = if ($Suite -eq 'all') { @('brush','smoothing','backend') } else { @($Suite) }
 foreach ($group in $selected) {
