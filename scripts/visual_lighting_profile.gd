@@ -1,8 +1,8 @@
 extends Resource
 class_name VisualLightingProfile
 
-## Opt-in look-development data. Applying a profile owns private Environment/Sky
-## resources and never changes camera framing, meshes, or authoritative world data.
+## Opt-in look-development data; application never changes camera framing,
+## shared source environments, meshes, or saved building/terrain records.
 @export var profile_id: StringName = &"baseline"
 @export var sun_rotation_degrees := Vector3(-52.0, -28.0, 0.0)
 @export var sun_colour := Color("#fff0d5")
@@ -37,6 +37,8 @@ func apply_to(sun: DirectionalLight3D, world: WorldEnvironment) -> bool:
 		sky_material.sky_horizon_color = sky_horizon
 		sky_material.ground_bottom_color = ground_bottom
 		sky_material.ground_horizon_color = ground_horizon
+		# Radiance and blend are separate controls. Retain a little constant
+		# fill so canopy interiors and shaded facades remain readable.
 		sky_material.sky_energy_multiplier = sky_energy
 		sky_material.ground_energy_multiplier = sky_energy
 		var sky := Sky.new()
@@ -50,8 +52,8 @@ func apply_to(sun: DirectionalLight3D, world: WorldEnvironment) -> bool:
 		environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 		environment.ambient_light_sky_contribution = 0.0
 		environment.reflected_light_source = Environment.REFLECTION_SOURCE_BG
-	# Keep the comparison focused on direct/ambient light. Exposure, tonemapper,
-	# background and shadow quality stay exactly as supplied by the gameplay scene.
+	# Isolate light/fill first. Exposure, tonemapper, background and shadow
+	# quality are retained; fog/glow are deliberately absent from this study.
 	environment.fog_enabled = false
 	environment.glow_enabled = false
 	world.environment = environment

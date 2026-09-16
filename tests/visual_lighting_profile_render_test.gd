@@ -2,11 +2,12 @@ extends SceneTree
 
 const Profile = preload("res://scripts/visual_lighting_profile.gd")
 const LOOKS := [
+	{"id": "baseline", "profile": "baseline"},
 	{"id": "sky_fill", "profile": "sky_fill"},
-	{"id": "sky_depth", "profile": "sky_depth"},
-	{"id": "sky_soft", "profile": "sky_soft"},
+	{"id": "warm_daylight", "profile": "warm_daylight"},
+	{"id": "warm_meadow", "profile": "warm_daylight", "grass": "#82935e"},
 ]
-const CAPTURE_DIR := ".tools/lighting-polish/captures"
+const CAPTURE_DIR := "reports/screenshots/m2-hamlet/lighting-profiles"
 var scene: Node
 var checks := 0
 var failures := 0
@@ -30,7 +31,7 @@ func _run() -> void:
 	root.size = Vector2i(1280, 720)
 	scene = preload("res://scenes/m1.tscn").instantiate()
 	scene.test_mode = true
-	scene.checkpoint_root = "user://lighting-polish-%s" % Time.get_ticks_usec()
+	scene.checkpoint_root = "user://lighting-study-%s" % Time.get_ticks_usec()
 	root.add_child(scene)
 	var deadline := Time.get_ticks_msec() + 65000
 	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
@@ -44,81 +45,81 @@ func _run() -> void:
 	scene.edit_pointer = Vector2(12, 12)
 	scene._update_detail_hover()
 	scene.hud.visible = false
+	# Fixed practical camera: no auto exposure or depth-of-field blur.
 	scene.camera.attributes = CameraAttributesPractical.new()
 	var sun: DirectionalLight3D
 	var world: WorldEnvironment
 	for child in scene.get_children():
 		if child is DirectionalLight3D: sun = child
 		if child is WorldEnvironment: world = child
-	check(sun != null and world != null and world.environment != null, "study uses gameplay sun and environment")
-	if not sun or not world or not world.environment:
+	var library: Object = scene.backend.terrain.mesher.library
+	var grass: StandardMaterial3D = library.get_model(2).get_material_override(0)
+	check(sun != null and world != null and grass != null, "study uses the gameplay light and native terrain material")
+	if not sun or not world or not grass:
 		await _finish()
 		return
-	check(DirAccess.make_dir_recursive_absolute(CAPTURE_DIR) == OK, "capture directory is writable")
+	check(grass.resource_path.is_empty(), "ground palette experiment is scene-private")
+	var grass_before := grass.albedo_color
 	var environment_before: Environment = world.environment
-	var source_environment_snapshot := [environment_before.sky, environment_before.ambient_light_source, environment_before.ambient_light_energy, environment_before.tonemap_exposure, environment_before.tonemap_mode, environment_before.background_mode, environment_before.background_color]
-	var sun_transform_before := sun.transform
+	var sun_before := sun.transform
 	var sun_colour_before := sun.light_color
 	var sun_energy_before := sun.light_energy
-	var original: String = scene.building_world.serialize_document()
-	var cases := [
-		{"id": "cottage-front", "yaw": 1.20, "distance": 9.0, "fixture": "base"},
-		{"id": "l-shape", "yaw": 1.15, "distance": 12.0, "fixture": "l_shape"},
-		{"id": "t-shape", "yaw": 0.88, "distance": 12.0, "fixture": "t_shape"},
-		{"id": "u-courtyard", "yaw": 1.00, "distance": 12.0, "fixture": "u_shape"},
-		{"id": "upper-floor", "yaw": 1.20, "distance": 11.0, "fixture": "upper"},
+	var environment_snapshot := [environment_before.sky, environment_before.ambient_light_source, environment_before.ambient_light_energy, environment_before.tonemap_exposure]
+	check(DirAccess.make_dir_recursive_absolute(CAPTURE_DIR) == OK, "capture directory is writable")
+	var cameras := [
+		{"id": "normal", "yaw": PI * 1.20, "distance": 16.0},
+		{"id": "close", "yaw": PI * 1.20, "distance": 7.0},
+		{"id": "reverse", "yaw": PI * 0.20, "distance": 16.0},
+		{"id": "edited", "yaw": PI * 1.20, "distance": 16.0},
 	]
-	for spec in cases:
-		check(scene.building_world.load_serialized_document(original), "restore clean lighting fixture")
-		scene._presentation_key = ""
-		scene._update_presentation()
-		var fixture := str(spec["fixture"])
-		if fixture in ["l_shape", "t_shape", "u_shape"]:
-			check(scene._apply_house_shape_preset(fixture), "%s comparison uses house-shape API" % fixture)
-		elif fixture == "upper":
+	for camera_spec in cameras:
+		if camera_spec["id"] == "edited":
 			scene._begin_next_storey()
-			check(scene.portion_valid and scene._commit_portion_placement(), "upper comparison uses add-floor API")
-		scene._presentation_key = ""
-		scene._update_presentation()
-		scene.garden_visual.set_wind_enabled(false)
-		scene.hud.visible = false
+			check(scene.portion_valid and scene._commit_portion_placement(), "edited view contains a real editable upper floor")
+			scene._presentation_key = ""
+			scene._update_presentation()
+			scene.garden_visual.set_wind_enabled(false)
+			scene.hud.visible = false
 		var buildings_before: String = scene.building_world.serialize_document()
 		var landscape_before: String = JSON.stringify(scene.landscape_state.document())
-		scene.camera_yaw = PI * float(spec["yaw"])
-		scene.camera_pitch = 0.43
-		scene.camera_distance = float(spec["distance"])
+		scene.camera_yaw = camera_spec["yaw"]
+		scene.camera_pitch = 0.40
+		scene.camera_distance = camera_spec["distance"]
 		scene._update_camera()
 		var camera_transform: Transform3D = scene.camera.global_transform
+		var pixel_hashes: Dictionary = {}
 		for look in LOOKS:
-			world.environment = environment_before
-			sun.transform = sun_transform_before
-			sun.light_color = sun_colour_before
-			sun.light_energy = sun_energy_before
-			var profile_id := str(look["profile"])
-			var profile := load("res://resources/visual_profiles/%s.tres" % profile_id) as Profile
-			check(profile != null, "%s profile loads" % str(look["id"]))
+			var profile := load("res://resources/visual_profiles/%s.tres" % look["profile"]) as Profile
+			check(profile != null, "profile loads")
 			if not profile: continue
-			check(profile.apply_to(sun, world), "apply %s" % str(look["id"]))
-			check(world.environment != environment_before and world.environment.sky != null, "candidate owns private sky environment")
-			check([environment_before.sky, environment_before.ambient_light_source, environment_before.ambient_light_energy, environment_before.tonemap_exposure, environment_before.tonemap_mode, environment_before.background_mode, environment_before.background_color] == source_environment_snapshot, "source environment remains untouched")
+			world.environment = environment_before
+			grass.albedo_color = Color(look["grass"]) if look.has("grass") else grass_before
+			check(profile.apply_to(sun, world), "apply " + str(look["id"]))
+			check(world.environment != environment_before, "private environment used")
+			check([environment_before.sky, environment_before.ambient_light_source, environment_before.ambient_light_energy, environment_before.tonemap_exposure] == environment_snapshot, "original environment is untouched")
+			check(world.environment.tonemap_exposure == environment_before.tonemap_exposure and world.environment.tonemap_mode == environment_before.tonemap_mode, "exposure and tonemapper are fixed")
 			check(scene.camera.global_transform.is_equal_approx(camera_transform), "camera framing is identical across looks")
-			# This is visual evidence, not a byte-perfect renderer determinism gate.
-			# Warm a bounded number of frames and capture; animated water/shadows are
-			# allowed to evolve naturally between otherwise matched comparisons.
-			for frame in 8: await RenderingServer.frame_post_draw
-			var image: Image = root.get_texture().get_image()
+			print("LOOK_CAPTURE_BEGIN %s/%s" % [camera_spec["id"], look["id"]])
+			var started := Time.get_ticks_msec()
+			var capture: Dictionary = await _settled_image()
+			var image: Image = capture["image"]
 			check(not image.is_empty() and image.get_size() == Vector2i(1280, 720), "actual Mobile image exists")
-			var path := "%s/%s-%s.png" % [CAPTURE_DIR, spec["id"], look["id"]]
+			var path := "%s/%s-%s.png" % [CAPTURE_DIR, camera_spec["id"], look["id"]]
 			check(image.save_png(path) == OK, "capture saved")
+			var pixel_hash := hash(image.get_data())
+			pixel_hashes[look["id"]] = pixel_hash
+			receipts.append({"view": camera_spec["id"], "look": look["id"], "path": path, "pixel_hash": pixel_hash, "sun": str(sun.rotation_degrees), "sky_energy": profile.sky_energy, "sky_contribution": profile.sky_contribution if profile.use_sky_fill else 0.0, "grass": grass.albedo_color.to_html(), "exposure": world.environment.tonemap_exposure, "settled_frames": capture["frames"], "capture_ms": Time.get_ticks_msec() - started})
 			captures += 1
-			receipts.append({"view": spec["id"], "look": look["id"], "path": path, "sun": str(sun.rotation_degrees), "sun_energy": sun.light_energy, "ambient_energy": world.environment.ambient_light_energy, "ambient_source": world.environment.ambient_light_source, "sky_contribution": world.environment.ambient_light_sky_contribution, "exposure": world.environment.tonemap_exposure})
+			print("LOOK_CAPTURE_SAVED %s frames=%d" % [path, capture["frames"]])
 			check(scene.building_world.serialize_document() == buildings_before, "look does not change building records")
-			check(JSON.stringify(scene.landscape_state.document()) == landscape_before, "look does not change landscape records")
+			check(JSON.stringify(scene.landscape_state.document()) == landscape_before, "look does not change planting/path records")
+		check(pixel_hashes.get("warm_daylight") != pixel_hashes.get("warm_meadow"), "ground colour experiment changes rendered pixels")
+	grass.albedo_color = grass_before
 	world.environment = environment_before
-	sun.transform = sun_transform_before
+	sun.transform = sun_before
 	sun.light_color = sun_colour_before
 	sun.light_energy = sun_energy_before
-	check(world.environment == environment_before and sun.transform == sun_transform_before and sun.light_color == sun_colour_before and is_equal_approx(sun.light_energy, sun_energy_before), "comparison restores exact source lighting")
+	check(grass.albedo_color == grass_before and world.environment == environment_before and sun.transform == sun_before, "comparison restores its source look")
 	var receipt := FileAccess.open(CAPTURE_DIR + "/manifest.json", FileAccess.WRITE)
 	check(receipt != null, "comparison manifest is writable")
 	if receipt:
@@ -126,12 +127,30 @@ func _run() -> void:
 		receipt.close()
 	await _finish()
 
+func _settled_image() -> Dictionary:
+	# Keep the original 24-frame maximum, but require actual convergence
+	# rather than burn every frame after a static view has already settled.
+	var previous := PackedByteArray()
+	var image := Image.new()
+	var stable := 0
+	for frame in 24:
+		await RenderingServer.frame_post_draw
+		image = root.get_texture().get_image()
+		var pixels := image.get_data()
+		stable = stable + 1 if not pixels.is_empty() and pixels == previous else 0
+		previous = pixels
+		if frame >= 5 and stable >= 2:
+			check(true, "three consecutive complete frames agree after warmup")
+			return {"image": image, "frames": frame + 1}
+	check(false, "static lighting view did not converge within 24 rendered frames")
+	return {"image": image, "frames": 24}
+
 func _finish() -> void:
 	if scene and is_instance_valid(scene):
 		scene._shutting_down = true
 		scene.queue_free()
 		await process_frame
 		await process_frame
-	check(captures == 15, "sky-fill control/depth/soft looks cover cottage L T U and upper-floor views")
-	print("LIGHTING_POLISH_RENDER " + JSON.stringify({"ok": failures == 0, "checks": checks, "failures": failures, "captures": captures, "capture_directory": CAPTURE_DIR, "renderer": RenderingServer.get_current_rendering_method()}))
+	check(captures == 16, "all four looks have normal/close/reverse/edited captures")
+	print("LIGHTING_PROFILE_RENDER " + JSON.stringify({"ok": failures == 0, "checks": checks, "failures": failures, "captures": captures, "capture_directory": CAPTURE_DIR, "renderer": RenderingServer.get_current_rendering_method()}))
 	quit(1 if failures else 0)
