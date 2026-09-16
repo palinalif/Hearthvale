@@ -51,6 +51,21 @@ class DeliveryRegressionGateTest(unittest.TestCase):
         self.assertIn("PLANTER_MOBILE_CAPTURE", block.group(1))
         self.assertNotIn("--promote", block.group(1), "CI validates canonical exports without private MCP staging")
 
+    def test_windows_candidate_proves_runtime_terrain_readiness(self):
+        workflow = (ROOT / ".github/workflows/thor-repair-apk.yml").read_text(encoding="utf-8")
+        build = job_block(workflow, "build-windows")
+        self.assertIn("terrain-ready.json", build)
+        self.assertIn("TERRAIN_RUNTIME_READY", build)
+        self.assertRegex(build, r"terrain-ready\.json.*ConvertFrom-Json|ConvertFrom-Json.*terrain-ready\.json")
+        self.assertRegex(build, r"if \(-not \$.*\.ok\)")
+
+    def test_backend_readiness_diagnostics_expose_initialization_phase_and_error(self):
+        backend = (ROOT / "scripts/terrain_backend.gd").read_text(encoding="utf-8")
+        helper = (ROOT / "tests/scene_readiness.gd").read_text(encoding="utf-8")
+        self.assertIn('"initialization_phase"', backend)
+        self.assertIn('"backend_phase"', helper)
+        self.assertIn('"backend_error"', helper)
+
     def test_gate_contract_runs_in_delivery_prerequisite(self):
         source = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("tests/ci_delivery_regression_gate_test.py", job_block(source, "delivery-contract"))
