@@ -1,0 +1,21 @@
+name: Focused startup viewer RED
+
+on:
+  push:
+    branches:
+      - task/test-maintenance-browser-watchdog
+
+permissions:
+  contents: read
+
+jobs:
+  red:
+    runs-on: windows-2022
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Run backend regression suite
+        shell: pwsh
+        run: ./tools/test-sculpt-feedback.ps1 -Suite 'backend'
