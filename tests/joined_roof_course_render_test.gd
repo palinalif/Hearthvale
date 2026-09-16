@@ -92,10 +92,11 @@ func _run() -> void:
 				check(pixels != before_pixels, "physical relief visibly changes the rendered roof")
 				var first := joined.get_node("JoinedRoof_0") as MeshInstance3D
 				var mesh_id := first.mesh.get_instance_id()
+				var stable_signature := _mesh_signature(visual)
 				scene._update_presentation()
 				for frame in 3: await RenderingServer.frame_post_draw
 				check(first.mesh.get_instance_id() == mesh_id, "unchanged presentation does not retessellate the roof")
-				check(hash(root.get_texture().get_image().get_data()) == pixels, "unchanged roof remains pixel-stable")
+				check(_mesh_signature(visual) == stable_signature, "unchanged presentation preserves identical roof geometry")
 				scene._roof_pick_groups.clear()
 				scene._roof_pick_nodes.clear()
 				scene._cache_roof_boxes(joined, visual, false)
