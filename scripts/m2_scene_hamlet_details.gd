@@ -667,7 +667,11 @@ func _refresh_landing_root(roots: Dictionary, building_id: String, building: Dic
 func _remove_landing_root(roots: Dictionary, building_id: String) -> void:
 	if not roots.has(building_id): return
 	var root: Node = roots[building_id]
-	if is_instance_valid(root): root.queue_free()
+	if is_instance_valid(root):
+		# Leave the tree immediately: the replacement root reuses this name, and a
+		# deferred free would make Godot rename the new node.
+		if root.get_parent() == self: remove_child(root)
+		root.queue_free()
 	roots.erase(building_id)
 
 func _refresh_controller_hud() -> void:
