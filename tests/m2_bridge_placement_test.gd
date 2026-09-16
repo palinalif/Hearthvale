@@ -15,7 +15,7 @@ func _initialize() -> void:
 	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
 	_check(scene._player_restored, "native bridge scene ready")
 	if not scene._player_restored:
-		_finish()
+		await _finish()
 		return
 	scene.set_process(false)
 
@@ -26,14 +26,35 @@ func _initialize() -> void:
 	var history_before: int = scene._history_tags.size()
 
 	await _press(JOY_BUTTON_DPAD_UP)
-	_check(scene._build_catalogue_open, "D-pad Up opens the build catalogue")
-	scene._build_catalogue_buttons[1].grab_focus()
+	var browser_ready: bool = scene._browser_open and scene._browser_world_mode and scene._build_browser.category == "homes"
+	_check(browser_ready, "D-pad Up opens the world build browser")
+	if not browser_ready:
+		await _finish()
+		return
+	await _press(JOY_BUTTON_RIGHT_SHOULDER)
+	for i in 4: await process_frame
+	var paths_ready: bool = scene._browser_open and scene._build_browser.category == "paths" and scene._build_browser.cards.size() == 5
+	_check(paths_ready, "RB selects Paths & bridges with three paths and two bridge styles")
+	if not paths_ready:
+		await _finish()
+		return
+	var timber_item: Dictionary = scene._build_browser.cards[3].get_meta("item", {})
+	var stone_item: Dictionary = scene._build_browser.cards[4].get_meta("item", {})
+	_check(str(timber_item.get("id", "")) == "timber" and str(timber_item.get("name", "")).begins_with("Timber footbridge") and str(stone_item.get("id", "")) == "stone" and str(stone_item.get("name", "")).begins_with("Stone crossing"), "bridge styles are visually named")
+	for i in 3: await _press(JOY_BUTTON_DPAD_RIGHT)
+	var focused := root.gui_get_focus_owner() as Button
+	var focused_item: Dictionary = focused.get_meta("item", {}) if focused else {}
+	var timber_focused: bool = str(focused_item.get("id", "")) == "timber"
+	_check(timber_focused, "D-pad focuses the timber bridge card")
+	if not timber_focused:
+		await _finish()
+		return
 	await _press(JOY_BUTTON_A)
-	_check(scene._roads_catalogue_open and scene._roads_catalogue_buttons.size() == 5, "Roads & Paths includes three paths and two bridge styles")
-	_check(scene._roads_catalogue_buttons[3].text.begins_with("Timber footbridge") and scene._roads_catalogue_buttons[4].text.begins_with("Stone crossing"), "bridge styles are visually named")
-	scene._roads_catalogue_buttons[3].grab_focus()
-	await _press(JOY_BUTTON_A)
-	_check(scene.bridge_placement_active and scene.bridge_style_id == "timber" and scene.view_context == "terrain", "bridge selection enters terrain composition placement")
+	var bridge_tool_ready: bool = scene.bridge_placement_active and scene.bridge_style_id == "timber" and scene.view_context == "terrain" and not scene._browser_open
+	_check(bridge_tool_ready, "bridge selection enters terrain composition placement")
+	if not bridge_tool_ready:
+		await _finish()
+		return
 	_check(scene.landscape_state.document() == before, "starting bridge placement is read-only")
 
 	_aim(Vector2(34.0, 40.0))
@@ -85,7 +106,7 @@ func _initialize() -> void:
 	_aim(Vector2(21.0, 10.0))
 	_check(not scene.bridge_placement_valid and scene.bridge_placement_reason.contains("too long"), "overlong bridge span is rejected")
 	scene._cancel_bridge_placement()
-	_finish()
+	await _finish()
 
 func _aim(point: Vector2) -> void:
 	scene.cursor = Vector3(point.x, 8.0, point.y)
