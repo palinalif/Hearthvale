@@ -1,0 +1,56 @@
+name: Apply last two CI fixes
+on:
+  push:
+    branches: [task/test-maintenance-browser-watchdog]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: task/test-maintenance-browser-watchdog
+          fetch-depth: 0
+      - name: Apply exact scoped fixes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          replacements = {
+              Path('tests/m2_planter_render_test.gd'): [(
+'''\tscene._open_build_browser("outdoor", true)\n\tdeadline = Time.get_ticks_msec() + 60000\n\twhile Time.get_ticks_msec() < deadline:\n\t\tvar complete := true\n\t\tfor style: String in Planters.STYLE_IDS:\n\t\t\tif not scene._catalogue_thumbnails.cache.has(style): complete = false\n\t\tif complete: break\n\t\tawait process_frame\n\tfor style: String in Planters.STYLE_IDS:\n\t\t_check(scene._catalogue_thumbnails.cache.has(style), "Real catalogue thumbnail " + style)\n\tawait _capture("catalogue")\n\tscene._close_build_browser()\n''',
+'''\tscene._open_build_browser("outdoor", true)\n\t# Keep this a production thumbnail test, but do not benchmark unrelated outdoor\n\t# entries while waiting for the three planter cards on the software renderer.\n\tvar planter_entries: Array[Dictionary] = []\n\tfor item: Dictionary in scene._browser_entries:\n\t\tif str(item.get("id", "")) in Planters.STYLE_IDS:\n\t\t\tplanter_entries.append(item)\n\tscene._catalogue_thumbnails.stop()\n\tscene._catalogue_thumbnails.request(planter_entries)\n\tdeadline = Time.get_ticks_msec() + 60000\n\twhile Time.get_ticks_msec() < deadline:\n\t\tvar complete := true\n\t\tfor style: String in Planters.STYLE_IDS:\n\t\t\tif not scene._catalogue_thumbnails.cache.has(style): complete = false\n\t\tif complete: break\n\t\tawait process_frame\n\tfor style: String in Planters.STYLE_IDS:\n\t\t_check(scene._catalogue_thumbnails.cache.has(style), "Real catalogue thumbnail " + style)\n\tif not failures.is_empty():\n\t\tscene._close_build_browser()\n\t\tawait _finish()\n\t\treturn\n\tawait _capture("catalogue")\n\tscene._close_build_browser()\n''')],
+              Path('tests/m1_recovery_dpad_test.gd'): [(
+'''\tvar expected_rows := ["Duplicate", "House shape", "Wall colour", "Roof colour", "Needs placement", "Close"]\n''',
+'''\tvar expected_rows := ["Duplicate", "House shape", "Wall colour", "Roof colour", "Roof design", "Roof decor", "Needs placement", "Close"]\n''')],
+          }
+
+          for path, pairs in replacements.items():
+              text = path.read_text()
+              for old, new in pairs:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f'{path}: expected exact block once, found {count}')
+                  text = text.replace(old, new)
+              path.write_text(text)
+      - name: Verify changed file scope
+        shell: bash
+        run: |
+          changed="$(git diff --name-only | sort)"
+          expected=$'tests/m1_recovery_dpad_test.gd\ntests/m2_planter_render_test.gd'
+          test "$changed" = "$expected" || { echo "Unexpected changed files:"; echo "$changed"; exit 1; }
+          git diff --check
+          git diff --stat
+          git diff
+      - name: Commit fixes and remove workflow
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tests/m1_recovery_dpad_test.gd tests/m2_planter_render_test.gd
+          git commit -m "test: align final cottage gates with current UI"
+          git rm .github/workflows/apply-last-two-ci-fixes.yml
+          git commit -m "ci: remove last-two patch workflow"
+          git push origin HEAD:task/test-maintenance-browser-watchdog
