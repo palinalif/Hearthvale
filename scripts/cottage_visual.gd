@@ -18,6 +18,48 @@ const STONE_COLOR := Color("#a48770")
 const QUOIN_COLOR := Color("#c09c78")
 const WINDOW_COLOR := Color("#344e50")
 const FLOWER_COLOR := Color("#d56d65")
+
+# --- Deterministic wall tone variation (presentation only) -------------------
+# Wall masonry variety is a pure function of the wall's own fine cell grid: no
+# RNG, no records, no new authority, so it is identical across regeneration,
+# save/load, undo/redo and replay. Pitch, joint and facing are whole fine cells
+# (Grid.COTTAGE_DETAIL_UNIT); cells are added, never stretched.
+const BRICK_STYLE := "riverside_cottage"
+const TUDOR_STYLE := "village_gable"
+const LODGE_STYLE := "woodland_lodge"
+const WOOD_MATERIAL := "timber"
+## Coherent red-brick/ochre family the cottage coursing is drawn from.
+const BRICK_TONES: Array[Color] = [
+	Color("#8d422c"), Color("#9c5340"), Color("#a96247"), Color("#b5734f"), Color("#c1865f"),
+]
+## Coursing pitch and mortar joint in fine cells: a 3x2 cell brick with a 1 cell
+## joint (18 bricks across the cottage front, 8 courses), so every emitted box
+## lands exactly on the fine grid. The joint reveals the wall material one cell
+## lower as the mortar bed, so the material record stays authoritative and the
+## shell keeps its authored tone.
+const BRICK_PITCH := Vector2(4.0, 3.0)
+const BRICK_JOINT := 1.0
+## Hand-painted plaster patch size for the timber-framed village gable walls.
+const TUDOR_PATCH := Vector2(16.0, 12.0)
+const TUDOR_TONES := 3
+## The gable strips above the eave are 0.22 deep, centred on the wall plane.
+const GABLE_STRIP_THICKNESS := 0.22
+## The facing stands one cell clear of the eave and plinth relief bands so no
+## two surfaces ever land on the same plane.
+const TONE_GAP := 1.0
+const TONE_DEPTH := 1.0
+const BRICK_TONE_SALT := 127
+const TUDOR_TONE_SALT := 331
+const TONE_NUDGE := 5
+
+var _tone_boxes: Array = []
+var _tone_colors: Array[Color] = []
+var _tone_pitch := Vector2.ZERO
+var _tone_joint := 0.0
+var _tone_bond := false
+var _tone_brick := false
+var _tone_salt := 0
+
 var applied_revision := -1
 var requested_revision := -1
 var building_id := ""
@@ -82,8 +124,142 @@ func apply_building(view: Dictionary, source_revision: int) -> bool:
 			child.position = child.position.snapped(_detail_unit if child.has_meta("cottage_detail_grid") else _unit)
 	return true
 
+func _arm_tone_layer(style_id: String, material_id: String, wall_color: Color) -> void:
+	# Arm the wall tone layer for this building. It is additive presentation: the
+	# wall surface keeps its authored material tone (which reads as the mortar bed
+	# at every joint) and the coursed facing is laid over it.
+	_tone_boxes.clear()
+	_tone_colors.clear()
+	_tone_pitch = Vector2.ZERO
+	_tone_joint = 0.0
+	_tone_bond = false
+	_tone_brick = false
+	_tone_salt = 0
+	if style_id == BRICK_STYLE and material_id != WOOD_MATERIAL:
+		_tone_colors = BRICK_TONES.duplicate()
+		_tone_pitch = BRICK_PITCH
+		_tone_joint = BRICK_JOINT
+		_tone_bond = true
+		_tone_brick = true
+		_tone_salt = BRICK_TONE_SALT
+	elif style_id == TUDOR_STYLE:
+		_tone_colors = _tudor_tones(wall_color)
+		_tone_pitch = TUDOR_PATCH
+		_tone_salt = TUDOR_TONE_SALT
+	for tone in _tone_colors.size(): _tone_boxes.append([])
+
+func _tudor_tones(wall_color: Color) -> Array[Color]:
+	# Slight plaster/plank mottling around whatever material the player chose,
+	# so panels read hand-painted instead of uniform.
+	var tones: Array[Color] = []
+	for step in TUDOR_TONES:
+		var offset := (float(step) - float(TUDOR_TONES - 1) * 0.5) * 0.045
+		tones.append(wall_color.lightened(offset) if offset > 0.0 else wall_color.darkened(-offset))
+	return tones
+
+static func _tone_hash(a: int, b: int, salt: int) -> int:
+	# Deterministic 32-bit mix of cell indices. Stable across runs, sessions and
+	# platforms: no RNG and no state are involved.
+	var h := ((a & 0xFFFF) * 73856093) ^ ((b & 0xFFFF) * 19349663) ^ ((salt & 0xFFFF) * 83492791)
+	h &= 0x7FFFFFFF
+	h = (h ^ (h >> 13)) & 0x7FFFFFFF
+	h = (h * 1274126177) & 0x7FFFFFFF
+	return (h ^ (h >> 16)) & 0x7FFFFFFF
+
+func _tone_index(course: int, column: int) -> int:
+	var count := _tone_colors.size()
+	if count <= 1: return 0
+	# A coarse patch bias plus strong per-cell jitter: the reference wall reads as
+	# per-brick tonal noise inside soft hand-painted patches, never salt-and-pepper
+	# randomness, and it is identical for a given cell every time.
+	var patch := _tone_hash(column / 4, course / 3, _tone_salt) % count
+	var jitter := _tone_hash(column, course, _tone_salt + 17) % TONE_NUDGE - 2
+	return posmod(patch + jitter, count)
+
+func _collect_tone_faces(basis: Basis, origin: Vector3, pieces: Array, plane: float, pitch_cells := Vector2.ZERO, joint_cells := Vector2(-1.0, -1.0)) -> void:
+	# Tile each surface piece on the fine grid. Row and column indices come from
+	# the surface's own cell grid, so a piece cut around an opening keeps the same
+	# tone as the wall around it and nothing depends on iteration order. A caller
+	# may override the pitch/joint to meet a surface whose bands are fixed.
+	if _tone_colors.is_empty(): return
+	var pitch_source := pitch_cells if pitch_cells != Vector2.ZERO else _tone_pitch
+	var joint_source := joint_cells if joint_cells.x >= 0.0 else Vector2(_tone_joint, _tone_joint)
+	var bond := _tone_bond and pitch_cells == Vector2.ZERO
+	var pitch := Vector2(absf(pitch_source.x * _detail_unit.x), absf(pitch_source.y * _detail_unit.y))
+	if pitch.x <= 0.0 or pitch.y <= 0.0: return
+	var joint_x := _detail_unit.x * joint_source.x
+	var joint_y := _detail_unit.y * joint_source.y
+	var depth := _detail_unit.z * TONE_DEPTH
+	var face := plane + _detail_unit.z * (TONE_GAP + TONE_DEPTH * 0.5)
+	for piece_value in pieces:
+		var piece: Dictionary = piece_value
+		var quantized := Grid.quantized_box(piece["center"], piece["size"], _unit)
+		var center: Vector3 = quantized["center"]
+		var size: Vector3 = quantized["size"]
+		var low_x := center.x - size.x * 0.5
+		var high_x := center.x + size.x * 0.5
+		var low_y := center.y - size.y * 0.5
+		var high_y := center.y + size.y * 0.5
+		for course in range(floori(low_y / pitch.y + 0.0001), ceili(high_y / pitch.y - 0.0001)):
+			var row_low := maxf(low_y, float(course) * pitch.y)
+			var row_high := minf(high_y, float(course + 1) * pitch.y - joint_y)
+			if row_high - row_low < _detail_unit.y * 0.5: continue
+			# Alternate courses step half a brick: readable running bond.
+			var shift := pitch.x * 0.5 if bond and posmod(course, 2) == 1 else 0.0
+			for column in range(floori((low_x - shift) / pitch.x + 0.0001), ceili((high_x - shift) / pitch.x - 0.0001)):
+				var brick_low := maxf(low_x, shift + float(column) * pitch.x)
+				var brick_high := minf(high_x, shift + float(column + 1) * pitch.x - joint_x)
+				if brick_high - brick_low < _detail_unit.x * 1.5: continue
+				var tone := _tone_index(course, column)
+				var local := Vector3((brick_low + brick_high) * 0.5, (row_low + row_high) * 0.5, face)
+				# Emit axis-aligned in the building frame: Grid.quantized_box snaps
+				# centre and size together, so the extents must share one frame or a
+				# rotated wall would be snapped along the wrong axis.
+				var extents := Vector3(brick_high - brick_low, row_high - row_low, depth)
+				(_tone_boxes[tone] as Array).append(_piece(origin + basis * local, _oriented_extents(basis, extents), Basis.IDENTITY))
+
+func _collect_gable_tone_faces(dimensions: Vector3) -> void:
+	# The gable strips above the eave are wall surface too; leaving them plain
+	# would read as a flat slab over the coursed walls.
+	if not _tone_brick: return
+	var rise := dimensions.y * _roof_rise_ratio
+	if rise <= 0.0: return
+	var gable_run := dimensions.z * 0.5 + 0.45
+	var row_height := _unit.y
+	for side_value in [-1.0, 1.0]:
+		var basis := _surface_basis("left" if side_value < 0.0 else "right")
+		var origin := basis * Vector3(0, 0, dimensions.x * 0.5)
+		var strips: Array = []
+		for step in maxi(1, ceili(rise / row_height)):
+			var level := dimensions.y + row_height * (float(step) + 0.5)
+			var ratio := clampf((level + row_height * 0.5 - dimensions.y) / rise, 0.0, 1.0)
+			var span := maxf(0.12, gable_run * 2.0 * (1.0 - ratio) - 0.12)
+			strips.append(_piece(Vector3(0, level, 0), Vector3(span, row_height, GABLE_STRIP_THICKNESS)))
+		# The gable bands are fixed by the strip rows, so the coursing meets them
+		# exactly instead of clipping a sliver into every step.
+		_collect_tone_faces(basis, origin, strips, GABLE_STRIP_THICKNESS * 0.5, Vector2(BRICK_PITCH.x, row_height / _detail_unit.y), Vector2(BRICK_JOINT, 0.0))
+
+static func _oriented_extents(basis: Basis, size: Vector3) -> Vector3:
+	# House-frame extents of a box carried by a wall basis. Wall orientations are
+	# right-angle turns, so this is an axis permutation, never a stretch.
+	var along_x := (basis * Vector3.RIGHT).abs()
+	var along_y := (basis * Vector3.UP).abs()
+	var along_z := (basis * Vector3.BACK).abs()
+	return Vector3(
+		along_x.x * size.x + along_y.x * size.y + along_z.x * size.z,
+		along_x.y * size.x + along_y.y * size.y + along_z.y * size.z,
+		along_x.z * size.x + along_y.z * size.y + along_z.z * size.z)
+
+func _flush_tone_faces() -> void:
+	# One batch per tone: the whole building stays at five extra draw calls.
+	for tone in _tone_boxes.size():
+		var boxes: Array = _tone_boxes[tone]
+		if boxes.is_empty(): continue
+		_add_detail_boxes("WallTone%d" % tone, boxes, _tone_colors[tone])
+
 func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 	var material_id := str(view.get("wall_material_id", view.get("material_id", "stone_plaster")))
+	var style_id := str(view.get("style_id", BRICK_STYLE))
 	var wall_color := WALL_COLOR
 	if material_id == "warm_plaster": wall_color = Color("#d5a982")
 	elif material_id == "timber": wall_color = Color("#9c684d")
@@ -91,6 +267,9 @@ func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 	elif material_id == "chalk_white": wall_color = Color("#e8e2d5")
 	elif material_id == "moss_stone": wall_color = Color("#a5b19b")
 	elif material_id == "rose_lime": wall_color = Color("#d7aaa0")
+	# Arm the wall tone layer before any wall surface is emitted so the coursed
+	# faces and the gable strips share one deterministic plan.
+	_arm_tone_layer(style_id, material_id, wall_color)
 	_add_box("Foundation", Vector3(dimensions.x + 0.5, 0.6, dimensions.z + 0.5), Vector3(0, 0.3, 0), STONE_COLOR)
 	var deleted := {}
 	for surface_value in view.get("surfaces", []):
@@ -117,10 +296,12 @@ func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 		var span := maxf(0.12, gable_run * 2.0 * (1.0 - ratio) - 0.12)
 		_add_box("GableLeft_%d" % step, Vector3(0.22, row_height, span), Vector3(-dimensions.x * 0.5, level, 0), wall_color)
 		_add_box("GableRight_%d" % step, Vector3(0.22, row_height, span), Vector3(dimensions.x * 0.5, level, 0), wall_color)
-	if str(view.get("style_id", "riverside_cottage")) != "woodland_lodge": _build_corner_quoin_batch(dimensions)
-	_build_crafted_shell(dimensions, wall_color, str(view.get("style_id", "riverside_cottage")))
+	_collect_gable_tone_faces(dimensions)
+	_flush_tone_faces()
+	if style_id != LODGE_STYLE: _build_corner_quoin_batch(dimensions)
+	_build_crafted_shell(dimensions, wall_color, style_id)
 	_build_gable_vent(dimensions, deleted)
-	_build_style_accents(dimensions, str(view.get("style_id", "riverside_cottage")))
+	_build_style_accents(dimensions, style_id)
 
 func _build_roof_tile_batches(dimensions: Vector3, _roof_angle: float) -> void:
 	var buckets: Array = [[], [], []]
@@ -473,6 +654,9 @@ func _build_wall(orientation: String, dimensions: Vector3, view: Dictionary, col
 		for shade in 2:
 			var log_face := _add_detail_boxes("LogCourses%s%d" % [orientation.capitalize(), shade], courses[shade], color.lightened(0.04 + shade * 0.07))
 			log_face.transform = Transform3D(basis, origin)
+	# Coursed masonry facing sits on the same wall plane, proud of the surface, so
+	# openings stay clear and the mortar bed behind reads at every joint.
+	_collect_tone_faces(basis, origin, pieces, 0.0)
 
 func _detail_size(detail: Dictionary, fallback: Vector2) -> Vector2:
 	var value = (detail.get("override", {}) as Dictionary).get("size", null)
