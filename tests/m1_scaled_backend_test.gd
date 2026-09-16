@@ -44,6 +44,8 @@ func _initialize() -> void:
 	_check(is_equal_approx(backend.voxel_scale, 0.125), "M1 uses eighth-unit editable voxels")
 	_check(backend.terrain.bounds.size == Vector3(Generator.PATCH_SIZE), "native bounds use index dimensions")
 	_check(backend.terrain.scale.is_equal_approx(Vector3.ONE * Generator.VOXEL_SCALE), "native terrain scales geometry uniformly")
+	var viewer_nodes := backend.get_children().filter(func(child: Node) -> bool: return child.get_class() == "VoxelViewer")
+	_check(viewer_nodes.size() == 1 and is_equal_approx(float(viewer_nodes[0].get("view_distance")), 64.0), "voxel viewer distance stays in world units")
 	_check(backend.voxel_at(Generator.PATCH_SIZE - Vector3i.ONE) >= 0 and backend.voxel_at(Generator.PATCH_SIZE) == 0, "index bounds are clamped")
 
 	var plane: Dictionary = backend.sample_surface_plane(Vector3(20.0, 8.0, 18.0), Vector3.UP, 3.0)

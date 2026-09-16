@@ -115,7 +115,8 @@ func _ready() -> void:
 	if ClassDB.class_exists("VoxelViewer"):
 		var viewer: Node3D = ClassDB.instantiate("VoxelViewer")
 		viewer.position = _world_size() * 0.5
-		viewer.view_distance = 64.0 / voxel_scale
+		# VoxelViewer view_distance is already measured in world-space units.
+		viewer.view_distance = 64.0
 		add_child(viewer)
 	voxels = generator_script.generate()
 	var full_area := AABB(Vector3.ZERO, Vector3(patch_size))
