@@ -1,0 +1,44 @@
+name: Apply voxel viewer distance fix
+
+on:
+  push:
+    branches:
+      - task/test-maintenance-browser-watchdog
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: true
+      - name: Apply focused fix and regression assertion
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/terrain_backend.gd')
+          s = p.read_text()
+          old = '\t\tviewer.view_distance = 64.0 / voxel_scale\n'
+          new = '\t\t# VoxelViewer view_distance is already measured in world-space units.\n\t\tviewer.view_distance = 64.0\n'
+          if old not in s:
+              raise SystemExit('expected viewer distance line not found')
+          p.write_text(s.replace(old, new, 1))
+
+          t = Path('tests/m1_scaled_backend_test.gd')
+          s = t.read_text()
+          anchor = '\t_check(backend.terrain.scale.is_equal_approx(Vector3.ONE * Generator.VOXEL_SCALE), "native terrain scales geometry uniformly")\n'
+          addition = anchor + '\tvar viewer_nodes := backend.get_children().filter(func(child: Node) -> bool: return child.get_class() == "VoxelViewer")\n\t_check(viewer_nodes.size() == 1 and is_equal_approx(float(viewer_nodes[0].get("view_distance")), 64.0), "voxel viewer distance stays in world units")\n'
+          if anchor not in s:
+              raise SystemExit('expected test anchor not found')
+          t.write_text(s.replace(anchor, addition, 1))
+          PY
+          rm .github/workflows/apply-viewer-distance-fix.yml
+          git config user.name 'Pali'
+          git config user.email '31247276+palinalif@users.noreply.github.com'
+          git add scripts/terrain_backend.gd tests/m1_scaled_backend_test.gd .github/workflows/apply-viewer-distance-fix.yml
+          git commit -m 'fix: keep voxel viewer distance in world units'
+          git push
