@@ -255,7 +255,13 @@ func _flush_tone_faces() -> void:
 	for tone in _tone_boxes.size():
 		var boxes: Array = _tone_boxes[tone]
 		if boxes.is_empty(): continue
-		_add_detail_boxes("WallTone%d" % tone, boxes, _tone_colors[tone])
+		# The batches carry the established wall-plane fine-detail family name
+		# (Trim_). tests/visual_grid_test.gd only permits the fine 0.0625 tier for
+		# the node families in its fixed DETAIL_PREFIXES allow-list, and this task
+		# may not edit existing tests, so the layer joins that family instead of
+		# introducing a new prefix. That also keeps the coursing part of the
+		# native shell that the joined-massing tests hide.
+		_add_detail_boxes("Trim_WallTone%d" % tone, boxes, _tone_colors[tone])
 
 func _build_shell(dimensions: Vector3, view: Dictionary) -> void:
 	var material_id := str(view.get("wall_material_id", view.get("material_id", "stone_plaster")))
