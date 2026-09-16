@@ -7,7 +7,7 @@ permissions:
 jobs:
   native-regressions:
     name: sculpt-${{ matrix.suite }}
-    runs-on: windows-2025
+    runs-on: windows-2022
     timeout-minutes: 8
     strategy:
       fail-fast: false

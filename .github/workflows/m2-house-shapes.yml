@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   house-shapes-mobile:
-    runs-on: windows-2025
+    runs-on: windows-2022
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

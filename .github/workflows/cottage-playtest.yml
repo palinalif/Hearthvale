@@ -16,7 +16,7 @@ permissions:
 jobs:
   cottage-shards:
     name: cottage-${{ matrix.shard }}
-    runs-on: windows-2025
+    runs-on: windows-2022
     timeout-minutes: 12
     strategy:
       fail-fast: false

@@ -10,7 +10,7 @@ permissions:
 jobs:
   terrain-native:
     name: terrain-${{ matrix.suite }}
-    runs-on: windows-2025
+    runs-on: windows-2022
     timeout-minutes: 8
     strategy:
       fail-fast: false
@@ -47,7 +47,7 @@ jobs:
 
   terrain-mobile:
     name: terrain-mobile
-    runs-on: windows-2025
+    runs-on: windows-2022
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
