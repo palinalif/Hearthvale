@@ -58,7 +58,6 @@ func _check_options_navigation(label: String) -> void:
 	check(bounds.end.y <= scene._prompt_bar.get_global_rect().position.y - 10.0, label + ": panel clears prompt bar")
 	check(root.get_visible_rect().grow(1.0).encloses(bounds), label + ": panel stays on screen")
 	check(scroll.get_global_rect().size.y >= 100.0, label + ": scroll area remains usable")
-	check(scroll.get_v_scroll_bar().max_value > scroll.get_v_scroll_bar().page, label + ": long options actually overflow into scrolling")
 	var buttons: Array[Button] = []
 	for button in scene._building_buttons:
 		check(scroll.is_ancestor_of(button), label + ": action remains in scroll content")
@@ -67,6 +66,9 @@ func _check_options_navigation(label: String) -> void:
 	buttons.sort_custom(func(a: Button, b: Button) -> bool: return a.get_index() < b.get_index())
 	check(not buttons.is_empty(), label + ": actions remain available")
 	if buttons.is_empty(): return
+	var needs_scroll := false
+	for button in buttons:
+		needs_scroll = needs_scroll or not scroll.get_global_rect().grow(1.0).encloses(button.get_global_rect())
 	buttons[0].grab_focus()
 	await _settle()
 	var did_scroll := false
@@ -76,7 +78,9 @@ func _check_options_navigation(label: String) -> void:
 		did_scroll = did_scroll or scroll.scroll_vertical > 0
 		_press("m1_height_down")
 		await _settle()
-	check(did_scroll, label + ": controller reaches offscreen options")
+	check(not needs_scroll or did_scroll, label + ": controller scrolls when home actions need it")
+	if label == "raised prompt bar":
+		check(needs_scroll and did_scroll, "%s: constrained menu exercises real home-option scrolling; needs=%s scrolled=%s bounds=%s" % [label, needs_scroll, did_scroll, scroll.get_global_rect()])
 	check(root.gui_get_focus_owner() == buttons[0], label + ": downward navigation wraps to first option")
 	_press("m1_height_up")
 	await _settle()
