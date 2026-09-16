@@ -1,9 +1,13 @@
 name: Apply startup mesh height fix
+
 on:
   push:
-    branches: [task/test-maintenance-browser-watchdog]
+    branches:
+      - task/test-maintenance-browser-watchdog
+
 permissions:
   contents: write
+
 jobs:
   patch:
     if: contains(github.event.head_commit.message, 'ci: apply startup mesh height fix')
@@ -13,9 +17,10 @@ jobs:
         with:
           persist-credentials: true
           fetch-depth: 1
-      - name: Apply exact startup mesh height patch
-        shell: python
+      - name: Apply startup mesh height patch
+        shell: bash
         run: |
+          python - <<'PY'
           from pathlib import Path
 
           backend = Path('scripts/terrain_backend.gd')
@@ -39,7 +44,8 @@ jobs:
           if text.count(old) != 1:
               raise SystemExit(f'expected one m1 scene match, got {text.count(old)}')
           scene.write_text(text.replace(old, new), encoding='utf-8')
-      - name: Commit patch and remove one-shot workflow
+          PY
+      - name: Commit patch
         shell: bash
         run: |
           git config user.name 'Pali'
