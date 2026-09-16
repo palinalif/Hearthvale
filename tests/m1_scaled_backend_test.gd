@@ -12,6 +12,17 @@ var failures := 0
 var backend: Node
 
 func _initialize() -> void:
+	var focus_world := Vector3(24.0, 8.0, 22.0)
+	var startup_area: AABB = Backend.startup_mesh_area(Generator.PATCH_SIZE, Generator.VOXEL_SCALE, focus_world, 20.0)
+	var full_area := AABB(Vector3.ZERO, Vector3(Generator.PATCH_SIZE))
+	var focus_cell := focus_world / Generator.VOXEL_SCALE
+	_check(startup_area != full_area, "large valley startup mesh is bounded")
+	_check(startup_area.has_point(focus_cell), "startup mesh contains initial play focus")
+	_check(startup_area.position.x >= 0.0 and startup_area.position.z >= 0.0, "startup mesh starts inside native bounds")
+	_check(startup_area.end.x <= Generator.PATCH_SIZE.x and startup_area.end.z <= Generator.PATCH_SIZE.z, "startup mesh ends inside native bounds")
+	_check(startup_area.size.x <= 320.0 and startup_area.size.z <= 320.0, "startup mesh stays within forty world units")
+	_check(startup_area.position.y == 0.0 and startup_area.size.y == Generator.PATCH_SIZE.y, "startup mesh keeps full vertical authority")
+
 	backend = Backend.new()
 	backend.patch_size = Generator.PATCH_SIZE
 	backend.voxel_scale = Generator.VOXEL_SCALE
@@ -19,6 +30,8 @@ func _initialize() -> void:
 	backend.generator_id = Generator.GENERATOR_ID
 	backend.checkpoint_root = "user://m1-scaled-backend-%d" % Time.get_ticks_usec()
 	backend.require_building_document = true
+	backend.startup_mesh_focus_world = focus_world
+	backend.startup_mesh_radius_world = 20.0
 	root.add_child(backend)
 	var deadline := Time.get_ticks_msec() + 60000
 	while not backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame
