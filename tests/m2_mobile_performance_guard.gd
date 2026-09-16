@@ -40,7 +40,7 @@ func _run() -> void:
 	var group := _scenario_group()
 	check(group in GROUPS, "known performance scenario group")
 	if not group in GROUPS:
-		await _finish()
+		_finish()
 		return
 	check(rendering, "performance guard requires explicit rendering mode")
 	if rendering:
@@ -53,7 +53,7 @@ func _run() -> void:
 	var baseline := _load_baseline()
 	check(not baseline.is_empty(), "performance baseline loads")
 	if baseline.is_empty():
-		await _finish()
+		_finish()
 		return
 
 	print("PERF_STAGE scene-load group=" + group)
@@ -65,7 +65,7 @@ func _run() -> void:
 	var scene_ready := await SceneReadiness.wait_for_player(self, scene)
 	check(scene_ready, "performance scene ready")
 	if not scene_ready:
-		await _finish()
+		_finish()
 		return
 
 	scene._set_view_context("building")
@@ -104,7 +104,7 @@ func _run() -> void:
 		scene._begin_portion_placement()
 		check(scene.portion_placement_active, "section placement starts for benchmark")
 		if not scene.portion_placement_active:
-			await _finish()
+			_finish()
 			return
 		_section_base = scene.portion_offset
 		await _wait_frames(8)
@@ -166,7 +166,7 @@ func _run() -> void:
 		receipt.store_string(JSON.stringify(result, "\t"))
 		receipt.close()
 	print("M2_PERFORMANCE_RESULT " + JSON.stringify(result))
-	await _finish()
+	_finish()
 
 func _camera_step(_index: int) -> void:
 	scene.camera_yaw += 0.012
@@ -232,8 +232,5 @@ func _load_baseline() -> Dictionary:
 func _finish() -> void:
 	if is_instance_valid(scene):
 		scene._shutting_down = true
-		scene.queue_free()
-		await process_frame
-		await process_frame
 	print("m2_mobile_performance_guard checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures else 0)
