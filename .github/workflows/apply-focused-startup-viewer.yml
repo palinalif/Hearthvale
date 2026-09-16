@@ -1,0 +1,63 @@
+name: Apply focused startup viewer
+
+on:
+  push:
+    branches:
+      - task/test-maintenance-browser-watchdog
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: true
+      - name: Apply focused startup viewer
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('scripts/terrain_backend.gd')
+          s = p.read_text()
+          old = '''\tif ClassDB.class_exists("VoxelViewer"):\n\t\tvar viewer: Node3D = ClassDB.instantiate("VoxelViewer")\n\t\tviewer.position = _world_size() * 0.5\n\t\t# VoxelViewer view_distance is already measured in world-space units.\n\t\tviewer.view_distance = 64.0\n\t\tadd_child(viewer)\n'''
+          new = '''\tif ClassDB.class_exists("VoxelViewer"):\n\t\tvar viewer: Node3D = ClassDB.instantiate("VoxelViewer")\n\t\tvar viewer_focus := _world_size() * 0.5\n\t\tvar viewer_distance := 64.0\n\t\tif startup_mesh_radius_world > 0.0 and is_finite(startup_mesh_radius_world) and startup_mesh_focus_world.is_finite():\n\t\t\tviewer_focus = startup_mesh_focus_world\n\t\t\tviewer_distance = minf(64.0, startup_mesh_radius_world)\n\t\tviewer.position = viewer_focus\n\t\t# VoxelViewer view_distance is measured in world-space units. Keep cold\n\t\t# start demand aligned with the bounded startup readiness region.\n\t\tviewer.view_distance = viewer_distance\n\t\tadd_child(viewer)\n'''
+          if old not in s:
+              raise SystemExit('terrain viewer block not found')
+          p.write_text(s.replace(old, new, 1))
+
+          p = Path('scripts/m1_scene.gd')
+          s = p.read_text()
+          old = 'backend.set("startup_mesh_radius_world", 20.0)'
+          new = 'backend.set("startup_mesh_radius_world", 16.0)'
+          if old not in s:
+              raise SystemExit('M1 startup radius line not found')
+          p.write_text(s.replace(old, new, 1))
+
+          p = Path('tests/m1_scaled_backend_test.gd')
+          s = p.read_text()
+          s = s.replace(
+              'var startup_radius_world := 16.0\n\tvar startup_area: AABB = Backend.startup_mesh_area(Generator.PATCH_SIZE, Generator.VOXEL_SCALE, focus_world, startup_radius_world)',
+              'var startup_radius_world := 16.0\n\tvar startup_height_world := 16.0\n\tvar startup_area: AABB = Backend.startup_mesh_area(Generator.PATCH_SIZE, Generator.VOXEL_SCALE, focus_world, startup_radius_world, startup_height_world)',
+              1,
+          )
+          s = s.replace(
+              '_check(startup_area.position.y == 0.0 and startup_area.size.y == Generator.PATCH_SIZE.y, "startup mesh keeps full vertical authority")',
+              '_check(startup_area.position.y == 0.0 and startup_area.size.y == 128.0, "startup readiness is bounded to sixteen world metres vertically")',
+              1,
+          )
+          anchor = '\tbackend.startup_mesh_radius_world = startup_radius_world\n'
+          if anchor not in s:
+              raise SystemExit('test radius assignment not found')
+          s = s.replace(anchor, anchor + '\tbackend.startup_mesh_height_world = startup_height_world\n', 1)
+          p.write_text(s)
+          PY
+          rm .github/workflows/apply-focused-startup-viewer.yml
+          git config user.name 'Pali'
+          git config user.email '31247276+palinalif@users.noreply.github.com'
+          git add scripts/terrain_backend.gd scripts/m1_scene.gd tests/m1_scaled_backend_test.gd .github/workflows/apply-focused-startup-viewer.yml
+          git commit -m 'fix: focus initial voxel streaming region'
+          git push
