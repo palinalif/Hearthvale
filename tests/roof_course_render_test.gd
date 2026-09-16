@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Courses = preload("res://scripts/roof_course_layout.gd")
+const SceneReadiness = preload("res://tests/scene_readiness.gd")
 const OUTPUT := ".tools/cottage-repair/roof-courses"
 var scene: Node
 var checks := 0
@@ -28,10 +29,9 @@ func _run() -> void:
 	scene.test_mode = true
 	scene.checkpoint_root = "user://roof-courses-%s" % Time.get_ticks_usec()
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 65000
-	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
-	check(scene._player_restored, "real editable scene ready")
-	if not scene._player_restored:
+	var scene_ready := await SceneReadiness.wait_for_player(self, scene)
+	check(scene_ready, "real editable scene ready")
+	if not scene_ready:
 		await _finish()
 		return
 	scene.set_process(false)
