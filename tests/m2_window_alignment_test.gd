@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Grid = preload("res://scripts/visual_grid.gd")
+const SceneReadiness = preload("res://tests/scene_readiness.gd")
 var scene: Node
 var checks := 0
 var failures := 0
@@ -30,10 +31,9 @@ func _run() -> void:
 	scene.test_mode = true
 	scene.checkpoint_root = "user://window-alignment-%s" % Time.get_ticks_usec()
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 65000
-	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
-	check(scene._player_restored, "native scene ready")
-	if not scene._player_restored:
+	var scene_ready := await SceneReadiness.wait_for_player(self, scene)
+	check(scene_ready, "native scene ready")
+	if not scene_ready:
 		await _finish()
 		return
 	scene.set_process(false)
@@ -73,7 +73,6 @@ func _check_geometry_matrix() -> void:
 							check(is_equal_approx(back, cell.z), "closed shutter back touches reveal, including half-open, rotated and upstairs")
 							check(holder.basis.is_equal_approx(Basis.IDENTITY), "closed shutter stays flat")
 						group.free()
-				# Opening a sash must not clip through the exterior closed shutter.
 				for asset_id in ["window_wood", "window_awning"]:
 					var group := Node3D.new()
 					wall.add_child(group)
