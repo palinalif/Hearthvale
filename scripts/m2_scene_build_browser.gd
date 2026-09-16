@@ -189,7 +189,7 @@ func _request_browser_thumbnails(category: String) -> void:
 
 func _browser_house_options() -> void:
 	_close_build_browser()
-	_open_house_actions()
+	_open_building_panel()
 
 func _browser_landscape_options() -> void:
 	_close_build_browser()

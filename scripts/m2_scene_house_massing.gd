@@ -234,8 +234,8 @@ func _update_portion_preview() -> void:
 		portion_valid = HouseMassing.can_add_portion(sections, candidate)
 		portion_reason = "Needs a shared wall with the house" if not portion_valid else _portion_world_reason(view, _sections_with_candidate(sections, candidate))
 		portion_valid = portion_valid and portion_reason.is_empty()
-	_presentation_key = ""
-	_refresh_massing_shells()
+	var visual := cottage_visuals.get(selected_building_id, null) as Node3D
+	if is_instance_valid(visual): _refresh_portion_ghost(visual)
 	_refresh_controller_hud()
 
 func _commit_portion_placement() -> bool:
