@@ -55,7 +55,11 @@ func _run() -> void:
 	scene.test_mode = true
 	scene.checkpoint_root = "user://m2-build-browser-%s" % Time.get_ticks_usec()
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 65000
+	# Microsoft's software D3D12 renderer can spend well over a minute compiling
+	# the first rendered scene on a clean hosted runner. Keep native behavior
+	# strict while allowing capture startup to use the render wrapper's budget.
+	var readiness_ms := 120000 if rendered else 65000
+	var deadline := Time.get_ticks_msec() + readiness_ms
 	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
 	check(scene._player_restored, "native browser scene ready")
 	if not scene._player_restored:
