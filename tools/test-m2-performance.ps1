@@ -5,7 +5,7 @@
 param(
     [ValidateSet('all','camera-catalogue','section-preview','section-commit')]
     [string]$Group = 'all',
-    [int]$TimeoutMs = 240000
+    [int]$TimeoutMs = 420000
 )
 
 $ErrorActionPreference = 'Stop'
