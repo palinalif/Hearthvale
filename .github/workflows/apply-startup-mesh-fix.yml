@@ -1,0 +1,93 @@
+name: Apply bounded startup mesh fix
+
+on:
+  push:
+    branches:
+      - task/test-maintenance-browser-watchdog
+    paths:
+      - .github/workflows/apply-startup-mesh-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 4
+      - name: Apply exact bounded-mesh patch
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              if old not in text:
+                  raise SystemExit(f"expected source block missing in {path}: {old[:80]!r}")
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected exactly one source block in {path}, found {text.count(old)}")
+              p.write_text(text.replace(old, new), encoding="utf-8")
+
+          # The first experimental assertion landed in an unwired backend test.
+          # Restore that file; the real regression now lives in m1_scaled_backend_test.gd.
+          original = subprocess.check_output(
+              ["git", "show", "64095d5177c0f154321451bf0554d65913afb6e4:tests/backend_test.gd"],
+              text=True,
+              encoding="utf-8",
+          )
+          Path("tests/backend_test.gd").write_text(original, encoding="utf-8")
+
+          replace(
+              "scripts/terrain_backend.gd",
+              '@export var initialization_budget_override_ms := 0\nvar loaded_building_document: Dictionary = {}',
+              '@export var initialization_budget_override_ms := 0\n@export var startup_mesh_focus_world := Vector3.ZERO\n@export var startup_mesh_radius_world := 0.0\nvar loaded_building_document: Dictionary = {}',
+          )
+          replace(
+              "scripts/terrain_backend.gd",
+              'var full_area := AABB(Vector3.ZERO, Vector3(patch_size))\n\t# The expanded 512-cell valley',
+              'var full_area := AABB(Vector3.ZERO, Vector3(patch_size))\n\tvar mesh_area := initial_mesh_area()\n\t# The expanded 512-cell valley',
+          )
+          replace(
+              "scripts/terrain_backend.gd",
+              'while not terrain.is_area_meshed(full_area) and Time.get_ticks_msec() < load_deadline:\n\t\tawait get_tree().process_frame\n\tif not terrain.is_area_meshed(full_area):\n\t\t_error = "Native terrain area did not mesh within %d ms" % initialization_budget_ms',
+              'while not terrain.is_area_meshed(mesh_area) and Time.get_ticks_msec() < load_deadline:\n\t\tawait get_tree().process_frame\n\tif not terrain.is_area_meshed(mesh_area):\n\t\t_error = "Native startup terrain area did not mesh within %d ms" % initialization_budget_ms',
+          )
+          replace(
+              "scripts/terrain_backend.gd",
+              'func is_ready() -> bool:\n\treturn _backend_ready\n\nfunc world_size() -> Vector3:',
+              '''static func startup_mesh_area(size: Vector3i, scale: float, focus_world: Vector3, radius_world: float) -> AABB:\n\tvar full_area := AABB(Vector3.ZERO, Vector3(size))\n\tif scale <= 0.0 or not is_finite(scale) or radius_world <= 0.0 or not is_finite(radius_world) or not focus_world.is_finite():\n\t\treturn full_area\n\tvar focus_cell := focus_world / scale\n\tvar radius_cells := radius_world / scale\n\tvar min_x := clampi(floori(focus_cell.x - radius_cells), 0, maxi(0, size.x - 1))\n\tvar min_z := clampi(floori(focus_cell.z - radius_cells), 0, maxi(0, size.z - 1))\n\tvar max_x := clampi(ceili(focus_cell.x + radius_cells), min_x + 1, size.x)\n\tvar max_z := clampi(ceili(focus_cell.z + radius_cells), min_z + 1, size.z)\n\treturn AABB(Vector3(min_x, 0, min_z), Vector3(max_x - min_x, size.y, max_z - min_z))\n\nfunc initial_mesh_area() -> AABB:\n\treturn startup_mesh_area(patch_size, voxel_scale, startup_mesh_focus_world, startup_mesh_radius_world)\n\nfunc is_ready() -> bool:\n\treturn _backend_ready\n\nfunc world_size() -> Vector3:''',
+          )
+
+          replace(
+              "scripts/m1_scene.gd",
+              'backend.set("voxel_scale", M1PatchGenerator.VOXEL_SCALE)\n\tif test_mode: backend.set("initialization_budget_override_ms", 90000)\n\tadd_child(backend)',
+              'backend.set("voxel_scale", M1PatchGenerator.VOXEL_SCALE)\n\t# Startup only waits for the initial cottage/play area to mesh; the full\n\t# 64-unit valley remains authoritative, editable and continues streaming.\n\tbackend.set("startup_mesh_focus_world", Vector3(24.0, 8.0, 22.0))\n\tbackend.set("startup_mesh_radius_world", 20.0)\n\tif test_mode: backend.set("initialization_budget_override_ms", 90000)\n\tadd_child(backend)',
+          )
+
+          for path in ["tests/scene_readiness.gd", "scripts/terrain_runtime_probe.gd"]:
+              replace(
+                  path,
+                  'var full_area := AABB(Vector3.ZERO, Vector3(patch_size_value))\n\tif terrain.has_method("get_voxel_tool"):',
+                  'var full_area := AABB(Vector3.ZERO, Vector3(patch_size_value))\n\tvar mesh_area := backend.initial_mesh_area() if backend.has_method("initial_mesh_area") else full_area\n\tif terrain.has_method("get_voxel_tool"):',
+              )
+              replace(
+                  path,
+                  'if terrain.has_method("is_area_meshed") and not terrain.is_area_meshed(full_area):',
+                  'if terrain.has_method("is_area_meshed") and not terrain.is_area_meshed(mesh_area):',
+              )
+
+          Path(".github/workflows/apply-startup-mesh-fix.yml").unlink()
+
+      - name: Commit bounded startup mesh fix
+        shell: bash
+        run: |
+          git config user.name 'Hearthvale CI patcher'
+          git config user.email 'actions@users.noreply.github.com'
+          git add scripts/terrain_backend.gd scripts/m1_scene.gd scripts/terrain_runtime_probe.gd tests/scene_readiness.gd tests/backend_test.gd .github/workflows/apply-startup-mesh-fix.yml
+          git diff --cached --check
+          git commit -m 'fix: bound initial terrain mesh readiness'
+          git push origin HEAD:task/test-maintenance-browser-watchdog
