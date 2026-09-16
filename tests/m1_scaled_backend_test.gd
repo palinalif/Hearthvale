@@ -36,6 +36,23 @@ func _initialize() -> void:
 	backend.startup_mesh_radius_world = startup_radius_world
 	backend.startup_mesh_height_world = startup_height_world
 	root.add_child(backend)
+	await process_frame
+	var viewer_nodes := backend.get_children().filter(func(child: Node) -> bool: return child.get_class() == "VoxelViewer")
+	_check(viewer_nodes.size() == 2, "scaled backend separates full-data and local-visual voxel viewers")
+	if viewer_nodes.size() == 2:
+		var visual_viewers := viewer_nodes.filter(func(child: Node) -> bool: return bool(child.get("requires_visuals")))
+		var data_viewers := viewer_nodes.filter(func(child: Node) -> bool: return not bool(child.get("requires_visuals")))
+		_check(visual_viewers.size() == 1, "scaled backend creates one visual voxel viewer")
+		_check(data_viewers.size() == 1, "scaled backend creates one data-only voxel viewer")
+		if visual_viewers.size() == 1:
+			var visual_viewer := visual_viewers[0] as Node3D
+			_check(visual_viewer.position.is_equal_approx(focus_world), "visual voxel viewer begins at the bounded play focus")
+			_check(is_equal_approx(float(visual_viewer.get("view_distance")), startup_radius_world), "visual voxel viewer only requests the bounded play radius")
+		if data_viewers.size() == 1:
+			var data_viewer := data_viewers[0] as Node3D
+			_check(data_viewer.position.is_equal_approx(Vector3(32.0, 16.0, 32.0)), "data-only voxel viewer stays at valley center")
+			_check(is_equal_approx(float(data_viewer.get("view_distance")), 64.0), "data-only voxel viewer keeps the full valley resident")
+			_check(not bool(data_viewer.get("requires_collisions")), "data-only voxel viewer does not request collision meshes")
 	var deadline := Time.get_ticks_msec() + 60000
 	while not backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame
 	_check(backend.is_ready(), "scaled native backend ready")
@@ -47,12 +64,6 @@ func _initialize() -> void:
 	_check(is_equal_approx(backend.voxel_scale, 0.125), "M1 uses eighth-unit editable voxels")
 	_check(backend.terrain.bounds.size == Vector3(Generator.PATCH_SIZE), "native bounds use index dimensions")
 	_check(backend.terrain.scale.is_equal_approx(Vector3.ONE * Generator.VOXEL_SCALE), "native terrain scales geometry uniformly")
-	var viewer_nodes := backend.get_children().filter(func(child: Node) -> bool: return child.get_class() == "VoxelViewer")
-	_check(viewer_nodes.size() == 1, "scaled backend creates one voxel viewer")
-	if viewer_nodes.size() == 1:
-		var viewer := viewer_nodes[0] as Node3D
-		_check(viewer.position.is_equal_approx(focus_world), "startup voxel viewer begins at the bounded play focus")
-		_check(is_equal_approx(float(viewer.get("view_distance")), startup_radius_world), "startup voxel viewer only requests the bounded play radius")
 	_check(backend.voxel_at(Generator.PATCH_SIZE - Vector3i.ONE) >= 0 and backend.voxel_at(Generator.PATCH_SIZE) == 0, "index bounds are clamped")
 
 	var plane: Dictionary = backend.sample_surface_plane(Vector3(20.0, 8.0, 18.0), Vector3.UP, 3.0)
@@ -108,9 +119,6 @@ func _hash_buffer(buffer: Object) -> String:
 	return c.finish().hex_encode()
 
 func _changed_cells(before: Object, after: Object) -> int:
-	# Inspect the native stroke's changed region, then undo only those reported
-	# cells in a clone. Equality of the entire payload proves the report omitted
-	# no changes, without a 37-million-cell GDScript traversal.
 	var restored: Object = backend._clone_buffer(after)
 	var count := 0
 	var seen := {}
