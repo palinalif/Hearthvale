@@ -37,7 +37,7 @@ const ROOF_TINTS := {
 
 func _ready() -> void:
 	super._ready()
-	_install_roof_decor_action()
+	# Roof accessories live in the roof catalogue/direct roof workflow, not Home Details.
 	_build_roof_decor_picker()
 	_refresh_roof_accessories()
 

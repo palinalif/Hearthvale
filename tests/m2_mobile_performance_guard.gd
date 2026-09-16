@@ -91,11 +91,12 @@ func _run() -> void:
 
 		print("PERF_STAGE catalogue group=" + group)
 		scene._open_build_browser("windows")
+		# Thumbnail generation is separately covered by rendered catalogue tests. Stop
+		# it before yielding a frame so the software renderer cannot start a thumbnail
+		# render while this normalized guard measures only browser steady-state cost.
+		if scene._catalogue_thumbnails: scene._catalogue_thumbnails.stop()
 		await _wait_frames(8)
 		check(scene._browser_open, "build catalogue opens for benchmark")
-		# Thumbnail generation is separately covered by rendered catalogue tests. Stop
-		# it here so this normalized guard measures the open browser's steady-state cost.
-		if scene._catalogue_thumbnails: scene._catalogue_thumbnails.stop()
 		await _wait_frames(2)
 		var catalogue := await _sample_frames(CATALOGUE_FRAMES)
 		scene._close_build_browser()
