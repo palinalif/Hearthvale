@@ -83,7 +83,8 @@ func _capture_group(category_ids: Array[String], category_specs: Array, prefix: 
 		# queue with one real model so software D3D12 verifies the production
 		# SubViewport/factory/cache path without becoming an exhaustive GPU test.
 		scene._catalogue_thumbnails.stop()
-		scene._catalogue_thumbnails.request([item])
+		var render_items: Array[Dictionary] = [item]
+		scene._catalogue_thumbnails.request(render_items)
 		var render_deadline := Time.get_ticks_msec() + 45000
 		while not scene._catalogue_thumbnails.cache.has(representative_id) and Time.get_ticks_msec() < render_deadline:
 			await process_frame
