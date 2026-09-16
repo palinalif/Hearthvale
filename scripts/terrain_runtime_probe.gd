@@ -117,6 +117,46 @@ func _find_solid_sample(source: Variant, area: AABB) -> Vector3i:
 			return Vector3i(x, y, z)
 	return Vector3i(x, min_y, z)
 
+func _sync_mesher_probe(terrain: Variant, source: Variant, sample_pos: Vector3i) -> Dictionary:
+	var mesher: Variant = terrain.get("mesher")
+	if mesher == null or not mesher.has_method("build_mesh"):
+		return {"available": false, "reason": "mesher build_mesh unavailable"}
+	var library: Variant = mesher.get("library")
+	if library == null or not library.has_method("get_materials"):
+		return {"available": false, "reason": "blocky library materials unavailable"}
+	if not ClassDB.class_exists("VoxelBuffer"):
+		return {"available": false, "reason": "VoxelBuffer unavailable"}
+	var min_padding := int(mesher.get_minimum_padding()) if mesher.has_method("get_minimum_padding") else 1
+	var max_padding := int(mesher.get_maximum_padding()) if mesher.has_method("get_maximum_padding") else 1
+	var inner_size := 16
+	var buffer_size := Vector3i(inner_size + min_padding + max_padding, inner_size + min_padding + max_padding, inner_size + min_padding + max_padding)
+	var buffer: Variant = ClassDB.instantiate("VoxelBuffer")
+	buffer.create(buffer_size.x, buffer_size.y, buffer_size.z)
+	var source_size: Vector3i = source.get_size()
+	var source_origin := sample_pos - Vector3i(inner_size / 2 + min_padding, inner_size / 2 + min_padding, inner_size / 2 + min_padding)
+	for x in range(buffer_size.x):
+		for y in range(buffer_size.y):
+			for z in range(buffer_size.z):
+				var source_pos := source_origin + Vector3i(x, y, z)
+				if source_pos.x < 0 or source_pos.y < 0 or source_pos.z < 0 or source_pos.x >= source_size.x or source_pos.y >= source_size.y or source_pos.z >= source_size.z:
+					continue
+				var value := int(source.get_voxel(source_pos.x, source_pos.y, source_pos.z, 0))
+				buffer.set_voxel(value, x, y, z, 0)
+	var started_us := Time.get_ticks_usec()
+	var mesh: Variant = mesher.build_mesh(buffer, library.get_materials())
+	var elapsed_us := Time.get_ticks_usec() - started_us
+	return {
+		"available": true,
+		"mesh_returned": mesh != null,
+		"mesh_class": mesh.get_class() if mesh != null else "",
+		"surface_count": int(mesh.get_surface_count()) if mesh != null and mesh.has_method("get_surface_count") else 0,
+		"elapsed_us": elapsed_us,
+		"minimum_padding": min_padding,
+		"maximum_padding": max_padding,
+		"buffer_size": str(buffer_size),
+		"source_origin": str(source_origin),
+	}
+
 func _run_diagnostic_nudge(backend: Variant) -> Dictionary:
 	var terrain: Variant = backend.get("terrain")
 	var source: Variant = backend.get("voxels")
@@ -132,6 +172,7 @@ func _run_diagnostic_nudge(backend: Variant) -> Dictionary:
 	var terrain_value_before := int(tool.get_voxel(sample_pos))
 	var stats_before: Dictionary = terrain.get_statistics() if terrain.has_method("get_statistics") else {}
 	var editable_before := bool(tool.is_area_editable(area)) if tool.has_method("is_area_editable") else false
+	var sync_mesher := _sync_mesher_probe(terrain, source, sample_pos)
 	# Deliberately write the same value back through VoxelTool. This should be a
 	# semantic no-op, but it exercises the normal single-voxel post-edit path.
 	tool.set_voxel(sample_pos, terrain_value_before)
@@ -147,6 +188,7 @@ func _run_diagnostic_nudge(backend: Variant) -> Dictionary:
 		"terrain_value_after": terrain_value_after,
 		"matches_source_before": source_value == terrain_value_before,
 		"editable_before": editable_before,
+		"sync_mesher": sync_mesher,
 		"statistics_before": stats_before,
 		"statistics_immediately_after": stats_after,
 	}
