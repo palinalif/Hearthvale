@@ -10,6 +10,8 @@ var behavior_phase := true
 const OUTPUT := ".tools/cottage-repair/build-browser"
 const HOUSE_CATEGORIES: Array[String] = ["windows", "doors", "wall", "roof"]
 const WORLD_CATEGORIES: Array[String] = ["homes", "paths", "outdoor"]
+const HOUSE_CATEGORY_SPECS := [["windows", "Windows"], ["doors", "Doors"], ["wall", "Wall decor"], ["roof", "Roof decor"]]
+const WORLD_CATEGORY_SPECS := [["homes", "Homes"], ["paths", "Paths & bridges"], ["outdoor", "Outdoor"]]
 
 func check(ok: bool, label: String) -> void:
 	checks += 1
@@ -37,6 +39,58 @@ func _press(button: JoyButton) -> void:
 	Input.flush_buffered_events()
 	await _settle()
 
+func _browser_capture_ready() -> bool:
+	return is_instance_valid(scene) and is_instance_valid(scene._build_browser) and is_instance_valid(scene._catalogue_thumbnails) and not scene._browser_entries.is_empty()
+
+func _run_capture_phase() -> void:
+	# The capture shard owns browser rendering only. Full checkpoint/player restore
+	# is covered by the separate behavior shard and can be very slow on Microsoft's
+	# software D3D12 renderer, so wait for the actual browser/thumbnail subsystem.
+	var deadline := Time.get_ticks_msec() + 65000
+	while not _browser_capture_ready() and Time.get_ticks_msec() < deadline:
+		await process_frame
+	check(_browser_capture_ready(), "rendered browser subsystem ready")
+	if not _browser_capture_ready(): return
+
+	var browser = scene._build_browser
+	scene._browser_world_mode = false
+	scene._browser_open = true
+	scene.tools_open = true
+	browser.set_categories(HOUSE_CATEGORY_SPECS)
+	browser.show()
+	browser.select_category("windows")
+	scene._request_browser_thumbnails("windows")
+	scene._fit_build_browser()
+	await _settle()
+	check(_category_ids() == HOUSE_CATEGORIES and browser.tabs.size() == HOUSE_CATEGORIES.size(), "capture exposes four current house categories")
+	for category in HOUSE_CATEGORIES:
+		browser.select_category(category)
+		scene._request_browser_thumbnails(category)
+		await _settle()
+		check(not browser.cards.is_empty(), "capture house category has real choices: " + category)
+		await _capture_category(category, category)
+
+	scene._browser_world_mode = true
+	browser.set_categories(WORLD_CATEGORY_SPECS)
+	browser.select_category("homes")
+	scene._request_browser_thumbnails("homes")
+	await _settle()
+	check(_category_ids() == WORLD_CATEGORIES and browser.tabs.size() == WORLD_CATEGORIES.size(), "capture exposes three current world categories")
+	for category in WORLD_CATEGORIES:
+		browser.select_category(category)
+		scene._request_browser_thumbnails(category)
+		await _settle()
+		check(not browser.cards.is_empty(), "capture world category has real choices: " + category)
+		await _capture_category(category, "world-" + category)
+
+	var count: int = scene._catalogue_thumbnails.rendered_count
+	browser.select_category("homes")
+	scene._request_browser_thumbnails("homes")
+	for i in 12: await process_frame
+	check(scene._catalogue_thumbnails.rendered_count == count, "cached thumbnails do not keep rendering")
+	check(scene._catalogue_thumbnails.get_child_count() == 1 and scene._catalogue_thumbnails._viewport.own_world_3d, "one private render viewport, not one live renderer per card")
+	check(scene._catalogue_thumbnails.cache.size() <= 64, "thumbnail memory is bounded")
+
 func _run() -> void:
 	var user_args := OS.get_cmdline_user_args()
 	rendered = "--require-rendering" in user_args
@@ -55,11 +109,12 @@ func _run() -> void:
 	scene.test_mode = true
 	scene.checkpoint_root = "user://m2-build-browser-%s" % Time.get_ticks_usec()
 	root.add_child(scene)
-	# Microsoft's software D3D12 renderer can spend well over a minute compiling
-	# the first rendered scene on a clean hosted runner. Keep native behavior
-	# strict while allowing capture startup to use the render wrapper's budget.
-	var readiness_ms := 120000 if rendered else 65000
-	var deadline := Time.get_ticks_msec() + readiness_ms
+	if capture_phase and not behavior_phase:
+		await _run_capture_phase()
+		await _finish()
+		return
+
+	var deadline := Time.get_ticks_msec() + 65000
 	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
 	check(scene._player_restored, "native browser scene ready")
 	if not scene._player_restored:
@@ -263,7 +318,7 @@ func _phase_name() -> String:
 func _finish() -> void:
 	if is_instance_valid(scene):
 		scene._shutting_down = true
-		scene._catalogue_thumbnails.stop()
+		if is_instance_valid(scene._catalogue_thumbnails): scene._catalogue_thumbnails.stop()
 		scene.queue_free()
 		await process_frame
 		await process_frame
