@@ -189,11 +189,13 @@ func _run() -> void:
 		check(scene._browser_open and scene.building_world.serialize_document() == before, "clicking outside catalogue cannot activate a focused card")
 		scene._update_camera()
 		check(scene.camera.v_offset < offset, "world browser also reframes camera while open")
-		scene._cancel_current_edit("Controller disconnected")
+		scene._on_joy_connection_changed(0, false)
 		await _settle()
-		check(not scene._browser_open and not scene.tools_open and scene.camera.v_offset == offset, "interrupt closes catalogue and restores camera")
+		check(not scene._browser_open and not scene.tools_open and scene.menu_open and scene.camera.v_offset == offset, "controller disconnect closes catalogue, restores camera, and pauses world")
 		check(not scene._catalogue_thumbnails.active, "hidden catalogue does no thumbnail work")
 		check(JSON.stringify(scene._browser_entries) == registry_before, "interrupting a render never clears shared catalogue records")
+		scene._set_menu(false)
+		await _settle()
 
 		var original_buildings: Array = scene.building_world.get_document()["buildings"]
 		scene._open_build_browser("windows")
