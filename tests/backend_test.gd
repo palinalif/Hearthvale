@@ -12,6 +12,21 @@ func check(condition: bool, label: String) -> void:
 		push_error("FAIL: " + label)
 
 func _init() -> void:
+	# Large valleys must not gate startup on meshing every native cell. The
+	# initial play focus gets a bounded region while the rest keeps streaming.
+	var large_size := Vector3i(512, 256, 512)
+	var large_scale := 0.125
+	var focus_world := Vector3(24.0, 8.0, 22.0)
+	var startup_area: AABB = Backend.startup_mesh_area(large_size, large_scale, focus_world, 20.0)
+	var full_area := AABB(Vector3.ZERO, Vector3(large_size))
+	var focus_cell := focus_world / large_scale
+	check(startup_area != full_area, "large valley startup mesh is bounded")
+	check(startup_area.has_point(focus_cell), "startup mesh contains initial play focus")
+	check(startup_area.position.x >= 0.0 and startup_area.position.z >= 0.0, "startup mesh starts inside native bounds")
+	check(startup_area.end.x <= large_size.x and startup_area.end.z <= large_size.z, "startup mesh ends inside native bounds")
+	check(startup_area.size.x <= 320.0 and startup_area.size.z <= 320.0, "startup mesh remains within forty world units")
+	check(startup_area.position.y == 0.0 and startup_area.size.y == large_size.y, "startup mesh keeps full vertical authority")
+
 	var backend: Node = Backend.new()
 	root.add_child(backend)
 	await _wait_ready(backend, 16000)
