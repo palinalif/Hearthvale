@@ -4,11 +4,51 @@ class_name M2TableAssets
 ## Authored, baked MagicaVoxel street furniture. Saved composition records keep
 ## their existing style_id, footprint, identity and orientation contracts.
 const UNIT := 0.0625
-const STYLE_IDS: Array[String] = ["village_table"]
+const STYLE_IDS: Array[String] = [
+	"village_table",
+	"clothesline",
+	"potted_trio",
+	"market_crate",
+	"bird_feeder",
+	"mailbox",
+	"topiary_pair",
+	"beehive",
+	"wheelbarrow",
+	"flower_arch",
+	"garden_gnome",
+	"garden_gnome_small",
+	"garden_gnome_tall",
+]
 const PATHS := {
 	"village_table": "res://assets/models/magicavoxel/hearthvale_table_gathering.res",
+	"clothesline": "res://assets/models/magicavoxel/hearthvale_clothesline.res",
+	"potted_trio": "res://assets/models/magicavoxel/hearthvale_potted_trio.res",
+	"market_crate": "res://assets/models/magicavoxel/hearthvale_market_crate.res",
+	"bird_feeder": "res://assets/models/magicavoxel/hearthvale_bird_feeder.res",
+	"mailbox": "res://assets/models/magicavoxel/hearthvale_mailbox.res",
+	"topiary_pair": "res://assets/models/magicavoxel/hearthvale_topiary_pair.res",
+	"beehive": "res://assets/models/magicavoxel/hearthvale_beehive.res",
+	"wheelbarrow": "res://assets/models/magicavoxel/hearthvale_wheelbarrow.res",
+	"flower_arch": "res://assets/models/magicavoxel/hearthvale_flower_arch.res",
+	"garden_gnome": "res://assets/models/magicavoxel/hearthvale_garden_gnome.res",
+	"garden_gnome_small": "res://assets/models/magicavoxel/hearthvale_garden_gnome_small.res",
+	"garden_gnome_tall": "res://assets/models/magicavoxel/hearthvale_garden_gnome_tall.res",
 }
-const VOXEL_COUNTS := {"village_table": 1178}
+const VOXEL_COUNTS := {
+	"village_table": 1178,
+	"clothesline": 310,
+	"potted_trio": 224,
+	"market_crate": 310,
+	"bird_feeder": 229,
+	"mailbox": 180,
+	"topiary_pair": 363,
+	"beehive": 174,
+	"wheelbarrow": 148,
+	"flower_arch": 122,
+	"garden_gnome": 182,
+	"garden_gnome_small": 102,
+	"garden_gnome_tall": 190,
+}
 const SWATCHES := [Color("#c9a878"), Color("#7d5b43"), Color("#594337")]
 const TINTS := preload("res://scripts/m2_composition_visual.gd").DETAIL_TINTS
 static var _cache: Dictionary = {}

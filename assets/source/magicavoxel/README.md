@@ -166,3 +166,27 @@ Re-export with `vox_to_obj.py --greedy`, import with the pinned editor, then
 bake with explicit `0.0625`. `tests/m2_table_asset_test.gd` validates provenance,
 reproducible export, grid, materials, preview parity and legacy records; the
 converter test covers its exposed-cell coverage.
+
+## Street furniture prop set
+
+Five MCP-authored runtime props for the outdoor catalogue, reviewed and
+approved by the player in MagicaVoxel before promotion. All use the 0.0625
+prop grid, ground base at Y=0, and restrained village palettes:
+
+| Source | Style | Declared volume | Voxels / triangles | Character |
+| --- | --- | --- | --- | --- |
+| `hearthvale_clothesline.vox` | `clothesline` | 40 x 12 x 8, pivot (20, 0, 4) | 310 / 158 | Two timber posts, sagging line, four drying cloths |
+| `hearthvale_potted_trio.vox` | `potted_trio` | 16 x 10 x 12, pivot (8, 0, 6) | 224 / 258 | Rose, herb and leafy pots in a casual V, stepped planter heights |
+| `hearthvale_market_crate.vox` | `market_crate` | 10 x 12 x 10, pivot (5, 0, 5) | 310 / 364 | Apple crate with three apples and a tilted straw hat leaning in |
+| `hearthvale_bird_feeder.vox` | `bird_feeder` | 14 x 15 x 14, pivot (7, 0, 7) | 229 / 132 | Shelved feeder on a post with seed pile and perched bird |
+| `hearthvale_mailbox.vox` | `mailbox` | 12 x 16 x 8, pivot (6, 0, 4) | 180 / 104 | Village post box with raised flag |
+
+Declared volumes are even on every axis: the bake snaps vertices to the
+0.0625 grid, so an odd volume half-cells every face and degenerates greedy
+quads (first hit on the trio's 15-wide revision). Saved footprints:
+2.5 x 0.5, 1.0 x 0.75, 0.625 x 0.625, 0.875 x 0.875 and 0.75 x 0.5.
+
+Re-export with `vox_to_obj.py --greedy`, import with the pinned editor, then
+bake with explicit `0.0625`. `tests/m2_street_prop_asset_test.gd` validates
+provenance, reproducible export, grid, winding, footprints, matte materials
+and preview parity for all five.

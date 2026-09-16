@@ -1,0 +1,41 @@
+{
+  "asset": "hearthvale_market_crate",
+  "declared_dimensions": [
+    10,
+    12,
+    10
+  ],
+  "emitted_quads": 182,
+  "exposed_quads": 560,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      9,
+      10,
+      9
+    ],
+    "min": [
+      1,
+      0,
+      1
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "source": "hearthvale_market_crate.vox",
+  "source_sha256": "c33ec8eb662caeaed0a98ed52a05f6c70320331cf038eaacedcc88e3ad057857",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 364,
+  "voxel_count": 310,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}

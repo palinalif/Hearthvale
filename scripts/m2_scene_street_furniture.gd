@@ -6,17 +6,29 @@ const PlanterFurniture = preload("res://scripts/m2_planter_assets.gd")
 const StarterFurniture = preload("res://scripts/m2_starter_props.gd")
 const FURNITURE_STYLES := {
 	"well": StarterFurniture.DEFINITIONS["well"],
+	"topiary_pair": {"name": "Topiary pair", "size": Vector2(0.875, 0.5), "summary": "A clipped ball and a rounded column, close together"},
+	"beehive": {"name": "Beehive", "size": Vector2(0.4375, 0.5625), "summary": "Banded skep on a post with a quiet entrance"},
+	"wheelbarrow": {"name": "Wheelbarrow", "size": Vector2(1.0, 0.375), "summary": "Timber barrow spilling pink and cream flowers"},
+	"flower_arch": {"name": "Flower arch", "size": Vector2(0.8125, 0.125), "summary": "Woven timber arch with blossoms on the shoulders"},
+	"garden_gnome": {"name": "Garden gnome", "size": Vector2(0.375, 0.375), "summary": "Bearded gnome with a pointed hat"},
+	"garden_gnome_small": {"name": "Small gnome", "size": Vector2(0.375, 0.375), "summary": "Armless gnome with a stubby hat"},
+	"garden_gnome_tall": {"name": "Tall gnome", "size": Vector2(0.375, 0.375), "summary": "Slim gnome with a very long hat"},
 	"chopping_block": StarterFurniture.DEFINITIONS["chopping_block"],
 	"log_stack": StarterFurniture.DEFINITIONS["log_stack"],
 	"bench": {"name": "Village bench", "size": Vector2(1.5, 0.625), "summary": "Slatted timber seat with a proper back"},
 	"village_table": {"name": "Gathering table and benches", "size": Vector2(1.25, 1.875), "summary": "Authored timber table with a backless bench on each side"},
+	"clothesline": {"name": "Clothesline", "size": Vector2(2.5, 0.5), "summary": "Two timber posts with a sagging line of drying laundry"},
+	"potted_trio": {"name": "Potted trio", "size": Vector2(1.0, 0.75), "summary": "Rose, herb and leafy pots in a casual V"},
+	"market_crate": {"name": "Market crate", "size": Vector2(0.625, 0.625), "summary": "Apple crate with a straw hat slung on top"},
+	"bird_feeder": {"name": "Bird feeder", "size": Vector2(0.875, 0.875), "summary": "Shelved feeder with a little bird and seed pile"},
+	"mailbox": {"name": "Mailbox", "size": Vector2(0.75, 0.5), "summary": "Village post box with a raised flag"},
 	"lantern": {"name": "Path lantern", "size": Vector2(0.5, 0.5), "summary": "Small warm lantern on a dark village post"},
 	"signpost": {"name": "Wooden signpost", "size": Vector2(0.625, 0.625), "summary": "Two crooked direction boards on one post"},
 	"barrel_planter": PlanterFurniture.DEFINITIONS["barrel_planter"],
 	"barrel_planter_herbs": PlanterFurniture.DEFINITIONS["barrel_planter_herbs"],
 	"barrel_planter_light": PlanterFurniture.DEFINITIONS["barrel_planter_light"],
 }
-const FURNITURE_STYLE_ORDER: Array[String] = ["bench", "village_table", "lantern", "signpost", "barrel_planter", "well", "chopping_block", "log_stack", "barrel_planter_herbs", "barrel_planter_light"]
+const FURNITURE_STYLE_ORDER: Array[String] = ["bench", "village_table", "lantern", "signpost", "barrel_planter", "well", "chopping_block", "log_stack", "barrel_planter_herbs", "barrel_planter_light", "clothesline", "potted_trio", "market_crate", "bird_feeder", "mailbox", "topiary_pair", "beehive", "wheelbarrow", "flower_arch", "garden_gnome", "garden_gnome_small", "garden_gnome_tall"]
 const FURNITURE_RANDOM_TURN_COUNT := 24
 const FURNITURE_RANDOM_STEP_DEGREES := 15.0
 
@@ -48,20 +60,27 @@ func _install_hamlet_catalogue() -> void:
 	super._install_hamlet_catalogue()
 	var box := _catalogue_box(_hamlet_catalogue_panel)
 	_add_catalogue_heading(box, "STREET FURNITURE", "Small props use the same A/place and left-right/rotate grammar")
-	for style_id in FURNITURE_STYLE_ORDER:
+	# Two columns of eleven keep every style on one 720p handheld page; the
+	# selected item's placement HUD still carries the descriptive context.
+	var columns := HBoxContainer.new()
+	columns.add_theme_constant_override("separation", 8)
+	box.add_child(columns)
+	var column_boxes: Array[VBoxContainer] = []
+	for i in 2:
+		var column := VBoxContainer.new()
+		column.add_theme_constant_override("separation", 3)
+		columns.add_child(column)
+		column_boxes.append(column)
+	for i in FURNITURE_STYLE_ORDER.size():
+		var style_id: String = FURNITURE_STYLE_ORDER[i]
 		var style: Dictionary = FURNITURE_STYLES[style_id]
-		_add_catalogue_button(box, _hamlet_catalogue_buttons, "%s\n%s" % [style["name"], style["summary"]], _choose_furniture_style.bind(style_id))
+		_add_catalogue_button(column_boxes[i % 2], _hamlet_catalogue_buttons, "%s\n%s" % [style["name"], style["summary"]], _choose_furniture_style.bind(style_id))
 
-	# This catalogue is deliberately bounded to twelve choices, so keep it all on
-	# one 720p handheld page rather than adding scrolling. The selected item's
-	# placement HUD still carries the descriptive context once it enters world
-	# placement; this menu only needs fast, readable names.
 	_hamlet_catalogue_panel.position.y = 36
-	_hamlet_catalogue_panel.custom_minimum_size = Vector2(540, 580)
-	box.add_theme_constant_override("separation", 3)
+	_hamlet_catalogue_panel.custom_minimum_size = Vector2(560, 580)
 	for button in _hamlet_catalogue_buttons:
 		button.text = button.text.get_slice("\n", 0)
-		button.custom_minimum_size.y = 34
+		button.custom_minimum_size = Vector2(266, 34)
 	for child in box.get_children():
 		if not child is Label: continue
 		var label := child as Label

@@ -1,0 +1,40 @@
+{
+  "asset": "hearthvale_beehive",
+  "declared_dimensions": [
+    12,
+    14,
+    12
+  ],
+  "emitted_quads": 103,
+  "exposed_quads": 306,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      10,
+      14,
+      10
+    ],
+    "min": [
+      3,
+      0,
+      1
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "source": "hearthvale_beehive.vox",
+  "source_sha256": "0eb5f9b030bc87edf1342108dc0416e9d5178a130d37e19f500a22320fab6b79",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 206,
+  "voxel_count": 174,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}

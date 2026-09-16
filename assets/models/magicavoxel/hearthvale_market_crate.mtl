@@ -1,0 +1,29 @@
+newmtl palette_1
+Kd 0.549020 0.396078 0.282353
+Ks 0 0 0
+Ns 1
+
+newmtl palette_2
+Kd 0.658824 0.505882 0.360784
+Ks 0 0 0
+Ns 1
+
+newmtl palette_3
+Kd 0.803922 0.243137 0.188235
+Ks 0 0 0
+Ns 1
+
+newmtl palette_4
+Kd 0.658824 0.176471 0.149020
+Ks 0 0 0
+Ns 1
+
+newmtl palette_5
+Kd 0.909804 0.800000 0.509804
+Ks 0 0 0
+Ns 1
+
+newmtl palette_6
+Kd 0.431373 0.294118 0.176471
+Ks 0 0 0
+Ns 1

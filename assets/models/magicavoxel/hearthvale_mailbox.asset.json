@@ -1,0 +1,39 @@
+{
+  "asset": "hearthvale_mailbox",
+  "declared_dimensions": [
+    12,
+    16,
+    8
+  ],
+  "emitted_quads": 52,
+  "exposed_quads": 268,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      12,
+      15,
+      6
+    ],
+    "min": [
+      2,
+      0,
+      2
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "source": "hearthvale_mailbox.vox",
+  "source_sha256": "5f30ef777dd8ec526e85a76db178456b0c1ff3d530bf8b938e3aa4a6590eb92a",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 104,
+  "voxel_count": 180,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}

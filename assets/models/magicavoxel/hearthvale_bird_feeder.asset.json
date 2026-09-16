@@ -1,0 +1,41 @@
+{
+  "asset": "hearthvale_bird_feeder",
+  "declared_dimensions": [
+    14,
+    15,
+    14
+  ],
+  "emitted_quads": 66,
+  "exposed_quads": 482,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      12,
+      14,
+      12
+    ],
+    "min": [
+      2,
+      0,
+      2
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "source": "hearthvale_bird_feeder.vox",
+  "source_sha256": "591f83e22f9042a26f676d6501ac868270c58c431791533db348904f11928c4c",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 132,
+  "voxel_count": 229,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}
