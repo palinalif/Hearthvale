@@ -1,0 +1,67 @@
+name: Windows Compatibility terrain probe
+
+on:
+  push:
+    branches:
+      - task/test-maintenance-browser-watchdog
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility-terrain-probe:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Bootstrap pinned Godot and native dependencies
+        shell: pwsh
+        run: ./tools/bootstrap.ps1
+
+      - name: Export Windows playtest
+        shell: pwsh
+        run: |
+          ./tools/build.ps1 -WindowsOnly
+          if ($LASTEXITCODE -ne 0) { throw 'Windows playtest export failed' }
+
+      - name: Launch Compatibility terrain readiness probe
+        shell: pwsh
+        run: |
+          $folder = (Resolve-Path 'builds/Hearthvale-M2-PC').Path
+          $exe = Join-Path $folder 'Hearthvale.exe'
+          $receipt = Join-Path $folder 'terrain-ready-compat.json'
+          $stdout = Join-Path $folder 'terrain-ready-compat.stdout.log'
+          $stderr = Join-Path $folder 'terrain-ready-compat.stderr.log'
+          $probeArg = '--terrain-ready-receipt=' + $receipt
+          $process = Start-Process -FilePath $exe -ArgumentList @('--rendering-method','gl_compatibility','--quit-after','120','--',$probeArg) -WorkingDirectory $folder -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          if (-not $process.WaitForExit(100000)) {
+            $process.Kill()
+            $process.WaitForExit()
+            Write-Output 'COMPAT_PROBE_PROCESS_TIMEOUT'
+          }
+          $runtimeLog = ((Get-Content $stdout -Raw -ErrorAction SilentlyContinue) + "`n" + (Get-Content $stderr -Raw -ErrorAction SilentlyContinue))
+          Write-Output $runtimeLog
+          if (Test-Path $receipt) {
+            $terrainRecord = Get-Content $receipt -Raw | ConvertFrom-Json
+            Write-Output ('COMPAT_TERRAIN_RECEIPT ' + ($terrainRecord | ConvertTo-Json -Compress -Depth 8))
+            if ($terrainRecord.renderer -ne 'gl_compatibility') { throw ('Compatibility renderer was not active: ' + $terrainRecord.renderer) }
+            if (-not $terrainRecord.ok) { throw ('Compatibility terrain backend did not become ready: ' + ($terrainRecord | ConvertTo-Json -Compress -Depth 8)) }
+          } else {
+            throw 'Compatibility terrain readiness receipt was not created'
+          }
+          if ($process.ExitCode -ne 0) { throw "Compatibility terrain readiness probe failed with exit $($process.ExitCode)" }
+          if ($runtimeLog -notmatch 'TERRAIN_RUNTIME_READY') { throw 'Compatibility terrain readiness marker was not emitted' }
+
+      - name: Upload Compatibility diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-compat-terrain-${{ github.sha }}
+          path: |
+            builds/Hearthvale-M2-PC/terrain-ready-compat.json
+            builds/Hearthvale-M2-PC/terrain-ready-compat.*.log
+          if-no-files-found: warn
+          retention-days: 7
