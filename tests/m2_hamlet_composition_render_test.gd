@@ -45,7 +45,7 @@ func _run() -> void:
 	_check(main_path > 0 and cottage_path > 0 and lodge_path > 0 and gable_path > 0, "hamlet lane and home branches receive saved path IDs")
 	for path_value in scene.landscape_state.paths:
 		var path: Dictionary = path_value
-		scene.landscape_state.clear_records_along_path(path["points"], float(path["width"]))
+		scene.landscape_state.clear_records_in_path_cells(path.get("cells", []))
 
 	var bridge_id: int = int(scene.landscape_state.add_bridge("timber", 1.0, [[38.5, 24.5], [43.5, 24.5]]))
 	_check(bridge_id > 0, "saved timber bridge crosses the authored river")

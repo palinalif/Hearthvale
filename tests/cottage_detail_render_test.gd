@@ -41,6 +41,7 @@ func _run() -> void:
 		_finish()
 		return
 	scene.set_process(false)
+	if scene.garden_visual: scene.garden_visual.set_wind_enabled(false)
 	scene._set_view_context("building")
 	scene._update_presentation()
 	scene.hud.visible = false

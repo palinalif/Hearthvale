@@ -79,6 +79,10 @@ func _input(event: InputEvent) -> void:
 		if _blocked_until_accept_release and event.is_action_pressed("m1_accept"):
 			get_viewport().set_input_as_handled()
 			return
+		if event is InputEventJoypadButton and (event as InputEventJoypadButton).pressed and (event as InputEventJoypadButton).button_index == JOY_BUTTON_Y:
+			_browser_house_options()
+			get_viewport().set_input_as_handled()
+			return
 		if event is InputEventKey or event is InputEventMouseButton: InputGlyph.set_keyboard_mouse_mode(true)
 		elif event is InputEventJoypadButton: InputGlyph.set_keyboard_mouse_mode(false)
 		if event.is_action_pressed("m1_pause"):
