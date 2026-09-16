@@ -9,6 +9,7 @@ Start with `HANDOFF.md`, `tasks/M2-hamlet-building.md`, and the user's current r
 ## Non-negotiable contracts
 
 - Preserve native volumetric terrain/caves/overhangs, controller-only gameplay on one gameplay screen, continuous sculpting, resize/detail editing, attachment recovery, undo/redo, duplication and save compatibility. Never substitute heightmaps or a static cottage. No online model is required during gameplay.
+- Standalone presentation assets (street furniture, props, miniatures) are authored as MagicaVoxel voxel assets, not procedural box builds; only stretchable or variable-dimension elements (windows, doors, shutters and similar) remain procedural.
 - Separate authoritative records from generated meshes. Stable IDs, manual overrides, suppressions and unsupported attachments survive regeneration; invalid details remain recoverable. Reject stale asynchronous results. Preserve the full ticket regression.
 - Menus block world input. Cancel restores previews; disconnect/focus loss stops held brushes. Each committed edit is one undo transaction, including affected planting.
 - Preserve player/test saves and original legacy checkpoints. Publish only complete atomic generations; test recovery. Never uninstall the game to resolve update/signing problems.

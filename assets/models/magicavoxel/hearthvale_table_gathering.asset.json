@@ -1,0 +1,38 @@
+{
+  "asset": "hearthvale_table_gathering",
+  "declared_dimensions": [
+    22,
+    9,
+    32
+  ],
+  "emitted_quads": 140,
+  "exposed_quads": 1674,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      21,
+      9,
+      31
+    ],
+    "min": [
+      2,
+      0,
+      1
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    1,
+    2,
+    3
+  ],
+  "source": "hearthvale_table_gathering.vox",
+  "source_sha256": "c1c72bb66ff9e031159182dc9bc6bffe19d292de123663ac8e9b67af02c48d0f",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 280,
+  "voxel_count": 1178,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}

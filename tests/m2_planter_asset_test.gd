@@ -17,11 +17,11 @@ func _check(ok: bool, message: String) -> void:
 
 func _run() -> void:
 	var output: Array = []
-	var result := OS.execute("python", [ProjectSettings.globalize_path("res://tests/m2_planter_source_test.py")], output, true)
+	var result := OS.execute("python3", [ProjectSettings.globalize_path("res://tests/m2_planter_source_test.py")], output, true)
 	for text in output: print(text)
 	_check(result == 0, "Editable source, provenance, barrel and deterministic export tests")
 	output.clear()
-	result = OS.execute("python", [ProjectSettings.globalize_path("res://tests/magicavoxel_converter_test.py")], output, true)
+	result = OS.execute("python3", [ProjectSettings.globalize_path("res://tests/magicavoxel_converter_test.py")], output, true)
 	for text in output: print(text)
 	_check(result == 0, "Exact exposed-cell coverage for all prior vegetation and three planters")
 	for style: String in Assets.STYLE_IDS:

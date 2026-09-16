@@ -152,3 +152,17 @@ materials, preview parity and legacy records. `m2_planter_placement_test.gd`
 uses the current controller catalogue and checks cancel, confirm, undo/redo,
 recolour, relocation, save/reload and invalid targets. The `planters` cottage
 CI shard also runs actual Mobile rendering. Real source contact sheets and
+
+## Gathering table and benches
+
+`hearthvale_table_gathering.vox` is an MCP-authored runtime street-furniture
+asset for the `village_table` composition style: a square timber table with a
+backless bench on each side. It uses the shared 0.0625 prop grid with a declared
+22 x 9 x 32 volume, pivot (11, 0, 16), ground base at Y=0, and the three
+restrained timber palette groups #c9a878 / #7d5b43 / #594337. The greedy mesh
+contains 280 triangles over 1,178 voxels.
+
+Re-export with `vox_to_obj.py --greedy`, import with the pinned editor, then
+bake with explicit `0.0625`. `tests/m2_table_asset_test.gd` validates provenance,
+reproducible export, grid, materials, preview parity and legacy records; the
+converter test covers its exposed-cell coverage.

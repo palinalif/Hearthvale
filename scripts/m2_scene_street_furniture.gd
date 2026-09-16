@@ -9,7 +9,7 @@ const FURNITURE_STYLES := {
 	"chopping_block": StarterFurniture.DEFINITIONS["chopping_block"],
 	"log_stack": StarterFurniture.DEFINITIONS["log_stack"],
 	"bench": {"name": "Village bench", "size": Vector2(1.5, 0.625), "summary": "Slatted timber seat with a proper back"},
-	"village_table": {"name": "Gathering table and benches", "size": Vector2(1.35, 2.0), "summary": "Square timber table with a backless bench on each side"},
+	"village_table": {"name": "Gathering table and benches", "size": Vector2(1.25, 1.875), "summary": "Authored timber table with a backless bench on each side"},
 	"lantern": {"name": "Path lantern", "size": Vector2(0.5, 0.5), "summary": "Small warm lantern on a dark village post"},
 	"signpost": {"name": "Wooden signpost", "size": Vector2(0.625, 0.625), "summary": "Two crooked direction boards on one post"},
 	"barrel_planter": PlanterFurniture.DEFINITIONS["barrel_planter"],

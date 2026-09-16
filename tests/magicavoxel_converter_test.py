@@ -22,7 +22,7 @@ class CandidateMeshingTest(unittest.TestCase):
                 convert(source, output, 0.25, True)
 
     def test_exact_palette_boundary_coverage(self):
-        for name in ("tree_orchard", "tree_riverside", "tree_wind", "foliage_grass", "foliage_wildflowers", "foliage_leafy", "foliage_seedgrass", "foliage_cream", "foliage_mauve", "rock_slab", "rock_split", "rock_moss", "foliage_reeds", "foliage_fern", "foliage_mushrooms", "tree_orchard_compact", "tree_riverside_young", "tree_wind_low", "foliage_mushrooms_flat", "foliage_mushrooms_flat_scatter", "planter_flowers", "planter_herbs", "planter_light"):
+        for name in ("tree_orchard", "tree_riverside", "tree_wind", "foliage_grass", "foliage_wildflowers", "foliage_leafy", "foliage_seedgrass", "foliage_cream", "foliage_mauve", "rock_slab", "rock_split", "rock_moss", "foliage_reeds", "foliage_fern", "foliage_mushrooms", "tree_orchard_compact", "tree_riverside_young", "tree_wind_low", "foliage_mushrooms_flat", "foliage_mushrooms_flat_scatter", "planter_flowers", "planter_herbs", "planter_light", "table_gathering"):
             with self.subTest(candidate=name):
                 _, voxels, _ = read_vox(ROOT / f"assets/source/magicavoxel/hearthvale_{name}.vox")
                 # A tuft may contain separate rooted stems, but no floating tips.
