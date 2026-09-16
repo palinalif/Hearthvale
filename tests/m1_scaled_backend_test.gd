@@ -13,7 +13,7 @@ var backend: Node
 
 func _initialize() -> void:
 	var focus_world := Vector3(24.0, 8.0, 22.0)
-	var startup_radius_world := 16.0
+	var startup_radius_world := 12.0
 	var startup_height_world := 16.0
 	var startup_area: AABB = Backend.startup_mesh_area(Generator.PATCH_SIZE, Generator.VOXEL_SCALE, focus_world, startup_radius_world, startup_height_world)
 	var full_area := AABB(Vector3.ZERO, Vector3(Generator.PATCH_SIZE))
@@ -47,7 +47,8 @@ func _initialize() -> void:
 		if visual_viewers.size() == 1:
 			var visual_viewer := visual_viewers[0] as Node3D
 			_check(visual_viewer.position.is_equal_approx(focus_world), "visual voxel viewer begins at the bounded play focus")
-			_check(is_equal_approx(float(visual_viewer.get("view_distance")), startup_radius_world), "visual voxel viewer only requests the bounded play radius")
+			_check(is_equal_approx(float(visual_viewer.get("view_distance")), 16.0), "visual voxel viewer keeps one mesh block of startup headroom")
+			_check(is_equal_approx(float(visual_viewer.get("view_distance_vertical_ratio")), 0.75), "visual voxel viewer limits cold-start vertical demand")
 		if data_viewers.size() == 1:
 			var data_viewer := data_viewers[0] as Node3D
 			_check(data_viewer.position.is_equal_approx(Vector3(32.0, 16.0, 32.0)), "data-only voxel viewer stays at valley center")

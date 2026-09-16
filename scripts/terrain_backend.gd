@@ -22,6 +22,7 @@ const SmoothNeighbourhood = preload("res://scripts/smooth_neighbourhood.gd")
 
 var terrain: Node
 var voxels: Object
+var _startup_visual_viewer: Node3D
 ## Index dimensions remain 48×32×48 for M0. M1 supplies 384×256×384 at
 ## eighth-unit voxels, keeping the authored world bounds at 48×32×48.
 @export var patch_size: Vector3i = PATCH_SIZE
@@ -128,7 +129,15 @@ func _ready() -> void:
 			# Visual startup demand stays local to the initial cottage/play area.
 			var visual_viewer: Node3D = ClassDB.instantiate("VoxelViewer")
 			visual_viewer.position = startup_mesh_focus_world
-			visual_viewer.view_distance = minf(64.0, startup_mesh_radius_world)
+			# Readiness uses a smaller box than the viewer so mesh-block rounding
+			# cannot leave an edge block required-but-never-requested. One native
+			# mesh block is 4 world metres on the fine M1 grid.
+			visual_viewer.view_distance = minf(64.0, startup_mesh_radius_world + float(terrain.mesh_block_size) * voxel_scale)
+			# Startup terrain occupies only the lower half of the valley. Avoid
+			# cold-building empty upper mesh layers; restore full vertical range
+			# after readiness.
+			visual_viewer.view_distance_vertical_ratio = 0.75
+			_startup_visual_viewer = visual_viewer
 			add_child(visual_viewer)
 		else:
 			var viewer: Node3D = ClassDB.instantiate("VoxelViewer")
@@ -160,6 +169,14 @@ func _ready() -> void:
 	_initial_mesh_ready = true
 	_backend_ready = true
 	ready_changed.emit(true)
+	if _startup_visual_viewer != null:
+		call_deferred("_expand_startup_visual_viewer")
+
+func _expand_startup_visual_viewer() -> void:
+	if _startup_visual_viewer == null or not is_instance_valid(_startup_visual_viewer):
+		return
+	_startup_visual_viewer.view_distance_vertical_ratio = 1.0
+	_startup_visual_viewer.view_distance = 64.0
 
 static func startup_mesh_area(size: Vector3i, scale: float, focus_world: Vector3, radius_world: float, height_world: float = 0.0) -> AABB:
 	var full_area := AABB(Vector3.ZERO, Vector3(size))
