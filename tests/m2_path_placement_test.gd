@@ -16,7 +16,7 @@ func _initialize() -> void:
 	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
 	_check(scene._player_restored, "native path scene ready")
 	if not scene._player_restored:
-		_finish()
+		await _finish()
 		return
 	scene.set_process(false)
 	var fixture_z := -1.0
@@ -25,18 +25,39 @@ func _initialize() -> void:
 			fixture_z = z
 			break
 	_check(fixture_z > 0.0, "paint route has a planting fixture to clear")
+	if fixture_z <= 0.0:
+		await _finish()
+		return
 	scene.garden_visual.reset_records(scene.landscape_state.records)
 	var before: Dictionary = scene.landscape_state.document()
 	var history_before: int = scene._history_tags.size()
 
 	await _press(JOY_BUTTON_DPAD_UP)
-	_check(scene._build_catalogue_open, "D-pad Up opens the build catalogue")
-	scene._build_catalogue_buttons[1].grab_focus()
+	var browser_ready: bool = scene._browser_open and scene._browser_world_mode and scene._build_browser.category == "homes"
+	_check(browser_ready, "D-pad Up opens the world build browser")
+	if not browser_ready:
+		await _finish()
+		return
+	await _press(JOY_BUTTON_RIGHT_SHOULDER)
+	for i in 4: await process_frame
+	var paths_ready: bool = scene._browser_open and scene._build_browser.category == "paths" and scene._build_browser.cards.size() == 5
+	_check(paths_ready, "RB selects Paths & bridges in the world build browser")
+	if not paths_ready:
+		await _finish()
+		return
+	var focused := root.gui_get_focus_owner() as Button
+	var focused_item: Dictionary = focused.get_meta("item", {}) if focused else {}
+	var packed_earth_focused: bool = str(focused_item.get("id", "")) == "packed_earth"
+	_check(packed_earth_focused, "Packed-earth is the default focused path style")
+	if not packed_earth_focused:
+		await _finish()
+		return
 	await _press(JOY_BUTTON_A)
-	_check(scene._roads_catalogue_open and scene._roads_catalogue_buttons.size() == 5, "Roads & Paths opens its path and bridge styles")
-	scene._roads_catalogue_buttons[0].grab_focus()
-	await _press(JOY_BUTTON_A)
-	_check(scene.path_placement_active and scene.path_style_id == "packed_earth" and scene.view_context == "terrain", "style selection enters terrain path painting")
+	var path_tool_ready: bool = scene.path_placement_active and scene.path_style_id == "packed_earth" and scene.view_context == "terrain" and not scene._browser_open
+	_check(path_tool_ready, "style selection enters terrain path painting")
+	if not path_tool_ready:
+		await _finish()
+		return
 	_check(scene.landscape_state.document() == before, "starting path painting is read-only")
 	var initial_width: float = scene.path_width
 	await _press(JOY_BUTTON_DPAD_RIGHT)
@@ -56,9 +77,15 @@ func _initialize() -> void:
 	_aim(Vector2(44.0, fixture_z))
 	_check(scene._sample_path_stroke() and scene.path_cells.size() > 20, "moving while A is held continuously extends the stroke")
 	var expected_cut: Dictionary = Excavation.plan_packed_earth_transition(scene.backend, scene.landscape_state.path_cells("packed_earth"), scene.path_cells)
-	_check(bool(expected_cut.ok) and int(expected_cut.changed_count) > 0, "packed-earth stroke plans a real terrain cut before commit")
-	var cut_position: Vector3i = expected_cut.removals[0].position
-	var cut_material: int = int(expected_cut.removals[0].before)
+	var cut_ready: bool = bool(expected_cut.get("ok", false)) and int(expected_cut.get("changed_count", 0)) > 0 and not (expected_cut.get("removals", []) as Array).is_empty()
+	_check(cut_ready, "packed-earth stroke plans a real terrain cut before commit")
+	if not cut_ready:
+		await _button_up(JOY_BUTTON_A)
+		await _finish()
+		return
+	var removals: Array = expected_cut["removals"]
+	var cut_position: Vector3i = removals[0].position
+	var cut_material: int = int(removals[0].before)
 	var terrain_revision_before: int = int(scene.backend.stats().revision)
 	await _button_up(JOY_BUTTON_A)
 	_check(not scene.path_painting and scene.path_placement_active and scene.landscape_state.paths.size() == 1, "A release commits the stroke and keeps the paint tool active")
@@ -168,7 +195,7 @@ func _initialize() -> void:
 	var disconnect_before := JSON.stringify(scene.landscape_state.document())
 	scene._on_joy_connection_changed(0, false)
 	_check(not scene.path_placement_active and scene.menu_open and JSON.stringify(scene.landscape_state.document()) == disconnect_before, "controller disconnect cannot commit a stroke accidentally")
-	_finish()
+	await _finish()
 
 func _aim(point: Vector2) -> void:
 	scene.cursor = Vector3(point.x, 8.0, point.y)
