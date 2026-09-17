@@ -49,6 +49,25 @@ each branch's `notes.md` (read it FIRST before touching that branch).
       merge order is up to the user (wall-details → grass → landing is the
       natural dependency order if any overlap appears).
 
+## Live status (updated as work progresses, 2026-09-17)
+
+- **PR #24 wall-details: MERGED** into `main` (merge commit `16a6805`). CI fully
+  green (36 jobs incl. Thor APK + Windows + gated Drive upload) before merge.
+- **PR #25 living-grass: part 2 implemented + pushed.** Deterministic auto-scattered
+  meadow tufts: `scripts/grass_tuft_scatter.gd` (pure planner) + `m1_garden_visual.gd`
+  (single batched tuft mesh, native-validated, deduped on revision) + `m1_scene.gd`
+  building-foundation exclusions + `terrain_backend.revision()`. Headless: scatter
+  16/0, meadow_tuft_visual 11/0 (mock backend: determinism/exclusion/stone-rejection),
+  grass_tone 26/1 (1 environmental, no native module). CI re-running on the push.
+- **PR #26 house-landing: green except one delivery-infra flake.** Windows build
+  built + verified; only the gated Drive upload failed on a stale fixed-name
+  collision (`terrain-ready.json` already in Drive). Failed job re-run issued.
+- The three PRs touch **disjoint file sets** (no overlap) → merge order has no
+  conflict risk. Remaining: #25 CI green, #26 Windows re-run green, then merge
+  #25 + #26 and confirm green on `main`.
+- After all three are merged green: begin **water physics + water placement**
+  (user-approved).
+
 ## Local environment notes
 
 - Godot 4.7.2 headless available at `godot`; **no Xvfb in this sandbox**, so
