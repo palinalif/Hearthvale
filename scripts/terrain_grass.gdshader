@@ -1,11 +1,14 @@
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
-// Warm desaturated meadow palette with per-cell tone variation.
+// Warm desaturated meadow palette with coherent per-patch tone variation.
 //
-// The palette, the coherent patch scales and the fine per-cell amplitude are
-// published by scripts/m1_patch_generator.gd from scripts/grass_tone.gd, which
-// also mirrors this model on the CPU for tuft tinting and determinism tests.
+// The palette and the coherent patch scales are published by
+// scripts/m1_patch_generator.gd from scripts/grass_tone.gd, which also mirrors
+// this model on the CPU for tuft tinting and determinism tests. The tone is a
+// smooth multi-scale field only: an independent per-cell jitter used to alias
+// into a fine diagonal moire across the whole meadow at gameplay distance, so
+// voxel-level texture comes from the scattered tufts, not from this shader.
 // Nothing here flattens, tiles or replaces the volumetric terrain: this is a
 // material over the existing native grass voxel faces, and terrain authority
 // remains on the native 0.125 grid.
@@ -19,9 +22,6 @@ uniform float tone_span = 4.0;
 uniform float tone_base = 2.0;
 uniform vec3 tone_scales = vec3(6.0, 1.5, 0.5);
 uniform vec3 tone_weights = vec3(0.45, 0.35, 0.20);
-uniform float tone_fine_cell = 0.0625;
-uniform float tone_fine_amplitude = 0.30;
-
 varying vec3 world_position;
 varying vec3 world_normal;
 varying float tone_index;
@@ -65,12 +65,9 @@ void vertex() {
 }
 
 void fragment() {
-	// One decorative-scale jitter on top of the coherent field. Bounded, so it
-	// adds voxel-level texture without turning the meadow into noise.
-	vec2 fine_cell = floor(world_position.xz / tone_fine_cell);
-	float fine = (hash21(fine_cell + vec2(53.0, 53.0)) - 0.5) * 2.0 * tone_fine_amplitude;
-	float index = clamp(tone_index + fine, 0.0, tone_span);
-	vec3 top = meadow_palette(index);
+	// Coherent field only: no per-cell salt-and-pepper, which aliased into a
+	// visible diagonal moire across the meadow at gameplay camera distance.
+	vec3 top = meadow_palette(clamp(tone_index, 0.0, tone_span));
 	float top_face = smoothstep(0.72, 0.96, world_normal.y);
 	vec3 base = mix(tone_side_shade.rgb, top, top_face);
 	ALBEDO = base * COLOR.rgb;

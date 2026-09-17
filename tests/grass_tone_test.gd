@@ -41,7 +41,7 @@ func _verify_palette() -> void:
 	check(family_ok, "every palette tone is inside the approved green family")
 	check(Tone.TONES[Tone.TONES.size() / 2] == Tone.palette_color(Tone.base_index()), "field base index is the dominant meadow green")
 	check(Tone.TONES.size() == 5 and Tone.span() == 4.0, "five ordered tones with the shader span published from one source")
-	print("GRASS_TONE_PALETTE " + JSON.stringify({"tones": Tone.TONES.size(), "hues": hues.keys(), "coherent_scales": Tone.SCALES, "fine_cell": Tone.FINE_CELL, "fine_amplitude": Tone.FINE_AMPLITUDE}))
+	print("GRASS_TONE_PALETTE " + JSON.stringify({"tones": Tone.TONES.size(), "hues": hues.keys(), "coherent_scales": Tone.SCALES, "presentation_cell": Tone.FINE_CELL, "fine_amplitude": 0.0}))
 
 func _verify_determinism() -> void:
 	var first := Tone.digest(Vector2(0.0, 0.0), LATTICE_STEP, LATTICE_COUNT)
@@ -100,8 +100,9 @@ func _verify_spread() -> void:
 	print("GRASS_TONE_SPREAD " + JSON.stringify({"tones_reached": reached.size(), "min_index": low, "max_index": high, "outside_family": outside}))
 
 func _verify_coherence() -> void:
-	# Adjacent decorative cells must differ only within the bounded fine shift,
-	# while cells far apart must be free to differ fully: patches, not noise.
+	# The field is coherent only: adjacent decorative cells must stay very close
+	# in tone, while cells far apart are free to differ fully: patches, not a
+	# per-cell salt-and-pepper that aliased into a diagonal moire on device.
 	var neighbour_delta := 0.0
 	var neighbour_max := 0.0
 	var wide_delta := 0.0
@@ -118,9 +119,12 @@ func _verify_coherence() -> void:
 			samples += 1
 	neighbour_delta /= float(samples)
 	wide_delta /= float(samples)
-	check(neighbour_max <= Tone.FINE_AMPLITUDE * 2.0 + 0.15, "per-voxel tone shift is bounded (not salt-and-pepper)")
-	check(neighbour_max <= Tone.span() * 0.2, "adjacent voxels stay well inside the palette span")
-	check(neighbour_delta < Tone.FINE_AMPLITUDE, "neighbouring voxels stay close in tone")
+	var exact_coherent := true
+	for index in 512:
+		var x := float(index) * 0.0625
+		exact_coherent = exact_coherent and Tone.full_index(x, x * 0.37) == Tone.tone_index(x, x * 0.37)
+	check(exact_coherent, "full index is the coherent field: no per-cell salt-and-pepper term")
+	check(neighbour_max <= Tone.span() * 0.05, "adjacent decorative cells stay close in tone (no sub-pixel checker)")
 	check(wide_delta > neighbour_delta * 2.0, "distant cells vary more than neighbours (coherent patches)")
 	var broad_a := 0.0
 	var broad_b := 0.0
@@ -131,7 +135,7 @@ func _verify_coherence() -> void:
 	broad_a /= 256.0
 	broad_b /= 256.0
 	check(absf(broad_a - broad_b) < Tone.span(), "broad structure stays within the palette over a two-metre offset")
-	print("GRASS_TONE_COHERENCE " + JSON.stringify({"neighbour_delta": neighbour_delta, "neighbour_max": neighbour_max, "wide_delta": wide_delta, "fine_bound": Tone.FINE_AMPLITUDE * 2.0}))
+	print("GRASS_TONE_COHERENCE " + JSON.stringify({"neighbour_delta": neighbour_delta, "neighbour_max": neighbour_max, "wide_delta": wide_delta, "fine_bound": 0.0}))
 
 func _verify_shader_wiring() -> void:
 	var source := FileAccess.get_file_as_string(SHADER_PATH)
@@ -147,7 +151,7 @@ func _verify_shader_wiring() -> void:
 			declared = false
 			print("FAILED_UNIFORM " + name)
 	check(declared, "every published parameter is declared by the native grass shader")
-	check(source.contains("tone_fine_cell") and source.contains("tone_scales"), "shader keeps the shared patch scales and decorative cell")
+	check(source.contains("tone_scales") and not source.contains("tone_fine"), "shader keeps the shared patch scales and the per-cell moire term stays removed")
 	check(source.contains("COLOR.rgb"), "shader still respects the mesher's vertex colour")
 	var material := Generator.grass_material()
 	check(material != null and material.shader != null and str(material.shader.resource_path) == SHADER_PATH, "native grass model uses the meadow shader")

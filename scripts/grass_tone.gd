@@ -4,8 +4,11 @@ class_name GrassTone
 ## Deterministic meadow-tone model for the native grass surface.
 ##
 ## The visible ground is the native voxel terrain: every grass column carries
-## `res://scripts/terrain_grass.gdshader`, which evaluates this model per vertex
-## and adds one bounded per-cell jitter in the fragment stage. This module is the
+## `res://scripts/terrain_grass.gdshader`, which evaluates this model per vertex.
+## The tone is a smooth multi-scale field only: an independent per-cell jitter
+## aliased into a fine diagonal moire across the whole meadow at gameplay
+## distance, so voxel-level texture comes from the scattered tufts. This module
+## is the
 ## single source of truth for the palette and the patch scales —
 ## `M1PatchGenerator.build_library()` publishes them to the shader, and the
 ## automatic tuft renderer reuses `sample()` so ground foliage sits on the tone
@@ -31,11 +34,9 @@ const SIDE_SHADE := Color("688e52")
 const SCALES: Array[float] = [6.0, 1.5, 0.5]
 const WEIGHTS: Array[float] = [0.45, 0.35, 0.20]
 const SALTS: Array[int] = [17, 23, 29]
-## Decorative cell used for the per-voxel breakup, and the hard bound that keeps
-## it a tone shift instead of noise (index units, one step = one palette entry).
+## Decorative presentation cell shared with the tuft scatter (0.0625 grid).
+## The tone field itself is coherent only: no per-cell salt-and-pepper term.
 const FINE_CELL := 0.0625
-const FINE_AMPLITUDE := 0.30
-const FINE_SALT := 53
 ## Family guard used by the tests: every tone and every blend of them stays here.
 const FAMILY_HUE := Vector2(0.17, 0.30)
 const FAMILY_SATURATION := Vector2(0.20, 0.62)
@@ -72,14 +73,8 @@ static func tone_index(x: float, z: float) -> float:
 		deviation += (lattice(x, z, SCALES[index], SALTS[index]) - 0.5) * 2.0 * WEIGHTS[index]
 	return clampf(base_index() + deviation * base_index(), 0.0, span())
 
-## Bounded per-voxel shift. Neighbours differ slightly; the whole field does not
-## break into salt-and-pepper.
-static func fine_offset(x: float, z: float) -> float:
-	var cell := Vector2i(floori(x / FINE_CELL), floori(z / FINE_CELL))
-	return (hash_cell(cell, FINE_SALT) - 0.5) * 2.0 * FINE_AMPLITUDE
-
 static func full_index(x: float, z: float) -> float:
-	return clampf(tone_index(x, z) + fine_offset(x, z), 0.0, span())
+	return tone_index(x, z)
 
 ## Piecewise blend across the ordered palette: soft hand-painted patches.
 static func palette_color(index: float) -> Color:
@@ -115,8 +110,6 @@ static func shader_uniforms() -> Dictionary:
 		"tone_base": base_index(),
 		"tone_scales": Vector3(SCALES[0], SCALES[1], SCALES[2]),
 		"tone_weights": Vector3(WEIGHTS[0], WEIGHTS[1], WEIGHTS[2]),
-		"tone_fine_cell": FINE_CELL,
-		"tone_fine_amplitude": FINE_AMPLITUDE,
 		"tone_side_shade": SIDE_SHADE,
 	}
 	for index in TONES.size():
