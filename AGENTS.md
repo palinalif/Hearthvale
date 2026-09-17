@@ -39,3 +39,14 @@ Use pinned dependencies and matching MCP documentation. MCP is development-only 
 Future debug uploads to the user's Google Drive are authorized when tools/destination are available: versioned filenames, preserve existing files, verify upload and return link; no public sharing. Check current availability rather than trusting an old connection report.
 
 Handoff must include actual tests/failures, versions, artifacts and remaining work. Desktop is not Thor evidence; unavailable checks are **not run**. Visual approval belongs to the user. Preserve the accepted M1 baseline while progressing only the active M2 ticket.
+
+## Reading GitHub CI (this repo)
+
+Find the run with `gh run list --branch <branch>`, overall with `gh run view <run-id> --json status,conclusion`. A run is `failure` whenever **any** required *check-run* fails, even if every *job* succeeds — so check both and don't stop at the overall label:
+- Jobs: `gh run view <id> --json jobs --jq '.jobs[] | .name + " -> " + .conclusion'`
+- The actual non-job culprit: `gh api repos/palinalif/Hearthvale/commits/<SHA>/check-runs --jq '[.check_runs[]|select(.conclusion!="success")|.name] | join(", ")'`
+- Recurring non-job failures are `Upload verified Windows/Android build to private Google Drive` (the known Drive-delivery infra, out of scope). All jobs green + only those two red = the code is delivered; the Drive upload is the user's to resolve, not a code regression.
+
+For a specific step's log, `gh run view <id> --log` only surfaces a subset of jobs and `--log --job <name>` 404s on this repo's matrix jobs. Use the Actions web page (run → job → step) or the uploaded job artifact (e.g. `build-catalogue-<sha>`) for a failing test step.
+
+Which tests CI actually runs: each workflow hardcodes a small list (e.g. `@('m2_build_browser_test')`); there is **no glob**. The `tests/water_*` and many landscape suites are in **no** workflow — they run only via local `tools/check.ps1`. So "CI green" does **not** prove water/landscape tests passed; run `check.ps1` locally for those and register any new landscape test in it.
