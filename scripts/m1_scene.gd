@@ -793,11 +793,30 @@ func _on_joy_connection_changed(_device: int, connected: bool) -> void:
 	_set_menu(true)
 	_set_status("Controller disconnected; world paused")
 
+func _sync_meadow_exclusions() -> void:
+	if not garden_visual or not garden_visual.has_method("set_meadow_exclusions"):
+		return
+	var rects: Array = []
+	if building_world != null and building_world.has_method("get_buildings"):
+		for building_value: Dictionary in building_world.get_buildings():
+			var transform_value: Variant = building_value.get("transform", Transform3D.IDENTITY)
+			var transform: Transform3D = transform_value if transform_value is Transform3D else Transform3D.IDENTITY
+			var dims: Vector3 = building_value.get("dimensions", Vector3(18, 10, 14))
+			var scale_abs: Vector3 = transform.basis.get_scale().abs()
+			var margin := 0.5
+			var half := (dims + Vector3(0.5, 0.0, 0.5)) * 0.125 * 0.5 * Vector3(scale_abs.x, 1.0, scale_abs.z)
+			var origin := transform.origin
+			half.x += margin
+			half.z += margin
+			rects.append(Rect2(origin.x - half.x, origin.z - half.z, half.x * 2.0, half.z * 2.0))
+	garden_visual.set_meadow_exclusions(rects)
+
 func _on_backend_changed() -> void:
 	var started := Time.get_ticks_usec()
 	_refresh_river_water_from_terrain()
 	var water_ms := float(Time.get_ticks_usec() - started) / 1000.0
 	started = Time.get_ticks_usec()
+	_sync_meadow_exclusions()
 	if garden_visual and garden_visual.has_method("refresh_terrain"):
 		garden_visual.refresh_terrain()
 	var garden_ms := float(Time.get_ticks_usec() - started) / 1000.0
@@ -807,7 +826,9 @@ func _on_backend_changed() -> void:
 		print("THOR_BACKEND_BASE " + JSON.stringify({"water_ms": water_ms, "garden_ms": garden_ms, "presentation_ms": float(Time.get_ticks_usec() - started) / 1000.0}))
 
 func _on_building_changed() -> void:
-	if not _restoring: _building_dirty = true
+	if not _restoring:
+		_building_dirty = true
+		_sync_meadow_exclusions()
 	_update_presentation()
 
 func _read_camera_and_cursor(delta: float) -> void:

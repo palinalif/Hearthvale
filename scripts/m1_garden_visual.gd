@@ -3,7 +3,14 @@ class_name M1GardenVisual
 
 const Flora = preload("res://scripts/vegetation_mesh.gd")
 const State = preload("res://scripts/landscape_state.gd")
+const Scatter = preload("res://scripts/grass_tuft_scatter.gd")
 const VEGETATION_WIND_SHADER = preload("res://shaders/vegetation_wind.gdshader")
+## Native surface voxel type that carries the meadow tone (see M1PatchGenerator).
+const MEADOW_GRASS_TYPE := 2
+## Presentation fine cell for auto-scattered ground tufts (non-terrain).
+const MEADOW_UNIT := 0.0625
+## Keep auto tufts off hand-planted scenery by this half-extent (metres).
+const MEADOW_RECORD_CLEARANCE := 0.35
 const TREE_ROTATION_STEP := PI * 0.5
 const TREE_TURN_COUNT := 4
 const FOLIAGE_TURN_COUNT := 4
@@ -32,12 +39,30 @@ void fragment() {
 static var _prop_tint_shader: Shader
 var _groups: Dictionary = {}
 var wind_enabled := true
+var _tuft_backend: Node
+var _tuft_node: MeshInstance3D
+var _tuft_last_key := ""
+var _tuft_record_rects: Array = []
+var _tuft_extra_rects: Array = []
 
-func attach_backend(_backend: Node) -> void:
-	pass
+func attach_backend(backend: Node) -> void:
+	_tuft_backend = backend
+	if backend != null and backend.has_signal("changed") and not backend.is_connected("changed", _on_meadow_terrain_changed):
+		backend.connect("changed", _on_meadow_terrain_changed)
+	_rebuild_meadow_tufts()
 
 func refresh_terrain() -> void:
-	pass # Saved roots do not relocate or resurrect automatically after edits.
+	# Saved roots do not relocate or resurrect automatically after edits; the
+	# auto-scattered meadow tufts do, re-derived deterministically on each
+	# terrain revision (see _rebuild_meadow_tufts).
+	_rebuild_meadow_tufts()
+
+func set_meadow_exclusions(rects: Array) -> void:
+	_tuft_extra_rects = rects
+	_rebuild_meadow_tufts()
+
+func _on_meadow_terrain_changed() -> void:
+	_rebuild_meadow_tufts()
 
 func set_wind_enabled(enabled: bool) -> void:
 	wind_enabled = enabled
@@ -52,6 +77,10 @@ func apply_records(records: Array) -> void:
 	# Existing records keep their authored quarter-turn variation. Newly brushed
 	# plants may also carry a saved yaw marker, which unlocks a deterministic
 	# random 15-degree sub-turn without reshuffling old scenery.
+	_tuft_record_rects.clear()
+	for record: Dictionary in records:
+		var planted := State.position_of(record)
+		_tuft_record_rects.append(Rect2(planted.x - MEADOW_RECORD_CLEARANCE, planted.z - MEADOW_RECORD_CLEARANCE, MEADOW_RECORD_CLEARANCE * 2.0, MEADOW_RECORD_CLEARANCE * 2.0))
 	var batches := {}
 	for record: Dictionary in records:
 		var kind := str(record["kind"]); var variant := posmod(int(record["seed"]), Flora.variant_count(kind))
@@ -85,9 +114,139 @@ func apply_records(records: Array) -> void:
 			if multi.use_custom_data: multi.set_instance_custom_data(index, batch["custom_data"][index])
 	for key in _groups:
 		if not batches.has(key): _groups[key].multimesh.instance_count = 0
+	_rebuild_meadow_tufts()
 
 func reset_records(records: Array) -> void:
 	apply_records(records)
+
+func _rebuild_meadow_tufts() -> void:
+	if _tuft_backend == null or not _tuft_backend.has_method("voxel_at"):
+		return
+	if _tuft_backend.has_method("is_ready") and not _tuft_backend.is_ready():
+		return
+	var key := _tuft_key()
+	if key == _tuft_last_key:
+		return
+	_tuft_last_key = key
+	var scale := maxf(0.001, float(_tuft_backend.get("voxel_scale")))
+	var patch: Vector3i = _tuft_backend.get("patch_size")
+	var world := Vector2(float(patch.x) * scale, float(patch.z) * scale)
+	var exclusions: Array = []
+	exclusions.append_array(_tuft_record_rects)
+	exclusions.append_array(_tuft_extra_rects)
+	var plan := Scatter.plan(Vector2.ZERO, world, Scatter.DENSITY, exclusions)
+	var vertices := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var indices := PackedInt32Array()
+	var base := 0
+	var tufts := 0
+	var cells := 0
+	for tuft: Dictionary in plan:
+		var cell: Vector2i = tuft["cell"]
+		var step: Vector2i = tuft["step"]
+		var columns: Array = tuft["columns"]
+		var tone: Color = tuft["tone"]
+		var root := _meadow_column_top((cell.x + 0.5) * MEADOW_UNIT, (cell.y + 0.5) * MEADOW_UNIT)
+		if is_nan(root):
+			continue
+		var companion_valid := true
+		var companion_root := root
+		if int(columns[1]) > 0:
+			var companion := cell + step
+			companion_root = _meadow_column_top((companion.x + 0.5) * MEADOW_UNIT, (companion.y + 0.5) * MEADOW_UNIT)
+			if is_nan(companion_root) or absf(companion_root - root) > MEADOW_UNIT * 2.0:
+				companion_valid = false
+		for column_index in 2:
+			var height := int(columns[column_index])
+			if height <= 0:
+				continue
+			if column_index == 1 and not companion_valid:
+				continue
+			var column_cell := cell if column_index == 0 else cell + step
+			var column_root := root if column_index == 0 else companion_root
+			for level in height:
+				var center := Vector3((column_cell.x + 0.5) * MEADOW_UNIT, column_root + (float(level) + 0.5) * MEADOW_UNIT, (column_cell.y + 0.5) * MEADOW_UNIT)
+				base = _append_tuft_box(vertices, normals, colors, indices, base, center, tone)
+				cells += 1
+		tufts += 1
+	_clear_meadow_tuft_node()
+	if cells > 0:
+		var mesh := ArrayMesh.new()
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = vertices
+		arrays[Mesh.ARRAY_NORMAL] = normals
+		arrays[Mesh.ARRAY_COLOR] = colors
+		arrays[Mesh.ARRAY_INDEX] = indices
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var material := StandardMaterial3D.new()
+		material.vertex_color_use_as_albedo = true
+		material.vertex_color_is_srgb = true
+		material.roughness = 1.0
+		material.metallic_specular = 0.0
+		mesh.surface_set_material(0, material)
+		var node := MeshInstance3D.new()
+		node.name = "MeadowTufts"
+		node.mesh = mesh
+		add_child(node)
+		_tuft_node = node
+
+func _tuft_key() -> String:
+	var revision := 0
+	if _tuft_backend.has_method("revision"):
+		revision = int(_tuft_backend.call("revision"))
+	return "%d|%s" % [revision, _exclusion_digest()]
+
+func _exclusion_digest() -> String:
+	var payload: Array = []
+	for area: Variant in _tuft_record_rects:
+		if area is Rect2:
+			payload.append([snappedf((area as Rect2).position.x, 0.01), snappedf((area as Rect2).position.y, 0.01), snappedf((area as Rect2).size.x, 0.01), snappedf((area as Rect2).size.y, 0.01)])
+	for area: Variant in _tuft_extra_rects:
+		if area is Rect2:
+			payload.append([snappedf((area as Rect2).position.x, 0.01), snappedf((area as Rect2).position.y, 0.01), snappedf((area as Rect2).size.x, 0.01), snappedf((area as Rect2).size.y, 0.01)])
+	return var_to_bytes(payload).hex_encode().sha256_text()
+
+func _meadow_column_top(x: float, z: float) -> float:
+	var scale := maxf(0.001, float(_tuft_backend.get("voxel_scale")))
+	var patch: Vector3i = _tuft_backend.get("patch_size")
+	var vx := int(floori(x / scale))
+	var vz := int(floori(z / scale))
+	if vx < 0 or vz < 0 or vx >= patch.x or vz >= patch.z:
+		return NAN
+	for y in range(patch.y - 2, -1, -1):
+		var top := int(_tuft_backend.voxel_at(Vector3i(vx, y, vz)))
+		if top != 0 and int(_tuft_backend.voxel_at(Vector3i(vx, y + 1, vz))) == 0:
+			return float(y + 1) * scale if top == MEADOW_GRASS_TYPE else NAN
+	return NAN
+
+func _clear_meadow_tuft_node() -> void:
+	if _tuft_node != null and is_instance_valid(_tuft_node):
+		_tuft_node.queue_free()
+	_tuft_node = null
+
+func _append_tuft_box(vertices: PackedVector3Array, normals: PackedVector3Array, colors: PackedColorArray, indices: PackedInt32Array, base: int, center: Vector3, tone: Color) -> int:
+	var size := Vector3.ONE * MEADOW_UNIT
+	var half := size * 0.5
+	var faces := [
+		[Vector3.UP, [Vector3(-half.x, half.y, -half.z), Vector3(half.x, half.y, -half.z), Vector3(half.x, half.y, half.z), Vector3(-half.x, half.y, half.z)]],
+		[Vector3.DOWN, [Vector3(-half.x, -half.y, half.z), Vector3(half.x, -half.y, half.z), Vector3(half.x, -half.y, -half.z), Vector3(-half.x, -half.y, -half.z)]],
+		[Vector3.FORWARD, [Vector3(-half.x, -half.y, -half.z), Vector3(half.x, -half.y, -half.z), Vector3(half.x, half.y, -half.z), Vector3(-half.x, half.y, -half.z)]],
+		[Vector3.BACK, [Vector3(half.x, -half.y, half.z), Vector3(-half.x, -half.y, half.z), Vector3(-half.x, half.y, half.z), Vector3(half.x, half.y, half.z)]],
+		[Vector3.LEFT, [Vector3(-half.x, -half.y, half.z), Vector3(-half.x, -half.y, -half.z), Vector3(-half.x, half.y, -half.z), Vector3(-half.x, half.y, half.z)]],
+		[Vector3.RIGHT, [Vector3(half.x, -half.y, half.z), Vector3(half.x, -half.y, -half.z), Vector3(half.x, half.y, -half.z), Vector3(half.x, half.y, half.z)]],
+	]
+	for face: Array in faces:
+		var normal: Vector3 = face[0]
+		var corners: Array = face[1]
+		for corner: Vector3 in corners:
+			vertices.append(center + corner)
+			normals.append(normal)
+			colors.append(tone)
+		indices.append_array(PackedInt32Array([base, base + 1, base + 2, base + 1, base + 3, base + 2]))
+		base += 4
+	return base
 
 static func planting_rotation(record: Dictionary) -> Basis:
 	if not str(record.get("kind", "")) in ["tree", "foliage"]: return Basis.IDENTITY
