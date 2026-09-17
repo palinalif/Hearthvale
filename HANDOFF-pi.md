@@ -24,20 +24,27 @@ each branch's `notes.md` (read it FIRST before touching that branch).
   pre-existing test failures those branches noted (cottage_detail_render_test
   repeat-stability + m2_hamlet_composition_render_test `path.points` crash) and
   much of the Windows-host CI failure family the branch tips carried.
-- Consequence: each branch must be **rebased onto `origin/main`, re-verified,
-  re-pushed, and its PR reopened with base = `main`**.
+- Consequence: each branch is **rebased onto `origin/main`, re-verified, and
+  re-pushed with a FRESH PR** (GitHub cannot reopen a PR whose base branch was
+  deleted — "State cannot be changed. The master branch has been deleted.").
+  Fresh PRs: **#24** wall-details, **#25** living-grass, **#26** house-landing.
+- Root `notes.md` on `main` is owned by the visual-overhaul handoff, so each
+  branch's durable notes were moved to `notes-task-<name>.md` to end the
+  permanent rebase conflict.
 
 ## Plan / status as of this commit
 
 1. [x] Record this handoff (this file).
-2. [ ] Rebase `task/house-wall-details` onto `origin/main`; headless verify;
-      force-push; reopen PR #21 with base `main`.
-3. [ ] Rebase `task/living-grass` onto `origin/main`; headless verify;
-      force-push; reopen PR #22 with base `main`; **then implement part 2
-      (deterministic auto-scattered tufts)** per `tasks/` + notes.md.
-4. [ ] Rebase `task/house-landing` onto `origin/main`; headless verify;
-      force-push; reopen PR #23 with base `main` (picks up the two
-      previously-stuck commits `5dad921`, `9c4817c`).
+2. [x] Rebased `task/house-wall-details` onto `origin/main` (f610176) → tip
+      `f6f3f27`. headless: house_wall_detail_test 25/0, visual_grid_test ok.
+      **PR #24** opened (base main) — #21 cannot be reopened (base branch deleted).
+3. [x] Rebased `task/living-grass` → tip `dbb6c0a`. headless: grass_tone_test 26
+      checks, 1 environmental (no native voxel module in this sandbox's Godot).
+      **PR #25** opened. [ ] **Part 2 (deterministic auto-scattered tufts) —
+      in progress on this branch.**
+4. [x] Rebased `task/house-landing` → tip `d88f048` (now carries the two
+      previously-stuck commits). headless: edge_foliage 30/0, dirt_rim 32/0.
+      **PR #26** opened.
 5. [ ] CI gates each rebased branch to green on `main`; user visual approval;
       merge order is up to the user (wall-details → grass → landing is the
       natural dependency order if any overlap appears).
