@@ -64,3 +64,34 @@ CI fixes applied for the established contract:
 
 **Remaining: a visual playtest on the Thor** (native carve look, stream/lake feel, water-surface
 render in game) — visual approval belongs to the user.
+
+---
+
+## Waterfall (derived cascade) — delivered, CI green
+
+A waterfall is a **derived presentation**, not a new water type and not a fluid sim: a higher
+authored body overhanging a lower one renders a falling curtain + base splash (design line 152:
+"a waterfall joins authored upper and lower water regions").
+
+- `scripts/waterfall_geometry.gd` (new, pure + rect-scoped): `derive()` scans each upper body's
+  edge (authored corners + midpoints) for a crown whose terrain is near/under the upper level and
+  whose base is a distinct lower body; snap to the structural 0.125 grid, head 1..12 m, deduped
+  per crown, keyed `"<upper>:<lower>"`.
+- `LandscapeState.waterfall_suppressions` — the **only** stored waterfall state (a dismissed
+  upper/lower pair). `document()` omits the key when empty (schema-neutral); capped at 64;
+  `suppress_waterfall`/`unsuppress_waterfall`.
+- `water_visual.gd`: `refresh_waterfalls(dirty_rect)` re-derives only a terrain edit-bounds grown
+  by `SAMPLE_MARGIN` (never the whole map) and builds the cascade (curtain + splash,
+  `shaders/waterfall_fall.gdshader`). `active_waterfalls()` exposes crowns to the tool.
+- Scene wiring (`m1_scene.gd`): re-derives on terrain change (edit-bounds), water commit/undo/redo,
+  and load; `_sync_water_visual` re-applies suppressions.
+- Interaction (`m2_scene_water.gd`): in the water tool, aiming at a visible fall and pressing A
+  dismisses it as one landscape undo transaction.
+
+Tests (now in `tools/check.ps1` — the water tests were previously local-only): waterfall 19,
+waterfall_visual 6, water_region 54 (incl. suppressions round-trip), carve 12, water_visual 8,
+excavation 8 — all 0. Pushed `9651a1a`; CI run 35193493385 **30/30 green, overall success**
+incl. `build-thor-apk` (verified ARM64 APK) + Windows playtest. PR #27 OPEN/MERGEABLE.
+
+**Remaining: visual playtest on the Thor** — waterfall cascade/splash look, dismissal feel; visual
+approval belongs to the user.
