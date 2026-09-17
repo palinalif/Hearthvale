@@ -549,6 +549,7 @@ func _diagnose_water() -> void:
 	for r: Dictionary in water:
 		parts.append("id=%d %s lvl=%.3f pts=%d" % [int(r.get("id", 0)), str(r.get("type", "")), float(r.get("level", 0.0)), int((r.get("points", []) as Array).size())])
 	var lines: Array = ["DIAG_WATER regions=%d | %s" % [water.size(), " ".join(parts)]]
+	lines.append("DIAG_WATER scene=%s self=%s river=%s decor=%s garden=%s wv=%s" % [str(get_class()), str(get_path()), str(river_water != null), str(decor_root != null), str(garden_visual != null), str(water_visual != null)])
 	if not water_visual:
 		lines.append("DIAG_WATER wv=null")
 	else:
