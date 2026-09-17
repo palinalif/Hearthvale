@@ -63,10 +63,22 @@ each branch's `notes.md` (read it FIRST before touching that branch).
   built + verified; only the gated Drive upload failed on a stale fixed-name
   collision (`terrain-ready.json` already in Drive). Failed job re-run issued.
 - The three PRs touch **disjoint file sets** (no overlap) → merge order has no
-  conflict risk. Remaining: #25 CI green, #26 Windows re-run green, then merge
-  #25 + #26 and confirm green on `main`.
-- After all three are merged green: begin **water physics + water placement**
-  (user-approved).
+  conflict risk.
+- **ALL THREE MERGED into `main`** (head `11790d5`): #24 `16a6805`, #25 `52c2d77`,
+  #26 `11790d5`. `main` has **no branch protection / required checks**, so the
+  red Drive job did not block merging. Merged-main headless re-verify (deterministic
+  legs): grass_tuft_scatter 16/0, meadow_tuft_visual 11/0, house_wall_detail 25/0,
+  house_edge_foliage 30/0, house_dirt_rim 32/0.
+- **Known user-side infra issue (not a code regression, not merge-blocking):**
+  the gated "Upload verified Windows build to private Google Drive" job fails on
+  #25/#26 (and the main Drive-delivery workflow) because the backing **Apps Script
+  deployment returns HTTP 404 / empty** (flapping; three distinct errors across
+  re-runs). The Windows build itself builds + verifies; the **Android** Drive
+  upload succeeds. Fix = restore the Apps Script web-app deployment behind
+  `APPS_SCRIPT_WEBHOOK_URL`. Re-run the job once it's back to deliver the Windows
+  artifact.
+- **Next: water physics + water placement** (user-approved) — see the water task
+  ticket.
 
 ## Local environment notes
 
