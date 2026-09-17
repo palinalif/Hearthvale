@@ -31,6 +31,17 @@ var _cell_cache: Dictionary = {}
 var _regions_key := ""
 var _rebuild_scheduled := false
 var _dirty_accum := Rect2()
+# Live perf snapshot for the on-screen debug HUD (Y/F1): where the water surface
+# frame time goes (resample vs mesh build, how many cells, how many quads).
+var water_perf: Dictionary = {}
+var water_rebuilds := 0
+
+func get_perf() -> Dictionary:
+	return water_perf
+func get_rebuilds() -> int:
+	return water_rebuilds
+func reset_rebuilds() -> void:
+	water_rebuilds = 0
 
 func attach_backend(backend: Node) -> void:
 	_backend = backend
@@ -52,11 +63,13 @@ func set_regions_incremental(regions: Array, invalidate_cells: Array = []) -> vo
 		return
 	if _backend.has_method("is_ready") and not _backend.is_ready():
 		return
+	var t0 := Time.get_ticks_usec()
 	_regions = regions
 	_regions_key = _regions_signature()
 	for cell in invalidate_cells:
 		_cell_cache.erase(cell)
 	var world_x := _world_x()
+	var resampled := 0
 	for region: Dictionary in _regions:
 		for cell: Vector2i in Geometry.footprint_cells(region, world_x):
 			if _cell_cache.has(cell):
@@ -64,7 +77,12 @@ func set_regions_incremental(regions: Array, invalidate_cells: Array = []) -> vo
 			var px := float(cell.x) * WATER_CELL + WATER_CELL * 0.5
 			var pz := float(cell.y) * WATER_CELL + WATER_CELL * 0.5
 			_cell_cache[cell] = _terrain_top(px, pz)
+			resampled += 1
+	var t1 := Time.get_ticks_usec()
 	_build_mesh_from_cache()
+	var t2 := Time.get_ticks_usec()
+	water_perf = {"resample_ms": (t1 - t0) / 1000.0, "mesh_ms": (t2 - t1) / 1000.0, "cells_resampled": resampled, "regions": _regions.size(), "quads": surface_quad_count()}
+	water_rebuilds += 1
 	_last_key = _key()
 
 func refresh_terrain() -> void:
@@ -101,7 +119,8 @@ func _do_surface_rebuild() -> void:
 		return
 	if _backend.has_method("is_ready") and not _backend.is_ready():
 		return
-	var resampled := false
+	var t0 := Time.get_ticks_usec()
+	var resampled := 0
 	for region: Dictionary in _regions:
 		for cell: Vector2i in Geometry.footprint_cells(region, _world_x()):
 			if not rect.has_point(Vector2(float(cell.x) * WATER_CELL, float(cell.y) * WATER_CELL)):
@@ -109,10 +128,14 @@ func _do_surface_rebuild() -> void:
 			var px := float(cell.x) * WATER_CELL + WATER_CELL * 0.5
 			var pz := float(cell.y) * WATER_CELL + WATER_CELL * 0.5
 			_cell_cache[cell] = _terrain_top(px, pz)
-			resampled = true
-	if not resampled:
+			resampled += 1
+	if resampled == 0:
 		return
+	var t1 := Time.get_ticks_usec()
 	_build_mesh_from_cache()
+	var t2 := Time.get_ticks_usec()
+	water_perf = {"resample_ms": (t1 - t0) / 1000.0, "mesh_ms": (t2 - t1) / 1000.0, "cells_resampled": resampled, "regions": _regions.size(), "quads": surface_quad_count(), "localized": true}
+	water_rebuilds += 1
 	_last_key = _key()
 
 func _on_terrain_changed() -> void:
@@ -326,6 +349,8 @@ func _rebuild() -> void:
 		return
 	_last_key = key
 	_regions_key = _regions_signature()
+	var t0 := Time.get_ticks_usec()
+	var cells := 0
 	# Single pass (level-load fast path): scan each column once, cache the
 	# result for localized edits, and build the surface in the same loop.
 	_cell_cache.clear()
@@ -344,6 +369,7 @@ func _rebuild() -> void:
 			var cz := float(cell.y) * WATER_CELL
 			var surface_y := _terrain_top(cx + WATER_CELL * 0.5, cz + WATER_CELL * 0.5)
 			_cell_cache[cell] = surface_y
+			cells += 1
 			if not is_nan(surface_y) and surface_y >= level - 0.000001:
 				continue
 			var depth := 0.0 if is_nan(surface_y) else clampf((level - surface_y) / DEPTH_SCALE, 0.0, 1.0)
@@ -365,6 +391,9 @@ func _rebuild() -> void:
 		node.mesh = mesh
 		add_child(node)
 		_nodes.append(node)
+	var t1 := Time.get_ticks_usec()
+	water_perf = {"resample_ms": 0.0, "mesh_ms": 0.0, "total_ms": (t1 - t0) / 1000.0, "cells_resampled": cells, "regions": _regions.size(), "quads": surface_quad_count(), "full_rebuild": true}
+	water_rebuilds += 1
 
 func _build_mesh_from_cache() -> void:
 	_clear()

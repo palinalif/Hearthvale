@@ -1275,7 +1275,20 @@ func _update_debug_overlay() -> void:
 	var path_profile_text := ""
 	if path_profile is Dictionary and not path_profile.is_empty():
 		path_profile_text = "\nPath ms total %.2f  camera %.2f  brush %.2f  valid %.2f  preview %.2f  HUD %.2f" % [float(path_profile.get("path_process_total_ms", 0.0)), float(path_profile.get("camera_cursor_ms", 0.0)), float(path_profile.get("brush_preview_ms", 0.0)), float(path_profile.get("validity_ms", 0.0)), float(path_profile.get("preview_ms", 0.0)), float(path_profile.get("hud_ms", 0.0))]
-	debug_label.text = "FPS %.0f  process %.2f ms\n%s / %s  %dx%d  draw %d  triangles %d\nStatic memory %s  sculpt %.2f ms\nNative mesh acknowledgement unavailable%s" % [Engine.get_frames_per_second(), process_ms, renderer, adapter, get_viewport().size.x, get_viewport().size.y, draw_calls, primitives, memory_text, float(native_stats.get("last_edit_ms", -1.0)), path_profile_text]
+	# Water perf: where the water surface frame time goes (resample vs mesh
+	# build, how many cells, how many quads, and full vs incremental vs
+	# localized) so we can see exactly which path is hot on the device.
+	var water_perf_text := ""
+	if water_visual and water_visual.has_method("get_perf"):
+		var rebuilds: int = water_visual.get_rebuilds() if water_visual.has_method("get_rebuilds") else 0
+		var wp: Dictionary = water_visual.get_perf()
+		if not wp.is_empty():
+			var kind := "FULL" if wp.get("full_rebuild", false) else ("LOCAL" if wp.get("localized", false) else "incr")
+			water_perf_text = "\nWATER[%s] rebuilds %d  resample %.1f  mesh %.1f  cells %d  regions %d  quads %d" % [kind, rebuilds, float(wp.get("resample_ms", 0.0)), float(wp.get("mesh_ms", 0.0)), int(wp.get("cells_resampled", 0)), int(wp.get("regions", 0)), int(wp.get("quads", 0))]
+		if water_visual.has_method("reset_rebuilds"):
+			water_visual.reset_rebuilds()
+	var costs_text := "\nCOSTS process %.1f  sculpt %.1f  preview %.1f  query %.1f  build %.1f" % [process_ms, float(last_frame_costs.get("sculpt_ms", 0.0)), float(last_frame_costs.get("preview_ms", 0.0)), float(last_frame_costs.get("preview_query_ms", 0.0)), float(last_frame_costs.get("preview_build_ms", 0.0))]
+	debug_label.text = "FPS %.0f  process %.2f ms\n%s / %s  %dx%d  draw %d  triangles %d\nStatic memory %s  sculpt %.2f ms%s%s%s" % [Engine.get_frames_per_second(), process_ms, renderer, adapter, get_viewport().size.x, get_viewport().size.y, draw_calls, primitives, memory_text, float(native_stats.get("last_edit_ms", -1.0)), water_perf_text, costs_text, path_profile_text]
 
 func _build_ui() -> void:
 	hud = CanvasLayer.new(); add_child(hud)
