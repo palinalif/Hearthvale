@@ -165,7 +165,7 @@ def delivery_spec(kind: str, commit: str, branch: str) -> tuple[str, set[str]]:
     if kind == "apk":
         stem = f"{drive_branch_name(branch)}-{short}"
         return (
-            f"hearthvale-m1-repair-{commit}",
+            f"hearthvale-drive-apk-{commit}",
             {
                 f"{stem}.apk",
                 f"{stem}.verification.json",
