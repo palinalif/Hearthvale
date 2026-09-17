@@ -72,6 +72,22 @@ func _run() -> void:
 	check(state.water.size() == 1, "lake removed")
 	check(not state.erase_water(lake_id), "erase unknown returns false")
 
+	# --- waterfall suppressions (the only authoritative waterfall state) ----
+	var s4 = State.new()
+	check(not s4.document().has("waterfall_suppressions"), "document omits suppressions when empty")
+	check(s4.suppress_waterfall("1-2"), "suppress a derived fall")
+	check(not s4.suppress_waterfall("1-2"), "duplicate suppress rejected")
+	check(s4.suppress_waterfall("3-4"), "second fall suppressed")
+	check(not s4.suppress_waterfall(""), "empty key rejected")
+	check((s4.document()["waterfall_suppressions"] as Array).size() == 2, "document carries suppressions")
+	var s4b = State.new()
+	check(s4b.restore(s4.document()), "restore accepts suppressions")
+	check(s4b.waterfall_suppressions.has("1-2") and s4b.waterfall_suppressions.has("3-4"), "suppressions survive round trip")
+	check(s4b.unsuppress_waterfall("1-2"), "unsuppress removes")
+	check(not s4b.waterfall_suppressions.has("1-2"), "suppression gone after unsuppress")
+	check(not s4b.unsuppress_waterfall("1-2"), "unsuppress unknown rejected")
+	check(State.validate(s4b.document()), "document with suppressions validates")
+
 	# --- geometry: lake containment ------------------------------------------
 	var lake := {"type": "lake", "level": 3.0, "points": _square(32.0, 32.0, 2.0)}
 	check(Geometry.contains(lake, Vector2(32.0, 32.0)), "lake centre inside")

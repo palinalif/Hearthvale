@@ -517,6 +517,10 @@ func _create_backend() -> void:
 func _sync_water_visual() -> void:
 	if water_visual and water_visual.has_method("set_regions"):
 		water_visual.set_regions(landscape_state.water)
+	# set_waterfall_suppressions also re-derives the (bounded) waterfalls honouring
+	# the player's dismissals, so water commit / undo / redo / restore all stay in sync.
+	if water_visual and water_visual.has_method("set_waterfall_suppressions"):
+		water_visual.set_waterfall_suppressions(landscape_state.waterfall_suppressions)
 
 func _update_brush_preview() -> void:
 	if not brush_preview:
@@ -760,6 +764,8 @@ func _on_backend_ready(ready: bool) -> void:
 		garden_visual.refresh_terrain()
 	if water_visual and water_visual.has_method("refresh_terrain"):
 		water_visual.refresh_terrain()
+	if water_visual and water_visual.has_method("set_waterfall_suppressions"):
+		water_visual.set_waterfall_suppressions(landscape_state.waterfall_suppressions)
 	_update_presentation()
 
 func _apply_review_args() -> void:
@@ -833,6 +839,8 @@ func _on_backend_changed() -> void:
 		garden_visual.refresh_terrain()
 	if water_visual and water_visual.has_method("refresh_terrain"):
 		water_visual.refresh_terrain()
+	if water_visual and water_visual.has_method("refresh_waterfalls_from_bounds") and backend and backend.has_method("get_last_edit_bounds"):
+		water_visual.refresh_waterfalls_from_bounds(backend.get_last_edit_bounds())
 	var garden_ms := float(Time.get_ticks_usec() - started) / 1000.0
 	started = Time.get_ticks_usec()
 	_update_presentation()

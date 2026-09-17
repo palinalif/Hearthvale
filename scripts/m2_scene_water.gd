@@ -13,6 +13,7 @@ const WaterExcavation = preload("res://scripts/water_terrain_excavation.gd")
 const STREAM_WIDTH := 1.5
 const LAKE_MIN_POINTS := 3
 const LAKE_CLOSE_SNAP := 0.5
+const WATERFALL_DISMISS_RADIUS := 1.0
 
 var water_placement_active := false
 var water_kind := "stream"
@@ -137,6 +138,14 @@ func _input(event: InputEvent) -> void:
 		return
 	if water_placement_active:
 		if event.is_action_pressed("m1_accept"):
+			# Aiming at a visible waterfall and pressing A dismisses it (one landscape
+			# undo transaction); elsewhere A starts water placement as usual.
+			if not water_stroking and water_lake_points.is_empty():
+				var fall := _waterfall_at_aim(WATERFALL_DISMISS_RADIUS)
+				if not fall.is_empty():
+					_dismiss_waterfall(fall)
+					get_viewport().set_input_as_handled()
+					return
 			if water_kind == "stream": _start_water_stream()
 			else: _add_water_lake_vertex()
 			get_viewport().set_input_as_handled()
@@ -404,6 +413,37 @@ func _choose_water_tool(id: String) -> void:
 func _water_cursor_point() -> Vector2:
 	if not _terrain_target_valid: return Vector2(NAN, NAN)
 	return Vector2(snappedf(_terrain_target_point.x, WaterGrid.UNIT), snappedf(_terrain_target_point.z, WaterGrid.UNIT))
+
+## The active waterfall whose crown is within radius of the aim, or {} when none.
+func _waterfall_at_aim(radius: float) -> Dictionary:
+	if not water_visual or not water_visual.has_method("active_waterfalls"): return {}
+	var aim := _water_cursor_point()
+	if is_nan(aim.x): return {}
+	var best := {}
+	var best_dist := radius
+	for fall in water_visual.active_waterfalls():
+		var crown := Vector2(float(fall["crown"][0]), float(fall["crown"][1]))
+		var d := crown.distance_to(aim)
+		if d <= best_dist:
+			best_dist = d
+			best = fall
+	return best
+
+## Dismiss a visible waterfall: one landscape undo transaction; the visual re-derives
+## and hides it. Pure scenery state — no terrain, no new water type.
+func _dismiss_waterfall(fall: Dictionary) -> void:
+	var key := str(fall["key"])
+	if JSON.stringify(landscape_state.document()) != _water_before_serialized or _terrain_revision() != _water_terrain_revision or building_world.get_revision() != _water_building_revision:
+		_set_status("World changed; cannot dismiss")
+		return
+	if not landscape_state.suppress_waterfall(key):
+		_set_status("Waterfall already dismissed")
+		return
+	_record_history("landscape")
+	_sync_water_visual()
+	_reset_water_baseline()
+	_set_status("Waterfall dismissed • LB undo")
+	_refresh_controller_hud()
 
 func _terrain_top(point: Vector2) -> float:
 	if not backend or not backend.has_method("voxel_at"): return NAN

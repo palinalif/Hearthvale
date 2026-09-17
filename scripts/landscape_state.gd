@@ -38,6 +38,7 @@ const WATER_MAX_LEVEL := 32.0
 const WATER_MIN_WIDTH := 0.25
 const WATER_MAX_WIDTH := 8.0
 const WATER_RENDER_CELL_LIMIT := 24000
+const WATERFALL_SUPPRESSION_LIMIT := 64
 const EDITABLE_WORLD_SIZE := preload("res://scripts/m2_world_bounds.gd").SIZE
 const Grid = preload("res://scripts/visual_grid.gd")
 const PathRegion = preload("res://scripts/m2_painted_path_region.gd")
@@ -48,6 +49,7 @@ var paths: Array = []
 var bridges: Array = []
 var composition: Array = []
 var water: Array = []
+var waterfall_suppressions: Array = []
 var next_id := 1
 
 func document() -> Dictionary:
@@ -56,6 +58,10 @@ func document() -> Dictionary:
 	# (presentation/record work stays save-authority neutral for existing saves).
 	if not water.is_empty():
 		document["water"] = water.duplicate(true)
+	# Omit the suppressions key when empty so existing saves keep an identical
+	# schema; only the falls the player dismissed are authoritative state.
+	if not waterfall_suppressions.is_empty():
+		document["waterfall_suppressions"] = waterfall_suppressions.duplicate(true)
 	return document
 
 static func validate(value: Dictionary) -> bool:
@@ -121,6 +127,7 @@ static func validate(value: Dictionary) -> bool:
 		ids[id] = true
 		water_cells += _estimated_water_render_cells(region)
 		if water_cells > WATER_RENDER_CELL_LIMIT: return false
+	if not _validate_waterfall_suppressions(value.get("waterfall_suppressions", [])): return false
 	return true
 
 func restore(value: Dictionary) -> bool:
@@ -130,6 +137,7 @@ func restore(value: Dictionary) -> bool:
 	bridges = value.get("bridges", []).duplicate(true)
 	composition = value.get("composition", []).duplicate(true)
 	water = value.get("water", []).duplicate(true)
+	waterfall_suppressions = value.get("waterfall_suppressions", []).duplicate(true)
 	next_id = int(value["next_id"])
 	for record_value in records:
 		var record: Dictionary = record_value
@@ -367,6 +375,20 @@ func erase_water(water_id: int) -> bool:
 		return true
 	return false
 
+## Dismiss a derived waterfall (keyed by its stable pair id) so it is not shown
+## until the water/terrain change enough to re-suggest it. Returns false when the
+## key is already suppressed (so the caller knows nothing changed).
+func suppress_waterfall(key: String) -> bool:
+	if key.is_empty() or waterfall_suppressions.has(key): return false
+	if waterfall_suppressions.size() >= WATERFALL_SUPPRESSION_LIMIT: return false
+	waterfall_suppressions.append(key)
+	return true
+
+func unsuppress_waterfall(key: String) -> bool:
+	if not waterfall_suppressions.has(key): return false
+	waterfall_suppressions.erase(key)
+	return true
+
 func clear_records_in_footprint(point_value: Variant, size_value: Variant, yaw_quarters: int, margin: float = 0.0, yaw_degrees: float = NAN) -> bool:
 	var point_array := _point_array(point_value)
 	var size_array := _size_array(size_value)
@@ -525,6 +547,16 @@ static func _water_flow(value: Variant) -> Array:
 	if not direction.is_finite() or direction.length() < 0.000001: return []
 	direction = direction.normalized()
 	return [snappedf(direction.x, 0.001), snappedf(direction.y, 0.001)]
+
+static func _validate_waterfall_suppressions(value: Variant) -> bool:
+	if not value is Array or value.size() > WATERFALL_SUPPRESSION_LIMIT: return false
+	var seen := {}
+	for entry in value:
+		if not entry is String: return false
+		var key := str(entry)
+		if key.is_empty() or key.length() > 24 or seen.has(key): return false
+		seen[key] = true
+	return true
 
 static func _validate_water_record(value: Variant) -> bool:
 	if not value is Dictionary: return false

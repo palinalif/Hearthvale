@@ -6,18 +6,25 @@ class_name M1WaterVisual
 ## writes no terrain, and stores no save data. Water is an editable scenery
 ## layer, not a fluid simulation.
 const Geometry = preload("res://scripts/water_region_geometry.gd")
+const Waterfall = preload("res://scripts/waterfall_geometry.gd")
 const Grid = preload("res://scripts/visual_grid.gd")
 const WATER_SHADER = preload("res://shaders/water_surface.gdshader")
+const FALL_SHADER = preload("res://shaders/waterfall_fall.gdshader")
 
 const WATER_CELL := Grid.UNIT
 const WATER_COLOR := Color(0.16, 0.44, 0.52, 0.82)
 const WATER_DEEP_COLOR := Color(0.07, 0.26, 0.36, 0.82)
 const DEPTH_SCALE := 4.0
+const FALL_COLOR := Color(0.62, 0.80, 0.88, 0.70)
+const SPLASH_COLOR := Color(0.86, 0.96, 1.0, 0.55)
 
 var _backend: Node
 var _nodes: Array = []
 var _regions: Array = []
 var _last_key := ""
+var _suppressions: Array = []
+var _waterfalls: Array = []
+var _fall_nodes: Array = []
 
 func attach_backend(backend: Node) -> void:
 	_backend = backend
@@ -34,6 +41,128 @@ func refresh_terrain() -> void:
 
 func _on_terrain_changed() -> void:
 	_rebuild()
+
+## --- Derived waterfalls (presentation only; the only stored state is the
+## suppressions the player chose, kept in LandscapeState) -----------------------
+func set_waterfall_suppressions(keys: Array) -> void:
+	_suppressions = keys
+	_refresh_waterfalls(Waterfall.FULL_RECT)
+
+## Re-derive waterfalls only inside dirty_rect and rebuild their cascade meshes.
+## The scene grows a terrain edit-bounds by Waterfall.SAMPLE_MARGIN before calling
+## this (mirroring the path rebuild), so a local edit only samples that area and
+## never the whole map. Falls outside the rect keep their cached state.
+func refresh_waterfalls(dirty_rect: Rect2) -> void:
+	_refresh_waterfalls(dirty_rect)
+
+## Re-derive a bounded area from a terrain edit AABB (or the whole map when the
+## bounds are unset/zero-size), growing the edit by the sampling margin.
+func refresh_waterfalls_from_bounds(bounds: AABB) -> void:
+	if bounds.size == Vector3.ZERO:
+		_refresh_waterfalls(Waterfall.FULL_RECT)
+		return
+	var rect := Rect2(bounds.position.x, bounds.position.z, bounds.size.x, bounds.size.z)
+	_refresh_waterfalls(rect.grow(Waterfall.SAMPLE_MARGIN))
+
+func refresh_waterfalls_full() -> void:
+	_refresh_waterfalls(Waterfall.FULL_RECT)
+
+func _refresh_waterfalls(dirty_rect: Rect2) -> void:
+	if _backend == null or not _backend.has_method("voxel_at"):
+		return
+	if _backend.has_method("is_ready") and not _backend.is_ready():
+		return
+	var kept: Array = []
+	for fall in _waterfalls:
+		if not dirty_rect.has_point(_fall_crown(fall)):
+			kept.append(fall)
+	_waterfalls = kept
+	var derived := Waterfall.derive(_regions, _waterfall_sample(), dirty_rect)
+	var present := {}
+	for fall in _waterfalls:
+		present[str(fall["key"])] = true
+	for fall in derived:
+		var key := str(fall["key"])
+		if present.has(key) or _suppressions.has(key):
+			continue
+		_waterfalls.append(fall)
+	_waterfalls.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return str(a["key"]) < str(b["key"]))
+	_rebuild_falls()
+
+func _waterfall_sample() -> Callable:
+	return func(p: Vector2) -> float: return _terrain_top(p.x, p.y)
+
+static func _fall_crown(fall: Dictionary) -> Vector2:
+	return Vector2(float(fall["crown"][0]), float(fall["crown"][1]))
+
+func _rebuild_falls() -> void:
+	for node: MeshInstance3D in _fall_nodes:
+		if is_instance_valid(node):
+			node.queue_free()
+	_fall_nodes = []
+	for fall in _waterfalls:
+		var node := _build_cascade(fall)
+		if node != null:
+			add_child(node)
+			_fall_nodes.append(node)
+
+func _build_cascade(fall: Dictionary) -> MeshInstance3D:
+	var crown := _fall_crown(fall)
+	var width := maxf(0.25, float(fall["width"]))
+	var top := float(fall["top_level"])
+	var bottom := float(fall["bottom_level"])
+	if bottom >= top:
+		return null
+	var flow := Vector2(float(fall["flow"][0]), float(fall["flow"][1]))
+	if flow.length() < 0.0001:
+		flow = Vector2(1.0, 0.0)
+	flow = flow.normalized()
+	var perp := Vector2(-flow.y, flow.x)
+	var half := width * 0.5
+	var mesh := ArrayMesh.new()
+	# Surface 0: the falling curtain, a vertical sheet from lip down to the pool.
+	var a := crown + perp * half
+	var b := crown - perp * half
+	var cv := PackedVector3Array([Vector3(a.x, top, a.y), Vector3(b.x, top, b.y), Vector3(b.x, bottom, b.y), Vector3(a.x, bottom, a.y)])
+	var cn := PackedVector3Array([Vector3(flow.x, 0.0, flow.y), Vector3(flow.x, 0.0, flow.y), Vector3(flow.x, 0.0, flow.y), Vector3(flow.x, 0.0, flow.y)])
+	var cc := PackedColorArray([Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE])
+	var ci := PackedInt32Array([0, 1, 2, 0, 2, 3])
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _surface_arrays(cv, cn, cc, ci))
+	mesh.surface_set_material(0, _fall_material(top - bottom))
+	# Surface 1: a flat foam splash just above the pool at the base.
+	var s := width * 0.7
+	var eps := 0.02
+	var sv := PackedVector3Array([Vector3(crown.x - s, bottom + eps, crown.y - s), Vector3(crown.x + s, bottom + eps, crown.y - s), Vector3(crown.x + s, bottom + eps, crown.y + s), Vector3(crown.x - s, bottom + eps, crown.y + s)])
+	var sn := PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP])
+	var sc := PackedColorArray([SPLASH_COLOR, SPLASH_COLOR, SPLASH_COLOR, SPLASH_COLOR])
+	var si := PackedInt32Array([0, 1, 2, 0, 2, 3])
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _surface_arrays(sv, sn, sc, si))
+	var splash_material := StandardMaterial3D.new()
+	splash_material.albedo = SPLASH_COLOR
+	splash_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	splash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	splash_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_set_material(1, splash_material)
+	var node := MeshInstance3D.new()
+	node.name = "Waterfall_%d-%d" % [int(fall["upper_id"]), int(fall["lower_id"])]
+	node.mesh = mesh
+	return node
+
+func _surface_arrays(vertices: PackedVector3Array, normals: PackedVector3Array, colors: PackedColorArray, indices: PackedInt32Array) -> Array:
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_INDEX] = indices
+	return arrays
+
+func _fall_material(span: float) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = FALL_SHADER
+	material.set_shader_parameter("fall_color", FALL_COLOR)
+	material.set_shader_parameter("height", span)
+	return material
 
 func _rebuild() -> void:
 	if _backend == null or not _backend.has_method("voxel_at"):
@@ -136,6 +265,10 @@ func _clear() -> void:
 		if is_instance_valid(node):
 			node.queue_free()
 	_nodes = []
+	for node: MeshInstance3D in _fall_nodes:
+		if is_instance_valid(node):
+			node.queue_free()
+	_fall_nodes = []
 
 ## Deterministic quad count of the current surface (test hook).
 func surface_quad_count() -> int:
@@ -146,3 +279,18 @@ func surface_quad_count() -> int:
 			var arrays: Array = mesh.surface_get_arrays(0)
 			total += (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 4
 	return total
+
+## Deterministic fall count (test hook).
+func waterfall_count() -> int:
+	return _waterfalls.size()
+
+## The active (non-suppressed) derived falls, each with crown/levels/key (read-only copy).
+func active_waterfalls() -> Array:
+	return _waterfalls.duplicate(false)
+
+## Keys of the active (non-suppressed) falls, sorted (test hook).
+func waterfall_keys() -> Array:
+	var keys: Array = []
+	for fall in _waterfalls:
+		keys.append(str(fall["key"]))
+	return keys

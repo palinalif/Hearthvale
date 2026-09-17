@@ -25,6 +25,10 @@ static func stream_radius(region: Dictionary) -> float:
 	var width = region.get("width", 0.0)
 	return float(width) * 0.5
 
+## The region's authored points as Vector2 (lake boundary / stream centreline).
+static func points(region: Dictionary) -> PackedVector2Array:
+	return _points(region)
+
 ## Structural-grid cells whose centre lies inside the water body. Used for the
 ## clipped water surface mesh and shore clipping. Deterministic.
 static func footprint_cells(region: Dictionary, world_size: float) -> Array:
