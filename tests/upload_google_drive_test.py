@@ -32,7 +32,7 @@ class DriveUploadContractTest(unittest.TestCase):
         commit = "a" * 40
         apk_artifact, apk_files = drive_upload.delivery_spec("apk", commit, "feat/m2-path-ground-polish")
         pc_artifact, pc_files = drive_upload.delivery_spec("pc", commit, "feat/m2-path-ground-polish")
-        self.assertEqual(apk_artifact, f"hearthvale-m1-repair-{commit}")
+        self.assertEqual(apk_artifact, f"hearthvale-drive-apk-{commit}")
         self.assertEqual(
             apk_files,
             {"feat-m2-path-ground-polish-aaaaaaaa.apk", "feat-m2-path-ground-polish-aaaaaaaa.verification.json"},
