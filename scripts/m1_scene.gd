@@ -547,26 +547,38 @@ func _diagnose_water() -> void:
 	var parts: Array = []
 	for r: Dictionary in water:
 		parts.append("id=%d %s lvl=%.3f pts=%d" % [int(r.get("id", 0)), str(r.get("type", "")), float(r.get("level", 0.0)), int((r.get("points", []) as Array).size())])
-	print("DIAG_WATER regions=%d | %s" % [water.size(), " ".join(parts)])
+	var lines: Array = ["DIAG_WATER regions=%d | %s" % [water.size(), " ".join(parts)]]
 	if not water_visual:
-		print("DIAG_WATER wv=null"); return
-	var quads := int(water_visual.call("surface_quad_count"))
-	print("DIAG_WATER wv tree=%s visible=%s nodes=%d quads=%d" % [str(water_visual.is_inside_tree()), str(water_visual.visible), water_visual.get_child_count(), quads])
-	if water.is_empty() or not backend:
-		return
-	var scale := maxf(0.001, float(backend.get("voxel_scale")))
-	var patch: Vector3i = backend.get("patch_size")
-	var world := float(patch.x) * scale
-	var Geometry = load("res://scripts/water_region_geometry.gd")
-	var r: Dictionary = water[0]
-	var lvl := float(r.get("level", 0.0))
-	var cells: Array = Geometry.footprint_cells(r, world)
-	var submerged := 0
-	for c: Vector2i in cells:
-		var top: float = water_visual._terrain_top((c.x + 0.5) * 0.0625, (c.y + 0.5) * 0.0625)
-		if is_nan(top) or top < lvl - 0.000001:
-			submerged += 1
-	print("DIAG_WATER r0=%s lvl=%.3f cells=%d submerged=%d" % [str(r.get("type", "")), lvl, cells.size(), submerged])
+		lines.append("DIAG_WATER wv=null")
+	else:
+		var quads := int(water_visual.call("surface_quad_count"))
+		lines.append("DIAG_WATER wv tree=%s visible=%s nodes=%d quads=%d" % [str(water_visual.is_inside_tree()), str(water_visual.visible), water_visual.get_child_count(), quads])
+		if not water.is_empty() and backend:
+			var scale := maxf(0.001, float(backend.get("voxel_scale")))
+			var patch: Vector3i = backend.get("patch_size")
+			var world := float(patch.x) * scale
+			var Geometry = load("res://scripts/water_region_geometry.gd")
+			var r: Dictionary = water[0]
+			var lvl := float(r.get("level", 0.0))
+			var cells: Array = Geometry.footprint_cells(r, world)
+			var submerged := 0
+			for c: Vector2i in cells:
+				var top: float = water_visual._terrain_top((c.x + 0.5) * 0.0625, (c.y + 0.5) * 0.0625)
+				if is_nan(top) or top < lvl - 0.000001:
+					submerged += 1
+			lines.append("DIAG_WATER r0=%s lvl=%.3f cells=%d submerged=%d" % [str(r.get("type", "")), lvl, cells.size(), submerged])
+	# logcat + a file the user can pull off the device (user:// on Android is the
+	# app's internal files dir; see the printed global path).
+	var path := "user://water_diagnostic.txt"
+	var wrote := false
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f != null:
+		f.store_string("=== Hearthvale water diagnostic %s ===\n%s\n" % [Time.get_datetime_string_from_unix_time(Time.get_unix_time_from_system()), "\n".join(lines)])
+		f.close()
+		wrote = true
+	for line in lines:
+		print(line)
+	print("DIAG_WATER file: %s (wrote=%s)" % [ProjectSettings.globalize_path(path), str(wrote)])
 
 func _update_brush_preview() -> void:
 	if not brush_preview:
