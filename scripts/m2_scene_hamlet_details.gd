@@ -5,6 +5,9 @@ extends "res://scripts/m2_scene_composition.gd"
 ## transaction; the named aliases below keep tests and UI language explicit.
 
 const DetailState = preload("res://scripts/landscape_state.gd")
+const LandingSite = preload("res://scripts/house_landing_site.gd")
+const HouseEdgeFoliage = preload("res://scripts/house_edge_foliage.gd")
+const HouseDirtRim = preload("res://scripts/house_dirt_rim.gd")
 
 const GARDEN_STYLES := {
 	"cottage_flowers": {"name": "Cottage flower garden", "size": Vector2(3.0, 2.0), "summary": "Loose flowers in a low old-stone border"},
@@ -41,6 +44,14 @@ var _detail_selected_id := -1
 var _detail_selected_colour := ""
 const DETAIL_EDIT_COLOURS: Array[String] = ["natural", "sage", "blue", "berry", "cream"]
 const DETAIL_SELECT_RADIUS := 1.25
+
+## House landing decoration (planting ring + dirt rim). Roots are keyed by stable
+## building id and re-derived from the building record, like the raised-foundation
+## masonry, so move/resize/delete/undo/redo/save-load reconcile for free.
+var _landing_tuft_roots: Dictionary = {}
+var _landing_rim_roots: Dictionary = {}
+var _landing_signature := ""
+var house_landing_stats: Dictionary = {}
 
 # Explicit aliases used by tests and by feature-specific entry points.
 var garden_placement_active := false
@@ -592,9 +603,76 @@ func _refresh_fence_visual(force: bool = false) -> void:
 
 func _update_presentation() -> void:
 	super._update_presentation()
+	_refresh_house_landing()
 	if not detail_placement_active or not target_label: return
 	target_label.text = "%s • %.0f° • %s\nA place  left/right rotate  B cancel  RS orbit" % [_detail_style_name(), detail_yaw_degrees, detail_placement_reason]
 	_update_detail_preview()
+
+## Presentation-only finishing pass: a committed home should read as grown into
+## the landscape (a small grass tuft ring hugging the footprint plus a quiet
+## packed-dirt shoulder where the foundation meets open ground). Everything is
+## re-derived from the building record on every pass, keyed by stable building id,
+## so move/resize/delete/undo/redo/save-load reconcile for free, no planting is
+## saved and no undo transaction changes.
+func _refresh_house_landing(force: bool = false) -> void:
+	if not building_world or not backend or not backend.has_method("voxel_at"):
+		return
+	var signature_parts: Array[String] = [str(_terrain_revision())]
+	for building: Dictionary in building_world.get_buildings():
+		signature_parts.append("%s|%s|%s|%s" % [building.get("id", ""), building.get("style_id", ""), building.get("transform", Transform3D.IDENTITY), building.get("dimensions", Vector3.ZERO)])
+	var signature := "||".join(signature_parts)
+	if not force and signature == _landing_signature:
+		return
+	_landing_signature = signature
+	var site_value := LandingSite.site(backend, landscape_state)
+	var seen := {}
+	house_landing_stats = {}
+	for building: Dictionary in building_world.get_buildings():
+		var building_id := str(building.get("id", ""))
+		if building_id.is_empty(): continue
+		seen[building_id] = true
+		var tufts: Dictionary = HouseEdgeFoliage.build(building, site_value)
+		var rim: Dictionary = HouseDirtRim.build(building, site_value)
+		_refresh_landing_root(_landing_tuft_roots, building_id, building, "HouseEdgeFoliage_%s" % building_id, tufts["mesh"], "TuftRing")
+		_refresh_landing_root(_landing_rim_roots, building_id, building, "HouseDirtRim_%s" % building_id, rim["mesh"], "FoundationShoulder")
+		house_landing_stats[building_id] = {
+			"tufts": tufts["tufts"],
+			"tuft_cells": tufts["cells"],
+			"tuft_draw_calls": tufts["draw_calls"],
+			"tuft_digest": tufts["digest"],
+			"rim_cells": rim["cells"],
+			"rim_draw_calls": rim["draw_calls"],
+			"rim_digest": rim["digest"],
+		}
+	for building_id in _landing_tuft_roots.keys():
+		if not seen.has(building_id): _remove_landing_root(_landing_tuft_roots, str(building_id))
+	for building_id in _landing_rim_roots.keys():
+		if not seen.has(building_id): _remove_landing_root(_landing_rim_roots, str(building_id))
+
+func _refresh_landing_root(roots: Dictionary, building_id: String, building: Dictionary, node_name: String, mesh: Mesh, child_name: String) -> void:
+	_remove_landing_root(roots, building_id)
+	if mesh == null: return
+	var transform_value = building.get("transform", Transform3D.IDENTITY)
+	if not transform_value is Transform3D: return
+	var root := Node3D.new()
+	root.name = node_name
+	root.transform = transform_value as Transform3D
+	var view := MeshInstance3D.new()
+	view.name = child_name
+	view.mesh = mesh
+	root.add_child(view)
+	add_child(root)
+	roots[building_id] = root
+
+func _remove_landing_root(roots: Dictionary, building_id: String) -> void:
+	if not roots.has(building_id): return
+	var root: Node = roots[building_id]
+	if is_instance_valid(root):
+		# Leave the tree immediately: the replacement root reuses this name, and a
+		# deferred free would make Godot rename the new node.
+		if root.get_parent() == self: remove_child(root)
+		root.queue_free()
+	roots.erase(building_id)
 
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
