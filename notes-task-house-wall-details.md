@@ -106,3 +106,12 @@ what changed / checks=N failures=M / what is next.
 - what changed: branch `task/house-wall-details` created off `master` (6ae02f9);
   notes.md stub added. No source edits yet.
 - tests: none run yet
+## Pickup by Pi (2026-09-17): rebased onto main, re-PR'd
+- context: PRs #21/#22/#23 were found closed unmerged (not intentional) and their
+  base branch `master` had been deleted, so GitHub cannot reopen them. Notes moved
+  from root `notes.md` to this file to end the permanent conflict.
+- changed: rebased onto `main` (f610176). No feature-code changes.
+- tests (local headless): house_wall_detail_test checks=25 failures=0;
+  visual_grid_test ok:true (1224 checks, 0 failures).
+- delivery: forced push f6f3f27; new PR https://github.com/palinalif/Hearthvale/pull/24 (base main).
+- next: CI green on #24; user visual approval.
