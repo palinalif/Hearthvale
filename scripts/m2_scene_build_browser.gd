@@ -222,9 +222,6 @@ func _choose_browser_item(item: Dictionary) -> void:
 	if kind == "terrain_tool":
 		_choose_outdoor_tool(str(item["id"]))
 		return
-	if kind == "water":
-		if has_method("_choose_water_tool"): call("_choose_water_tool", str(item["id"]))
-		return
 	if kind == "home":
 		if world_mode and view_context != "building": _set_view_context("building", "Home placement selected")
 		_choose_home_design(str(item["id"]))
@@ -364,7 +361,6 @@ func _make_catalogue_model(item: Dictionary) -> Node3D:
 func _make_world_catalogue_model(kind: String, id: String) -> Node3D:
 	if kind == "path": return _make_path_catalogue_model(id)
 	if kind == "terrain_tool": return _make_plant_catalogue_model(id)
-	if kind == "water": return _make_water_catalogue_model(id)
 	var visual := HamletPreviewVisual.new()
 	if kind == "bridge":
 		var width := float(BRIDGE_STYLES[id]["width"])
@@ -380,24 +376,6 @@ func _make_world_catalogue_model(kind: String, id: String) -> Node3D:
 		visual.rebuild_furniture([{"kind": "furniture", "style_id": id, "position": [0.0, 0.0], "size": [furniture_size.x, furniture_size.y], "yaw_quarters": 0, "yaw_degrees": 0.0}])
 	visual.position.y = -8.0
 	return visual
-
-## A small flat blue surface standing in for a stream (narrow) or lake (wider);
-## matches the water presentation colour so the catalogue entry reads as water.
-func _make_water_catalogue_model(id: String) -> Node3D:
-	var root := Node3D.new()
-	var is_stream := id == "water_stream"
-	var mesh := PlaneMesh.new()
-	mesh.size = Vector2(3.4, 1.1) if is_stream else Vector2(3.2, 2.6)
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.albedo_color = Color(0.16, 0.44, 0.52, 0.9)
-	mesh.material = material
-	var node := MeshInstance3D.new()
-	node.mesh = mesh
-	root.add_child(node)
-	root.position.y = -8.0
-	return root
 
 func _make_path_catalogue_model(id: String) -> Node3D:
 	var root := Node3D.new()

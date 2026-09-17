@@ -29,13 +29,6 @@ var _water_building_revision := -1
 var _water_terrain_revision := -1
 var _water_last_sample := Vector2(NAN, NAN)
 var _water_preview_signature := ""
-var _water_catalogue_open := false
-var _water_catalogue_panel: PanelContainer
-var _water_catalogue_buttons: Array[Button] = []
-
-func _ready() -> void:
-	super._ready()
-	_build_water_catalogue()
 
 func _process(delta: float) -> void:
 	super._process(delta)
@@ -44,45 +37,13 @@ func _process(delta: float) -> void:
 		if water_stroking and water_kind == "stream": _sample_water_stream()
 		_update_water_preview()
 
-func _build_water_catalogue() -> void:
-	_water_catalogue_panel = _make_catalogue_panel("WaterCatalogue", Vector2(540, 340))
-	var box := _catalogue_box(_water_catalogue_panel)
-	_add_catalogue_heading(box, "WATER", "Choose a body of water, then shape it on the terrain")
-	_add_catalogue_button(box, _water_catalogue_buttons, "Stream\nDrag a centreline; the riverbed is carved to it", _choose_water_kind.bind("stream"))
-	_add_catalogue_button(box, _water_catalogue_buttons, "Lake\nOutline a bounded region; its floor is carved to a basin", _choose_water_kind.bind("lake"))
-
-func _open_water_catalogue() -> void:
-	_cancel_current_edit("Water catalogue opened")
-	_build_catalogue_open = false
-	if _build_catalogue_panel: _build_catalogue_panel.visible = false
-	_roads_catalogue_open = false
-	if _roads_catalogue_panel: _roads_catalogue_panel.visible = false
-	_outdoor_catalogue_open = false
-	if _outdoor_catalogue_panel: _outdoor_catalogue_panel.visible = false
-	_home_catalogue_open = false
-	if _home_catalogue_panel: _home_catalogue_panel.visible = false
-	_water_catalogue_open = true
-	tools_open = true
-	_water_catalogue_panel.visible = true
-	if not _water_catalogue_buttons.is_empty(): _water_catalogue_buttons[0].grab_focus()
-	_set_status("Water • choose a body • A select / B back")
-	_refresh_controller_hud()
-
-func _close_water_catalogue() -> void:
-	if not _water_catalogue_open: return
-	_water_catalogue_open = false
-	_water_catalogue_panel.visible = false
-	super._close_all_catalogues()
-
-func _choose_water_kind(kind: String) -> void:
-	if kind not in ["stream", "lake"]: return
-	_water_catalogue_open = false
-	_water_catalogue_panel.visible = false
-	tools_open = false
-	get_viewport().gui_release_focus()
-	_set_view_context("terrain", "Water tool selected")
-	water_kind = kind
-	_begin_water_placement()
+func _select_terrain_tool(tool: String) -> void:
+	super._select_terrain_tool(tool)
+	if tool == "water":
+		water_kind = "stream"
+		_begin_water_placement()
+	elif water_placement_active:
+		_cancel_water_placement("Terrain tool selected")
 
 func _begin_water_placement() -> void:
 	if water_placement_active or stroke_active or landscape_active or detail_move_active or resize_active or building_placement_active: return
@@ -120,22 +81,6 @@ func _input(event: InputEvent) -> void:
 	if _blocked_until_accept_release:
 		super._input(event)
 		return
-	if _water_catalogue_open and not menu_open:
-		if event.is_action_pressed("m1_cancel") or event.is_action_pressed("m1_tools"):
-			_close_water_catalogue()
-		elif event.is_action_pressed("m1_pause"):
-			_close_water_catalogue()
-			super._input(event)
-			return
-		elif event.is_action_pressed("m1_accept"):
-			var focus := get_viewport().gui_get_focus_owner()
-			if focus in _water_catalogue_buttons: (focus as Button).pressed.emit()
-		elif event.is_action_pressed("m1_height_up") or event.is_action_pressed("ui_up"):
-			_move_focus(_water_catalogue_buttons, -1)
-		elif event.is_action_pressed("m1_height_down") or event.is_action_pressed("ui_down"):
-			_move_focus(_water_catalogue_buttons, 1)
-		get_viewport().set_input_as_handled()
-		return
 	if water_placement_active:
 		if event.is_action_pressed("m1_accept"):
 			# Aiming at a visible waterfall and pressing A dismisses it (one landscape
@@ -156,7 +101,6 @@ func _input(event: InputEvent) -> void:
 			return
 		if event.is_action_pressed("m1_cancel"):
 			if water_stroking or not water_lake_points.is_empty(): _cancel_water_stroke("Cancelled")
-			else: _cancel_water_placement("Water tool closed")
 			get_viewport().set_input_as_handled()
 			return
 		if event.is_action_released("m1_cancel"):
@@ -176,7 +120,7 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 		if event.is_action_pressed("m1_pause"):
-			_cancel_water_placement("Water tool closed by pause")
+			if water_stroking: _cancel_water_stroke("Paused")
 			super._input(event)
 			return
 		if event.is_action_pressed("m1_mode_switch") or event.is_action_pressed("m1_view") or event.is_action_pressed("m1_cycle_left") or event.is_action_pressed("m1_cycle_right") or event.is_action_pressed("m1_height_up") or event.is_action_pressed("m1_height_down") or event.is_action_pressed("m1_tools"):
@@ -313,7 +257,7 @@ func _stream_region() -> Dictionary:
 	var points: Array = []
 	for p: Vector2 in water_stream_points:
 		points.append([p.x, p.y])
-	return {"type": "stream", "level": water_stream_level, "width": STREAM_WIDTH, "points": points, "flow": [flow.x, flow.y]}
+	return {"type": "stream", "level": water_stream_level, "width": maxf(0.5, 2.0 * brush_radius), "points": points, "flow": [flow.x, flow.y]}
 
 func _lake_region() -> Dictionary:
 	var points: Array = []
@@ -391,7 +335,6 @@ func _cancel_water_placement(reason: String = "Water tool closed") -> void:
 
 func _cancel_current_edit(reason: String) -> void:
 	if water_placement_active: _cancel_water_placement(reason)
-	if _water_catalogue_open: _close_water_catalogue()
 	super._cancel_current_edit(reason)
 
 func _undo() -> void:
@@ -409,17 +352,6 @@ func _restore_landscape(document: Dictionary) -> void:
 func _on_backend_changed() -> void:
 	super._on_backend_changed()
 	_sync_water_visual()
-
-func _build_browser_entries() -> Array[Dictionary]:
-	var entries: Array[Dictionary] = super._build_browser_entries()
-	entries.append({"id": "water_stream", "name": "Stream", "category": "paths", "kind": "water", "summary": "Drag a centreline to carve a river"})
-	entries.append({"id": "water_lake", "name": "Lake", "category": "paths", "kind": "water", "summary": "Outline a bounded region to carve a basin"})
-	return entries
-
-func _choose_water_tool(id: String) -> void:
-	var kind := "stream" if id == "water_stream" else "lake"
-	_open_water_catalogue()
-	_choose_water_kind(kind)
 
 func _water_cursor_point() -> Vector2:
 	if not _terrain_target_valid: return Vector2(NAN, NAN)
@@ -512,19 +444,9 @@ func _update_presentation() -> void:
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
 	if not _tool_name or not _prompt_row or menu_open: return
-	if _water_catalogue_open:
-		_mode_label.text = "BUILD"
-		_tool_name.text = "Water"
-		_tool_meta.text = "Streams and lakes"
-		_tool_card.visible = true
-		if _terrain_panel: _terrain_panel.visible = false
-		if _building_panel: _building_panel.visible = false
-		if _world_prompt: _world_prompt.visible = false
-		_set_prompts([["UP/DOWN", "Choose"], ["A", "Select"], ["B", "Back"]])
-		return
 	if not water_placement_active: return
 	_mode_label.text = "TERRAIN"
-	_tool_name.text = water_kind.capitalize()
+	_tool_name.text = "Water"
 	_tool_meta.text = water_placement_reason
 	_tool_card.visible = true
 	if _terrain_panel: _terrain_panel.visible = false

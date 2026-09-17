@@ -1,7 +1,8 @@
 # Water / River — branch progress (task/water-river)
 
-**STATUS: all slices delivered. Full verified Drive-delivery CI is green
-(run 35184766877, 30/30 jobs, ARM64 `build-thor-apk` succeeded). Ready to merge.**
+**STATUS: waterfall/animation slices were green; the premade-river → region unification is
+in progress (import-safe compromise landed in `cee413c`; awaiting a green Drive-delivery run).
+See the Known issues / TODO below for the headless-import fragility that shaped it.**
 
 
 Carved from `main @ c2364ef`. User-approved feature: **editable water** per `docs/design.md`
@@ -113,3 +114,63 @@ billboard material (`draw_pass_1`), sized by the particle `scale_min/scale_max`.
 Headless waterfall_visual 7/0 (asserts both emitters per fall). Pushed `ffefdc7`; CI
 35196625269 **30/30 green, overall success** (incl. verified ARM64 APK + Windows playtest).
 **Remaining: visual playtest on the Thor** — spray/mist density, cascade look; approval is the user's.
+
+## Premade river → region unification — import-safe compromise
+
+The starter river was a bespoke static mesh (`M1Scene.river_water`) that never became a water
+region, so it diverged from player-authored water (rendered via `M1WaterVisual`). `PremadeRiver`
+(`scripts/premade_river.gd`) derives it as a deterministic stream region; `M1Scene._ensure_premade_river()`
+adds it once (idempotent, covers fresh + existing worlds). The legacy mesh is kept **hidden**
+(`river_water.visible = false`) because removing it is blocked by the import fragility below.
+`premade_river_test` 15/0.
+
+## Known issues / TODO
+
+### TODO: make the headless import less fragile (deep `extends` chain)
+The headless `godot --headless --import` gate fails if the **base** `scripts/m1_scene.gd` is
+*shrunk* (even removing one function): the deep scene `extends` chain
+(`m2_scene_water → m2_scene_starter_valley → m2_scene_style_preview_stability →
+m2_scene_path_erase → m2_scene_path_terrain_ownership → … → m1_scene`) fails to resolve —
+"Could not resolve class `m2_scene_starter_valley.gd`" at `m2_scene_water.gd:1`. Import exits 0,
+but `tools/test-m1-placement.ps1` `Assert-GateOutput` fails on any `SCRIPT ERROR|ERROR:|Parse
+Error|FAIL:` in the output.
+
+- **Reproduced** on `f0429e1` with no other changes: delete `_build_river_water_mesh()` from
+  `m1_scene.gd` → clean `.godot` `--import` emits the parse error.
+- **Adding** to `m1_scene.gd` is safe; **removing** is not. New files + editing the non-base
+  scenes are safe. So the chain is effectively frozen against shrinking its base.
+- **Fix-forward:** break the 6+ level `extends` stack (compose off one common base, or delegate)
+  so import order no longer depends on the base script's size; then the now-dead `river_water`
+  mesh and its three functions can be deleted for a clean unification.
+
+(Found while doing the river → region unification.)
+
+## Water tool consolidation (stream + lake → one terrain "Water" tool)
+- **User directive:** remove the separate Stream/Lake catalogue entries + the water
+  catalogue panel; make water a single **Water** terrain tool (like raise/dig), paint
+  stroke-based (cells under the brush), **auto-derived level** (snaps to terrain at the
+  stroke start), and it must support **connecting different water levels** (the existing
+  waterfall derivation handles this — a carved cliff between an upper and lower body
+  yields a derived cascade).
+- **Implementation (reuses the existing, playtested stream machinery):**
+  - `m1_scene_tool_ui.gd`: `"water"` added to TERRAIN_TOOLS (between slope and foliage);
+    routed as a non-sculpt tool (like foliage/tree); radius setting stays (it now sets
+    the river width), other settings disabled for it.
+  - `m2_scene_water.gd`: removed the water catalogue (`_build_water_catalogue`,
+    `_open/_close_water_catalogue`, `_choose_water_kind`, the panel/buttons, the browser
+    `water_stream`/`water_lake` entries, the HUD catalogue branch). `_select_terrain_tool`
+    now activates/deactivates the paint (`water_placement_active`); brush radius sets the
+    stream width (`2.0 * brush_radius`, min 0.5); B cancels a stroke without deactivating
+    the tool; pause stops the stroke; auto level via `_terrain_top` at stroke start.
+  - `m2_scene_build_browser.gd`: removed the now-dead water catalogue thumbnail model.
+- **The paint produces a stream-type region** (centreline = stroke path, width = brush
+  diameter, level = auto, flow = stroke direction) — a narrow brush reads as a stream,
+  a wide one as a river. Region records, carve plan, clipped surface visual, and the
+  waterfall derivation are all unchanged.
+- **Verified:** tool_ui + water + build_browser import clean; scene instantiates + the
+  Water tool activates/deactivates the paint (water_active=true→false on tool switch);
+  water machinery tests green (region 54, visual 8, waterfall 19, carve 12). The
+  m2_build_browser test's "native browser scene ready" failure is a **pre-existing
+  headless limitation** (`_player_restored` never completes in headless — confirmed by
+  stashing all my changes and reproducing it on the baseline), not a regression.
+- **Not yet:** on-Thor playtest of the new Water tool (user approval), CI run.
