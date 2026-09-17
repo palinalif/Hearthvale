@@ -13,6 +13,7 @@ const Grid = preload("res://scripts/visual_grid.gd")
 const Flora = preload("res://scripts/vegetation_mesh.gd")
 
 const GardenVisualScript = preload("res://scripts/m1_garden_visual.gd")
+const WaterVisualScript = preload("res://scripts/water_visual.gd")
 
 @export var checkpoint_root := "user://m1_checkpoints"
 @export var test_mode := false
@@ -94,6 +95,7 @@ var cursor_reticle: Node3D
 var river_water: MeshInstance3D
 var _river_water_spans: Array[Vector2i] = []
 var garden_visual: Node3D
+var water_visual: Node3D
 var landscape_state := LandscapeScript.new()
 var landscape_active := false
 var _landscape_before: Dictionary = {}
@@ -382,6 +384,7 @@ func _build_world() -> void:
 	var water_material := StandardMaterial3D.new(); water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; water_material.albedo_color = Color(0.30, 0.57, 0.56, 0.86); water_material.metallic = 0.05; water_material.roughness = 0.42; river_water.material_override = water_material; add_child(river_water)
 	decor_root = Node3D.new(); decor_root.name = "GardenDecor"; add_child(decor_root)
 	garden_visual = GardenVisualScript.new(); garden_visual.name = "M1GardenVisual"; garden_visual.set_wind_enabled(not test_mode); decor_root.add_child(garden_visual)
+	water_visual = WaterVisualScript.new(); water_visual.name = "M1WaterVisual"; decor_root.add_child(water_visual)
 	camera = Camera3D.new(); camera.current = true; camera.fov = 52; add_child(camera)
 	resize_handles = Node3D.new(); resize_handles.name = "ResizeHandles"; resize_handles.visible = false; add_child(resize_handles)
 	for axis_name in ["width", "depth", "height"]:
@@ -507,6 +510,13 @@ func _create_backend() -> void:
 	add_child(backend)
 	if garden_visual and garden_visual.has_method("attach_backend"):
 		garden_visual.attach_backend(backend)
+	if water_visual and water_visual.has_method("attach_backend"):
+		water_visual.attach_backend(backend)
+	_sync_water_visual()
+
+func _sync_water_visual() -> void:
+	if water_visual and water_visual.has_method("set_regions"):
+		water_visual.set_regions(landscape_state.water)
 
 func _update_brush_preview() -> void:
 	if not brush_preview:
@@ -748,6 +758,8 @@ func _on_backend_ready(ready: bool) -> void:
 		if not buttons.is_empty(): (buttons[0] as Button).grab_focus()
 	if garden_visual and garden_visual.has_method("refresh_terrain"):
 		garden_visual.refresh_terrain()
+	if water_visual and water_visual.has_method("refresh_terrain"):
+		water_visual.refresh_terrain()
 	_update_presentation()
 
 func _apply_review_args() -> void:
@@ -819,6 +831,8 @@ func _on_backend_changed() -> void:
 	_sync_meadow_exclusions()
 	if garden_visual and garden_visual.has_method("refresh_terrain"):
 		garden_visual.refresh_terrain()
+	if water_visual and water_visual.has_method("refresh_terrain"):
+		water_visual.refresh_terrain()
 	var garden_ms := float(Time.get_ticks_usec() - started) / 1000.0
 	started = Time.get_ticks_usec()
 	_update_presentation()
@@ -1003,6 +1017,7 @@ func _end_stroke() -> void:
 	if ok:
 		landscape_state.clear_edited_cells(backend.get_last_edit_cells(), float(backend.voxel_scale))
 		garden_visual.apply_records(landscape_state.records)
+		_sync_water_visual()
 		_record_history("terrain")
 	_landscape_before.clear()
 	_set_status("Stroke committed" if ok else "Stroke unchanged")
@@ -1064,6 +1079,7 @@ func _cancel_current_edit(reason: String) -> void:
 	if landscape_active:
 		landscape_state.restore(_landscape_before)
 		garden_visual.reset_records(landscape_state.records)
+		_sync_water_visual()
 		landscape_active = false
 	_landscape_before.clear()
 	if stroke_active and backend and backend.has_method("cancel_stroke"): backend.cancel_stroke()
@@ -1093,7 +1109,7 @@ func _undo() -> void:
 		_history_tags.pop_back(); _redo_tags.append(tag)
 		var entry: Dictionary = _landscape_history.pop_back()
 		_landscape_redo.append(entry); landscape_state.restore(entry["before"])
-		garden_visual.reset_records(landscape_state.records); _building_dirty = true
+		garden_visual.reset_records(landscape_state.records); _building_dirty = true; _sync_water_visual()
 	_set_status("Undo complete" if ok else "Nothing to undo")
 
 func _redo() -> void:
@@ -1105,7 +1121,7 @@ func _redo() -> void:
 		_redo_tags.pop_back(); _history_tags.append(tag)
 		var entry: Dictionary = _landscape_redo.pop_back()
 		_landscape_history.append(entry); landscape_state.restore(entry["after"])
-		garden_visual.reset_records(landscape_state.records); _building_dirty = true
+		garden_visual.reset_records(landscape_state.records); _building_dirty = true; _sync_water_visual()
 	_set_status("Redo complete" if ok else "Nothing to redo")
 
 func _record_history(tag: String) -> void:
@@ -1532,6 +1548,7 @@ func _quit_cleanly() -> void:
 func _restore_landscape(document: Dictionary) -> void:
 	if document.has("landscape") and landscape_state.restore(document["landscape"]):
 		garden_visual.reset_records(landscape_state.records)
+		_sync_water_visual()
 		return
 	landscape_state = LandscapeScript.new()
 	var rng := RandomNumberGenerator.new(); rng.seed = 1042
@@ -1553,6 +1570,7 @@ func _restore_landscape(document: Dictionary) -> void:
 		var ground := _plant_ground(point, true)
 		if not ground.is_empty(): landscape_state.add("rock", ground["point"], rng.randi_range(0, 2))
 	garden_visual.reset_records(landscape_state.records)
+	_sync_water_visual()
 
 func _plant_ground(point: Vector3, from_top: bool = false) -> Dictionary:
 	if not backend or not backend.is_ready(): return {}
@@ -1613,6 +1631,7 @@ func _paint_plant_sample() -> void:
 			if not ground.is_empty(): landscape_state.add(sculpt_tool, ground["point"], rng.randi_range(0, Flora.variant_count(sculpt_tool) - 1), planting_yaw_degrees)
 	_plant_last = center; _plant_sequence += 1
 	garden_visual.apply_records(landscape_state.records)
+	_sync_water_visual()
 
 func _end_plant_stroke() -> void:
 	if not landscape_active: return
