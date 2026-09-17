@@ -322,7 +322,11 @@ func _axis(action: String, axis: JoyAxis, value: float) -> void:
 func _key(action: String, key: Key) -> void:
 	var event := InputEventKey.new(); event.keycode = key; InputMap.action_add_event(action, event)
 
-func _build_world() -> void:
+## World lighting, as a single overridable seam. This is the canonical M2 live
+## look; an environment that wants a different atmosphere overrides just this
+## method instead of re-copying the whole world build (which previously dropped
+## water_visual and other nodes).
+func _apply_world_lighting() -> void:
 	# M2 lighting polish -> golden-hour overhaul. Warm low sun for long,
 	# directional contrast; warm hazy procedural sky with depth; ordinary fog
 	# for atmospheric perspective; modest glow for a soft golden bloom; ACES
@@ -342,9 +346,9 @@ func _build_world() -> void:
 	var environment := Environment.new()
 	var sky_material := ProceduralSkyMaterial.new()
 	sky_material.sky_top_color = Color("#d8e1e5")
-	# 2026-09-15 wide-shot pass: horizon pushed to the warm golden hour tone so the
-	# empty backdrop reads as a low golden-hour glow instead of a blank cream void.
-	sky_material.sky_horizon_color = Color("#f2c98a")
+	# Canonical M2 live look (this is the build that actually ships; a prior
+	# m1-only "wide-shot" pass never reached the live level, so M2's values win).
+	sky_material.sky_horizon_color = Color("#f2d9a4")
 	sky_material.ground_bottom_color = Color("#c3b795")
 	sky_material.ground_horizon_color = Color("#e0d3b2")
 	sky_material.sky_energy_multiplier = 0.55
@@ -359,14 +363,12 @@ func _build_world() -> void:
 	environment.ambient_light_sky_contribution = 1.0
 	environment.fog_enabled = true
 	environment.fog_light_color = Color("#ead7b3")
-	# 2026-09-15 wide-shot pass: the old 0.0038 density + 150-unit depth made
-	# the hamlet read as a beige fog wall in wide framing (~half the frame a
-	# flat cream veil, no sky gradient). Cut density ~58% and pull the depth
-	# range in so mid-ground terrain stays readable and sky shows through.
-	environment.fog_density = 0.0016
-	environment.fog_sky_affect = 0.45
-	environment.fog_depth_begin = 10.0
-	environment.fog_depth_end = 95.0
+	# Canonical M2 live look: the single source of truth for world fog. Envs that
+	# want a different atmosphere override this (see _apply_world_lighting).
+	environment.fog_density = 0.0038
+	environment.fog_sky_affect = 0.8
+	environment.fog_depth_begin = 18.0
+	environment.fog_depth_end = 150.0
 	environment.glow_enabled = true
 	environment.glow_intensity = 0.5
 	environment.glow_bloom = 0.14
@@ -383,6 +385,9 @@ func _build_world() -> void:
 	environment.adjustment_brightness = 1.02
 	environment_node.environment = environment
 	add_child(environment_node)
+
+func _build_world() -> void:
+	_apply_world_lighting()
 	river_water = MeshInstance3D.new(); river_water.name = "RiverWater"; river_water.mesh = _build_river_water_mesh(); river_water.position.y = 5.0
 	var water_material := StandardMaterial3D.new(); water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; water_material.albedo_color = Color(0.30, 0.57, 0.56, 0.86); water_material.metallic = 0.05; water_material.roughness = 0.42; river_water.material_override = water_material; add_child(river_water)
 	decor_root = Node3D.new(); decor_root.name = "GardenDecor"; add_child(decor_root)

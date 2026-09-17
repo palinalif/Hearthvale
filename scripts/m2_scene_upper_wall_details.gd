@@ -9,87 +9,11 @@ const MassingSurfaces = preload("res://scripts/m2_massing_wall_surfaces.gd")
 var _massing_surface_sync_revision := -1
 
 func _build_world() -> void:
-	# Golden-hour lighting (ported from m1_scene.gd, which the live M2 chain
-	# overrides — the original overhaul never reached the real game).
-	# Verified against Godot 4.7.2: Sky resource wrapping the material,
-	# directional_shadow_max_distance; Godot-3-only properties
-	# (adjustment_gamma, ssao_deitter_enabled, ground_top_color) NOT used.
-	# All Mobile-renderer-safe; no volumetrics, SDFGI, or SSR.
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-33, -46, 0)
-	sun.light_color = Color("#ffd9a0")
-	sun.light_energy = 1.72
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 150.0
-	sun.shadow_bias = 0.028
-	sun.shadow_normal_bias = 0.02
-	add_child(sun)
-	var environment_node := WorldEnvironment.new()
-	var environment := Environment.new()
-	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = Color("#d8e1e5")
-	sky_material.sky_horizon_color = Color("#f2d9a4")
-	sky_material.ground_bottom_color = Color("#c3b795")
-	sky_material.ground_horizon_color = Color("#e0d3b2")
-	sky_material.sky_energy_multiplier = 0.55
-	sky_material.ground_energy_multiplier = 0.35
-	var sky := Sky.new()
-	sky.sky_material = sky_material
-	environment.sky = sky
-	environment.background_mode = Environment.BG_SKY
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	environment.ambient_light_sky_contribution = 1.0
-	environment.fog_enabled = true
-	environment.fog_light_color = Color("#ead7b3")
-	environment.fog_density = 0.0038
-	environment.fog_sky_affect = 0.8
-	environment.fog_depth_begin = 18.0
-	environment.fog_depth_end = 150.0
-	environment.glow_enabled = true
-	environment.glow_intensity = 0.5
-	environment.glow_bloom = 0.14
-	environment.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
-	environment.tonemap_mode = Environment.TONE_MAPPER_ACES
-	environment.tonemap_exposure = 1.05
-	environment.tonemap_white = 1.35
-	# SSAO disabled: its per-frame jitter breaks the repo's render-determinism
-	# contract (cottage/roof-course tests require identical re-renders), and it
-	# adds Mobile GPU cost for a barely-visible contact shadow here.
-	environment.adjustment_enabled = true
-	environment.adjustment_saturation = 1.06
-	environment.adjustment_contrast = 1.04
-	environment.adjustment_brightness = 1.02
-	environment_node.environment = environment
-	add_child(environment_node)
-	river_water = MeshInstance3D.new(); river_water.name = "RiverWater"; river_water.mesh = _build_river_water_mesh(); river_water.position.y = 5.0
-	var water_material := StandardMaterial3D.new(); water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; water_material.albedo_color = Color(0.30, 0.57, 0.56, 0.86); water_material.metallic = 0.05; water_material.roughness = 0.42; river_water.material_override = water_material; add_child(river_water)
-	decor_root = Node3D.new(); decor_root.name = "GardenDecor"; add_child(decor_root)
-	garden_visual = GardenVisualScript.new(); garden_visual.name = "M1GardenVisual"; garden_visual.set_wind_enabled(not test_mode); decor_root.add_child(garden_visual)
-	camera = Camera3D.new(); camera.current = true; camera.fov = 52; add_child(camera)
-	resize_handles = Node3D.new(); resize_handles.name = "ResizeHandles"; resize_handles.visible = false; add_child(resize_handles)
-	for axis_name in ["width", "depth", "height"]:
-		var handle := MeshInstance3D.new(); handle.name = "Handle_%s" % axis_name
-		var handle_mesh := BoxMesh.new(); handle_mesh.size = Vector3(0.22, 0.22, 0.22); handle.mesh = handle_mesh
-		var handle_material := StandardMaterial3D.new(); handle_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; handle_material.albedo_color = Color(1.0, 0.70, 0.28, 0.82); handle_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; handle.material_override = handle_material
-		resize_handles.add_child(handle)
+	super._build_world()
+	# The M2-aware building world is the only thing this environment swaps; the
+	# full world (lighting seam, water/garden visuals, camera, handles) is
+	# inherited from the base M1 scene (single source of truth).
 	building_world = M2BuildingWorldScript.new()
-	cottage_visual = CottageVisualScript.new(); cottage_visual.name = "CottageVisual"; add_child(cottage_visual); cottage_visuals[BUILDING_ID] = cottage_visual
-	brush_preview = BrushPreviewScript.new()
-	brush_preview.name = "BrushPreview"
-	brush_preview.scale = Vector3.ONE * M1PatchGenerator.VOXEL_SCALE
-	brush_preview.visible = false
-	add_child(brush_preview)
-	reference_plane = MeshInstance3D.new()
-	reference_plane.name = "ReferencePlane"
-	var plane_mesh := PlaneMesh.new(); plane_mesh.size = Vector2(8, 8); reference_plane.mesh = plane_mesh
-	var plane_material := StandardMaterial3D.new(); plane_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; plane_material.albedo_color = Color(0.42, 0.82, 0.88, 0.16); plane_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; reference_plane.material_override = plane_material; reference_plane.visible = false; add_child(reference_plane)
-	terrain_hit_marker = MeshInstance3D.new(); terrain_hit_marker.name = "TerrainHitMarker"
-	var marker_mesh := SphereMesh.new(); marker_mesh.radius = 0.12; marker_mesh.height = 0.24; marker_mesh.radial_segments = 12; marker_mesh.rings = 6; terrain_hit_marker.mesh = marker_mesh
-	var marker_material := StandardMaterial3D.new(); marker_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; marker_material.albedo_color = Color(0.55, 0.92, 0.96, 0.82); marker_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; marker_material.no_depth_test = true; terrain_hit_marker.material_override = marker_material; terrain_hit_marker.visible = false; add_child(terrain_hit_marker)
-	cursor_reticle = CursorReticleScript.new()
-	cursor_reticle.name = "M1CursorReticle"
-	cursor_reticle.visible = false
-	add_child(cursor_reticle)
 
 func _apply_house_shape_preset(preset_id: String) -> bool:
 	var index: int = building_world._building_index(selected_building_id)
