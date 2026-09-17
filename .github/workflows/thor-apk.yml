@@ -75,6 +75,18 @@ jobs:
           $godot = '.\.tools\godot-4.7.2\Godot_v4.7.2-stable_win64_console.exe'
           & $godot --headless --path . --editor --import --quit
           if ($LASTEXITCODE -ne 0) { throw 'Godot import failed' }
+          # The ~56-deep path-based `extends` scene chain resolves racy under headless
+          # import: a single pass can leave the class cache half-built and the later
+          # export fails with "Could not resolve class". Probe the chain and re-import
+          # until it actually resolves, before exporting.
+          $chainOk = $false
+          for ($i = 0; $i -lt 6; $i++) {
+            $probe = (& $godot --headless --path . --script tests/chain_resolution_probe.gd 2>&1 | ForEach-Object { "$_" })
+            if ($probe -match 'CHAIN_RESOLVED') { $chainOk = $true; Write-Output "scene chain resolved on pass $($i+1)"; break }
+            Write-Output "chain probe pass $($i+1) did not resolve; re-importing..."
+            & $godot --headless --path . --editor --import --quit | Out-Null
+          }
+          if (-not $chainOk) { throw 'scene chain did not resolve after 6 import passes' }
           New-Item -ItemType Directory -Force builds | Out-Null
           $output = 'builds/hearthvale-m1-thor-feedback.apk'
           $log = (& $godot --headless --path . --export-debug 'Android ARM64' $output 2>&1 | ForEach-Object { "$_" })
