@@ -42,6 +42,31 @@ func set_regions(regions: Array) -> void:
 	_regions = regions
 	_rebuild()
 
+## Cache-aware rebuild: reuse the cached terrain tops, resample only new or
+## invalidated cells, then build the mesh from the cache. Cheap for a growing
+## stroke preview and for a commit that reuses the startup + preview cache
+## instead of resampling every water column — the old full rebuild (clear +
+## resample all) froze the frame on mobile for large regions.
+func set_regions_incremental(regions: Array, invalidate_cells: Array = []) -> void:
+	if _backend == null or not _backend.has_method("voxel_at"):
+		return
+	if _backend.has_method("is_ready") and not _backend.is_ready():
+		return
+	_regions = regions
+	_regions_key = _regions_signature()
+	for cell in invalidate_cells:
+		_cell_cache.erase(cell)
+	var world_x := _world_x()
+	for region: Dictionary in _regions:
+		for cell: Vector2i in Geometry.footprint_cells(region, world_x):
+			if _cell_cache.has(cell):
+				continue
+			var px := float(cell.x) * WATER_CELL + WATER_CELL * 0.5
+			var pz := float(cell.y) * WATER_CELL + WATER_CELL * 0.5
+			_cell_cache[cell] = _terrain_top(px, pz)
+	_build_mesh_from_cache()
+	_last_key = _key()
+
 func refresh_terrain() -> void:
 	# Full resample (startup / unknown bounds). Local terrain edits use
 	# refresh_surface_from_bounds() to only resample near the edit.

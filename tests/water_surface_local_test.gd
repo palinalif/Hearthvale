@@ -17,6 +17,7 @@ class MockBackend:
 	var bumps := {}
 	var _rev := 0
 	var last_edit_bounds := AABB()
+	var calls := 0
 	func is_ready() -> bool: return true
 	func revision() -> int: return _rev
 	func bump() -> void: _rev += 1
@@ -24,6 +25,7 @@ class MockBackend:
 	func _col_surface(x: int, z: int) -> int:
 		return surface + int(bumps.get(Vector2i(x, z), 0))
 	func voxel_at(p: Vector3i) -> int:
+		calls += 1
 		if p.x < 0 or p.z < 0 or p.x >= patch_size.x or p.z >= patch_size.z: return 0
 		return 1 if p.y < _col_surface(p.x, p.z) else 0
 
@@ -69,6 +71,25 @@ func _initialize() -> void:
 	visual.refresh_surface_from_bounds(mock.last_edit_bounds)
 	visual._do_surface_rebuild()
 	check(visual.surface_quad_count() == whole, "localized restore returns the quad (quads=%d)" % visual.surface_quad_count())
+
+	# --- Incremental rebuild (the cache-aware commit / preview path) ------------
+	# Warm cache: no invalidation resamples no cell and keeps the surface.
+	mock.calls = 0
+	var warm: int = visual.surface_quad_count()
+	visual.set_regions_incremental([lake])
+	check(mock.calls == 0, "incremental warm resamples no cell (calls=%d)" % mock.calls)
+	check(visual.surface_quad_count() == warm, "incremental warm keeps the surface (quads=%d)" % visual.surface_quad_count())
+	# A bump the commit carved; without invalidation the stale cache is kept.
+	mock.bumps[Vector2i(8, 8)] = 8
+	mock.calls = 0
+	visual.set_regions_incremental([lake])
+	check(mock.calls == 0, "incremental stale (no invalidate) resamples no cell (calls=%d)" % mock.calls)
+	check(visual.surface_quad_count() == warm, "incremental stale keeps the stale quad (quads=%d)" % visual.surface_quad_count())
+	# With the carved cell invalidated it is resampled and dries.
+	mock.calls = 0
+	visual.set_regions_incremental([lake], [Vector2i(8, 8)])
+	check(mock.calls >= 1, "incremental invalidated resamples the cell (calls=%d)" % mock.calls)
+	check(visual.surface_quad_count() == warm - 1, "incremental invalidated dries the quad (quads=%d)" % visual.surface_quad_count())
 
 	visual.queue_free()
 	mock.queue_free()

@@ -145,9 +145,21 @@ func _update_brush_preview() -> void:
 	if terrain_edit_preview: terrain_edit_preview.visible = false
 	if reference_plane: reference_plane.visible = false
 	if terrain_hit_marker: terrain_hit_marker.visible = false
-	if cursor_reticle:
-		if _terrain_target_valid: cursor_reticle.update_target(_terrain_target_point, _terrain_target_normal, (STREAM_WIDTH * 0.5) if water_kind == "stream" else 0.25, "water", camera, true)
-		else: cursor_reticle.set_target_visible(false)
+
+## Water brush footprint (the area of effect). The terrain UX hides its reticle
+## for the water tool (_sculpt_preview_visible is false for "water"), so the
+## water tool owns the reticle here: a ring at the brush radius, the actual carve
+## width, not a fixed small diamond.
+func _update_cursor_reticle() -> void:
+	if not water_placement_active:
+		super._update_cursor_reticle()
+		return
+	if not cursor_reticle: return
+	if _terrain_target_valid:
+		var radius := brush_radius if water_kind == "stream" else 0.25
+		cursor_reticle.update_target(_terrain_target_point, _terrain_target_normal, radius, "water", camera, true)
+	else:
+		cursor_reticle.set_target_visible(false)
 
 func _update_water_validity() -> void:
 	water_placement_valid = false
@@ -265,6 +277,25 @@ func _lake_region() -> Dictionary:
 		points.append([p.x, p.y])
 	return {"type": "lake", "level": _lake_level(points), "points": points}
 
+## Rebuild the water surface from the cache, resampling only the cells the last
+## terrain carve touched. The commit carves just the new region's bed, so the
+## rest of the surface (starter river + prior water) keeps its cached terrain
+## tops instead of a full column resample.
+func _sync_water_incremental(changes: Array) -> void:
+	if not water_visual: return
+	var invalidated: Array = []
+	var seen := {}
+	for change in changes:
+		var pos: Vector3i = change.get("position", Vector3i.ZERO)
+		var cell := Vector2i(pos.x, pos.z)
+		if seen.has(cell): continue
+		seen[cell] = true
+		invalidated.append(cell)
+	if water_visual.has_method("set_regions_incremental"):
+		water_visual.set_regions_incremental(landscape_state.water, invalidated)
+	else:
+		_sync_water_visual()
+
 func _commit_water(region: Dictionary) -> bool:
 	if JSON.stringify(landscape_state.document()) != _water_before_serialized or _terrain_revision() != _water_terrain_revision or building_world.get_revision() != _water_building_revision:
 		_cancel_water_placement("World changed; cancelled")
@@ -298,7 +329,10 @@ func _commit_water(region: Dictionary) -> bool:
 	_water_preview_signature = ""
 	_record_history("path" if terrain_changed else "landscape")
 	_landscape_before.clear()
-	_sync_water_visual()
+	# Incremental water sync: the commit carved only this region's bed, so reuse
+	# the cached surface + resample just the carved cells (the old full rebuild
+	# resampled every water column and froze the frame on mobile for big lakes).
+	_sync_water_incremental(changes)
 	_reset_water_baseline()
 	_set_status("%s committed • LB undo" % (str(region.get("type", "water")).capitalize()))
 	_update_water_validity()
@@ -316,7 +350,9 @@ func _cancel_water_stroke(reason: String = "Cancelled") -> void:
 	_set_status(reason)
 	_update_water_validity()
 	_update_water_preview()
-	_sync_water_visual()
+	# A cancelled stroke carved nothing, so the cached surface is still valid —
+	# reuse it (no invalidation) instead of a full column resample.
+	_sync_water_incremental([])
 
 func _cancel_water_placement(reason: String = "Water tool closed") -> void:
 	if not water_placement_active: return
@@ -330,7 +366,7 @@ func _cancel_water_placement(reason: String = "Water tool closed") -> void:
 	_water_before_serialized = ""
 	water_placement_reason = ""
 	_set_status(reason)
-	_sync_water_visual()
+	_sync_water_incremental([])
 	_refresh_controller_hud()
 
 func _cancel_current_edit(reason: String) -> void:
@@ -350,8 +386,12 @@ func _restore_landscape(document: Dictionary) -> void:
 	_sync_water_visual()
 
 func _on_backend_changed() -> void:
+	# The base already localizes the region-water surface to the edit bounds
+	# (refresh_surface_from_bounds) and re-derives waterfalls; a water commit
+	# additionally syncs the new region via _sync_water_incremental. A full
+	# set_regions here re-resampled every water column on every terrain edit —
+	# the source of the mobile freeze.
 	super._on_backend_changed()
-	_sync_water_visual()
 
 func _water_cursor_point() -> Vector2:
 	if not _terrain_target_valid: return Vector2(NAN, NAN)
@@ -429,10 +469,20 @@ func _update_water_preview() -> void:
 	var candidate := _water_candidate_region()
 	var regions: Array = landscape_state.water.duplicate(true)
 	if not candidate.is_empty(): regions.append(candidate)
-	var signature := "%s|%s|%s|%d" % [water_kind, JSON.stringify(candidate), water_placement_valid, _terrain_revision()]
+	# Rebuild only when the candidate footprint (cell count) changes, not every
+	# sampled point, and reuse the cached surface (incremental) so a long stroke
+	# does not trigger a full resample + mesh rebuild every frame — the cause of
+	# the mobile freeze.
+	var signature := "%s|%d|%d" % [water_kind, _footprint_count(candidate), _terrain_revision()]
 	if signature == _water_preview_signature: return
 	_water_preview_signature = signature
-	water_visual.set_regions(regions)
+	water_visual.set_regions_incremental(regions)
+
+## Cheap preview fingerprint: the candidate's footprint cell count grows only
+## when the stroke gains a new cell, so it is a stable, cheap preview key.
+func _footprint_count(region: Dictionary) -> int:
+	if region.is_empty(): return 0
+	return WaterRegion.footprint_cells(region, WaterState.EDITABLE_WORLD_SIZE).size()
 
 func _update_presentation() -> void:
 	super._update_presentation()
