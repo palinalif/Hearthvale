@@ -1,5 +1,9 @@
 # Water / River — branch progress (task/water-river)
 
+**STATUS: all slices delivered. Full verified Drive-delivery CI is green
+(run 35184766877, 30/30 jobs, ARM64 `build-thor-apk` succeeded). Ready to merge.**
+
+
 Carved from `main @ c2364ef`. User-approved feature: **editable water** per `docs/design.md`
 — streams (editable centreline + width/bed depth/surface height/flow direction), lakes
 (bounded region + level), waterfalls (join regions), river tool previews carved bed+banks,
@@ -39,17 +43,24 @@ All green locally: import clean; `water_region_test` 42/0, `water_visual_test` 8
   "Native VoxelBuffer unavailable" (environmental, unchanged on main).
 - `m1_landscape_test` 1/1 fixture (`user://`) — identical on plain main (not a regression).
 
-## Remaining: slice 4b — interactive river/lake controller tool + undo integration
-Follows the proven path-tool pattern (`m2_scene_paths.gd`): `_begin_*_placement` (guarded) →
-A starts a stroke → `_sample_*` into the stroke → `_update_*_preview` (render via
-`WaterCarvePlan` + `water_visual`) → release A commits (terrain carve + `add_water` as **one**
-landscape undo transaction via `landscape_state.document()` snapshot) → cancel restores the
-snapshot. Native terrain carve is CI-gated.
+## Delivered: slice 4b — interactive river/lake controller tool + undo integration
+`scripts/m2_scene_water.gd` (new head; `m1.tscn` points at it) + `scripts/water_terrain_excavation.gd`
+(carve planner, `water_excavation_test` 8/0). Wired into the build browser's Paths & bridges tab
+as `water` kind (stream/lake entries). Follows the proven path-tool pattern:
+- **Stream**: hold A to drag a centreline; width fixed 1.5; level = terrain surface at the stroke
+  start; flow = stroke direction. Release A commits.
+- **Lake**: press A to outline a boundary polygon; near the first point closes it; level = highest
+  terrain inside the region. B removes the last vertex.
+- Preview renders the water surface live via `water_visual` as it is drawn.
+- Commit records the region **and** carves its bed/banks (`WaterExcavation`) as ONE landscape undo
+  transaction; on any failure the record/terrain are restored. Cancel restores the baseline.
+  Menus block the tool; disconnect/focus loss stops a held stroke via the shared cancel path.
 
-**UX decision needed (visual/interaction approval is the user's):**
-1. **Stream** — drag a centreline; width by a held modifier/step; level by a control (bed auto-
-   carved to `level - 0.4`). Flow direction = stroke direction.
-2. **Lake** — outline a boundary polygon (or a bounded area brush), then set the level.
-3. Preview shows carved bed + banks + the water surface before commit; release commits.
+CI fixes applied for the established contract:
+- `document()` omits the `water` key when empty, so water-free saves keep an identical schema
+  (planter save-authority-neutral + legacy-restore guards restored).
+- Water tools live in the existing Paths & bridges tab (no 4th category); the two placement
+  regressions count that tab's cards (5 -> 7).
 
-Needs CI (native carve + ARM64 APK) + a visual playtest on the Thor before it counts as delivered.
+**Remaining: a visual playtest on the Thor** (native carve look, stream/lake feel, water-surface
+render in game) — visual approval belongs to the user.
