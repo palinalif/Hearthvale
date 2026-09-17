@@ -528,17 +528,45 @@ func _ensure_premade_river() -> void:
 	# materials and editability as player-authored water. Deterministic + idempotent:
 	# derived from the generator, added once, and the generated bed already exists
 	# (no carve). Covers fresh and existing worlds.
-	# NOTE: the legacy static river mesh is left in place (hidden below). Removing it
-	# breaks the headless import gate: the deep M1 scene `extends` chain fails to
-	# resolve when the base m1_scene.gd is shrunk. Drop the mesh once that fragility
-	# is fixed; until then the region is the visible river.
-	if river_water:
-		river_water.visible = false
+	# NOTE: the legacy static river mesh stays VISIBLE for now. The region water
+	# surface is not rendering on the Mobile renderer yet (see _diagnose_water); with
+	# it hidden the river would be blank, so keep the mesh until the region renders.
 	var river := PremadeRiver.region()
 	for existing: Dictionary in landscape_state.water:
 		if PremadeRiver.matches(existing, river): return
 	if landscape_state.add_water("stream", river["level"], river["points"], river["width"], river["flow"]) > 0:
 		_sync_water_visual()
+
+## Live diagnostic (debug builds only): report what the water region path sees in the
+## real scene -- enough to split "empty mesh" (no submerged cells) from
+## "mesh built but not rendered" (node/material/renderer issue).
+func _diagnose_water() -> void:
+	if not OS.is_debug_build():
+		return
+	var water := landscape_state.water
+	var parts: Array = []
+	for r: Dictionary in water:
+		parts.append("id=%d %s lvl=%.3f pts=%d" % [int(r.get("id", 0)), str(r.get("type", "")), float(r.get("level", 0.0)), int((r.get("points", []) as Array).size())])
+	print("DIAG_WATER regions=%d | %s" % [water.size(), " ".join(parts)])
+	if not water_visual:
+		print("DIAG_WATER wv=null"); return
+	var quads := int(water_visual.call("surface_quad_count"))
+	print("DIAG_WATER wv tree=%s visible=%s nodes=%d quads=%d" % [str(water_visual.is_inside_tree()), str(water_visual.visible), water_visual.get_child_count(), quads])
+	if water.is_empty() or not backend:
+		return
+	var scale := maxf(0.001, float(backend.get("voxel_scale")))
+	var patch: Vector3i = backend.get("patch_size")
+	var world := float(patch.x) * scale
+	var Geometry = load("res://scripts/water_region_geometry.gd")
+	var r: Dictionary = water[0]
+	var lvl := float(r.get("level", 0.0))
+	var cells: Array = Geometry.footprint_cells(r, world)
+	var submerged := 0
+	for c: Vector2i in cells:
+		var top: float = water_visual._terrain_top((c.x + 0.5) * 0.0625, (c.y + 0.5) * 0.0625)
+		if is_nan(top) or top < lvl - 0.000001:
+			submerged += 1
+	print("DIAG_WATER r0=%s lvl=%.3f cells=%d submerged=%d" % [str(r.get("type", "")), lvl, cells.size(), submerged])
 
 func _update_brush_preview() -> void:
 	if not brush_preview:
