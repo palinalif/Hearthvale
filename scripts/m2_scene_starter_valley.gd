@@ -117,6 +117,10 @@ func _on_backend_ready(ready: bool) -> void:
 		_valley_surround.name = "ValleySurround"
 		add_child(_valley_surround)
 	_valley_surround.rebuild(backend)
+	# The starter river is a water region (not a bespoke mesh) so it shares the
+	# presentation path, materials and editability with player-authored water.
+	# Runs for both fresh (seeded) and existing (restored) worlds; idempotent.
+	_ensure_premade_river()
 
 func _seed_starter_hamlet() -> bool:
 	if _starter_seeded or not backend.loaded_building_document.is_empty(): return false

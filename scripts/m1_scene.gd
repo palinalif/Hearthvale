@@ -14,6 +14,7 @@ const Flora = preload("res://scripts/vegetation_mesh.gd")
 
 const GardenVisualScript = preload("res://scripts/m1_garden_visual.gd")
 const WaterVisualScript = preload("res://scripts/water_visual.gd")
+const PremadeRiver = preload("res://scripts/premade_river.gd")
 
 @export var checkpoint_root := "user://m1_checkpoints"
 @export var test_mode := false
@@ -92,8 +93,6 @@ var resize_handles: Node3D
 var reference_plane: MeshInstance3D
 var terrain_hit_marker: MeshInstance3D
 var cursor_reticle: Node3D
-var river_water: MeshInstance3D
-var _river_water_spans: Array[Vector2i] = []
 var garden_visual: Node3D
 var water_visual: Node3D
 var landscape_state := LandscapeScript.new()
@@ -380,8 +379,6 @@ func _build_world() -> void:
 	environment.adjustment_brightness = 1.02
 	environment_node.environment = environment
 	add_child(environment_node)
-	river_water = MeshInstance3D.new(); river_water.name = "RiverWater"; river_water.mesh = _build_river_water_mesh(); river_water.position.y = 5.0
-	var water_material := StandardMaterial3D.new(); water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; water_material.albedo_color = Color(0.30, 0.57, 0.56, 0.86); water_material.metallic = 0.05; water_material.roughness = 0.42; river_water.material_override = water_material; add_child(river_water)
 	decor_root = Node3D.new(); decor_root.name = "GardenDecor"; add_child(decor_root)
 	garden_visual = GardenVisualScript.new(); garden_visual.name = "M1GardenVisual"; garden_visual.set_wind_enabled(not test_mode); decor_root.add_child(garden_visual)
 	water_visual = WaterVisualScript.new(); water_visual.name = "M1WaterVisual"; decor_root.add_child(water_visual)
@@ -412,80 +409,6 @@ func _build_world() -> void:
 	cursor_reticle.name = "M1CursorReticle"
 	cursor_reticle.visible = false
 	add_child(cursor_reticle)
-
-func _build_river_water_mesh() -> ArrayMesh:
-	var vertices := PackedVector3Array()
-	var normals := PackedVector3Array()
-	var uvs := PackedVector2Array()
-	var indices := PackedInt32Array()
-	for z_index in M1PatchGenerator.PATCH_SIZE.z + 1:
-		var world_z := float(z_index) * M1PatchGenerator.VOXEL_SCALE
-		var center := M1PatchGenerator.river_center_x(world_z)
-		var half_width := M1PatchGenerator.river_half_width(world_z)
-		vertices.append(Vector3(center - half_width, 0, world_z))
-		vertices.append(Vector3(center + half_width, 0, world_z))
-		normals.append(Vector3.UP); normals.append(Vector3.UP)
-		uvs.append(Vector2(0, world_z * 0.25)); uvs.append(Vector2(1, world_z * 0.25))
-		if z_index < M1PatchGenerator.PATCH_SIZE.z:
-			var base := z_index * 2
-			indices.append_array(PackedInt32Array([base, base + 1, base + 2, base + 1, base + 3, base + 2]))
-	var arrays := []; arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices; arrays[Mesh.ARRAY_NORMAL] = normals; arrays[Mesh.ARRAY_TEX_UV] = uvs; arrays[Mesh.ARRAY_INDEX] = indices
-	var mesh := ArrayMesh.new(); mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return mesh
-
-func _river_water_span_for_row(z: int, water_cell_y: int, support_cell_y: int) -> Vector2i:
-	var best_start := -1
-	var best_end := -1
-	var run_start := -1
-	for x in range(floori(37.5 / M1PatchGenerator.VOXEL_SCALE), M1PatchGenerator.PATCH_SIZE.x + 1):
-		var qualifies: bool = x < M1PatchGenerator.PATCH_SIZE.x and int(backend.voxel_at(Vector3i(x, water_cell_y, z))) == 0 and int(backend.voxel_at(Vector3i(x, support_cell_y, z))) != 0
-		if qualifies and run_start < 0: run_start = x
-		if not qualifies and run_start >= 0:
-			if x - run_start > best_end - best_start:
-				best_start = run_start
-				best_end = x
-			run_start = -1
-	return Vector2i(best_start, best_end)
-
-func _refresh_river_water_from_terrain() -> void:
-	if not river_water or not backend or not backend.has_method("voxel_at") or not backend.is_ready(): return
-	var vertices := PackedVector3Array()
-	var normals := PackedVector3Array()
-	var indices := PackedInt32Array()
-	var unit := M1PatchGenerator.VOXEL_SCALE
-	var water_cell_y := floori(5.0 / unit) - 1
-	var support_cell_y := floori(3.0 / unit)
-	if _river_water_spans.size() != M1PatchGenerator.PATCH_SIZE.z:
-		_river_water_spans.resize(M1PatchGenerator.PATCH_SIZE.z)
-		for z in M1PatchGenerator.PATCH_SIZE.z:
-			_river_water_spans[z] = _river_water_span_for_row(z, water_cell_y, support_cell_y)
-	else:
-		var edit_bounds: AABB = backend.get_last_edit_bounds() if backend.has_method("get_last_edit_bounds") else AABB()
-		# Only edits within the water/support sampling band can alter the river
-		# surface. All other terrain work keeps the existing mesh untouched.
-		if edit_bounds.size == Vector3.ZERO or edit_bounds.end.x < 37.5 or edit_bounds.position.y >= 5.0 or edit_bounds.end.y <= 3.0:
-			return
-		var row_start := clampi(floori(edit_bounds.position.z / unit) - 1, 0, M1PatchGenerator.PATCH_SIZE.z - 1)
-		var row_end := clampi(ceili(edit_bounds.end.z / unit) + 1, 0, M1PatchGenerator.PATCH_SIZE.z - 1)
-		for z in range(row_start, row_end + 1):
-			_river_water_spans[z] = _river_water_span_for_row(z, water_cell_y, support_cell_y)
-	for z in M1PatchGenerator.PATCH_SIZE.z:
-		var span := _river_water_spans[z]
-		var best_start := span.x
-		var best_end := span.y
-		if best_start < 0: continue
-		var base := vertices.size()
-		var x0 := float(best_start) * unit; var x1 := float(best_end) * unit
-		var z0 := float(z) * unit; var z1 := float(z + 1) * unit
-		vertices.append_array(PackedVector3Array([Vector3(x0, 0, z0), Vector3(x1, 0, z0), Vector3(x0, 0, z1), Vector3(x1, 0, z1)]))
-		for unused in 4: normals.append(Vector3.UP)
-		indices.append_array(PackedInt32Array([base, base + 1, base + 2, base + 1, base + 3, base + 2]))
-	if vertices.is_empty(): return
-	var arrays := []; arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices; arrays[Mesh.ARRAY_NORMAL] = normals; arrays[Mesh.ARRAY_INDEX] = indices
-	var mesh := ArrayMesh.new(); mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	river_water.mesh = mesh
 
 func _create_backend() -> void:
 	var backend_script := load("res://scripts/terrain_backend.gd")
@@ -521,6 +444,17 @@ func _sync_water_visual() -> void:
 	# the player's dismissals, so water commit / undo / redo / restore all stay in sync.
 	if water_visual and water_visual.has_method("set_waterfall_suppressions"):
 		water_visual.set_waterfall_suppressions(landscape_state.waterfall_suppressions)
+
+func _ensure_premade_river() -> void:
+	# The starter river is a water region (not a bespoke mesh) so it shares the
+	# same presentation path, materials and editability as player-authored water.
+	# Deterministic + idempotent: derived from the generator, added once, and the
+	# generated bed already exists (no carve). Covers fresh and existing worlds.
+	var river := PremadeRiver.region()
+	for existing: Dictionary in landscape_state.water:
+		if PremadeRiver.matches(existing, river): return
+	if landscape_state.add_water("stream", river["level"], river["points"], river["width"], river["flow"]) > 0:
+		_sync_water_visual()
 
 func _update_brush_preview() -> void:
 	if not brush_preview:
@@ -744,7 +678,6 @@ func _on_backend_ready(ready: bool) -> void:
 			_set_menu(true)
 			_set_status("Checkpoint load failed; reload blocked")
 		else: _set_status("Cottage and riverbank ready")
-	_refresh_river_water_from_terrain()
 	_restore_landscape(backend.get("loaded_building_document") if loaded_ok else {})
 	_player_restored = true
 	_restoring = false
@@ -831,9 +764,6 @@ func _sync_meadow_exclusions() -> void:
 
 func _on_backend_changed() -> void:
 	var started := Time.get_ticks_usec()
-	_refresh_river_water_from_terrain()
-	var water_ms := float(Time.get_ticks_usec() - started) / 1000.0
-	started = Time.get_ticks_usec()
 	_sync_meadow_exclusions()
 	if garden_visual and garden_visual.has_method("refresh_terrain"):
 		garden_visual.refresh_terrain()
@@ -845,7 +775,7 @@ func _on_backend_changed() -> void:
 	started = Time.get_ticks_usec()
 	_update_presentation()
 	if OS.is_debug_build():
-		print("THOR_BACKEND_BASE " + JSON.stringify({"water_ms": water_ms, "garden_ms": garden_ms, "presentation_ms": float(Time.get_ticks_usec() - started) / 1000.0}))
+		print("THOR_BACKEND_BASE " + JSON.stringify({"garden_ms": garden_ms, "presentation_ms": float(Time.get_ticks_usec() - started) / 1000.0}))
 
 func _on_building_changed() -> void:
 	if not _restoring:
