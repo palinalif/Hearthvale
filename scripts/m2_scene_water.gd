@@ -266,17 +266,28 @@ func _add_water_lake_vertex() -> void:
 		return
 	var point := _water_cursor_point()
 	if not point.is_finite(): return
-	if water_lake_points.size() >= LAKE_MIN_POINTS:
-		var first: Vector2 = water_lake_points[0]
-		if point.distance_to(first) < LAKE_CLOSE_SNAP:
-			_commit_water_lake()
-			return
-	if water_lake_points.is_empty() or point.distance_to(water_lake_points.back()) < WaterGrid.UNIT:
+	var action := _lake_outline_action(water_lake_points, point)
+	if action == "close":
+		_commit_water_lake()
+		return
+	if action != "add":
 		return
 	water_lake_points.append(point)
 	_water_preview_signature = ""
 	_set_status("Lake • %d points • near the start to close" % water_lake_points.size())
 	_update_water_preview()
+
+## Pure decision for a lake outline A-press: "close" when near the start with enough
+## points, "ignore" when too close to the previous point (only once one exists), else
+## "add". Kept pure so the outline logic is testable without the live scene.
+static func _lake_outline_action(points: Array, point: Vector2) -> String:
+	if points.size() >= LAKE_MIN_POINTS:
+		var first: Vector2 = points[0]
+		if point.distance_to(first) < LAKE_CLOSE_SNAP:
+			return "close"
+	if not points.is_empty() and point.distance_to(points.back()) < WaterGrid.UNIT:
+		return "ignore"
+	return "add"
 
 func _commit_water_stream() -> bool:
 	if not water_stroking or water_kind != "stream": return false

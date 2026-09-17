@@ -61,6 +61,7 @@ Invoke-GodotBounded 'water-visual' @('--headless','--path','.','--script','res:/
 Invoke-GodotBounded 'water-excavation' @('--headless','--path','.','--script','res://tests/water_excavation_test.gd','--max-fps','60')
 Invoke-GodotBounded 'waterfall' @('--headless','--path','.','--script','res://tests/waterfall_test.gd','--max-fps','60')
 Invoke-GodotBounded 'waterfall-visual' @('--headless','--path','.','--script','res://tests/waterfall_visual_test.gd','--max-fps','60')
+Invoke-GodotBounded 'water-lake-outline' @('--headless','--path','.','--script','res://tests/water_lake_outline_test.gd','--max-fps','60')
 Invoke-GodotBounded 'm1-visual' @('--headless','--path','.','--script','res://tests/m1_visual_test.gd','--max-fps','60')
 Invoke-GodotBounded 'building-world' @('--headless','--path','.','--script','res://tests/building_world_test.gd','--max-fps','60')
 Invoke-GodotBounded 'cottage-detail-visual' @('--headless','--path','.','--script','res://tests/cottage_detail_visual_test.gd','--max-fps','60')
