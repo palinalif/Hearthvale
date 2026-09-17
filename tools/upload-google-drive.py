@@ -153,14 +153,22 @@ def notify(
     raise RuntimeError("Apps Script webhook retry loop ended unexpectedly")
 
 
-def delivery_spec(kind: str, commit: str) -> tuple[str, set[str]]:
+def drive_branch_name(branch: str) -> str:
+    name = branch.strip().replace("/", "-")
+    if not name:
+        raise RuntimeError("GitHub branch name is empty")
+    return name
+
+
+def delivery_spec(kind: str, commit: str, branch: str) -> tuple[str, set[str]]:
     short = commit[:8]
     if kind == "apk":
+        stem = f"{drive_branch_name(branch)}-{short}"
         return (
-            f"hearthvale-m1-repair-{commit}",
+            f"hearthvale-drive-apk-{commit}",
             {
-                f"hearthvale-m1-repair-{short}.apk",
-                f"hearthvale-m1-repair-{short}.verification.json",
+                f"{stem}.apk",
+                f"{stem}.verification.json",
             },
         )
     if kind == "pc":
@@ -184,13 +192,14 @@ def main() -> int:
     repository = required_env("GITHUB_REPOSITORY")
     run_id = required_env("GITHUB_RUN_ID")
     commit = required_env("GITHUB_SHA")
+    branch = required_env("GITHUB_REF_NAME")
     token = required_env("GITHUB_TOKEN")
     webhook_url = required_env("APPS_SCRIPT_WEBHOOK_URL")
     webhook_secret = required_env("APPS_SCRIPT_WEBHOOK_SECRET")
     if not webhook_url.startswith("https://script.google.com/"):
         raise RuntimeError("APPS_SCRIPT_WEBHOOK_URL must be an HTTPS script.google.com URL")
 
-    artifact_name, expected_files = delivery_spec(args.artifact_kind, commit)
+    artifact_name, expected_files = delivery_spec(args.artifact_kind, commit, branch)
     listing_url = f"{api_url}/repos/{repository}/actions/runs/{urllib.parse.quote(run_id)}/artifacts?per_page=100"
     artifact = select_artifact(github_json(listing_url, token), artifact_name)
     download_url = signed_archive_url(str(artifact["archive_download_url"]), token)
