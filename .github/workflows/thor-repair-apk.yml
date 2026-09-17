@@ -94,13 +94,24 @@ jobs:
           python ./tools/verify-repair-apk.py
           if ($LASTEXITCODE -ne 0) { throw 'Isolated repair APK verification failed' }
 
+      - name: Name verified APK for branch and commit
+        shell: pwsh
+        run: |
+          $short = $env:GITHUB_SHA.Substring(0, 8)
+          $branch = $env:GITHUB_REF_NAME.Replace('/', '-')
+          if (-not $branch) { throw 'GitHub branch name is empty' }
+          $source = "builds/hearthvale-m1-repair-$short"
+          $target = "builds/$branch-$short"
+          Move-Item -LiteralPath "$source.apk" -Destination "$target.apk"
+          Move-Item -LiteralPath "$source.verification.json" -Destination "$target.verification.json"
+
       - name: Upload verified repair APK and receipt
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: hearthvale-m1-repair-${{ github.sha }}
           path: |
-            builds/hearthvale-m1-repair-*.apk
-            builds/hearthvale-m1-repair-*.verification.json
+            builds/*.apk
+            builds/*.verification.json
           if-no-files-found: error
           retention-days: 14
 
