@@ -6,7 +6,7 @@ const BuildBrowser = preload("res://scripts/ui/m2_build_browser.gd")
 const CatalogueThumbnails = preload("res://scripts/ui/m2_catalogue_thumbnails.gd")
 const HamletPreviewVisual = preload("res://scripts/m2_hamlet_visual.gd")
 const HOUSE_BROWSER_CATEGORIES := [["windows", "Windows"], ["doors", "Doors"], ["wall", "Wall decor"], ["roof", "Roof decor"]]
-const WORLD_BROWSER_CATEGORIES := [["homes", "Homes"], ["paths", "Paths & bridges"], ["outdoor", "Outdoor"]]
+const WORLD_BROWSER_CATEGORIES := [["homes", "Homes"], ["paths", "Paths & bridges"], ["outdoor", "Outdoor"], ["water", "Water"]]
 var _build_browser: BuildBrowser
 var _catalogue_thumbnails: CatalogueThumbnails
 var _browser_open := false

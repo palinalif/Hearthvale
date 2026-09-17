@@ -392,8 +392,8 @@ func _on_backend_changed() -> void:
 
 func _build_browser_entries() -> Array[Dictionary]:
 	var entries: Array[Dictionary] = super._build_browser_entries()
-	entries.append({"id": "water_stream", "name": "Stream", "category": "paths", "kind": "water", "summary": "Drag a centreline to carve a river"})
-	entries.append({"id": "water_lake", "name": "Lake", "category": "paths", "kind": "water", "summary": "Outline a bounded region to carve a basin"})
+	entries.append({"id": "water_stream", "name": "Stream", "category": "water", "kind": "water", "summary": "Drag a centreline to carve a river"})
+	entries.append({"id": "water_lake", "name": "Lake", "category": "water", "kind": "water", "summary": "Outline a bounded region to carve a basin"})
 	return entries
 
 func _choose_water_tool(id: String) -> void:
