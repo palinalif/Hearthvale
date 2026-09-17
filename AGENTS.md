@@ -18,9 +18,9 @@ Start with `HANDOFF.md`, `tasks/M2-hamlet-building.md`, and the user's current r
 
 ## Ownership and efficient work
 
-Default lead is Sol/medium for everyday coding, debugging, architecture, integration, tests, builds and delivery. Art tasks use Sol/high, including visual design, art direction, asset creation and visual implementation; do not use Astra/low for art tasks. The lead should implement ordinary work directly when delegation would add coordination overhead. No silent model substitution or second coordinator. These instructions do not switch an active task's model: report a mismatch with the exposed task model rather than claiming the default is already active.
+Implement ordinary work directly when delegation would add coordination overhead. No second coordinator.
 
-Do not use subagents, workers or delegation unless the user explicitly requests them. If the user does request delegation, use at most one worker, with `fork_turns="none"`, an explicit supported model/effort, minimal relevant context, owned files/interfaces and acceptance checks. Sol should handle coupled debugging and integration directly. If repeated corrections show the brief is unsuitable, stop the delegation loop and let Sol finish it. Verify a new model/runtime with a small read-only gate; reuse unchanged verified gates. Report requested versus exposed model honestly.
+Do not use subagents, workers or delegation unless the user explicitly requests them. If the user does request delegation, use at most one worker, with `fork_turns="none"`, minimal relevant context, owned files/interfaces and acceptance checks. Coupled debugging and integration should be handled directly. If repeated corrections show the brief is unsuitable, stop the delegation loop and finish it directly.
 
 Use small reviewable commits and one writer per subsystem. Main owns shared configuration and live Godot/MCP. Prefer typed GDScript/native voxel operations and only needed abstractions; measure before adding C++ or removing visual detail for performance.
 
