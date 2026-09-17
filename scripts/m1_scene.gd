@@ -159,6 +159,12 @@ func _ready() -> void:
 	_track_connect(Input, "joy_connection_changed", _on_joy_connection_changed)
 	_track_connect(building_world, "changed", _on_building_changed)
 	if backend and backend.has_method("is_ready") and backend.is_ready(): _on_backend_ready(true)
+	# Debug-only virtual-controller + telemetry bridge (localhost TCP, loopback
+	# only, OS.is_debug_build()-gated). Inert in release builds; see the script.
+	if OS.is_debug_build():
+		var bridge := load("res://scripts/m1_debug_bridge.gd").new()
+		bridge.name = "virtual_controller_bridge"
+		add_child(bridge)
 
 func _process(delta: float) -> void:
 	if _shutting_down: return
