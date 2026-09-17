@@ -146,6 +146,10 @@ func _build_cascade(fall: Dictionary) -> MeshInstance3D:
 	var node := MeshInstance3D.new()
 	node.name = "Waterfall_%d-%d" % [int(fall["upper_id"]), int(fall["lower_id"])]
 	node.mesh = mesh
+	# The particle aspect of the fall: a short-lived base spray (droplets thrown
+	# up and out, pulled back by gravity) plus a prewarmed, slowly rising soft mist.
+	node.add_child(_make_spray(crown, bottom, width))
+	node.add_child(_make_mist(crown, bottom, width))
 	return node
 
 func _surface_arrays(vertices: PackedVector3Array, normals: PackedVector3Array, colors: PackedColorArray, indices: PackedInt32Array) -> Array:
@@ -163,6 +167,73 @@ func _fall_material(span: float) -> ShaderMaterial:
 	material.set_shader_parameter("fall_color", FALL_COLOR)
 	material.set_shader_parameter("height", span)
 	return material
+
+## A unit billboard quad carrying a soft, unshaded alpha material; the particle
+## scale (scale_min/scale_max) sizes each instance.
+func _particle_quad(color: Color) -> QuadMesh:
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo = color
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE
+	quad.material = mat
+	return quad
+
+## Base spray: droplets emitted from a flat disc at the pool, thrown up and out and
+## pulled back down. Short-lived, no prewarm (so it reads as fresh splashes).
+func _make_spray(center: Vector2, level: float, width: float) -> GPUParticles3D:
+	var p := GPUParticles3D.new()
+	p.name = "Spray"
+	p.position = Vector3(center.x, level + 0.05, center.y)
+	p.amount = 64
+	p.lifetime = 0.6
+	p.visibility_range_end = 40.0
+	var m := ParticleProcessMaterial.new()
+	m.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	m.emission_box_extents = Vector3(width * 0.5, 0.05, width * 0.5)
+	m.direction = Vector3.UP
+	m.spread = 34.0
+	m.initial_velocity_min = 1.0
+	m.initial_velocity_max = 2.3
+	m.gravity = Vector3(0.0, -9.8, 0.0)
+	m.scale_min = 0.04
+	m.scale_max = 0.1
+	m.color = Color(0.86, 0.96, 1.0, 0.5)
+	m.damping_min = 8.0
+	m.damping_max = 12.0
+	p.process_material = m
+	p.draw_pass_1 = _particle_quad(Color(0.9, 0.97, 1.0, 0.5))
+	return p
+
+## Soft mist: a prewarmed bed of large, faint billboards that drifts up slowly, so
+## the base always reads as hazy without pop-in.
+func _make_mist(center: Vector2, level: float, width: float) -> GPUParticles3D:
+	var p := GPUParticles3D.new()
+	p.name = "Mist"
+	p.position = Vector3(center.x, level + 0.2, center.y)
+	p.amount = 28
+	p.lifetime = 1.6
+	p.preprocess = 1.6   # simulate a full lifetime on start so the mist never pops in
+	p.visibility_range_end = 40.0
+	var m := ParticleProcessMaterial.new()
+	m.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	m.emission_box_extents = Vector3(width * 0.6, 0.1, width * 0.6)
+	m.direction = Vector3.UP
+	m.spread = 14.0
+	m.initial_velocity_min = 0.15
+	m.initial_velocity_max = 0.45
+	m.gravity = Vector3(0.0, -0.25, 0.0)
+	m.scale_min = 0.4
+	m.scale_max = 0.85
+	m.color = Color(0.9, 0.97, 1.0, 0.1)
+	m.damping_min = 3.0
+	m.damping_max = 5.0
+	p.process_material = m
+	p.draw_pass_1 = _particle_quad(Color(0.9, 0.97, 1.0, 0.12))
+	return p
 
 func _rebuild() -> void:
 	if _backend == null or not _backend.has_method("voxel_at"):
@@ -287,6 +358,16 @@ func waterfall_count() -> int:
 ## The active (non-suppressed) derived falls, each with crown/levels/key (read-only copy).
 func active_waterfalls() -> Array:
 	return _waterfalls.duplicate(false)
+
+## Number of particle emitters under the active falls (spray + mist each) — test hook.
+func waterfall_particle_node_count() -> int:
+	var total := 0
+	for node: MeshInstance3D in _fall_nodes:
+		if node != null:
+			for child: Node in node.get_children():
+				if child is GPUParticles3D:
+					total += 1
+	return total
 
 ## Keys of the active (non-suppressed) falls, sorted (test hook).
 func waterfall_keys() -> Array:

@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode cull_disabled, diffuse_burley, specular_schlick_ggx, alpha_blend;
+render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
 
 uniform vec4 fall_color : source_color = vec4(0.62, 0.80, 0.88, 0.70);
 uniform float fall_speed = 3.0;

@@ -53,6 +53,7 @@ func _initialize() -> void:
 	visual.refresh_waterfalls(Waterfall.FULL_RECT)
 	check(visual.waterfall_count() == 1, "stepped cliff yields one waterfall (got %d)" % visual.waterfall_count())
 	check(visual.waterfall_keys() == ["1-2"], "fall key is the upper-lower pair")
+	check(visual.waterfall_particle_node_count() == 2, "each fall has spray + mist emitters (got %d)" % visual.waterfall_particle_node_count())
 	# dismissal hides the fall; un-dismissing brings it back
 	visual.set_waterfall_suppressions(["1-2"])
 	check(visual.waterfall_count() == 0, "a dismissed fall is hidden")
