@@ -95,3 +95,21 @@ incl. `build-thor-apk` (verified ARM64 APK) + Windows playtest. PR #27 OPEN/MERG
 
 **Remaining: visual playtest on the Thor** — waterfall cascade/splash look, dismissal feel; visual
 approval belongs to the user.
+
+## Waterfall animation + particles — delivered, CI green
+
+On top of the animated shader curtain (downward-scrolling streaks + base foam), each derived
+fall now carries the **particle aspect** (`water_visual.gd`, `GPUParticles3D` billboard emitters,
+sized to the fall width):
+- **Spray** — a short-lived bed of droplets at the pool, thrown up and out (spread 34°, gravity
+  9.8), no prewarm so it reads as fresh splashes.
+- **Mist** — a prewarmed (`preprocess` = full lifetime) bed of large, faint billboards that drift
+  up slowly; hazy base with no pop-in.
+
+Notes: spatial shaders use ALPHA for transparency (no `alpha_blend` render mode); GPUParticles3D
+`prewarm` is read-only — set `preprocess` (duration); the draw pass is a `QuadMesh` carrying the
+billboard material (`draw_pass_1`), sized by the particle `scale_min/scale_max`.
+
+Headless waterfall_visual 7/0 (asserts both emitters per fall). Pushed `ffefdc7`; CI
+35196625269 **30/30 green, overall success** (incl. verified ARM64 APK + Windows playtest).
+**Remaining: visual playtest on the Thor** — spray/mist density, cascade look; approval is the user's.
