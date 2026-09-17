@@ -35,3 +35,32 @@ Resume artifact. Read this FIRST. Format per unit: what changed / checks=N failu
   limitation on plain main).
 - delivery: forced push; new PR https://github.com/palinalif/Hearthvale/pull/25 (base main).
 - next: CI green on #25, then part 2 (auto-scattered tufts) on this branch.
+
+## U2 — part 2: auto-scattered meadow tufts (cffc881)
+- changed:
+  - NEW `scripts/grass_tuft_scatter.gd` (GrassTuftScatter): pure-logic deterministic
+    planner. Coarse 0.25 m candidate lattice hash-preselected (never scans the ~1M
+    fine grid), tone-field clump bias (lifted patches carry more tufts), exclusion
+    rects (paths/water/stone/foundations), fine-cell occupancy, 1-2 cell ground-cover
+    columns with optional companion, hard MAX_TUFTS cap. Integer identity only —
+    no RNG/frame time/terrain revision/enumeration order. `digest()` for determinism.
+  - `scripts/m1_garden_visual.gd`: builds ONE batched tuft ArrayMesh (vertex-coloured
+    per tuft tone) on attach + refresh_terrain, native-validated per column (grass
+    type 2, above-surface, companion within 2 fine cells), deduped on (revision,
+    exclusions digest). Excludes hand-planted records + building foundations.
+    Presentation only: no planting records, no terrain writes, no save data.
+  - `scripts/m1_scene.gd`: `_sync_meadow_exclusions()` pushes building-foundation
+    rects on terrain/building change. `scripts/terrain_backend.gd`: trivial
+    `revision()` getter for the dedupe key.
+  - NEW `tests/grass_tuft_scatter_test.gd`, `tests/meadow_tuft_visual_test.gd`.
+- checks (local headless, stock Godot, no native voxel module):
+  - grass_tuft_scatter_test 16/0 (225 tufts, sparse 0.055/m^2, clumping 1.25x lifted,
+    exclusions respected, unique cells, ground-cover bounded, green family).
+  - meadow_tuft_visual_test 11/0 (mock flat-grass backend: 390 cells/9360 verts,
+    deterministic rebuild 9360==9360, no-op refresh no-rebuild, exclusion 9360->8496->9360,
+    stone surface -> 0 tufts, sits-on-grass no-sink).
+  - grass_tone_test 26/1 (1 environmental "native VoxelBuffer unavailable", same on main).
+  - import check clean.
+- native legs (real terrain surface/grass detection, live building+record exclusions,
+  in-scene render) are CI-gated; not verifiable in this sandbox (no native module).
+- next: CI green on #25; then merge (after #24 wall-details, before #26 landing).
