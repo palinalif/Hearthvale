@@ -37,6 +37,9 @@ jobs:
   performance:
     uses: ./.github/workflows/m2-performance.yml
 
+  water:
+    uses: ./.github/workflows/water.yml
+
   # Candidate packaging may run in parallel, but private delivery requires every
   # regression and package verification to pass for this exact source commit.
   # A valid APK is not evidence that gameplay/visual regressions passed.
