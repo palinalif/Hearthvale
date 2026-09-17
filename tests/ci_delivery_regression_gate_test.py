@@ -36,6 +36,20 @@ class DeliveryRegressionGateTest(unittest.TestCase):
         for name in REQUIRED:
             self.assertNotIn("continue-on-error", job_block(source, name))
 
+    def test_apk_keeps_verified_name_until_drive_revalidation(self):
+        candidate = (ROOT / ".github/workflows/thor-repair-apk.yml").read_text(encoding="utf-8")
+        android = job_block(candidate, "build-android")
+        self.assertNotIn("Name verified APK for branch and commit", android)
+        self.assertIn("builds/hearthvale-m1-repair-*.apk", android)
+        self.assertIn("builds/hearthvale-m1-repair-*.verification.json", android)
+
+        drive = job_block(WORKFLOW.read_text(encoding="utf-8"), "drive-apk")
+        revalidate_at = drive.index("- name: Revalidate APK receipt")
+        prepare_at = drive.index("- name: Prepare branch-named APK for Drive")
+        self.assertLess(revalidate_at, prepare_at)
+        self.assertIn('Get-Item "delivery/hearthvale-m1-repair-$short.apk"', drive)
+        self.assertIn("name: hearthvale-drive-apk-${{ github.sha }}", drive)
+
     def test_planter_source_interaction_and_render_checks_are_wired(self):
         workflow = (ROOT / ".github/workflows/cottage-playtest.yml").read_text(encoding="utf-8")
         self.assertRegex(workflow, r"(?m)^          - planters$")
