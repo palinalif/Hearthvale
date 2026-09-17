@@ -40,7 +40,7 @@ func _initialize() -> void:
 		return
 	await _press(JOY_BUTTON_RIGHT_SHOULDER)
 	for i in 4: await process_frame
-	var paths_ready: bool = scene._browser_open and scene._build_browser.category == "paths" and scene._build_browser.cards.size() == 5
+	var paths_ready: bool = scene._browser_open and scene._build_browser.category == "paths" and scene._build_browser.cards.size() == 7
 	_check(paths_ready, "RB selects Paths & bridges in the world build browser")
 	if not paths_ready:
 		await _finish()

@@ -51,7 +51,12 @@ var water: Array = []
 var next_id := 1
 
 func document() -> Dictionary:
-	return {"version": 1, "next_id": next_id, "records": records.duplicate(true), "paths": paths.duplicate(true), "bridges": bridges.duplicate(true), "composition": composition.duplicate(true), "water": water.duplicate(true)}
+	var document := {"version": 1, "next_id": next_id, "records": records.duplicate(true), "paths": paths.duplicate(true), "bridges": bridges.duplicate(true), "composition": composition.duplicate(true)}
+	# Omit the water key when empty so water-free saves keep an identical schema
+	# (presentation/record work stays save-authority neutral for existing saves).
+	if not water.is_empty():
+		document["water"] = water.duplicate(true)
+	return document
 
 static func validate(value: Dictionary) -> bool:
 	if not _integer(value.get("version", null)) or int(value["version"]) != 1 or not value.get("records", null) is Array: return false
@@ -346,7 +351,9 @@ func add_water(type_id: String, level_value: Variant, point_values: Array, width
 		if flow.is_empty(): return -1
 		candidate["flow"] = flow
 	var proposed := document()
-	(proposed["water"] as Array).append(candidate)
+	var proposed_water: Array = proposed.get("water", [])
+	proposed_water.append(candidate)
+	proposed["water"] = proposed_water
 	proposed["next_id"] = next_id + 1
 	if not validate(proposed): return -1
 	water.append(candidate)
