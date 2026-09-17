@@ -24,3 +24,14 @@ Resume artifact. Read this FIRST. Format per unit: what changed / checks=N failu
 - checks: `grass_tone_test checks=28 failures=0` (exit 0). Key lines: albedo digest stable across two evaluations and after patch regeneration (`9fc464a7a1847cdb`), 5/5 tones reachable, 0 samples outside the green family, neighbour tone delta 0.205 vs 0.614 for distant cells (coherent patches, not noise), all 12 published uniforms declared by the shader and applied to the material, regenerated native patch byte-identical (`patch_digest 0ea4e7ccbbc17c73`).
 - smoke: one render-session run reached the scene + terrain (no SHADER ERROR in log) but the run died in the test's own pre-existing `path.points` bug, so shader compile is NOT yet verified by a full render gate.
 - next: part 2 (automatic tufts), tuft tests, captures, gate, PR.
+
+## Pickup by Pi (2026-09-17): rebased onto main, re-PR'd
+- context: PRs #21/#22/#23 were found closed unmerged (not intentional) and their
+  base branch `master` had been deleted, so GitHub cannot reopen them. Notes moved
+  from root `notes.md` to this file to end the permanent conflict.
+- changed: rebased onto `main` (f610176). No feature-code changes.
+- tests (local headless, stock Godot — no native voxel module): grass_tone_test
+  26 checks / 1 fail "native VoxelBuffer unavailable" (environmental; same
+  limitation on plain main).
+- delivery: forced push; new PR https://github.com/palinalif/Hearthvale/pull/25 (base main).
+- next: CI green on #25, then part 2 (auto-scattered tufts) on this branch.
