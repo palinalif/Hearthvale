@@ -100,6 +100,7 @@ var water_visual: Node3D
 var landscape_state := LandscapeScript.new()
 var landscape_active := false
 var _water_debug_overlay: Label
+var _water_diag_build := ""
 var _landscape_before: Dictionary = {}
 var _landscape_history: Array[Dictionary] = []
 var _landscape_redo: Array[Dictionary] = []
@@ -387,6 +388,7 @@ func _build_world() -> void:
 	decor_root = Node3D.new(); decor_root.name = "GardenDecor"; add_child(decor_root)
 	garden_visual = GardenVisualScript.new(); garden_visual.name = "M1GardenVisual"; garden_visual.set_wind_enabled(not test_mode); decor_root.add_child(garden_visual)
 	water_visual = WaterVisualScript.new(); water_visual.name = "M1WaterVisual"; decor_root.add_child(water_visual)
+	_water_diag_build = "wv=%s script_ok=%s" % [str(water_visual != null), str(WaterVisualScript != null)]
 	camera = Camera3D.new(); camera.current = true; camera.fov = 52; add_child(camera)
 	resize_handles = Node3D.new(); resize_handles.name = "ResizeHandles"; resize_handles.visible = false; add_child(resize_handles)
 	for axis_name in ["width", "depth", "height"]:
@@ -550,6 +552,7 @@ func _diagnose_water() -> void:
 		parts.append("id=%d %s lvl=%.3f pts=%d" % [int(r.get("id", 0)), str(r.get("type", "")), float(r.get("level", 0.0)), int((r.get("points", []) as Array).size())])
 	var lines: Array = ["DIAG_WATER regions=%d | %s" % [water.size(), " ".join(parts)]]
 	lines.append("DIAG_WATER scene=%s self=%s river=%s decor=%s garden=%s wv=%s" % [str(get_class()), str(get_path()), str(river_water != null), str(decor_root != null), str(garden_visual != null), str(water_visual != null)])
+	lines.append("DIAG_WATER build[ %s ]" % _water_diag_build)
 	if not water_visual:
 		lines.append("DIAG_WATER wv=null")
 	else:
