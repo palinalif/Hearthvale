@@ -384,6 +384,12 @@ func _apply_world_lighting() -> void:
 	environment_node.environment = environment
 	add_child(environment_node)
 
+## Building-world factory: the base M1 world returns the base BuildingWorld; an
+## environment (e.g. M2) overrides this to construct its subclass once, in place,
+## so the base _build_world builds exactly one building world (no double-build).
+func _create_building_world() -> RefCounted:
+	return BuildingWorldScript.new()
+
 func _build_world() -> void:
 	_apply_world_lighting()
 	river_water = MeshInstance3D.new(); river_water.name = "RiverWater"; river_water.mesh = _build_river_water_mesh(); river_water.position.y = 5.0
@@ -398,7 +404,7 @@ func _build_world() -> void:
 		var handle_mesh := BoxMesh.new(); handle_mesh.size = Vector3(0.22, 0.22, 0.22); handle.mesh = handle_mesh
 		var handle_material := StandardMaterial3D.new(); handle_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; handle_material.albedo_color = Color(1.0, 0.70, 0.28, 0.82); handle_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; handle.material_override = handle_material
 		resize_handles.add_child(handle)
-	building_world = BuildingWorldScript.new()
+	building_world = _create_building_world()
 	cottage_visual = CottageVisualScript.new(); cottage_visual.name = "CottageVisual"; add_child(cottage_visual); cottage_visuals[BUILDING_ID] = cottage_visual
 	brush_preview = BrushPreviewScript.new()
 	brush_preview.name = "BrushPreview"

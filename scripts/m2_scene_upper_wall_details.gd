@@ -1,19 +1,17 @@
 extends "res://scripts/m2_scene_multi_floor.gd"
 
-## Final M2 integration layer for editable upper-storey facades. The M1 world
-## setup is reproduced only to swap in the M2-aware BuildingWorld subclass;
-## everything else stays on the established scene inheritance chain.
+## Final M2 integration layer for editable upper-storey facades. The M1 world is
+## inherited from the scene chain; this environment only overrides the
+## building-world factory so the M2-aware BuildingWorld subclass is built in place.
 const M2BuildingWorldScript = preload("res://scripts/m2_building_world.gd")
 const MassingSurfaces = preload("res://scripts/m2_massing_wall_surfaces.gd")
 
 var _massing_surface_sync_revision := -1
 
-func _build_world() -> void:
-	super._build_world()
-	# The M2-aware building world is the only thing this environment swaps; the
-	# full world (lighting seam, water/garden visuals, camera, handles) is
-	# inherited from the base M1 scene (single source of truth).
-	building_world = M2BuildingWorldScript.new()
+## The base _build_world calls this factory, so the M2 world is constructed once,
+## in place (no double-build of the base BuildingWorld).
+func _create_building_world() -> RefCounted:
+	return M2BuildingWorldScript.new()
 
 func _apply_house_shape_preset(preset_id: String) -> bool:
 	var index: int = building_world._building_index(selected_building_id)
