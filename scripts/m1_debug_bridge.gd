@@ -55,7 +55,7 @@ func _ready() -> void:
 		return
 	enabled = true
 	_server = TCPServer.new()
-	var err := _server.listen(DEFAULT_PORT, "127.0.0.1", false)  # loopback only
+	var err := _server.listen(DEFAULT_PORT, "127.0.0.1")  # loopback only
 	if err != OK:
 		enabled = false
 		set_process(false)
@@ -89,7 +89,7 @@ func _pump_socket() -> void:
 			if line.length() > 0:
 				_handle_command(line)
 			idx = _buffer.find("\n")
-	elif _client.get_status() == StreamPeerTCP.STATUS_DISCONNECTED:
+	elif _client.get_status() == StreamPeerTCP.STATUS_ERROR:
 		_client = null
 		_buffer = ""
 
@@ -139,12 +139,12 @@ func _telemetry() -> Dictionary:
 	return {
 		"type": "telemetry",
 		"fps": Engine.get_frames_per_second(),
-		"frame_ms": Performance.get_monitor(Performance.TIME_FRAME) * 1000.0,
+		"frame_ms": 1000.0 / max(Engine.get_frames_per_second(), 0.001),
 		"process_ms": Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
-		"physics_ms": Performance.get_monitor(Performance.TIME_PHYSICS) * 1000.0,
+		"physics_ms": Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
 		"draw_calls": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
 		"primitives": int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)),
-		"objects": int(Performance.get_monitor(Performance.OBJECT_DRAWCALLS)),
+		"objects": int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)),
 		"memory_static_mb": Performance.get_monitor(Performance.MEMORY_STATIC) / 1024.0 / 1024.0,
 	}
 
