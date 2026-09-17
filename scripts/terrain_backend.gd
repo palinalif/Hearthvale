@@ -199,6 +199,9 @@ func initial_mesh_area() -> AABB:
 func is_ready() -> bool:
 	return _backend_ready
 
+func revision() -> int:
+	return _revision
+
 func world_size() -> Vector3:
 	return _world_size()
 
