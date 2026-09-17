@@ -522,11 +522,18 @@ func _create_backend() -> void:
 	add_child(backend)
 	if garden_visual and garden_visual.has_method("attach_backend"):
 		garden_visual.attach_backend(backend)
-	if water_visual and water_visual.has_method("attach_backend"):
-		water_visual.attach_backend(backend)
-	_sync_water_visual()
+	# The region-water surface is a heavy presentation mesh (tens of thousands of
+	# quads). Build it only for scenes that actually render; test_mode suites
+	# (placement/path) instantiate the world without rendering water and skip the
+	# build so they stay fast. The game (not test_mode) always builds it.
+	if not test_mode:
+		if water_visual and water_visual.has_method("attach_backend"):
+			water_visual.attach_backend(backend)
+		_sync_water_visual()
 
 func _sync_water_visual() -> void:
+	if test_mode:
+		return
 	if water_visual and water_visual.has_method("set_regions"):
 		water_visual.set_regions(landscape_state.water)
 	# set_waterfall_suppressions also re-derives the (bounded) waterfalls honouring
