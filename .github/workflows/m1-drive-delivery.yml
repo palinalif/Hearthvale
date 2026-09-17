@@ -76,6 +76,33 @@ jobs:
             throw 'Downloaded APK does not match its successful verification receipt'
           }
 
+      - name: Prepare branch-named APK for Drive
+        shell: pwsh
+        run: |
+          $short = $env:GITHUB_SHA.Substring(0, 8)
+          $branch = $env:GITHUB_REF_NAME.Replace('/', '-')
+          if ([string]::IsNullOrWhiteSpace($branch)) { throw 'GitHub branch name is empty' }
+          $stem = "$branch-$short"
+          $sourceApk = "delivery/hearthvale-m1-repair-$short.apk"
+          $sourceReceipt = "delivery/hearthvale-m1-repair-$short.verification.json"
+          $targetApk = "delivery/$stem.apk"
+          $targetReceipt = "delivery/$stem.verification.json"
+          Move-Item -LiteralPath $sourceApk -Destination $targetApk
+          Move-Item -LiteralPath $sourceReceipt -Destination $targetReceipt
+          $record = Get-Content $targetReceipt -Raw | ConvertFrom-Json
+          $record.apk = "$stem.apk"
+          $record | ConvertTo-Json -Depth 10 | Set-Content $targetReceipt -Encoding utf8
+
+      - name: Upload Drive-ready APK artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: hearthvale-drive-apk-${{ github.sha }}
+          path: |
+            delivery/*.apk
+            delivery/*.verification.json
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Copy verified APK to Drive
         env:
           APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
