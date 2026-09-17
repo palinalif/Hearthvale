@@ -59,6 +59,7 @@ Invoke-GodotBounded 'water-region' @('--headless','--path','.','--script','res:/
 Invoke-GodotBounded 'premade-river' @('--headless','--path','.','--script','res://tests/premade_river_test.gd','--max-fps','60')
 Invoke-GodotBounded 'water-carve-plan' @('--headless','--path','.','--script','res://tests/water_carve_plan_test.gd','--max-fps','60')
 Invoke-GodotBounded 'water-visual' @('--headless','--path','.','--script','res://tests/water_visual_test.gd','--max-fps','60')
+Invoke-GodotBounded 'water-surface-local' @('--headless','--path','.','--script','res://tests/water_surface_local_test.gd','--max-fps','60')
 Invoke-GodotBounded 'water-excavation' @('--headless','--path','.','--script','res://tests/water_excavation_test.gd','--max-fps','60')
 Invoke-GodotBounded 'waterfall' @('--headless','--path','.','--script','res://tests/waterfall_test.gd','--max-fps','60')
 Invoke-GodotBounded 'waterfall-visual' @('--headless','--path','.','--script','res://tests/waterfall_visual_test.gd','--max-fps','60')

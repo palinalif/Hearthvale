@@ -25,6 +25,12 @@ var _last_key := ""
 var _suppressions: Array = []
 var _waterfalls: Array = []
 var _fall_nodes: Array = []
+# Per-cell terrain cache so a local edit only re-samples the cells near it
+# (mirroring the river and waterfall bounds) instead of scanning every column.
+var _cell_cache: Dictionary = {}
+var _regions_key := ""
+var _rebuild_scheduled := false
+var _dirty_accum := Rect2()
 
 func attach_backend(backend: Node) -> void:
 	_backend = backend
@@ -37,10 +43,60 @@ func set_regions(regions: Array) -> void:
 	_rebuild()
 
 func refresh_terrain() -> void:
+	# Full resample (startup / unknown bounds). Local terrain edits use
+	# refresh_surface_from_bounds() to only resample near the edit.
 	_rebuild()
 
+## Resample only the cells near the given terrain-edit bounds and rebuild the
+## surface, coalescing rapid edits into one deferred rebuild. Edits that touch
+## no water cell leave the cached surface untouched (a no-op for far digging).
+func refresh_surface_from_bounds(bounds: AABB) -> void:
+	if _backend == null:
+		return
+	if bounds.size == Vector3.ZERO:
+		_rebuild()
+		return
+	var rkey := _regions_signature()
+	if rkey != _regions_key:
+		_rebuild()
+		return
+	var rect := Rect2(bounds.position.x, bounds.position.z, bounds.size.x, bounds.size.z)
+	rect = rect.grow(3.0)
+	_dirty_accum = rect if _dirty_accum.size == Vector2.ZERO else _dirty_accum.merge(rect)
+	if _rebuild_scheduled:
+		return
+	_rebuild_scheduled = true
+	call_deferred("_do_surface_rebuild")
+
+func _do_surface_rebuild() -> void:
+	_rebuild_scheduled = false
+	var rect := _dirty_accum
+	_dirty_accum = Rect2()
+	if _backend == null or not _backend.has_method("voxel_at"):
+		return
+	if _backend.has_method("is_ready") and not _backend.is_ready():
+		return
+	var resampled := false
+	for region: Dictionary in _regions:
+		for cell: Vector2i in Geometry.footprint_cells(region, _world_x()):
+			if not rect.has_point(Vector2(float(cell.x) * WATER_CELL, float(cell.y) * WATER_CELL)):
+				continue
+			var px := float(cell.x) * WATER_CELL + WATER_CELL * 0.5
+			var pz := float(cell.y) * WATER_CELL + WATER_CELL * 0.5
+			_cell_cache[cell] = _terrain_top(px, pz)
+			resampled = true
+	if not resampled:
+		return
+	_build_mesh_from_cache()
+	_last_key = _key()
+
 func _on_terrain_changed() -> void:
-	_rebuild()
+	# Localize via the last edit bounds (matches the river + waterfalls); the
+	# scene also calls refresh_surface_from_bounds and the debounce coalesces.
+	if _backend != null and _backend.has_method("get_last_edit_bounds"):
+		refresh_surface_from_bounds(_backend.get_last_edit_bounds())
+	else:
+		_rebuild()
 
 ## --- Derived waterfalls (presentation only; the only stored state is the
 ## suppressions the player chose, kept in LandscapeState) -----------------------
@@ -244,10 +300,21 @@ func _rebuild() -> void:
 	if key == _last_key:
 		return
 	_last_key = key
-	var scale := maxf(0.001, float(_backend.get("voxel_scale")))
-	var patch: Vector3i = _backend.get("patch_size")
-	var world := Vector2(float(patch.x) * scale, float(patch.z) * scale)
+	_regions_key = _regions_signature()
+	# Full resample: populate the per-cell cache for every region cell, then
+	# build the surface from the cache (no voxel scans in the mesh pass).
+	_cell_cache.clear()
+	var world_x := _world_x()
+	for region: Dictionary in _regions:
+		for cell: Vector2i in Geometry.footprint_cells(region, world_x):
+			var px := float(cell.x) * WATER_CELL + WATER_CELL * 0.5
+			var pz := float(cell.y) * WATER_CELL + WATER_CELL * 0.5
+			_cell_cache[cell] = _terrain_top(px, pz)
+	_build_mesh_from_cache()
+
+func _build_mesh_from_cache() -> void:
 	_clear()
+	var world_x := _world_x()
 	for region: Dictionary in _regions:
 		var level := Geometry.surface_level(region)
 		var flow := Geometry.flow_direction(region)
@@ -256,10 +323,10 @@ func _rebuild() -> void:
 		var colors := PackedColorArray()
 		var indices := PackedInt32Array()
 		var base := 0
-		for cell: Vector2i in Geometry.footprint_cells(region, world.x):
+		for cell: Vector2i in Geometry.footprint_cells(region, world_x):
 			var cx := float(cell.x) * WATER_CELL
 			var cz := float(cell.y) * WATER_CELL
-			var surface_y := _terrain_top(cx + WATER_CELL * 0.5, cz + WATER_CELL * 0.5)
+			var surface_y: Variant = _cell_cache.get(cell, NAN)
 			# Terrain at/above the level is dry (shore); only below-level cells
 			# (or empty deep columns) carry a water quad, clipped at the level.
 			if not is_nan(surface_y) and surface_y >= level - 0.000001:
@@ -277,13 +344,25 @@ func _rebuild() -> void:
 		arrays[Mesh.ARRAY_COLOR] = colors
 		arrays[Mesh.ARRAY_INDEX] = indices
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		var material := _region_material(flow)
-		mesh.surface_set_material(0, material)
+		mesh.surface_set_material(0, _region_material(flow))
 		var node := MeshInstance3D.new()
 		node.name = "WaterRegion_%d" % int(region.get("id", 0))
 		node.mesh = mesh
 		add_child(node)
 		_nodes.append(node)
+
+func _world_x() -> float:
+	if _backend == null:
+		return 0.0
+	var scale := maxf(0.001, float(_backend.get("voxel_scale")))
+	var patch: Vector3i = _backend.get("patch_size")
+	return float(patch.x) * scale
+
+func _regions_signature() -> String:
+	var payload: Array = []
+	for region: Dictionary in _regions:
+		payload.append([int(region.get("id", 0)), str(region.get("type", "")), float(region.get("level", 0.0)), int((region.get("points", []) as Array).size())])
+	return var_to_bytes(payload).hex_encode().sha256_text()
 
 func _region_material(flow: Vector2) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
