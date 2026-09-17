@@ -301,16 +301,45 @@ func _rebuild() -> void:
 		return
 	_last_key = key
 	_regions_key = _regions_signature()
-	# Full resample: populate the per-cell cache for every region cell, then
-	# build the surface from the cache (no voxel scans in the mesh pass).
+	# Single pass (level-load fast path): scan each column once, cache the
+	# result for localized edits, and build the surface in the same loop.
 	_cell_cache.clear()
 	var world_x := _world_x()
+	_clear()
 	for region: Dictionary in _regions:
+		var level := Geometry.surface_level(region)
+		var flow := Geometry.flow_direction(region)
+		var vertices := PackedVector3Array()
+		var normals := PackedVector3Array()
+		var colors := PackedColorArray()
+		var indices := PackedInt32Array()
+		var base := 0
 		for cell: Vector2i in Geometry.footprint_cells(region, world_x):
-			var px := float(cell.x) * WATER_CELL + WATER_CELL * 0.5
-			var pz := float(cell.y) * WATER_CELL + WATER_CELL * 0.5
-			_cell_cache[cell] = _terrain_top(px, pz)
-	_build_mesh_from_cache()
+			var cx := float(cell.x) * WATER_CELL
+			var cz := float(cell.y) * WATER_CELL
+			var surface_y := _terrain_top(cx + WATER_CELL * 0.5, cz + WATER_CELL * 0.5)
+			_cell_cache[cell] = surface_y
+			if not is_nan(surface_y) and surface_y >= level - 0.000001:
+				continue
+			var depth := 0.0 if is_nan(surface_y) else clampf((level - surface_y) / DEPTH_SCALE, 0.0, 1.0)
+			var color := WATER_COLOR.lerp(WATER_DEEP_COLOR, depth)
+			base = _append_water_quad(vertices, normals, colors, indices, base, cx, cz, level, color)
+		if vertices.is_empty():
+			continue
+		var mesh := ArrayMesh.new()
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = vertices
+		arrays[Mesh.ARRAY_NORMAL] = normals
+		arrays[Mesh.ARRAY_COLOR] = colors
+		arrays[Mesh.ARRAY_INDEX] = indices
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		mesh.surface_set_material(0, _region_material(flow))
+		var node := MeshInstance3D.new()
+		node.name = "WaterRegion_%d" % int(region.get("id", 0))
+		node.mesh = mesh
+		add_child(node)
+		_nodes.append(node)
 
 func _build_mesh_from_cache() -> void:
 	_clear()
