@@ -99,6 +99,7 @@ var garden_visual: Node3D
 var water_visual: Node3D
 var landscape_state := LandscapeScript.new()
 var landscape_active := false
+var _water_debug_overlay: Label
 var _landscape_before: Dictionary = {}
 var _landscape_history: Array[Dictionary] = []
 var _landscape_redo: Array[Dictionary] = []
@@ -567,18 +568,43 @@ func _diagnose_water() -> void:
 				if is_nan(top) or top < lvl - 0.000001:
 					submerged += 1
 			lines.append("DIAG_WATER r0=%s lvl=%.3f cells=%d submerged=%d" % [str(r.get("type", "")), lvl, cells.size(), submerged])
-	# logcat + a file the user can pull off the device (user:// on Android is the
-	# app's internal files dir; see the printed global path).
-	var path := "user://water_diagnostic.txt"
-	var wrote := false
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f != null:
-		f.store_string("=== Hearthvale water diagnostic %s ===\n%s\n" % [Time.get_datetime_string_from_unix_time(Time.get_unix_time_from_system()), "\n".join(lines)])
-		f.close()
-		wrote = true
+	var text := "HEARTHVALE WATER DIAGNOSTIC\n" + "\n".join(lines)
+	# On-screen overlay (screenshot this) + logcat + a file (if adb is available).
+	_show_water_debug_overlay(text)
 	for line in lines:
 		print(line)
-	print("DIAG_WATER file: %s (wrote=%s)" % [ProjectSettings.globalize_path(path), str(wrote)])
+	var path := "user://water_diagnostic.txt"
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f != null:
+		f.store_string("=== Hearthvale water diagnostic %s ===\n%s\n" % [Time.get_datetime_string_from_unix_time(Time.get_unix_time_from_system()), text])
+		f.close()
+		print("DIAG_WATER file: " + ProjectSettings.globalize_path(path))
+
+## Debug-only on-screen panel so the diagnostic can be read from a screenshot with
+## no adb. High CanvasLayer, top-left, bright text on a dark panel.
+func _show_water_debug_overlay(text: String) -> void:
+	if not OS.is_debug_build():
+		return
+	if _water_debug_overlay:
+		_water_debug_overlay.text = text
+		return
+	var layer := CanvasLayer.new()
+	layer.name = "WaterDebugOverlay"
+	layer.layer = 100
+	add_child(layer)
+	var panel := Panel.new()
+	panel.position = Vector2(6, 6)
+	panel.size = Vector2(780, 300)
+	layer.add_child(panel)
+	var label := Label.new()
+	label.position = Vector2(14, 14)
+	label.size = Vector2(756, 284)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_color_override("font_color", Color(0.8, 1.0, 0.8))
+	label.text = text
+	panel.add_child(label)
+	_water_debug_overlay = label
 
 func _update_brush_preview() -> void:
 	if not brush_preview:
