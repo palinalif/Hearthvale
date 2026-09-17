@@ -198,7 +198,7 @@ func _browser_landscape_options() -> void:
 func _choose_browser_item(item: Dictionary) -> void:
 	if not _browser_open or item not in _browser_entries: return
 	var kind := str(item["kind"])
-	if kind not in ["home", "path", "bridge", "garden", "fence", "furniture", "terrain_tool"] and (selected_building_id != _browser_building_id or building_world.get_building(selected_building_id).is_empty()):
+	if kind not in ["home", "path", "bridge", "garden", "fence", "furniture", "terrain_tool", "water"] and (selected_building_id != _browser_building_id or building_world.get_building(selected_building_id).is_empty()):
 		_build_browser.status.text = "Select a house first"
 		return
 	var hit := _browser_hit.duplicate(true)
@@ -221,6 +221,9 @@ func _choose_browser_item(item: Dictionary) -> void:
 		return
 	if kind == "terrain_tool":
 		_choose_outdoor_tool(str(item["id"]))
+		return
+	if kind == "water":
+		if has_method("_choose_water_tool"): call("_choose_water_tool", str(item["id"]))
 		return
 	if kind == "home":
 		if world_mode and view_context != "building": _set_view_context("building", "Home placement selected")
