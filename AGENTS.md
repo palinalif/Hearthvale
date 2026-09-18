@@ -28,7 +28,7 @@ Implement ordinary work directly when delegation would add coordination overhead
 
 Do not use subagents, workers or delegation unless the user explicitly requests them. If the user does request delegation, use at most one worker, with `fork_turns="none"`, minimal relevant context, owned files/interfaces and acceptance checks. Coupled debugging and integration should be handled directly. If repeated corrections show the brief is unsuitable, stop the delegation loop and finish it directly.
 
-Use small reviewable commits and one writer per subsystem. Main owns shared configuration and live Godot/MCP. Prefer typed GDScript/native voxel operations and only needed abstractions; measure before adding C++ or removing visual detail for performance.
+Use small reviewable commits and one writer per subsystem. Keep the session todo list current: when the user approves or requests a task, create a todo item for it before starting; mark items in_progress/completed as they happen; fold approved follow-ups into new items rather than letting them live only in chat. Main owns shared configuration and live Godot/MCP. Prefer typed GDScript/native voxel operations and only needed abstractions; measure before adding C++ or removing visual detail for performance.
 
 GDScript array gotcha: a guard that reads the previous element of a growing array (e.g. `points.back()`) must not also fire on the empty/first case, or the first element is silently never recorded. Test the empty→first and first→second transitions, not just the steady state (see `tests/water_lake_outline_test.gd`).
 
@@ -72,6 +72,8 @@ To run a feature perf/interaction test on the device:
 2. Install it + launch the game.
 3. `tools/thor forward` (sets up `adb forward tcp:47123`).
 4. `tools/feature_perf.py tools/specs/<feature>.json` — the driver runs the spec's input sequence, samples in-game telemetry (fps / process ms / draw calls / primitives / mem) via the bridge **and** SurfaceFlinger timestats (the actual on-device frame intervals), and writes a report to `.playtest/feature-perf/<name>/`.
+
+**Device cooldown (user request):** the Thor stays plugged in with its screen on while unattended. Close the game between on-device test sessions so it can cool down, and return the screen to the user's Chrome screensaver to prevent burn-in: `adb shell am force-stop <package>` then `adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main` (verified 2025-07: lands on the running Chrome instance with a moving screensaver). Only relaunch the game when a fresh reading is needed. Thermal throttling would otherwise skew the performance numbers.
 
 **Adding a new feature test = write a new spec JSON in `tools/specs/`** — no code changes. The spec describes `setup` (run once, e.g. cycle to the tool via D-pad), `stroke` (the repeated interaction), `repeat`, `stroke_seconds`, `rest_seconds`. Step actions: `button` (press/release a joypad button), `stick` (set a stick), `stick_drift` (drift a stick for `stroke_seconds`), `cycle` (press a button N times — the tool cycle), `call` (semantic scene verb via `debug_test_action`, see below), `state` (fetch scene state into the report), `sleep`, `reset` (clear virtual input), `telemetry` (sample, optional `label`).
 
