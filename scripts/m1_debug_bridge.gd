@@ -48,6 +48,8 @@ const BUTTON_MAP := {
 var _server: TCPServer
 var _client: StreamPeerTCP
 var _buffer := ""
+var _client_since_ms := 0
+var _client_got_data := false
 
 # Virtual joypad state.
 var _axes := {}   # JoyAxis -> float
@@ -67,6 +69,10 @@ func _ready() -> void:
 		set_process(false)
 		push_warning("VirtualControllerBridge: listen on 127.0.0.1:%d failed (%s)" % [DEFAULT_PORT, error_string(err)])
 		return
+	# Explicitly enable the per-frame pump. (A script-defined _process usually
+	# enables itself on ready; this makes it explicit and covers any future
+	# change to that default.)
+	set_process(true)
 
 func _process(_delta: float) -> void:
 	if not enabled: return
@@ -81,24 +87,49 @@ func _exit_tree() -> void:
 func _pump_socket() -> void:
 	if _client == null and _server.is_connection_available():
 		_client = _server.take_connection()
+		_client_since_ms = Time.get_ticks_msec()
+		_client_got_data = false
 	if _client == null:
 		return
-	# Gate on available bytes, not STATUS_CONNECTED: in headless same-process
-	# loopback the peer can linger in CONNECTING while data flows (and the gate
-	# would then swallow every command). On device the status is CONNECTED and
-	# this reads identically.
-	var avail := _client.get_available_bytes()
+	# Pump first: 4.7.2 StreamPeerSocket statuses are 0=none 1=connecting
+	# 2=connected 3=error, and is_open() no longer exists. A freshly accepted
+	# peer can report NONE before its first poll, so only a hard ERROR is
+	# fatal here; dead-but-silent peers are recycled by the no-data grace
+	# window below. (The read is gated on available bytes, not status, because
+	# headless same-process loopback can linger in CONNECTING while data
+	# flows; on device the status is CONNECTED and it reads identically.)
+	_client.poll()
+	var client_status := _client.get_status()
+	if client_status == StreamPeerTCP.STATUS_ERROR:
+		_client = null
+		_buffer = ""
+		return
+	# Query the byte count only while the socket is open: on a closed one,
+	# get_available_bytes() logs `Condition "!is_open()"` and returns -1,
+	# spamming the log (logcat) every frame while a dead peer is recycled.
+	var avail := 0
+	if client_status == StreamPeerTCP.STATUS_CONNECTED:
+		avail = _client.get_available_bytes()
 	if avail > 0:
-		var bytes: PackedByteArray = _client.get_data(avail)
-		_buffer += bytes.get_string_from_utf8()
-		var idx := _buffer.find("\n")
-		while idx >= 0:
-			var line := _buffer.left(idx).strip_edges()
-			_buffer = _buffer.substr(idx + 1)
-			if line.length() > 0:
-				_reply(_handle_command(line))
-			idx = _buffer.find("\n")
-	if _client.get_status() == StreamPeerTCP.STATUS_ERROR:
+		# Godot 4.7: get_data() returns [Error, PackedByteArray], not a bare buffer.
+		var res: Array = _client.get_data(avail)
+		if res.size() == 2 and int(res[0]) == OK:
+			var bytes: PackedByteArray = res[1]
+			_client_got_data = true
+			_buffer += bytes.get_string_from_utf8()
+			var idx := _buffer.find("\n")
+			while idx >= 0:
+				var line := _buffer.left(idx).strip_edges()
+				_buffer = _buffer.substr(idx + 1)
+				if line.length() > 0:
+					_reply(_handle_command(line))
+				idx = _buffer.find("\n")
+	elif _client_got_data and client_status == StreamPeerTCP.STATUS_NONE:
+		# Real EOF (client closed after a live session).
+		_client = null
+		_buffer = ""
+	elif not _client_got_data and Time.get_ticks_msec() - _client_since_ms > 3000:
+		# Connected and went silent: recycle the slot.
 		_client = null
 		_buffer = ""
 
@@ -107,7 +138,10 @@ func _pump_socket() -> void:
 ## live socket (same-process headless TCP peers are unreliable).
 func _handle_command(line: String) -> Dictionary:
 	var json := JSON.new()
-	if json.parse(line) != OK:
+	# Reject non-object JSON (arrays, numbers...) before typing, or the
+	# `Dictionary` assignment aborts the frame with a script error and the
+	# client gets no reply at all.
+	if json.parse(line) != OK or typeof(json.data) != TYPE_DICTIONARY:
 		return {"type": "error", "message": "bad json"}
 	var cmd: Dictionary = json.data
 	match String(cmd.get("cmd", "")):
@@ -139,9 +173,12 @@ func _handle_command(line: String) -> Dictionary:
 			return {"type": "ok", "reset": true}
 		"action":
 			var game := get_parent()
+			var args: Variant = cmd.get("args", [])
+			if not (args is Array):
+				args = []
 			if game != null and game.has_method("debug_test_action"):
-				var args: Array = cmd.get("args", [])
-				return game.debug_test_action(String(cmd.get("name", "")), args)
+				var res: Variant = game.debug_test_action(String(cmd.get("name", "")), args)
+				return res if res is Dictionary else {"type": "error", "message": "action failed"}
 			return {"type": "error", "message": "no debug action host"}
 		"telemetry":
 			return _telemetry()
@@ -166,7 +203,10 @@ func _telemetry() -> Dictionary:
 func _reply(dict: Dictionary) -> void:
 	if _client == null:
 		return
-	_client.put_data((JSON.stringify(dict) + "\n").to_utf8_buffer())
+	if _client.put_data((JSON.stringify(dict) + "\n").to_utf8_buffer()) != OK:
+		# Write failed (peer gone); drop so the slot recycles.
+		_client = null
+		_buffer = ""
 
 ## Inject the current virtual joypad state as InputMap events. Called once per
 ## frame in _process; the game's next _input reads the updated axis/button state.

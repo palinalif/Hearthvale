@@ -2,7 +2,8 @@
 
 Follow-up to the "on-device water-perf test, input-injection blocked" handoff
 (`task/water-river` @ `5f78648`). Both blockers are now root-caused and fixed
-locally; device re-verification is pending a fresh wireless-ADB `IP:port`.
+locally; device re-verification is pending the user's current wireless-ADB
+`IP:port` (the port may change on reconnect; ask when needed).
 
 ## Finding 1 — bridge `socket()` failure: missing `INTERNET` permission (fixed)
 
@@ -89,7 +90,8 @@ scene (`m1_scene.gd`); the spec driver gained `call` / `state` steps:
 
 ## Remaining device steps (blocked only on `IP:port`)
 
-1. Wireless ADB connect (port changes every reconnect — ask the user).
+1. Wireless ADB connect (ask the user for the current `IP:port`; it may
+   change on reconnect).
 2. Install `builds/hearthvale-grass-test.apk`, launch, confirm in logcat:
    `VirtualControllerBridge: listening on port 47123`.
 3. `tools/thor forward` → `python3 tools/feature_perf.py

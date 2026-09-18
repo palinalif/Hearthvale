@@ -107,14 +107,18 @@ case "$cmd" in
   forward)
     # forward [port]  — set up the adb forward for the debug bridge (default 47123)
     port="${1:-47123}"
-    adb -s "$DEV" forward "tcp:$port tcp:$port" 2>&1
-    echo "forwarded tcp:$port -> device"
+    if adb -s "$DEV" forward "tcp:$port" "tcp:$port" 2>&1; then
+      echo "forwarded tcp:$port -> device"
+    else
+      echo "ERROR: adb forward failed (device disconnected?)" >&2
+      exit 1
+    fi
     ;;
 
   bridge)  # thin wrapper: forward + python client
     port="${1:-47123}"
     shift || true
-    adb -s "$DEV" forward "tcp:$port tcp:$port" >/dev/null 2>&1
+    adb -s "$DEV" forward "tcp:$port" "tcp:$port" >/dev/null 2>&1 || { echo "ERROR: adb forward failed" >&2; exit 1; }
     python3 tools/thor_bridge.py --port "$port" "$@" 2>&1
     ;;
 
