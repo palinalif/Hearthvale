@@ -72,3 +72,16 @@ Semantic verbs (bridge `cmd:"action"`, debug-gated `debug_test_action()` in `m1_
 Reference facts the specs rely on: the terrain-tool cycle order is `TERRAIN_TOOLS = [raise, dig, smooth, level, slope, **water**, foliage, tree]` (so `water` is index 5 = 5× D-pad-right from the default `raise`), and the tool-cycle key gotcha is that `m1_cycle_left/right` are bound to joypad D-pad buttons + keyboard `[`/`]` (Android keycodes 71/72) — *not* `KEY_DPAD_RIGHT` (22) — so an `adb shell input keyevent` tool cycle uses **72/71** (`m1_accept` is ENTER, 66). Bridge button names are `a b x y lb rb lt rt back start dpad_up dpad_down dpad_left dpad_right`.
 
 **Bridge load gotcha:** it is loaded from `m1_scene.gd` behind `OS.is_debug_build()`. Load it with an **explicit** type — `var bridge: Node = load("res://scripts/m1_debug_bridge.gd").new()` — *not* a `:=` inference. A `:=` on `load(...).new()` (a `Resource` with no set type) breaks the base script's parse and cascades a "Could not resolve class" error up the whole 54-deep chain (this is exactly what forced the original bridge removal).
+
+## Godot API verification
+
+When working with Godot APIs:
+
+- Do not invent or infer API names from memory when uncertain.
+- If the live Godot analyzer/LSP rejects an API, treat that as authoritative evidence that the proposed call is invalid.
+- Before replacing a rejected API with another one, verify the replacement using one of:
+  1. Godot MCP / live ClassDB or GDScript analyzer
+  2. Official Godot documentation
+  3. A minimal standalone Godot probe
+- Prefer `OS.has_feature("...")` for Godot runtime feature tags.
+- Never modify project code based only on a guessed API.
