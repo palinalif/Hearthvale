@@ -202,8 +202,62 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 			_undo(); return {"type": "ok"}
 		"redo":
 			_redo(); return {"type": "ok"}
+		"world_stats":
+			return _debug_world_stats()
 		_:
 			return {"type": "error", "message": "unknown action: " + name}
+
+## One-shot render-cost snapshot: how many visible meshes we ship and where the
+## triangles live (terrain / trees / houses / water / props). Lets a playtest
+## answer "why is my world slow" without guessing — a stale dense forest world
+## shows up instantly (1.5M+ tris across thousands of tree meshes) versus the
+## ~158k-class current starter valley. Debug builds only.
+func _debug_world_stats() -> Dictionary:
+	var meshes := 0
+	var tris := 0
+	var by_cat: Dictionary = {}
+	var root_node: Node = get_tree().current_scene
+	if root_node == null:
+		root_node = self
+	var stack: Array[Node] = [root_node]
+	while stack.size() > 0:
+		var n: Node = stack.pop_back()
+		for c in n.get_children():
+			stack.push_back(c)
+		if n is MeshInstance3D:
+			var mi := n as MeshInstance3D
+			if not mi.visible or mi.mesh == null or not (mi.mesh is ArrayMesh):
+				continue
+			var am := mi.mesh as ArrayMesh
+			meshes += 1
+			var t := 0
+			for s in am.get_surface_count():
+				var arr: Array = am.surface_get_arrays(s)
+				var index: Variant = arr[Mesh.ARRAY_INDEX]
+				if index != null and index.size() > 0:
+					t += index.size() / 3
+				else:
+					var verts: Variant = arr[Mesh.ARRAY_VERTEX]
+					if verts != null and verts.size() > 0:
+						t += verts.size() / 3
+			tris += t
+			var path := String(n.get_path()).to_lower()
+			var cat := "other"
+			if path.contains("water"):
+				cat = "water"
+			elif path.contains("tree"):
+				cat = "trees"
+			elif path.contains("foliage") or path.contains("flower") or path.contains("mushroom") or path.contains("rock"):
+				cat = "foliage/props"
+			elif path.contains("house") or path.contains("cottage") or path.contains("roof") or path.contains("wall") or path.contains("door") or path.contains("window"):
+				cat = "houses/buildings"
+			elif path.contains("terrain") or path.contains("voxel") or path.contains("chunk"):
+				cat = "terrain"
+			by_cat[cat] = int(by_cat.get(cat, 0)) + t
+	return {
+		"type": "world_stats", "meshes": meshes, "tris": tris, "by_cat": by_cat,
+		"fps": Engine.get_frames_per_second(),
+	}
 
 func _process(delta: float) -> void:
 	if _shutting_down: return

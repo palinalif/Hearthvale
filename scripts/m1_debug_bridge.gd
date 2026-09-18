@@ -24,7 +24,7 @@ extends Node
 ##                                                     -> {"type":"ok","tool":"water"}
 ##     "action" forwards a semantic verb to the scene's debug_test_action():
 ##     state | select_tool [tool] | view_context [terrain|building]
-##     | cancel | undo | redo. Strokes themselves stay real InputMap events
+##     | cancel | undo | redo | world_stats. Strokes themselves stay real InputMap events
 ##     (button "a" + stick), so the gameplay path is exercised, not bypassed.
 
 const DEFAULT_PORT := 47123
@@ -50,6 +50,8 @@ var _client: StreamPeerTCP
 var _buffer := ""
 var _client_since_ms := 0
 var _client_got_data := false
+var _ready_ms := 0
+var _world_stats_reported := false
 
 # Virtual joypad state.
 var _axes := {}   # JoyAxis -> float
@@ -73,10 +75,22 @@ func _ready() -> void:
 	# enables itself on ready; this makes it explicit and covers any future
 	# change to that default.)
 	set_process(true)
+	_ready_ms = Time.get_ticks_msec()
 	print("BRIDGE_LISTENING port=", DEFAULT_PORT)
 
 func _process(_delta: float) -> void:
 	if not enabled: return
+	# One-shot, ~25 s after the scene is up (terrain meshing is done by then): a
+	# world-stats snapshot in the launch log, so "why is my world slow?" never
+	# depends on someone remembering to run a query. Stale dense forest worlds
+	# (1.5M+ tris across thousands of tree meshes) vs the ~158k-class starter
+	# valley are instantly distinguishable in logcat.
+	if not _world_stats_reported and Time.get_ticks_msec() - _ready_ms > 25000:
+		_world_stats_reported = true
+		var parent := get_parent()
+		if parent != null and parent.has_method("debug_test_action"):
+			var stats: Variant = parent.call("debug_test_action", "world_stats", [])
+			print("WORLD_STATS ", JSON.stringify(stats))
 	_pump_socket()
 	_inject_virtual_input()
 
