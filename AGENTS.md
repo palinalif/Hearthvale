@@ -6,6 +6,12 @@ Personal cozy voxel town-builder for AYN Thor Max. The user directs art and play
 
 Start with `HANDOFF.md`, `tasks/M2-hamlet-building.md`, and the user's current request. Read the relevant M1 ticket only when changing an inherited contract, plus relevant sections of `docs/design.md` once per workstream. Do not load historical reports or the whole repository by default.
 
+## World facts (stable reference)
+
+- The default/starter level is the **M2 starter valley** (introduced in 68a8e88, 2026-09-13): a **three-home hamlet + street props/furniture + premade river and lake water regions**. It has **no dense forest**. Fresh generation measured locally: ≈158k triangles / 45 meshes (terrain ≈92k, houses ≈120k, water ≈37k).
+- The **dense-forest valley** was the pre-68a8e88 world. Test APKs built before 2026-09-13 generate *that* world (≈5M triangles, ≈1,559 draw calls, ~13 FPS idle on the Thor) — "too many triangles / slow on device" from such a build is the stale world, not a current-code defect. The current code's worlds (starter or the user's playtest checkpoints) are the ~158k class.
+- Local user data: `~/.local/share/godot/app_userdata/Hearthvale M0/`, checkpoints under `m1_checkpoints/` (`user://m1_checkpoints`, `m1_scene.checkpoint_root`). The user's real playtest world lives in the **testgrass** app package (`org.hearthvale.game.testgrass`); `testvoxel` is a scratch/test package (its worlds may be stale-generation).
+
 ## Non-negotiable contracts
 
 - Preserve native volumetric terrain/caves/overhangs, controller-only gameplay on one gameplay screen, continuous sculpting, resize/detail editing, attachment recovery, undo/redo, duplication and save compatibility. Never substitute heightmaps or a static cottage. No online model is required during gameplay.
