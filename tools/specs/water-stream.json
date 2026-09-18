@@ -1,0 +1,22 @@
+{
+  "name": "water-stream",
+  "description": "Water tool: select via D-pad cycle (raise->water = 5 presses), paint N stream strokes (hold A + drift right stick diagonally, release A to commit).",
+  "repeat": 3,
+  "stroke_seconds": 4.0,
+  "rest_seconds": 1.5,
+  "setup": [
+    {"do": "cycle", "button": "dpad_right", "times": 5, "label": "select water tool (TERRAIN_TOOLS index 5)"},
+    {"do": "sleep", "seconds": 1.0}
+  ],
+  "stroke": [
+    {"do": "telemetry", "label": "pre_stroke"},
+    {"do": "button", "button": "a", "pressed": true},
+    {"do": "sleep", "seconds": 0.35},
+    {"do": "stick_drift", "stick": "right", "x": 0.35, "y": 0.35},
+    {"do": "stick", "stick": "right", "x": 0.0, "y": 0.0},
+    {"do": "button", "button": "a", "pressed": false},
+    {"do": "sleep", "seconds": 0.6},
+    {"do": "reset"},
+    {"do": "telemetry", "label": "post_stroke"}
+  ]
+}

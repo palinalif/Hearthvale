@@ -54,3 +54,19 @@ For a specific step's log, `gh run view <id> --log` only surfaces a subset of jo
 Which tests CI actually runs: each workflow hardcodes a small list (e.g. `@('m2_build_browser_test')`); there is **no glob**. The `tests/water_*` and many landscape suites are in **no** workflow — they run only via local `tools/check.ps1`. So "CI green" does **not** prove water/landscape tests passed; run `check.ps1` locally for those and register any new landscape test in it.
 
 **Test design — robust, not brittle.** Assert invariants and behaviors, not exact magic numbers (pixel counts, exact node-tree shapes, exact values). Exact-equality assertions force a test update for every unrelated feature and churn the suite. Prefer `>=` / monotonic / `exists` / `within range` over `==`. **Known follow-up (do when picking up scene/render work):** audit the scene/render tests that pin exact counts/shapes and loosen them to invariants so new features stop breaking them; where a value genuinely matters, assert a range or relationship, not a literal.
+
+## On-device feature performance testing (bridge + spec-driven harness)
+
+The Thor runs the game on a **secondary display** whose input focus is shared with a launcher/cast window, so `adb shell input keyevent` lands on the wrong window. The reliable input path is the **virtual-controller bridge**: a debug-only, loopback-only TCP server (`scripts/m1_debug_bridge.gd`, `OS.is_debug_build()`-gated, inert in release/CI) that injects virtual *joypad* events straight into the Godot InputMap — the same path a physical controller uses, so it exercises the real gameplay path and is focus-independent.
+
+To run a feature perf/interaction test on the device:
+1. Build the **debug** APK (`--export-debug`, *not* release — the bridge is debug-gated, so a release export has no bridge).
+2. Install it + launch the game.
+3. `tools/thor forward` (sets up `adb forward tcp:47123`).
+4. `tools/feature_perf.py tools/specs/<feature>.json` — the driver runs the spec's input sequence, samples in-game telemetry (fps / process ms / draw calls / primitives / mem) via the bridge **and** SurfaceFlinger timestats (the actual on-device frame intervals), and writes a report to `.playtest/feature-perf/<name>/`.
+
+**Adding a new feature test = write a new spec JSON in `tools/specs/`** — no code changes. The spec describes `setup` (run once, e.g. cycle to the tool via D-pad), `stroke` (the repeated interaction), `repeat`, `stroke_seconds`, `rest_seconds`. Step actions: `button` (press/release a joypad button), `stick` (set a stick), `stick_drift` (drift a stick for `stroke_seconds`), `cycle` (press a button N times — the tool cycle), `sleep`, `reset` (clear virtual input), `telemetry` (sample, optional `label`). See `tools/specs/water-stream.json` (the water tool) and `tools/specs/raise-sculpt.json` (the Raise sculpt tool) for the pattern. CLI overrides: `--repeat`, `--stroke-seconds`, `--out`.
+
+Reference facts the specs rely on: the terrain-tool cycle order is `TERRAIN_TOOLS = [raise, dig, smooth, level, slope, **water**, foliage, tree]` (so `water` is index 5 = 5× D-pad-right from the default `raise`), and the bridge button names are `a b x y lb rb lt rt back start dpad_up dpad_down dpad_left dpad_right`.
+
+**Bridge load gotcha:** it is loaded from `m1_scene.gd` behind `OS.is_debug_build()`. Load it with an **explicit** type — `var bridge: Node = load("res://scripts/m1_debug_bridge.gd").new()` — *not* a `:=` inference. A `:=` on `load(...).new()` (a `Resource` with no set type) breaks the base script's parse and cascades a "Could not resolve class" error up the whole 54-deep chain (this is exactly what forced the original bridge removal).
