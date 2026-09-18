@@ -44,11 +44,30 @@ var _tuft_node: MeshInstance3D
 var _tuft_last_key := ""
 var _tuft_record_rects: Array = []
 var _tuft_extra_rects: Array = []
+## Current merged scatter plan (stable scan order), kept across exclusion-only
+## changes so a single placement re-plans one region instead of the world.
+var _tuft_plan: Array = []
+var _tuft_last_revision := -1
+var _tuft_last_exclusions: Array = []
+## Per-fine-cell column-top cache; invalidated only on terrain revision.
+var _tuft_heights: Dictionary = {}
+## Per-tuft vertex-block cache keyed by main fine cell; fingerprint-checked.
+var _tuft_blocks: Dictionary = {}
+var _tuft_material: StandardMaterial3D = null
 
 func attach_backend(backend: Node) -> void:
-	_tuft_backend = backend
 	if backend != null and backend.has_signal("changed") and not backend.is_connected("changed", _on_meadow_terrain_changed):
 		backend.connect("changed", _on_meadow_terrain_changed)
+	if _tuft_backend != null and backend != _tuft_backend:
+		# New world source: the kept plan and per-cell caches belong to the
+		# old world regardless of what revision number the new one reports.
+		_tuft_plan = []
+		_tuft_last_revision = -1
+		_tuft_last_exclusions = []
+		_tuft_heights.clear()
+		_tuft_blocks.clear()
+		_tuft_last_key = ""
+	_tuft_backend = backend
 	_rebuild_meadow_tufts()
 
 func refresh_terrain() -> void:
@@ -131,45 +150,180 @@ func _rebuild_meadow_tufts() -> void:
 	var scale := maxf(0.001, float(_tuft_backend.get("voxel_scale")))
 	var patch: Vector3i = _tuft_backend.get("patch_size")
 	var world := Vector2(float(patch.x) * scale, float(patch.z) * scale)
+	var revision := 0
+	if _tuft_backend.has_method("revision"):
+		revision = int(_tuft_backend.call("revision"))
 	var exclusions: Array = []
 	exclusions.append_array(_tuft_record_rects)
 	exclusions.append_array(_tuft_extra_rects)
-	var plan := Scatter.plan(Vector2.ZERO, world, Scatter.DENSITY, exclusions)
+	if _tuft_plan.is_empty() or revision != _tuft_last_revision:
+		# World changed (or first build): re-derive the whole field and reset
+		# the per-cell caches that are only valid for one terrain revision.
+		_tuft_heights.clear()
+		_tuft_blocks.clear()
+		_tuft_plan = Scatter.plan(Vector2.ZERO, world, Scatter.DENSITY, exclusions)
+		_tuft_last_revision = revision
+	elif _tuft_last_exclusions != exclusions:
+		# Only exclusion rects changed (e.g. a newly planted tree keeps its
+		# clearing): re-plan just the affected region and splice it into the
+		# kept plan, so a placement costs a region scan, not the whole world.
+		_tuft_plan = _merge_exclusion_change(world, exclusions)
+	_tuft_last_exclusions = exclusions.duplicate()
+	_commit_tuft_mesh()
+
+## Splice a region re-plan into the kept plan after an exclusion change.
+## Scan order is (coarse z, then coarse x); the region span is the padded
+## coarse bounding box of the changed rects. Kept entries outside the span
+## are byte-identical to a full re-plan: their exclusion status cannot
+## change (the span covers every changed rect) and the re-plan is seeded
+## with their occupied fine cells, reproducing full-plan dedupe exactly.
+func _merge_exclusion_change(world: Vector2, exclusions: Array) -> Array:
+	var changed: Array = _exclusion_delta(_tuft_last_exclusions, exclusions)
+	if changed.is_empty():
+		return _tuft_plan
+	# A capped plan cannot reconstruct its exact tail after removals; a full
+	# re-plan is the only exact path there (worlds denser than MAX_TUFTS).
+	if _tuft_plan.size() >= Scatter.MAX_TUFTS:
+		return Scatter.plan(Vector2.ZERO, world, Scatter.DENSITY, exclusions)
+	var coarse_max := Vector2i(int(ceili(world.x / Scatter.COARSE_STEP)), int(ceili(world.y / Scatter.COARSE_STEP)))
+	var pad := 0.5
+	var min_c := Vector2i(0, 0)
+	var max_c := Vector2i(0, 0)
+	var first_span := true
+	for area: Variant in changed:
+		var r := area as Rect2
+		var x0 := int(floori((r.position.x - pad) / Scatter.COARSE_STEP))
+		var y0 := int(floori((r.position.y - pad) / Scatter.COARSE_STEP))
+		var x1 := int(ceili((r.position.x + r.size.x + pad) / Scatter.COARSE_STEP))
+		var y1 := int(ceili((r.position.y + r.size.y + pad) / Scatter.COARSE_STEP))
+		if first_span:
+			min_c = Vector2i(x0, y0)
+			max_c = Vector2i(x1, y1)
+			first_span = false
+		else:
+			min_c.x = mini(min_c.x, x0)
+			min_c.y = mini(min_c.y, y0)
+			max_c.x = maxi(max_c.x, x1)
+			max_c.y = maxi(max_c.y, y1)
+	min_c.x = clampi(min_c.x, 0, coarse_max.x)
+	min_c.y = clampi(min_c.y, 0, coarse_max.y)
+	max_c.x = clampi(max_c.x, 0, coarse_max.x)
+	max_c.y = clampi(max_c.y, 0, coarse_max.y)
+	var before: Array = []
+	var deferred_after: Array = []
+	var seed: Dictionary = {}
+	for tuft: Dictionary in _tuft_plan:
+		var point: Vector2 = tuft["point"]
+		var c := Vector2i(int(floori(point.x / Scatter.COARSE_STEP)), int(floori(point.y / Scatter.COARSE_STEP)))
+		var in_region := c.x >= min_c.x and c.x < max_c.x and c.y >= min_c.y and c.y < max_c.y
+		if not in_region:
+			var cell: Vector2i = tuft["cell"]
+			if c.y < min_c.y or (c.y == min_c.y and c.x < min_c.x):
+				before.append(tuft)
+				# Seed the region re-plan with earlier-in-scan cells only: the
+				# full plan's occupied state at region start is exactly the
+				# before cells (after cells are processed later, never before).
+				seed[cell] = true
+				if int(tuft["columns"][1]) > 0:
+					seed[cell + tuft["step"]] = true
+			else:
+				deferred_after.append(tuft)
+	var region := Scatter.plan(
+		Vector2(float(min_c.x) * Scatter.COARSE_STEP, float(min_c.y) * Scatter.COARSE_STEP),
+		Vector2(float(max_c.x - min_c.x) * Scatter.COARSE_STEP, float(max_c.y - min_c.y) * Scatter.COARSE_STEP),
+		Scatter.DENSITY, exclusions, seed)
+	# Kept later entries may now collide with cells the region just claimed
+	# (a freed candidate earlier in scan took the cell they were deduped
+	# against): drop the main cell entirely, or just its companion.
+	var region_occupied: Dictionary = {}
+	for tuft: Dictionary in region:
+		region_occupied[tuft["cell"]] = true
+		if int(tuft["columns"][1]) > 0:
+			region_occupied[tuft["cell"] + tuft["step"]] = true
+	var after: Array = []
+	for tuft: Dictionary in deferred_after:
+		var kept: Dictionary = tuft
+		if int(tuft["columns"][1]) > 0 and region_occupied.has(tuft["cell"] + tuft["step"]):
+			kept = {"cell": tuft["cell"], "point": tuft["point"], "columns": [int(tuft["columns"][0]), 0], "step": tuft["step"], "tone": tuft["tone"], "seed": tuft["seed"]}
+		if not region_occupied.has(kept["cell"]):
+			after.append(kept)
+	var merged := before.duplicate()
+	merged.append_array(region)
+	merged.append_array(after)
+	# The changed-rect span is a 2D box, not a contiguous interval in the
+	# plan's row-major scan (cells outside the box but inside its row range
+	# interleave with it), so the three parts are re-joined in true scan
+	# order. Every entry's coarse cell is its unique scan position, so
+	# sorting by (coarse y, coarse x) reproduces a fresh full plan's order
+	# exactly (including the MAX_TUFTS truncation point).
+	merged.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var ca := Vector2i(int(floori((a["point"] as Vector2).x / Scatter.COARSE_STEP)), int(floori((a["point"] as Vector2).y / Scatter.COARSE_STEP)))
+		var cb := Vector2i(int(floori((b["point"] as Vector2).x / Scatter.COARSE_STEP)), int(floori((b["point"] as Vector2).y / Scatter.COARSE_STEP)))
+		return ca.y < cb.y or (ca.y == cb.y and ca.x < cb.x))
+	if merged.size() > Scatter.MAX_TUFTS:
+		merged = merged.slice(0, Scatter.MAX_TUFTS)
+	return merged
+
+func _exclusion_delta(old_value: Array, new_value: Array) -> Array:
+	var changed: Array = []
+	for area: Variant in old_value:
+		if not _rect_present(new_value, area as Rect2):
+			changed.append(area)
+	var matched := 0
+	for area: Variant in new_value:
+		if _rect_present(old_value, area as Rect2): matched += 1
+		else: changed.append(area)
+	return changed
+
+func _rect_present(haystack: Array, needle: Rect2) -> bool:
+	for area: Variant in haystack:
+		if (area as Rect2) == needle:
+			return true
+	return false
+
+## Assemble the meadow mesh from the current plan. Per-tuft vertex blocks
+## are cached (fingerprint-checked), so an exclusion-only change re-copies
+## unchanged blocks instead of re-deriving box geometry.
+func _commit_tuft_mesh() -> void:
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var colors := PackedColorArray()
 	var indices := PackedInt32Array()
-	var base := 0
-	var tufts := 0
 	var cells := 0
-	for tuft: Dictionary in plan:
+	for tuft: Dictionary in _tuft_plan:
 		var cell: Vector2i = tuft["cell"]
 		var step: Vector2i = tuft["step"]
 		var columns: Array = tuft["columns"]
 		var tone: Color = tuft["tone"]
-		var root := _meadow_column_top((cell.x + 0.5) * MEADOW_UNIT, (cell.y + 0.5) * MEADOW_UNIT)
+		var root := _column_top_cached(cell)
 		if is_nan(root):
 			continue
 		var companion_valid := true
 		var companion_root := root
 		if int(columns[1]) > 0:
 			var companion := cell + step
-			companion_root = _meadow_column_top((companion.x + 0.5) * MEADOW_UNIT, (companion.y + 0.5) * MEADOW_UNIT)
+			companion_root = _column_top_cached(companion)
 			if is_nan(companion_root) or absf(companion_root - root) > MEADOW_UNIT * 2.0:
 				companion_valid = false
-		for column_index in 2:
-			var height := int(columns[column_index])
-			if height <= 0:
-				continue
-			if column_index == 1 and not companion_valid:
-				continue
-			var column_cell := cell if column_index == 0 else cell + step
-			var column_root := root if column_index == 0 else companion_root
-			for level in height:
-				var center := Vector3((column_cell.x + 0.5) * MEADOW_UNIT, column_root + (float(level) + 0.5) * MEADOW_UNIT, (column_cell.y + 0.5) * MEADOW_UNIT)
-				base = _append_tuft_box(vertices, normals, colors, indices, base, center, tone)
-				cells += 1
-		tufts += 1
+		var fingerprint := "%d|%d|%d|%d|%.4f|%.4f|%d" % [int(columns[0]), int(columns[1]), step.x, step.y, root, companion_root, int(companion_valid)]
+		var cached: Variant = _tuft_blocks.get(cell)
+		var block: Dictionary
+		if cached is Dictionary and (cached as Dictionary).get("fp") == fingerprint and (cached as Dictionary).get("tone") == tone:
+			block = cached
+		else:
+			block = _build_tuft_block(cell, step, columns, tone, root, companion_valid, companion_root)
+			block["fp"] = fingerprint
+			block["tone"] = tone
+			_tuft_blocks[cell] = block
+		if (block["v"] as PackedVector3Array).is_empty():
+			continue
+		var index_base := vertices.size()
+		vertices.append_array(block["v"])
+		normals.append_array(block["n"])
+		colors.append_array(block["c"])
+		for local: int in block["i"]:
+			indices.append(local + index_base)
+		cells += int(block["count"])
 	_clear_meadow_tuft_node()
 	if cells > 0:
 		var mesh := ArrayMesh.new()
@@ -180,17 +334,48 @@ func _rebuild_meadow_tufts() -> void:
 		arrays[Mesh.ARRAY_COLOR] = colors
 		arrays[Mesh.ARRAY_INDEX] = indices
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		var material := StandardMaterial3D.new()
-		material.vertex_color_use_as_albedo = true
-		material.vertex_color_is_srgb = true
-		material.roughness = 1.0
-		material.metallic_specular = 0.0
-		mesh.surface_set_material(0, material)
+		if _tuft_material == null:
+			_tuft_material = StandardMaterial3D.new()
+			_tuft_material.vertex_color_use_as_albedo = true
+			_tuft_material.vertex_color_is_srgb = true
+			_tuft_material.roughness = 1.0
+			_tuft_material.metallic_specular = 0.0
+		mesh.surface_set_material(0, _tuft_material)
 		var node := MeshInstance3D.new()
 		node.name = "MeadowTufts"
 		node.mesh = mesh
 		add_child(node)
 		_tuft_node = node
+
+func _column_top_cached(cell: Vector2i) -> float:
+	var v: Variant = _tuft_heights.get(cell)
+	if v != null:
+		return float(v)
+	var top := _meadow_column_top((cell.x + 0.5) * MEADOW_UNIT, (cell.y + 0.5) * MEADOW_UNIT)
+	_tuft_heights[cell] = top
+	return top
+
+func _build_tuft_block(cell: Vector2i, step: Vector2i, columns: Array, tone: Color, root: float, companion_valid: bool, companion_root: float) -> Dictionary:
+	var v := PackedVector3Array()
+	var n := PackedVector3Array()
+	var c := PackedColorArray()
+	var i := PackedInt32Array()
+	var base := 0
+	var count := 0
+	var companion := cell + step
+	for column_index in 2:
+		var height := int(columns[column_index])
+		if height <= 0:
+			continue
+		if column_index == 1 and not companion_valid:
+			continue
+		var column_cell := cell if column_index == 0 else companion
+		var column_root := root if column_index == 0 else companion_root
+		for level in height:
+			var center := Vector3((column_cell.x + 0.5) * MEADOW_UNIT, column_root + (float(level) + 0.5) * MEADOW_UNIT, (column_cell.y + 0.5) * MEADOW_UNIT)
+			base = _append_tuft_box(v, n, c, i, base, center, tone)
+			count += 1
+	return {"v": v, "n": n, "c": c, "i": i, "count": count}
 
 func _tuft_key() -> String:
 	var revision := 0
@@ -209,6 +394,8 @@ func _exclusion_digest() -> String:
 	return var_to_bytes(payload).hex_encode().sha256_text()
 
 func _meadow_column_top(x: float, z: float) -> float:
+	if _tuft_backend == null:
+		return NAN
 	var scale := maxf(0.001, float(_tuft_backend.get("voxel_scale")))
 	var patch: Vector3i = _tuft_backend.get("patch_size")
 	var vx := int(floori(x / scale))
