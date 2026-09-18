@@ -20,6 +20,12 @@ extends Node
 ##   {"cmd":"reset_input"}                           -> {"type":"ok","reset":true}
 ##   {"cmd":"telemetry"}                             -> {"type":"telemetry",...}
 ##   {"cmd":"mark","name":"x"}                       -> {"type":"ok","mark":"x"}
+##   {"cmd":"action","name":"select_tool","args":["water"]}
+##                                                     -> {"type":"ok","tool":"water"}
+##     "action" forwards a semantic verb to the scene's debug_test_action():
+##     state | select_tool [tool] | view_context [terrain|building]
+##     | cancel | undo | redo. Strokes themselves stay real InputMap events
+##     (button "a" + stick), so the gameplay path is exercised, not bypassed.
 
 const DEFAULT_PORT := 47123
 
@@ -77,31 +83,36 @@ func _pump_socket() -> void:
 		_client = _server.take_connection()
 	if _client == null:
 		return
-	if _client.get_status() == StreamPeerTCP.STATUS_CONNECTED:
-		var avail := _client.get_available_bytes()
-		if avail > 0:
-			var bytes: PackedByteArray = _client.get_data(avail)
-			_buffer += bytes.get_string_from_utf8()
+	# Gate on available bytes, not STATUS_CONNECTED: in headless same-process
+	# loopback the peer can linger in CONNECTING while data flows (and the gate
+	# would then swallow every command). On device the status is CONNECTED and
+	# this reads identically.
+	var avail := _client.get_available_bytes()
+	if avail > 0:
+		var bytes: PackedByteArray = _client.get_data(avail)
+		_buffer += bytes.get_string_from_utf8()
 		var idx := _buffer.find("\n")
 		while idx >= 0:
 			var line := _buffer.left(idx).strip_edges()
 			_buffer = _buffer.substr(idx + 1)
 			if line.length() > 0:
-				_handle_command(line)
+				_reply(_handle_command(line))
 			idx = _buffer.find("\n")
-	elif _client.get_status() == StreamPeerTCP.STATUS_ERROR:
+	if _client.get_status() == StreamPeerTCP.STATUS_ERROR:
 		_client = null
 		_buffer = ""
 
-func _handle_command(line: String) -> void:
+## Dispatch one protocol line; returns the reply dict (the socket layer sends
+## it). Returned directly so headless tests can exercise the protocol without a
+## live socket (same-process headless TCP peers are unreliable).
+func _handle_command(line: String) -> Dictionary:
 	var json := JSON.new()
 	if json.parse(line) != OK:
-		_reply({"type": "error", "message": "bad json"})
-		return
+		return {"type": "error", "message": "bad json"}
 	var cmd: Dictionary = json.data
 	match String(cmd.get("cmd", "")):
 		"ping":
-			_reply({"type": "pong", "ts": Time.get_ticks_msec()})
+			return {"type": "pong", "ts": Time.get_ticks_msec()}
 		"set_stick":
 			var stick := String(cmd.get("stick", "left"))
 			var x := float(cmd.get("x", 0.0)); var y := float(cmd.get("y", 0.0))
@@ -109,31 +120,35 @@ func _handle_command(line: String) -> void:
 				_axes[JOY_AXIS_LEFT_X] = x; _axes[JOY_AXIS_LEFT_Y] = y
 			else:
 				_axes[JOY_AXIS_RIGHT_X] = x; _axes[JOY_AXIS_RIGHT_Y] = y
-			_reply({"type": "ok", "stick": stick, "x": x, "y": y})
+			return {"type": "ok", "stick": stick, "x": x, "y": y}
 		"set_axis":
 			var name := String(cmd.get("axis", ""))
 			if AXIS_MAP.has(name):
 				_axes[AXIS_MAP[name]] = float(cmd.get("value", 0.0))
-				_reply({"type": "ok", "axis": name})
-			else:
-				_reply({"type": "error", "message": "unknown axis"})
+				return {"type": "ok", "axis": name}
+			return {"type": "error", "message": "unknown axis"}
 		"button":
 			var name := String(cmd.get("button", ""))
 			if BUTTON_MAP.has(name):
 				var pressed := bool(cmd.get("pressed", true))
 				_buttons[BUTTON_MAP[name]] = pressed
-				_reply({"type": "ok", "button": name, "pressed": pressed})
-			else:
-				_reply({"type": "error", "message": "unknown button"})
+				return {"type": "ok", "button": name, "pressed": pressed}
+			return {"type": "error", "message": "unknown button"}
 		"reset_input":
 			_axes.clear(); _buttons.clear()
-			_reply({"type": "ok", "reset": true})
+			return {"type": "ok", "reset": true}
+		"action":
+			var game := get_parent()
+			if game != null and game.has_method("debug_test_action"):
+				var args: Array = cmd.get("args", [])
+				return game.debug_test_action(String(cmd.get("name", "")), args)
+			return {"type": "error", "message": "no debug action host"}
 		"telemetry":
-			_reply(_telemetry())
+			return _telemetry()
 		"mark":
-			_reply({"type": "ok", "mark": String(cmd.get("name", ""))})
+			return {"type": "ok", "mark": String(cmd.get("name", ""))}
 		_:
-			_reply({"type": "error", "message": "unknown cmd"})
+			return {"type": "error", "message": "unknown cmd"}
 
 func _telemetry() -> Dictionary:
 	return {

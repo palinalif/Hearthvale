@@ -47,6 +47,12 @@ Step actions:
   {"do":"stick",  "stick":"right", "x":0.35, "y":0.35}  # set a stick
   {"do":"stick_drift","stick":"right","x":0.35,"y":0.35}  # drift for stroke_seconds
   {"do":"cycle",  "button":"dpad_right", "times":5}   # press a button N times (tool cycle)
+  {"do":"call",   "name":"select_tool", "args":["water"]}  # semantic scene verb (debug_test_action)
+  {"do":"state",  "label":"after_setup"}                  # fetch scene state into the report
+
+Semantic verbs: state | select_tool [tool] | view_context [terrain|building]
+| cancel | undo | redo. They call the same handler functions the real input
+uses; strokes stay real InputMap events (button a + stick).
   {"do":"sleep",  "seconds":1.0}
   {"do":"reset"}                                   # clear virtual input
   {"do":"telemetry","label":"pre_stroke"}          # sample telemetry (label optional)
@@ -127,6 +133,13 @@ def _run_step(sock, step: dict, stroke_seconds: float, samples: list) -> None:
         _send(sock, {"cmd": "reset_input"})
     elif do == "telemetry":
         samples.append({"phase": step.get("label", "telemetry"), **_send(sock, {"cmd": "telemetry"})})
+    elif do == "call":
+        resp = _send(sock, {"cmd": "action", "name": step.get("name", ""), "args": step.get("args", [])})
+        if resp.get("type") == "error":
+            print(f"  [warn] call {step.get('name')!r} -> {resp.get('message')}", file=sys.stderr)
+    elif do == "state":
+        resp = _send(sock, {"cmd": "action", "name": "state", "args": []})
+        samples.append({"phase": step.get("label", "state"), **resp})
     else:
         print(f"  [warn] unknown step do={do!r}", file=sys.stderr)
 

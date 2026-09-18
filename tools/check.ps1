@@ -56,6 +56,7 @@ Invoke-GodotBounded 'sculpt' @('--headless','--path','.','--script','res://tests
 Invoke-GodotBounded 'm1-scaled-backend' @('--headless','--path','.','--script','res://tests/m1_scaled_backend_test.gd','--max-fps','60')
 Invoke-GodotBounded 'm1-riverbank-visual' @('--headless','--path','.','--script','res://tests/m1_riverbank_visual_test.gd','--max-fps','60')
 Invoke-GodotBounded 'water-region' @('--headless','--path','.','--script','res://tests/water_region_test.gd','--max-fps','60')
+Invoke-GodotBounded 'debug-bridge-action' @('--headless','--path','.','--script','res://tests/debug_bridge_action_test.gd','--max-fps','60')
 Invoke-GodotBounded 'premade-river' @('--headless','--path','.','--script','res://tests/premade_river_test.gd','--max-fps','60')
 Invoke-GodotBounded 'water-carve-plan' @('--headless','--path','.','--script','res://tests/water_carve_plan_test.gd','--max-fps','60')
 Invoke-GodotBounded 'water-visual' @('--headless','--path','.','--script','res://tests/water_visual_test.gd','--max-fps','60')

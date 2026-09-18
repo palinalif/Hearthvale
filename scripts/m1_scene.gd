@@ -166,6 +166,45 @@ func _ready() -> void:
 		bridge.name = "virtual_controller_bridge"
 		add_child(bridge)
 
+## Debug-only semantic action API for the virtual-controller bridge (see
+## scripts/m1_debug_bridge.gd). Each verb calls the *same handler functions the
+## real input uses* (virtual dispatch, so subclass overrides win); the bridge
+## stays the input-injection + telemetry path for the rest of the interaction.
+## Debug builds only, loopback only, unreachable in release.
+func debug_test_action(name: String, args: Array) -> Dictionary:
+	if not OS.is_debug_build():
+		return {"type": "error", "message": "debug build only"}
+	match name:
+		"state":
+			return {
+				"type": "state", "tool": sculpt_tool, "stroke_active": stroke_active,
+				"landscape_active": landscape_active, "view_context": view_context,
+				"menu_open": menu_open, "tools_open": tools_open,
+				"water_placement_active": get("water_placement_active"),
+				"water_stroking": get("water_stroking"), "water_kind": get("water_kind"),
+			}
+		"select_tool":
+			if args.size() < 1: return {"type": "error", "message": "select_tool needs a tool name"}
+			if not has_method("_select_terrain_tool"):
+				return {"type": "error", "message": "no terrain tool selector in this scene"}
+			# Dynamic call: the selector lives in a downstream chain link (m1_scene_tool_ui)
+			# and is overridden further down (m2_scene_water), so dispatch must be virtual.
+			call("_select_terrain_tool", String(args[0]))
+			return {"type": "ok", "tool": sculpt_tool}
+		"view_context":
+			if args.size() < 1: return {"type": "error", "message": "view_context needs terrain|building"}
+			_set_view_context(String(args[0]), "debug")
+			return {"type": "ok", "view_context": view_context}
+		"cancel":
+			_cancel_current_edit("debug")
+			return {"type": "ok"}
+		"undo":
+			_undo(); return {"type": "ok"}
+		"redo":
+			_redo(); return {"type": "ok"}
+		_:
+			return {"type": "error", "message": "unknown action: " + name}
+
 func _process(delta: float) -> void:
 	if _shutting_down: return
 	if (stroke_active or landscape_active) and (menu_open or tools_open or detail_open or _restoring):

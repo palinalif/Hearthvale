@@ -1,11 +1,12 @@
 {
   "name": "water-stream",
-  "description": "Water tool: select via D-pad cycle (raise->water = 5 presses), paint N stream strokes (hold A + drift right stick diagonally, release A to commit).",
+  "description": "Water tool: select via the semantic select_tool verb, paint N stream strokes (real InputMap: press A + drift right stick, release A to commit).",
   "repeat": 3,
   "stroke_seconds": 4.0,
   "rest_seconds": 1.5,
   "setup": [
-    {"do": "cycle", "button": "dpad_right", "times": 5, "label": "select water tool (TERRAIN_TOOLS index 5)"},
+    {"do": "call", "name": "select_tool", "args": ["water"], "label": "select water tool (_select_terrain_tool, same handler as D-pad cycle)"},
+    {"do": "state", "label": "after_setup"},
     {"do": "sleep", "seconds": 1.0}
   ],
   "stroke": [
@@ -16,7 +17,8 @@
     {"do": "stick", "stick": "right", "x": 0.0, "y": 0.0},
     {"do": "button", "button": "a", "pressed": false},
     {"do": "sleep", "seconds": 0.6},
+    {"do": "state", "label": "post_stroke"},
     {"do": "reset"},
-    {"do": "telemetry", "label": "post_stroke"}
+    {"do": "telemetry", "label": "post_stroke_settled"}
   ]
 }
