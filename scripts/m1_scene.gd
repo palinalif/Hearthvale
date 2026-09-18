@@ -162,7 +162,7 @@ func _ready() -> void:
 	# Debug-only virtual-controller + telemetry bridge (localhost TCP, loopback
 	# only, OS.is_debug_build()-gated). Inert in release builds; see the script.
 	if OS.is_debug_build():
-		var bridge := load("res://scripts/m1_debug_bridge.gd").new()
+		var bridge: Node = load("res://scripts/m1_debug_bridge.gd").new()
 		bridge.name = "virtual_controller_bridge"
 		add_child(bridge)
 
