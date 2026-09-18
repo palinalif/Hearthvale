@@ -5,6 +5,18 @@ class_name M1WaterVisual
 ## this node turns them into a clipped, animated surface. It owns no records,
 ## writes no terrain, and stores no save data. Water is an editable scenery
 ## layer, not a fluid simulation.
+##
+## Render machine (incremental — a local edit never reworks the whole surface):
+##  - terrain is sampled once per footprint cell into _cell_cache; a cell is
+##    only resampled when something invalidates it (a carve commit) or a
+##    localized resample pass proves its value changed;
+##  - each region keeps its built mesh arrays in _build_state plus a
+##    persistent node (_region_nodes), so a growing stroke appends quads
+##    instead of the old free-every-node + re-union + rebuild-everything path;
+##  - work is budgeted per frame (RESAMPLE_BUDGET / BUILD_BUDGET) and drained
+##    in _process, so a first-time rebuild of a big region spreads over many
+##    frames instead of allocating the whole mesh at once (the one-shot
+##    rebuild froze the game for 37s and exhausted scudo on Thor).
 const Geometry = preload("res://scripts/water_region_geometry.gd")
 const Waterfall = preload("res://scripts/waterfall_geometry.gd")
 const Grid = preload("res://scripts/visual_grid.gd")
@@ -18,21 +30,44 @@ const DEPTH_SCALE := 4.0
 const FALL_COLOR := Color(0.62, 0.80, 0.88, 0.70)
 const SPLASH_COLOR := Color(0.86, 0.96, 1.0, 0.55)
 
+# Bounded per-frame work: a first-time rebuild of a large region (or a big
+# carve commit invalidating its footprint) drains over many frames instead of
+# one 37-second stall (measured on Thor with a 5m-wide stream stroke).
+const RESAMPLE_BUDGET := 2048
+const BUILD_BUDGET := 2048
+
 var _backend: Node
-var _nodes: Array = []
+# region id -> MeshInstance3D. Nodes are reused across incremental updates.
+var _region_nodes: Dictionary = {}
 var _regions: Array = []
 var _last_key := ""
 var _suppressions: Array = []
 var _waterfalls: Array = []
 var _fall_nodes: Array = []
-# Per-cell terrain cache so a local edit only re-samples the cells near it
-# (mirroring the river and waterfall bounds) instead of scanning every column.
+# Per-cell terrain cache (NAN = empty/deep column, matching the resampler).
+# Only footprint cells are held, never a whole-patch table.
 var _cell_cache: Dictionary = {}
 var _regions_key := ""
 var _rebuild_scheduled := false
-var _dirty_accum := Rect2()
-# Live perf snapshot for the on-screen debug HUD (Y/F1): where the water surface
-# frame time goes (resample vs mesh build, how many cells, how many quads).
+# region id -> region dict (for keying + level/flow).
+var _region_by_id: Dictionary = {}
+# region id -> strong key of the mesh geometry; an equal key means unchanged.
+var _region_keys: Dictionary = {}
+# region id -> {cells, verts, norms, cols, idx, index, material}. The mesh
+# arrays persist across uploads so a growing stroke appends instead of
+# reallocating everything (the old rebuild reallocated the whole mesh each
+# edit — the scudo-exhaustion source).
+var _build_state: Dictionary = {}
+# Cells awaiting resample (FIFO) plus a membership set for O(1) dedup.
+var _pending_cells: Array = []
+var _pending_set := {}
+# region id -> true: its mesh must (re)build. Drained in budgeted passes.
+var _dirty_regions := {}
+# cell -> Array of region ids whose mesh may contain that cell: a terrain
+# change under a column must rebuild every region spanning it (a stream
+# crossing a lake), so ownership is tracked, not assumed.
+var _cell_regions: Dictionary = {}
+# Live perf snapshot for the on-screen debug HUD (Y/F1).
 var water_perf: Dictionary = {}
 var water_rebuilds := 0
 
@@ -53,37 +88,24 @@ func set_regions(regions: Array) -> void:
 	_regions = regions
 	_rebuild()
 
-## Cache-aware rebuild: reuse the cached terrain tops, resample only new or
-## invalidated cells, then build the mesh from the cache. Cheap for a growing
-## stroke preview and for a commit that reuses the startup + preview cache
-## instead of resampling every water column — the old full rebuild (clear +
-## resample all) froze the frame on mobile for large regions.
+## Incremental update of the region set (preview + commit path). Regions whose
+## key is unchanged are left exactly as they are (no resample, no rebuild);
+## new/changed regions resample only their missing cells and rebuild only
+## their own mesh, both budgeted and draining in _process. A stream candidate
+## may carry "cells" (the scene's rolling stroke-cell set, already
+## rasterized) and a one-shot "reset" flag; without a hint the footprint comes
+## from the memoized geometry cache.
 func set_regions_incremental(regions: Array, invalidate_cells: Array = []) -> void:
 	if _backend == null or not _backend.has_method("voxel_at"):
 		return
 	if _backend.has_method("is_ready") and not _backend.is_ready():
 		return
-	var t0 := Time.get_ticks_usec()
 	_regions = regions
 	_regions_key = _regions_signature()
 	for cell in invalidate_cells:
-		_cell_cache.erase(cell)
-	var world_x := _world_x()
-	var resampled := 0
-	for region: Dictionary in _regions:
-		for cell: Vector2i in Geometry.footprint_cells(region, world_x):
-			if _cell_cache.has(cell):
-				continue
-			var px := float(cell.x) * WATER_CELL + WATER_CELL * 0.5
-			var pz := float(cell.y) * WATER_CELL + WATER_CELL * 0.5
-			_cell_cache[cell] = _terrain_top(px, pz)
-			resampled += 1
-	var t1 := Time.get_ticks_usec()
-	_build_mesh_from_cache()
-	var t2 := Time.get_ticks_usec()
-	water_perf = {"resample_ms": (t1 - t0) / 1000.0, "mesh_ms": (t2 - t1) / 1000.0, "cells_resampled": resampled, "regions": _regions.size(), "quads": surface_quad_count()}
-	water_rebuilds += 1
-	_last_key = _key()
+		_invalidate_cell(cell)
+	_sync_regions()
+	_drain(2)
 
 func refresh_terrain() -> void:
 	# Full resample (startup / unknown bounds). Local terrain edits use
@@ -91,8 +113,9 @@ func refresh_terrain() -> void:
 	_rebuild()
 
 ## Resample only the cells near the given terrain-edit bounds and rebuild the
-## surface, coalescing rapid edits into one deferred rebuild. Edits that touch
-## no water cell leave the cached surface untouched (a no-op for far digging).
+## affected regions, coalescing rapid edits into one deferred drain. Edits
+## that touch no water cell — or leave every watered column unchanged — do
+## nothing (a no-op for far digging).
 func refresh_surface_from_bounds(bounds: AABB) -> void:
 	if _backend == null:
 		return
@@ -101,11 +124,15 @@ func refresh_surface_from_bounds(bounds: AABB) -> void:
 		return
 	var rkey := _regions_signature()
 	if rkey != _regions_key:
-		_rebuild()
-		return
+		# The region set changed through the incremental path since the last
+		# sync (e.g. a commit replacing the stroke candidate): reconcile the
+		# region state instead of a full rebuild, then localize the edit.
+		_regions_key = rkey
+		_sync_regions()
 	var rect := Rect2(bounds.position.x, bounds.position.z, bounds.size.x, bounds.size.z)
 	rect = rect.grow(3.0)
-	_dirty_accum = rect if _dirty_accum.size == Vector2.ZERO else _dirty_accum.merge(rect)
+	_localize_resample(rect)
+	_drain(1)
 	if _rebuild_scheduled:
 		return
 	_rebuild_scheduled = true
@@ -113,30 +140,7 @@ func refresh_surface_from_bounds(bounds: AABB) -> void:
 
 func _do_surface_rebuild() -> void:
 	_rebuild_scheduled = false
-	var rect := _dirty_accum
-	_dirty_accum = Rect2()
-	if _backend == null or not _backend.has_method("voxel_at"):
-		return
-	if _backend.has_method("is_ready") and not _backend.is_ready():
-		return
-	var t0 := Time.get_ticks_usec()
-	var resampled := 0
-	for region: Dictionary in _regions:
-		for cell: Vector2i in Geometry.footprint_cells(region, _world_x()):
-			if not rect.has_point(Vector2(float(cell.x) * WATER_CELL, float(cell.y) * WATER_CELL)):
-				continue
-			var px := float(cell.x) * WATER_CELL + WATER_CELL * 0.5
-			var pz := float(cell.y) * WATER_CELL + WATER_CELL * 0.5
-			_cell_cache[cell] = _terrain_top(px, pz)
-			resampled += 1
-	if resampled == 0:
-		return
-	var t1 := Time.get_ticks_usec()
-	_build_mesh_from_cache()
-	var t2 := Time.get_ticks_usec()
-	water_perf = {"resample_ms": (t1 - t0) / 1000.0, "mesh_ms": (t2 - t1) / 1000.0, "cells_resampled": resampled, "regions": _regions.size(), "quads": surface_quad_count(), "localized": true}
-	water_rebuilds += 1
-	_last_key = _key()
+	_drain(1)
 
 func _on_terrain_changed() -> void:
 	# Localize via the last edit bounds (matches the river + waterfalls); the
@@ -145,6 +149,364 @@ func _on_terrain_changed() -> void:
 		refresh_surface_from_bounds(_backend.get_last_edit_bounds())
 	else:
 		_rebuild()
+
+## Resample every cached cell inside rect (the edit area). A changed value
+## marks every region spanning that cell for a full (budgeted) rebuild; an
+## unchanged value is left alone, so a distant edit is a no-op.
+func _localize_resample(rect: Rect2) -> void:
+	for cell: Vector2i in _cell_cache.keys():
+		if not rect.has_point(Vector2(float(cell.x) * WATER_CELL, float(cell.y) * WATER_CELL)):
+			continue
+		var previous: Variant = _cell_cache.get(cell, null)
+		var top := _terrain_top(float(cell.x) * WATER_CELL + WATER_CELL * 0.5, float(cell.y) * WATER_CELL + WATER_CELL * 0.5)
+		_cell_cache[cell] = top
+		if _terrain_value_changed(previous, top):
+			var owners: Array = _cell_regions.get(cell, [])
+			for rid: int in owners:
+				_mark_rebuild(rid)
+
+func _process(_delta: float) -> void:
+	if _pending_cells.is_empty() and _dirty_regions.is_empty():
+		return
+	if _backend == null or not _backend.has_method("voxel_at"):
+		return
+	if _backend.has_method("is_ready") and not _backend.is_ready():
+		return
+	_drain(1)
+
+## One budgeted pass: resample up to RESAMPLE_BUDGET queued cells, then build
+## up to BUILD_BUDGET cells of mesh across the dirty regions. Repeats while
+## work remains, so a large rebuild spreads over frames instead of stalling.
+func _drain(max_passes: int) -> void:
+	var rs_ms := 0.0
+	var mesh_ms := 0.0
+	var resampled := 0
+	var passed := 0
+	while passed < max_passes and (not _pending_cells.is_empty() or not _dirty_regions.is_empty()):
+		var tr := Time.get_ticks_usec()
+		resampled += _resample_pass()
+		rs_ms += (Time.get_ticks_usec() - tr) / 1000.0
+		var tb := Time.get_ticks_usec()
+		_build_pass()
+		mesh_ms += (Time.get_ticks_usec() - tb) / 1000.0
+		passed += 1
+	water_perf = {"resample_ms": rs_ms, "mesh_ms": mesh_ms, "cells_resampled": resampled, "cells_pending": _pending_cells.size(), "regions": _regions.size(), "quads": surface_quad_count()}
+	water_rebuilds += 1
+	_last_key = _key()
+
+func _resample_pass() -> int:
+	var count := 0
+	while not _pending_cells.is_empty() and count < RESAMPLE_BUDGET:
+		var cell: Vector2i = _pending_cells.pop_back()
+		_pending_set.erase(cell)
+		var previous: Variant = _cell_cache.get(cell, null)
+		var top := _terrain_top(float(cell.x) * WATER_CELL + WATER_CELL * 0.5, float(cell.y) * WATER_CELL + WATER_CELL * 0.5)
+		_cell_cache[cell] = top
+		count += 1
+		if _terrain_value_changed(previous, top):
+			var owners: Array = _cell_regions.get(cell, [])
+			for rid: int in owners:
+				_mark_rebuild(rid)
+	return count
+
+## Rebuild the dirty regions' meshes from the (now warm) cache, up to
+## BUILD_BUDGET cells of work per pass. A region whose index reaches its cell
+## count is uploaded to its reused node; the work arrays stay resident so a
+## growing candidate appends to them instead of reallocating.
+func _build_pass() -> void:
+	var budget := BUILD_BUDGET
+	for rid: int in _dirty_regions.keys():
+		if budget <= 0:
+			break
+		var state: Dictionary = _build_state.get(rid, {})
+		if state.is_empty():
+			_dirty_regions.erase(rid)
+			continue
+		var region: Dictionary = _region_by_id.get(rid, {})
+		var level := Geometry.surface_level(region)
+		var cells: Array = state["cells"]
+		var start: int = int(state["index"])
+		var end: int = mini(cells.size(), start + budget)
+		var verts: PackedVector3Array = state["verts"]
+		var norms: PackedVector3Array = state["norms"]
+		var cols: PackedColorArray = state["cols"]
+		var idx: PackedInt32Array = state["idx"]
+		var base := verts.size() / 4
+		for i in range(start, end):
+			var cell: Vector2i = cells[i]
+			var cx := float(cell.x) * WATER_CELL
+			var cz := float(cell.y) * WATER_CELL
+			var surface_y: Variant = _cell_cache.get(cell, NAN)
+			# Terrain at/above the level is dry (shore); only below-level cells
+			# (or empty deep columns) carry a water quad, clipped at the level.
+			if not is_nan(surface_y) and surface_y >= level - 0.000001:
+				continue
+			var depth := 0.0 if is_nan(surface_y) else clampf((level - surface_y) / DEPTH_SCALE, 0.0, 1.0)
+			var color := WATER_COLOR.lerp(WATER_DEEP_COLOR, depth)
+			base = _append_water_quad(verts, norms, cols, idx, base, cx, cz, level, color)
+		state["index"] = end
+		budget -= (end - start)
+		if end < cells.size():
+			continue
+		_upload_region(rid)
+		_dirty_regions.erase(rid)
+
+func _terrain_value_changed(previous: Variant, top: Variant) -> bool:
+	if previous == null:
+		return true
+	var prev_nan := previous is float and is_nan(previous)
+	var top_nan := top is float and is_nan(top)
+	if prev_nan != top_nan:
+		return true
+	if prev_nan:
+		return false
+	return not is_equal_approx(previous, top)
+
+## Sync the authoritative region list against the render state: drop gone
+## regions, prepare (or grow) changed ones, queue their cells.
+## Sync the authoritative region list against the render state: drop gone
+## regions, prepare (or grow) changed ones, queue their cells. A pure growth
+## (the old footprint is a subset of the new) appends to the region's
+## persistent mesh arrays instead of rebuilding it.
+func _sync_regions() -> void:
+	var present := {}
+	for region: Dictionary in _regions:
+		var id := int(region.get("id", 0))
+		present[id] = true
+		var old_region: Dictionary = _region_by_id.get(id, {})
+		_region_by_id[id] = region
+		var cells := _footprint_of(region)
+		var key := _region_key(region, cells)
+		var old_key: String = str(_region_keys.get(id, ""))
+		var state: Dictionary = _build_state.get(id, {})
+		var old_cells: Array = []
+		if not state.is_empty():
+			old_cells = state["cells"]
+		if old_key == key and not state.is_empty() and old_cells.size() == cells.size():
+			continue
+		if old_key != key and not old_region.is_empty() and not bool(region.get("reset", false)) and old_region.has("cells") and region.has("cells") and _same_water_identity(old_region, region) and cells.size() >= old_cells.size():
+			# A growing stroke (the scene's hint is append-only): only the new
+			# suffix is appended to the persistent mesh arrays; the built
+			# prefix stays valid (no realloc, no re-rasterize, no re-upload of
+			# existing quads).
+			for i in range(old_cells.size(), cells.size()):
+				var cell: Vector2i = cells[i]
+				state["cells"].append(cell)
+				_map_cell(id, cell)
+				_ensure_pending_one(cell)
+			var new_flow := Geometry.flow_direction(region)
+			var old_flow := Geometry.flow_direction(old_region)
+			if new_flow != old_flow:
+				# The material object is shared with the uploaded mesh, so a
+				# parameter update flows to the GPU without a mesh rebuild.
+				var mat: ShaderMaterial = state["material"]
+				mat.set_shader_parameter("flow_dir", new_flow)
+				mat.set_shader_parameter("flow_speed", 0.55 if new_flow.distance_to(Vector2(1.0, 0.0)) > 0.001 else 0.25)
+			_dirty_regions[id] = true
+			_region_keys[id] = key
+			continue
+		# New, or changed in a way that is not a pure extension: full (budgeted)
+		# rebuild from the warm cache.
+		_unmap_cells(id, old_cells)
+		_map_cells(id, cells)
+		_prepare_build(id, region, cells)
+		_ensure_pending(cells)
+		_dirty_regions[id] = true
+		_region_keys[id] = key
+	for id: Variant in _region_keys.keys():
+		if not present.has(int(id)):
+			_drop_region(int(id))
+
+static func _same_water_identity(a: Dictionary, b: Dictionary) -> bool:
+	return str(a.get("type", "")) == str(b.get("type", "")) and float(a.get("level", 0.0)) == float(b.get("level", 0.0))
+func _prepare_build(id: int, region: Dictionary, cells: Array) -> void:
+	_build_state[id] = {
+		"cells": cells.duplicate(),
+		"verts": PackedVector3Array(),
+		"norms": PackedVector3Array(),
+		"cols": PackedColorArray(),
+		"idx": PackedInt32Array(),
+		"index": 0,
+		"material": _region_material(Geometry.flow_direction(region)),
+	}
+
+func _mark_rebuild(id: int) -> void:
+	var state: Dictionary = _build_state.get(id, {})
+	if state.is_empty():
+		return
+	# A value-changing resample invalidates every quad of this region: clear
+	# the persistent mesh arrays (index restarts at 0) or _build_pass would
+	# append the rebuilt quads on top of the stale ones. The grow path
+	# (_sync_regions) sets _dirty_regions directly and keeps the prefix.
+	state["index"] = 0
+	state["verts"].clear()
+	state["norms"].clear()
+	state["cols"].clear()
+	state["idx"].clear()
+	_dirty_regions[id] = true
+
+func _ensure_pending(cells: Array) -> void:
+	for cell: Vector2i in cells:
+		_ensure_pending_one(cell)
+
+func _ensure_pending_one(cell: Vector2i) -> void:
+	if _cell_cache.has(cell) or _pending_set.has(cell):
+		return
+	_pending_set[cell] = true
+	_pending_cells.append(cell)
+
+## A committed carve: this cell's terrain changed under the water. Drop the
+## cached value so the next resample re-samples it (a changed value then
+## marks the owning regions for rebuild).
+func _invalidate_cell(cell: Vector2i) -> void:
+	_cell_cache.erase(cell)
+	_ensure_pending_one(cell)
+
+func _map_cell(id: int, cell: Vector2i) -> void:
+	var owners: Array = _cell_regions.get(cell, [])
+	if not owners.has(id):
+		owners.append(id)
+		_cell_regions[cell] = owners
+
+func _map_cells(id: int, cells: Array) -> void:
+	for cell: Vector2i in cells:
+		_map_cell(id, cell)
+
+func _unmap_cells(id: int, cells: Array) -> void:
+	for cell: Vector2i in cells:
+		var owners: Array = _cell_regions.get(cell, [])
+		if owners.has(id):
+			owners.erase(id)
+			if owners.is_empty():
+				_cell_regions.erase(cell)
+			else:
+				_cell_regions[cell] = owners
+
+func _drop_region(id: int) -> void:
+	var state: Dictionary = _build_state.get(id, {})
+	_unmap_cells(id, state.get("cells", []))
+	_region_keys.erase(id)
+	_region_by_id.erase(id)
+	_build_state.erase(id)
+	_dirty_regions.erase(id)
+	var node: MeshInstance3D = _region_nodes.get(id, null)
+	if is_instance_valid(node):
+		node.queue_free()
+	_region_nodes.erase(id)
+
+func _upload_region(id: int) -> void:
+	var state: Dictionary = _build_state.get(id, {})
+	var node := _region_node(id)
+	var verts: PackedVector3Array = state["verts"]
+	if verts.is_empty():
+		node.mesh = null
+		return
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _surface_arrays(verts, state["norms"], state["cols"], state["idx"]))
+	mesh.surface_set_material(0, state["material"])
+	node.mesh = mesh
+
+func _region_node(id: int) -> MeshInstance3D:
+	var node: MeshInstance3D = _region_nodes.get(id, null)
+	if node == null:
+		node = MeshInstance3D.new()
+		node.name = "WaterRegion_%d" % id
+		add_child(node)
+		_region_nodes[id] = node
+	return node
+
+## The cell set for a region: the scene's rolling hint for a stroke candidate
+## (an append-only PackedVector2Array, built incrementally by the scene as the
+## stroke grows — no per-frame re-union/re-rasterize) or the memoized
+## geometry footprint for saved regions.
+func _footprint_of(region: Dictionary) -> Array:
+	var cells = region.get("cells", null)
+	if cells != null and cells.size() > 0:
+		return cells
+	return Geometry.footprint_cells(region, _world_x())
+
+## Identity of a region's mesh geometry. Candidate streams key on their cell
+## hint size (the hint is append-only, so equal size == equal set) instead of
+## the point list, which grows every frame without adding water.
+static func _region_key(region: Dictionary, cells: Array) -> String:
+	if region.has("cells"):
+		return "c|%s|%.4f|%d" % [str(region.get("type", "")), float(region.get("level", 0.0)), cells.size()]
+	return "%s|%.4f|%.4f|%.3f,%.3f|%d" % [str(region.get("type", "")), float(region.get("level", 0.0)), float(region.get("width", 0.0)), Geometry.flow_direction(region).x, Geometry.flow_direction(region).y, (region.get("points", []) as Array).size()]
+
+## Full resample + synchronous build (startup / undo-redo / restore path).
+## Callers assert the surface is complete on return; small test regions
+## finish in one budgeted pass, and a large first-time region still only
+## allocates per-chunk, never the whole-at-once mesh that OOMed scudo.
+func _rebuild() -> void:
+	if _backend == null or not _backend.has_method("voxel_at"):
+		return
+	if _backend.has_method("is_ready") and not _backend.is_ready():
+		return
+	var key := _key()
+	if key == _last_key:
+		return
+	_last_key = key
+	_regions_key = _regions_signature()
+	_pending_cells = []
+	_pending_set = {}
+	_dirty_regions = {}
+	_build_state = {}
+	_region_keys = {}
+	_region_by_id = {}
+	_cell_cache = {}
+	_cell_regions = {}
+	_clear()
+	var resampled := 0
+	for region: Dictionary in _regions:
+		var id := int(region.get("id", 0))
+		_region_by_id[id] = region
+		var cells := _footprint_of(region)
+		_region_keys[id] = _region_key(region, cells)
+		_map_cells(id, cells)
+		for cell: Vector2i in cells:
+			var px := float(cell.x) * WATER_CELL + WATER_CELL * 0.5
+			var pz := float(cell.y) * WATER_CELL + WATER_CELL * 0.5
+			_cell_cache[cell] = _terrain_top(px, pz)
+			resampled += 1
+		_prepare_build(id, region, cells)
+		_build_region_full(id)
+	water_perf = {"resample_ms": 0.0, "mesh_ms": 0.0, "total_ms": 0.0, "cells_resampled": resampled, "regions": _regions.size(), "quads": surface_quad_count(), "full_rebuild": true}
+	water_rebuilds += 1
+
+## Synchronous full build of one region from the warm cache.
+func _build_region_full(id: int) -> void:
+	var state: Dictionary = _build_state.get(id, {})
+	if state.is_empty():
+		return
+	var cells: Array = state["cells"]
+	var region: Dictionary = _region_by_id.get(id, {})
+	var level := Geometry.surface_level(region)
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var cols := PackedColorArray()
+	var idx := PackedInt32Array()
+	var base := 0
+	for cell: Vector2i in cells:
+		var cx := float(cell.x) * WATER_CELL
+		var cz := float(cell.y) * WATER_CELL
+		var surface_y: Variant = _cell_cache.get(cell, NAN)
+		if not is_nan(surface_y) and surface_y >= level - 0.000001:
+			continue
+		var depth := 0.0 if is_nan(surface_y) else clampf((level - surface_y) / DEPTH_SCALE, 0.0, 1.0)
+		var color := WATER_COLOR.lerp(WATER_DEEP_COLOR, depth)
+		base = _append_water_quad(verts, norms, cols, idx, base, cx, cz, level, color)
+	state["verts"] = verts
+	state["norms"] = norms
+	state["cols"] = cols
+	state["idx"] = idx
+	state["index"] = cells.size()
+	_upload_region(id)
+
+func _clear() -> void:
+	for node: Variant in _region_nodes.values():
+		if is_instance_valid(node):
+			(node as Node).queue_free()
+	_region_nodes = {}
 
 ## --- Derived waterfalls (presentation only; the only stored state is the
 ## suppressions the player chose, kept in LandscapeState) -----------------------
@@ -339,101 +701,6 @@ func _make_mist(center: Vector2, level: float, width: float) -> GPUParticles3D:
 	p.draw_pass_1 = _particle_quad(Color(0.9, 0.97, 1.0, 0.12))
 	return p
 
-func _rebuild() -> void:
-	if _backend == null or not _backend.has_method("voxel_at"):
-		return
-	if _backend.has_method("is_ready") and not _backend.is_ready():
-		return
-	var key := _key()
-	if key == _last_key:
-		return
-	_last_key = key
-	_regions_key = _regions_signature()
-	var t0 := Time.get_ticks_usec()
-	var cells := 0
-	# Single pass (level-load fast path): scan each column once, cache the
-	# result for localized edits, and build the surface in the same loop.
-	_cell_cache.clear()
-	var world_x := _world_x()
-	_clear()
-	for region: Dictionary in _regions:
-		var level := Geometry.surface_level(region)
-		var flow := Geometry.flow_direction(region)
-		var vertices := PackedVector3Array()
-		var normals := PackedVector3Array()
-		var colors := PackedColorArray()
-		var indices := PackedInt32Array()
-		var base := 0
-		for cell: Vector2i in Geometry.footprint_cells(region, world_x):
-			var cx := float(cell.x) * WATER_CELL
-			var cz := float(cell.y) * WATER_CELL
-			var surface_y := _terrain_top(cx + WATER_CELL * 0.5, cz + WATER_CELL * 0.5)
-			_cell_cache[cell] = surface_y
-			cells += 1
-			if not is_nan(surface_y) and surface_y >= level - 0.000001:
-				continue
-			var depth := 0.0 if is_nan(surface_y) else clampf((level - surface_y) / DEPTH_SCALE, 0.0, 1.0)
-			var color := WATER_COLOR.lerp(WATER_DEEP_COLOR, depth)
-			base = _append_water_quad(vertices, normals, colors, indices, base, cx, cz, level, color)
-		if vertices.is_empty():
-			continue
-		var mesh := ArrayMesh.new()
-		var arrays: Array = []
-		arrays.resize(Mesh.ARRAY_MAX)
-		arrays[Mesh.ARRAY_VERTEX] = vertices
-		arrays[Mesh.ARRAY_NORMAL] = normals
-		arrays[Mesh.ARRAY_COLOR] = colors
-		arrays[Mesh.ARRAY_INDEX] = indices
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		mesh.surface_set_material(0, _region_material(flow))
-		var node := MeshInstance3D.new()
-		node.name = "WaterRegion_%d" % int(region.get("id", 0))
-		node.mesh = mesh
-		add_child(node)
-		_nodes.append(node)
-	var t1 := Time.get_ticks_usec()
-	water_perf = {"resample_ms": 0.0, "mesh_ms": 0.0, "total_ms": (t1 - t0) / 1000.0, "cells_resampled": cells, "regions": _regions.size(), "quads": surface_quad_count(), "full_rebuild": true}
-	water_rebuilds += 1
-
-func _build_mesh_from_cache() -> void:
-	_clear()
-	var world_x := _world_x()
-	for region: Dictionary in _regions:
-		var level := Geometry.surface_level(region)
-		var flow := Geometry.flow_direction(region)
-		var vertices := PackedVector3Array()
-		var normals := PackedVector3Array()
-		var colors := PackedColorArray()
-		var indices := PackedInt32Array()
-		var base := 0
-		for cell: Vector2i in Geometry.footprint_cells(region, world_x):
-			var cx := float(cell.x) * WATER_CELL
-			var cz := float(cell.y) * WATER_CELL
-			var surface_y: Variant = _cell_cache.get(cell, NAN)
-			# Terrain at/above the level is dry (shore); only below-level cells
-			# (or empty deep columns) carry a water quad, clipped at the level.
-			if not is_nan(surface_y) and surface_y >= level - 0.000001:
-				continue
-			var depth := 0.0 if is_nan(surface_y) else clampf((level - surface_y) / DEPTH_SCALE, 0.0, 1.0)
-			var color := WATER_COLOR.lerp(WATER_DEEP_COLOR, depth)
-			base = _append_water_quad(vertices, normals, colors, indices, base, cx, cz, level, color)
-		if vertices.is_empty():
-			continue
-		var mesh := ArrayMesh.new()
-		var arrays: Array = []
-		arrays.resize(Mesh.ARRAY_MAX)
-		arrays[Mesh.ARRAY_VERTEX] = vertices
-		arrays[Mesh.ARRAY_NORMAL] = normals
-		arrays[Mesh.ARRAY_COLOR] = colors
-		arrays[Mesh.ARRAY_INDEX] = indices
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		mesh.surface_set_material(0, _region_material(flow))
-		var node := MeshInstance3D.new()
-		node.name = "WaterRegion_%d" % int(region.get("id", 0))
-		node.mesh = mesh
-		add_child(node)
-		_nodes.append(node)
-
 func _world_x() -> float:
 	if _backend == null:
 		return 0.0
@@ -493,21 +760,11 @@ func _key() -> String:
 		payload.append([int(region.get("id", 0)), str(region.get("type", "")), float(region.get("level", 0.0)), int((region.get("points", []) as Array).size())])
 	return "%d|%s" % [revision, var_to_bytes(payload).hex_encode().sha256_text()]
 
-func _clear() -> void:
-	for node: MeshInstance3D in _nodes:
-		if is_instance_valid(node):
-			node.queue_free()
-	_nodes = []
-	for node: MeshInstance3D in _fall_nodes:
-		if is_instance_valid(node):
-			node.queue_free()
-	_fall_nodes = []
-
 ## Deterministic quad count of the current surface (test hook).
 func surface_quad_count() -> int:
 	var total := 0
-	for node: MeshInstance3D in _nodes:
-		var mesh: ArrayMesh = node.mesh
+	for node: Variant in _region_nodes.values():
+		var mesh: ArrayMesh = (node as MeshInstance3D).mesh
 		if mesh != null and mesh.get_surface_count() > 0:
 			var arrays: Array = mesh.surface_get_arrays(0)
 			total += (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 4

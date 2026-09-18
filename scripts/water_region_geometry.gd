@@ -29,16 +29,37 @@ static func stream_radius(region: Dictionary) -> float:
 static func points(region: Dictionary) -> PackedVector2Array:
 	return _points(region)
 
+## Rasterising a long stream (dozens of stroked segments of ~hundreds of cells
+## each) takes seconds on a phone CPU, and the surface/preview paths asked for
+## the same footprint repeatedly (resample loop, mesh build, per-frame preview
+## fingerprint) — once per call. Memoise per geometry signature so each distinct
+## shape is rasterised at most once; callers treat the returned array as
+## read-only (it is shared).
+static var _footprint_memo: Dictionary = {}
+const _FOOTPRINT_MEMO_LIMIT := 10
+
+static func footprint_key(region: Dictionary, world_size: float) -> String:
+	return "%s|%.6f|%.6f|%s" % [str(region.get("type", "")), stream_radius(region), world_size, var_to_bytes(_points(region)).hex_encode()]
+
 ## Structural-grid cells whose centre lies inside the water body. Used for the
 ## clipped water surface mesh and shore clipping. Deterministic.
 static func footprint_cells(region: Dictionary, world_size: float) -> Array:
+	var key := footprint_key(region, world_size)
+	if _footprint_memo.has(key):
+		return _footprint_memo[key]
+	var cells: Array
 	if is_lake(region):
-		return _lake_cells(_points(region), world_size)
-	var points := _points(region)
-	if points.size() < 2: return []
-	var cells: Array = []
-	for i in range(1, points.size()):
-		cells = PathRegion.union_cells(cells, PathRegion.stroke_cells(points[i - 1], points[i], stream_radius(region), world_size), world_size)
+		cells = _lake_cells(_points(region), world_size)
+	else:
+		var points := _points(region)
+		if points.size() < 2: cells = []
+		else:
+			cells = []
+			for i in range(1, points.size()):
+				cells = PathRegion.union_cells(cells, PathRegion.stroke_cells(points[i - 1], points[i], stream_radius(region), world_size), world_size)
+	if _footprint_memo.size() >= _FOOTPRINT_MEMO_LIMIT:
+		_footprint_memo.clear()
+	_footprint_memo[key] = cells
 	return cells
 
 ## True when the terrain surface Y at a point is below the water level (i.e. the

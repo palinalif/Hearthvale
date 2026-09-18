@@ -29,6 +29,22 @@ var _water_building_revision := -1
 var _water_terrain_revision := -1
 var _water_last_sample := Vector2(NAN, NAN)
 var _water_preview_signature := ""
+# Rolling stream stroke-cell hint: each sampled segment is rasterized once
+# (O(segment)) and merged into a dedup set + append-only list. This replaces
+# the old preview, which re-rasterized the entire growing stroke (a full
+# O(N^2) union) on every frame of a stroke — the cause of the mobile freeze.
+# The water visual consumes the list incrementally (appends only new cells to
+# its persistent mesh arrays) and its size is the cheap preview fingerprint.
+# Cleared when a stroke is cancelled or committed.
+var _stroke_cells := {}
+var _stroke_cell_list := PackedVector2Array()
+# One-shot: set when a stroke (re)starts so the water visual replaces its
+# previous candidate mesh instead of appending onto it; cleared after the
+# first preview sync of the stroke.
+var _stroke_reset_pending := true
+# The stroke's carve width is frozen when it starts (brush keys are blocked
+# while drawing) so the preview hint and the committed region match exactly.
+var _stroke_width := 1.5
 
 func _process(delta: float) -> void:
 	super._process(delta)
@@ -198,6 +214,10 @@ func _start_water_stream() -> bool:
 	if is_nan(water_stream_level): water_stream_level = 1.0
 	water_stream_points.append(point)
 	_water_last_sample = point
+	_stroke_width = maxf(0.5, 2.0 * brush_radius)
+	_stroke_cells.clear()
+	_stroke_cell_list.clear()
+	_stroke_reset_pending = true
 	_water_preview_signature = ""
 	_set_status("Stream • drawing • release A to commit")
 	_update_water_preview()
@@ -209,10 +229,30 @@ func _sample_water_stream() -> bool:
 	if not water_placement_valid: return false
 	var point := _water_cursor_point()
 	if not point.is_finite(): return false
+	# Distance gate: the centreline is a low-frequency shape edit, so jitter
+	# inside a few structural cells adds nothing. Appending a point every
+	# frame (the old behaviour) invalidated the preview fingerprint and forced
+	# the visual's full candidate rebuild every frame.
+	if point.distance_to(_water_last_sample) < 0.05:
+		_water_last_sample = point
+		return false
+	if water_stream_points.size() > 0:
+		_stroke_add_segment(water_stream_points[water_stream_points.size() - 1], point)
 	water_stream_points.append(point)
 	_water_last_sample = point
 	_water_preview_signature = ""
 	return true
+
+## Rasterize one stroke segment once and merge its cells into the rolling
+## hint. O(cells of this segment); the dedup set keeps repeated segments
+## cheap and the list stays append-only for the visual's incremental append.
+func _stroke_add_segment(p1: Vector2, p2: Vector2) -> void:
+	if not p1.is_finite() or not p2.is_finite():
+		return
+	for cell: Vector2i in PathRegion.stroke_cells(p1, p2, _stroke_width, WaterState.EDITABLE_WORLD_SIZE):
+		if not _stroke_cells.has(cell):
+			_stroke_cells[cell] = true
+			_stroke_cell_list.append(cell)
 
 func _add_water_lake_vertex() -> void:
 	if not water_placement_active or water_kind != "lake": return
@@ -269,7 +309,10 @@ func _stream_region() -> Dictionary:
 	var points: Array = []
 	for p: Vector2 in water_stream_points:
 		points.append([p.x, p.y])
-	return {"type": "stream", "level": water_stream_level, "width": maxf(0.5, 2.0 * brush_radius), "points": points, "flow": [flow.x, flow.y]}
+	# Candidate is the id-0 region (saved regions use ids >= 1). The rolling
+	# cell hint lets the visual append new cells without re-rasterizing the
+	# whole stroke; "reset" is the one-shot replace flag (stroke start).
+	return {"id": 0, "type": "stream", "level": water_stream_level, "width": _stroke_width, "points": points, "flow": [flow.x, flow.y], "cells": _stroke_cell_list, "reset": _stroke_reset_pending}
 
 func _lake_region() -> Dictionary:
 	var points: Array = []
@@ -325,6 +368,9 @@ func _commit_water(region: Dictionary) -> bool:
 	if garden_visual: garden_visual.reset_records(landscape_state.records)
 	water_stream_points.clear()
 	water_lake_points.clear()
+	_stroke_cells.clear()
+	_stroke_cell_list.clear()
+	_stroke_reset_pending = true
 	_water_last_sample = Vector2(NAN, NAN)
 	_water_preview_signature = ""
 	_record_history("path" if terrain_changed else "landscape")
@@ -344,6 +390,9 @@ func _cancel_water_stroke(reason: String = "Cancelled") -> void:
 	water_stroking = false
 	water_stream_points.clear()
 	water_lake_points.clear()
+	_stroke_cells.clear()
+	_stroke_cell_list.clear()
+	_stroke_reset_pending = true
 	_water_last_sample = Vector2(NAN, NAN)
 	_water_preview_signature = ""
 	_landscape_before.clear()
@@ -360,6 +409,9 @@ func _cancel_water_placement(reason: String = "Water tool closed") -> void:
 	water_placement_active = false
 	water_stream_points.clear()
 	water_lake_points.clear()
+	_stroke_cells.clear()
+	_stroke_cell_list.clear()
+	_stroke_reset_pending = true
 	_water_last_sample = Vector2(NAN, NAN)
 	_water_preview_signature = ""
 	_water_before.clear()
@@ -467,22 +519,25 @@ func _water_candidate_region() -> Dictionary:
 func _update_water_preview() -> void:
 	if not water_visual or not water_placement_active: return
 	var candidate := _water_candidate_region()
-	var regions: Array = landscape_state.water.duplicate(true)
-	if not candidate.is_empty(): regions.append(candidate)
-	# Rebuild only when the candidate footprint (cell count) changes, not every
-	# sampled point, and reuse the cached surface (incremental) so a long stroke
-	# does not trigger a full resample + mesh rebuild every frame — the cause of
-	# the mobile freeze.
-	var signature := "%s|%d|%d" % [water_kind, _footprint_count(candidate), _terrain_revision()]
+	# Cheap preview fingerprint: the stream's rolling cell count grows only
+	# when a segment adds a new cell (distance-gated, O(segment)), and the
+	# lake's point count grows only on a vertex press. This replaces the old
+	# fingerprint, which re-rasterized the whole stroke (a full O(N^2) union)
+	# every frame just to compute the key — the cause of the mobile freeze.
+	var fingerprint := 0
+	if not candidate.is_empty():
+		if water_kind == "stream": fingerprint = _stroke_cell_list.size()
+		else: fingerprint = water_lake_points.size()
+	var signature := "%s|%d|%d" % [water_kind, fingerprint, _terrain_revision()]
 	if signature == _water_preview_signature: return
 	_water_preview_signature = signature
+	var regions: Array = landscape_state.water.duplicate(true)
+	if not candidate.is_empty(): regions.append(candidate)
 	water_visual.set_regions_incremental(regions)
-
-## Cheap preview fingerprint: the candidate's footprint cell count grows only
-## when the stroke gains a new cell, so it is a stable, cheap preview key.
-func _footprint_count(region: Dictionary) -> int:
-	if region.is_empty(): return 0
-	return WaterRegion.footprint_cells(region, WaterState.EDITABLE_WORLD_SIZE).size()
+	if water_kind == "stream" and not candidate.is_empty():
+		# The one-shot reset has been delivered; later syncs of this stroke
+		# grow the candidate incrementally.
+		_stroke_reset_pending = false
 
 func _update_presentation() -> void:
 	super._update_presentation()
