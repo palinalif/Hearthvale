@@ -73,6 +73,7 @@ func _ready() -> void:
 	# enables itself on ready; this makes it explicit and covers any future
 	# change to that default.)
 	set_process(true)
+	print("BRIDGE_LISTENING port=", DEFAULT_PORT)
 
 func _process(_delta: float) -> void:
 	if not enabled: return
