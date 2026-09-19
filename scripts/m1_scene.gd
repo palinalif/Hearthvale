@@ -207,11 +207,11 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 				return {"type": "error", "message": "no terrain tool selector in this scene"}
 			# Dynamic call: the selector lives in a downstream chain link (m1_scene_tool_ui)
 			# and is overridden further down (m2_scene_water), so dispatch must be virtual.
-			call("_select_terrain_tool", String(args[0]))
+			call("_select_terrain_tool", str(args[0]))
 			return {"type": "ok", "tool": sculpt_tool}
 		"view_context":
 			if args.size() < 1: return {"type": "error", "message": "view_context needs terrain|building"}
-			_set_view_context(String(args[0]), "debug")
+			_set_view_context(str(args[0]), "debug")
 			return {"type": "ok", "view_context": view_context}
 		"cancel":
 			_cancel_current_edit("debug")
@@ -230,9 +230,12 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 			# mesh_survey. Only the allowlisted performance knobs are settable.
 			if args.size() < 3:
 				return {"type": "error", "message": "tune needs [target, key, value]"}
-			var target := String(args[0])
-			var key := String(args[1])
-			var raw := String(args[2])
+			# str(), not the String() constructor: in the pinned Godot 4.7.2 build a
+			# String() call on these arguments aborts the whole action with
+			# "Invalid call 'String' constructor" (tune silently no-ops, returns {}).
+			var target := str(args[0])
+			var key := str(args[1])
+			var raw := str(args[2])
 			var allow: Dictionary
 			match target:
 				"terrain", "viewer":
@@ -241,6 +244,7 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 						"max_view_distance": "float", "use_gpu_generation": "bool",
 						"generate_collisions": "bool", "automatic_loading_enabled": "bool",
 						"mesh_block_size": "float", "process_mode": "float",
+					"visible": "bool", # A/B isolation: which viewer's mesh is actually drawn
 					}
 				"light":
 					allow = {"shadow_enabled": "bool", "directional_shadow_max_distance": "float"}
@@ -259,6 +263,10 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 				value = int(value)
 			var applied := 0
 			var last: Variant = null
+			var want_index := -1
+			if args.size() >= 4:
+				want_index = int(args[3])
+			var match_index := 0
 			if get_tree().current_scene != null:
 				var tstack: Array[Node] = [get_tree().current_scene]
 				while tstack.size() > 0:
@@ -269,7 +277,7 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 						or (target == "viewer" and n.get_class() == "VoxelViewer") \
 						or (target == "light" and n is DirectionalLight3D and n.name == "WorldSun") \
 						or (target == "environment" and n is WorldEnvironment)
-					if want:
+					if want and (want_index < 0 or match_index == want_index):
 						if target == "environment" and n.environment != null:
 							n.environment.set(key, value)
 							last = n.environment.get(key)
@@ -277,6 +285,7 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 							n.set(key, value)
 							last = n.get(key)
 						applied += 1
+					match_index += 1
 			return {"type": "ok", "applied": applied, "key": key, "now": str(last)}
 		"perf":
 			# Phase-level CPU attribution for on-device profiling: the scene's own
