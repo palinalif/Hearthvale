@@ -112,6 +112,11 @@ func _exit_tree() -> void:
 	_server = null
 
 func _pump_socket() -> void:
+	# _server is null until listen succeeds (and during the post-failure
+	# window); a null-deref here spams a script error every frame and costs
+	# real time on an already frame-starved device.
+	if _server == null:
+		return
 	if _client == null and _server.is_connection_available():
 		_client = _server.take_connection()
 		_client_since_ms = Time.get_ticks_msec()
