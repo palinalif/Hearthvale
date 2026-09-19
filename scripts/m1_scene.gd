@@ -169,12 +169,15 @@ func _ready() -> void:
 		var bridge: Node = load("res://scripts/m1_debug_bridge.gd").new()
 		bridge.name = "virtual_controller_bridge"
 		add_child(bridge)
-		# Main-loop frame clock: first child of root, brackets pre/scene/post.
+		# Main-loop frame clock. Child of the scene root (children process
+		# before their parent, so it brackets the scene _process "pre").
+		# NOT get_tree().root.add_child(): during the main scene's _ready() the
+		# Window root is busy setting up children and the add fails silently
+		# (the probe then never runs and frame_clock reports all zeros).
 		var fc: Node = load("res://scripts/frame_clock_probe.gd").new()
 		fc.name = "FrameClockProbe"
 		fc.set("scene", self)
-		get_tree().root.add_child(fc)
-		get_tree().root.move_child(fc, 0)
+		add_child(fc)
 		_frame_clock_probe = fc
 
 ## Debug-only semantic action API for the virtual-controller bridge (see
