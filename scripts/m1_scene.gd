@@ -198,6 +198,32 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 				"water_stroking": get("water_stroking"), "water_kind": get("water_kind"),
 				"cursor": [cursor.x, cursor.y, cursor.z],
 			}
+		"shell_keys":
+			# Diagnostic (2026-09-19, idle-15fps hunt): per-house massing cache key plus
+			# its raw field components, so a two-call diff shows which field drifts
+			# frame-to-frame and defeats the idle skip. Debug builds only.
+			if not has_method("_massing_shell_key"):
+				return {"type": "error", "message": "no massing layer in this scene"}
+			var keys_out: Dictionary = {"type": "shell_keys", "revision": building_world.get_revision() if building_world else -1, "terrain_revision": int((backend.stats() as Dictionary).get("revision", -1)) if backend and backend.has_method("stats") else -1, "houses": {}}
+			var last_variant: Variant = get("_last_shell_key")
+			var last_map: Dictionary = last_variant if last_variant is Dictionary else {}
+			for bid in cottage_visuals:
+				var bid_str := str(bid)
+				var v: Dictionary = building_world.get_building(bid_str) if building_world else {}
+				if v.is_empty(): continue
+				var secs: Variant = v.get("massing_sections")
+				var dims_variant: Variant = v.get("dimensions", Vector3.ZERO)
+				var tr_variant: Variant = v.get("transform", Transform3D.IDENTITY)
+				var k := str(call("_massing_shell_key", v))
+				(keys_out["houses"] as Dictionary)[bid_str] = {
+					"key": k, "last_match": str(last_map.get(bid_str, "")) == k,
+					"dims": str(dims_variant),
+					"transform_hash": hash(str(tr_variant)),
+					"wall": str(v.get("wall_material_id", v.get("material_id", ""))),
+					"roof": str(v.get("roof_material_id", "")),
+					"sections": str(secs), "sections_hash": hash(str(secs))
+				}
+			return keys_out
 		"cursor_set":
 			# args: [x, y, z]; debug teleport of the world cursor to a known
 			# terrain position (e.g. a house pad) so scripted strokes are
