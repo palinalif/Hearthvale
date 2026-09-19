@@ -43,7 +43,9 @@ func _ready() -> void:
 	_install_accent_colour_action()
 	_extend_surface_picker_with_accents()
 	_update_home_catalogue_copy()
+	var _fc_p := Time.get_ticks_usec()
 	_apply_all_house_accents()
+	last_frame_costs["pres_house_accents"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _install_accent_colour_action() -> void:
 	if not _building_panel: return

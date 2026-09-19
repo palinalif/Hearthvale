@@ -603,7 +603,9 @@ func _refresh_fence_visual(force: bool = false) -> void:
 
 func _update_presentation() -> void:
 	super._update_presentation()
+	var _fc_p := Time.get_ticks_usec()
 	_refresh_house_landing()
+	last_frame_costs["pres_house_landing"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 	if not detail_placement_active or not target_label: return
 	target_label.text = "%s • %.0f° • %s\nA place  left/right rotate  B cancel  RS orbit" % [_detail_style_name(), detail_yaw_degrees, detail_placement_reason]
 	_update_detail_preview()

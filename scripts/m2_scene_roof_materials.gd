@@ -20,7 +20,9 @@ var _extra_roof_material_buttons: Array[Button] = []
 func _ready() -> void:
 	super._ready()
 	_install_extra_roof_materials()
+	var _fc_p := Time.get_ticks_usec()
 	_apply_extra_roof_materials()
+	last_frame_costs["pres_roof_materials"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _roof_material_choices() -> Array[String]:
 	var result: Array[String] = []

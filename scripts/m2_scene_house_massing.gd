@@ -23,7 +23,9 @@ func _ready() -> void:
 	super._ready()
 	_install_house_shape_action()
 	_build_house_shape_picker()
+	var _fc_p := Time.get_ticks_usec()
 	_refresh_massing_shells()
+	last_frame_costs["pres_massing_shells"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _install_house_shape_action() -> void:
 	if not _building_panel: return
@@ -367,7 +369,9 @@ func _preview_massing_view(view: Dictionary) -> Dictionary:
 func _update_presentation() -> void:
 	super._update_presentation()
 	_refresh_massing_shells()
+	var _fc_p := Time.get_ticks_usec()
 	_refresh_house_shape_label()
+	last_frame_costs["pres_house_shape_lbl"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _refresh_house_shape_label() -> void:
 	if not _house_shape_button or not building_world: return

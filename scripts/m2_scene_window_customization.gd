@@ -58,7 +58,9 @@ func _ready() -> void:
 	_install_adventure_window_styles()
 	_install_window_extras_action()
 	_build_window_extras_panel()
+	var _fc_p := Time.get_ticks_usec()
 	_refresh_window_customization()
+	last_frame_costs["pres_window_custom"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _install_adventure_window_styles() -> void:
 	var box := _actions_box()

@@ -39,7 +39,9 @@ func _ready() -> void:
 	super._ready()
 	# Roof accessories live in the roof catalogue/direct roof workflow, not Home Details.
 	_build_roof_decor_picker()
+	var _fc_p := Time.get_ticks_usec()
 	_refresh_roof_accessories()
+	last_frame_costs["pres_roof_accessories"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _process(delta: float) -> void:
 	super._process(delta)

@@ -141,8 +141,12 @@ func _roof_label(profile: String) -> String:
 
 func _update_presentation() -> void:
 	super._update_presentation()
-	if _roof_design_picker_open: _apply_roof_design_preview()
-	else: _refresh_roof_overlays()
+	if _roof_design_picker_open:
+		_apply_roof_design_preview()
+	else:
+		var _fc_p := Time.get_ticks_usec()
+		_refresh_roof_overlays()
+		last_frame_costs["pres_roof_overlays"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _refresh_roof_overlays() -> void:
 	var seen: Dictionary = {}

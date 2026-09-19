@@ -16,7 +16,9 @@ func _ready() -> void:
 
 func _update_presentation() -> void:
 	super._update_presentation()
+	var _fc_p := Time.get_ticks_usec()
 	_refresh_facade_depth()
+	last_frame_costs["pres_facade_depth"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _apply_surface_material_preview() -> void:
 	super._apply_surface_material_preview()

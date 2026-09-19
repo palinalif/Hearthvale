@@ -7,7 +7,9 @@ extends "res://scripts/m2_scene_roof_accessories.gd"
 func _ready() -> void:
 	super._ready()
 	_compact_home_options_for_roof_controls()
+	var _fc_p := Time.get_ticks_usec()
 	_align_base_roof_ridges()
+	last_frame_costs["pres_roof_ridges"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _compact_home_options_for_roof_controls() -> void:
 	if not _building_panel: return

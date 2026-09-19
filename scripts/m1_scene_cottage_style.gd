@@ -375,7 +375,9 @@ func _update_presentation() -> void:
 	if _style_picker_mode != "":
 		_apply_style_preview()
 	else:
+		var _fc_p := Time.get_ticks_usec()
 		_apply_persisted_detail_colours()
+		last_frame_costs["pres_style_colours"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _apply_persisted_detail_colours() -> void:
 	if not building_world:

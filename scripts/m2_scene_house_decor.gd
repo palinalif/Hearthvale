@@ -21,7 +21,9 @@ var _window_overlay_signatures: Dictionary = {}
 func _ready() -> void:
 	super._ready()
 	_install_extra_window_styles()
+	var _fc_p := Time.get_ticks_usec()
 	_refresh_custom_window_overlays()
+	last_frame_costs["pres_window_overlays"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _install_extra_window_styles() -> void:
 	var box := _actions_box()

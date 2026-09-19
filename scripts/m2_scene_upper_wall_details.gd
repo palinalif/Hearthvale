@@ -138,7 +138,9 @@ func _sync_loaded_massing_surfaces() -> void:
 		_presentation_key = ""
 
 func _update_presentation() -> void:
+	var _fc_p := Time.get_ticks_usec()
 	_sync_loaded_massing_surfaces()
+	last_frame_costs["pres_upper_walls"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 	super._update_presentation()
 
 func _begin_new_attachment(kind: String) -> void:

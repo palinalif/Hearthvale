@@ -8,7 +8,9 @@ const RoofMassingVisual = preload("res://scripts/m2_house_massing_visual.gd")
 
 func _ready() -> void:
 	super._ready()
+	var _fc_p := Time.get_ticks_usec()
 	_finish_all_roofs()
+	last_frame_costs["pres_roof_finish"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _update_presentation() -> void:
 	super._update_presentation()
