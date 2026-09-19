@@ -24,8 +24,9 @@ extends Node
 ##                                                     -> {"type":"ok","tool":"water"}
 ##     "action" forwards a semantic verb to the scene's debug_test_action():
 ##     state | select_tool [tool] | view_context [terrain|building]
-##     | cancel | undo | redo | world_stats | mesh_survey. Strokes themselves stay real InputMap events
-##     (button "a" + stick), so the gameplay path is exercised, not bypassed.
+##     | cancel | undo | redo | world_stats | mesh_survey | perf | tune [target key value].
+##     "tune" is also accepted as a top-level cmd (same args). Strokes themselves stay real
+##     InputMap events (button "a" + stick), so the gameplay path is exercised, not bypassed.
 
 const DEFAULT_PORT := 47123
 
@@ -195,6 +196,16 @@ func _handle_command(line: String) -> Dictionary:
 				var res: Variant = game.debug_test_action(String(cmd.get("name", "")), args)
 				return res if res is Dictionary else {"type": "error", "message": "action failed"}
 			return {"type": "error", "message": "no debug action host"}
+		"tune":
+			# Top-level sugar for action/name=tune (keeps feature-perf scripts terse).
+			var tune_game := get_parent()
+			var tune_args: Variant = cmd.get("args", [])
+			if not (tune_args is Array):
+				tune_args = []
+			if tune_game != null and tune_game.has_method("debug_test_action"):
+				var tune_res: Variant = tune_game.debug_test_action("tune", tune_args)
+				return tune_res if tune_res is Dictionary else {"type": "error", "message": "tune failed"}
+			return {"type": "error", "message": "no debug action host"}
 		"telemetry":
 			return _telemetry()
 		"mark":
@@ -213,7 +224,16 @@ func _telemetry() -> Dictionary:
 		"primitives": int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)),
 		"objects": int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)),
 		"memory_static_mb": Performance.get_monitor(Performance.MEMORY_STATIC) / 1024.0 / 1024.0,
+		# The scene's own per-phase timers (camera/focus/preview/presentation/...),
+		# so a feature-perf run shows which scene phase eats CPU on device.
+		"scene_costs": _scene_costs(),
 	}
+
+func _scene_costs() -> Dictionary:
+	var p := get_parent()
+	if p != null and p.get("last_frame_costs") is Dictionary:
+		return (p.get("last_frame_costs") as Dictionary).duplicate(true)
+	return {}
 
 func _reply(dict: Dictionary) -> void:
 	if _client == null:

@@ -182,7 +182,25 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 				"menu_open": menu_open, "tools_open": tools_open,
 				"water_placement_active": get("water_placement_active"),
 				"water_stroking": get("water_stroking"), "water_kind": get("water_kind"),
+				"cursor": [cursor.x, cursor.y, cursor.z],
 			}
+		"cursor_set":
+			# args: [x, y, z]; debug teleport of the world cursor to a known
+			# terrain position (e.g. a house pad) so scripted strokes are
+			# deterministic. The cursor is the brush position; only the LEFT
+			# stick moves it in normal play (the right stick orbits the camera
+			# and can never arm a stroke).
+			if args.size() < 3:
+				return {"type": "error", "message": "cursor_set needs [x, y, z]"}
+			var p := Vector3(
+				clampf(float(args[0]), 0.5, float(PATCH_SIZE.x) - 0.5),
+				clampf(float(args[1]), 0.0, 31.0),
+				clampf(float(args[2]), 0.5, float(PATCH_SIZE.z) - 0.5)
+			)
+			cursor = p
+			if view_context == "terrain": terrain_cursor = p
+			else: cottage_cursor = p
+			return {"type": "ok", "cursor": [p.x, p.y, p.z]}
 		"select_tool":
 			if args.size() < 1: return {"type": "error", "message": "select_tool needs a tool name"}
 			if not has_method("_select_terrain_tool"):
@@ -215,12 +233,21 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 			var target := String(args[0])
 			var key := String(args[1])
 			var raw := String(args[2])
-			var allow: Dictionary = {
-				"view_distance": "float", "view_distance_vertical_ratio": "float",
-				"max_view_distance": "float", "use_gpu_generation": "bool",
-				"generate_collisions": "bool", "automatic_loading_enabled": "bool",
-				"mesh_block_size": "float",
-			}
+			var allow: Dictionary
+			match target:
+				"terrain", "viewer":
+					allow = {
+						"view_distance": "float", "view_distance_vertical_ratio": "float",
+						"max_view_distance": "float", "use_gpu_generation": "bool",
+						"generate_collisions": "bool", "automatic_loading_enabled": "bool",
+						"mesh_block_size": "float", "process_mode": "float",
+					}
+				"light":
+					allow = {"shadow_enabled": "bool", "directional_shadow_max_distance": "float"}
+				"environment":
+					allow = {"glow_enabled": "bool", "fog_enabled": "bool"}
+				_:
+					return {"type": "error", "message": "tune target not allowed: %s" % target}
 			if not allow.has(key):
 				return {"type": "error", "message": "tune key not allowed: %s" % key}
 			var value: Variant
@@ -228,6 +255,8 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 				value = raw.to_lower() == "true" or raw == "1"
 			else:
 				value = raw.to_float()
+			if key == "process_mode":
+				value = int(value)
 			var applied := 0
 			var last: Variant = null
 			if get_tree().current_scene != null:
@@ -237,12 +266,37 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 					for c in n.get_children():
 						tstack.push_back(c)
 					var want := (target == "terrain" and n.get_class() == "VoxelTerrain") \
-						or (target == "viewer" and n.get_class() == "VoxelViewer")
+						or (target == "viewer" and n.get_class() == "VoxelViewer") \
+						or (target == "light" and n is DirectionalLight3D and n.name == "WorldSun") \
+						or (target == "environment" and n is WorldEnvironment)
 					if want:
-						n.set(key, value)
+						if target == "environment" and n.environment != null:
+							n.environment.set(key, value)
+							last = n.environment.get(key)
+						else:
+							n.set(key, value)
+							last = n.get(key)
 						applied += 1
-						last = n.get(key)
 			return {"type": "ok", "applied": applied, "key": key, "now": str(last)}
+		"perf":
+			# Phase-level CPU attribution for on-device profiling: the scene's own
+			# per-frame phase timers plus the native backend's last-edit cost.
+			var profile: Dictionary = call("path_profile_stats") if has_method("path_profile_stats") else {}
+			var water_perf: Dictionary = get("water_visual").get_perf() if get("water_visual") != null and get("water_visual").has_method("get_perf") else {}
+			var fps_now := Engine.get_frames_per_second()
+			return {
+				"type": "perf",
+				"fps": fps_now,
+				"frame_ms": 1000.0 / maxf(fps_now, 0.001),
+				"process_ms": Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+				"physics_ms": Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
+				"draws": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+				"prims": int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)),
+				"last_frame_costs": last_frame_costs.duplicate(true),
+				"path_profile": profile,
+				"native": backend.stats() if backend != null and backend.has_method("stats") else {},
+				"water": water_perf,
+			}
 		_:
 			return {"type": "error", "message": "unknown action: " + name}
 
@@ -408,22 +462,37 @@ func _process(delta: float) -> void:
 	if _shutting_down: return
 	if (stroke_active or landscape_active) and (menu_open or tools_open or detail_open or _restoring):
 		_cancel_current_edit("Sculpting cancelled")
+	var process_started := Time.get_ticks_usec()
+	var phase_started := process_started
 	if not menu_open and not tools_open and not detail_open:
 		_read_camera_and_cursor(delta)
 	if detail_move_active and not menu_open and not tools_open and not detail_open:
 		_read_detail_move(delta)
-	var phase_started := Time.get_ticks_usec()
+	last_frame_costs["camera_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	phase_started = Time.get_ticks_usec()
 	if stroke_active and backend and backend.has_method("update_stroke"):
 		backend.update_stroke(cursor + stroke_aim_offset, delta)
 	last_frame_costs["sculpt_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
 	if landscape_active: _update_plant_stroke(delta)
+	phase_started = Time.get_ticks_usec()
 	_update_camera()
+	# Keep native terrain mesh streaming centered on the camera (the visual
+	# viewer used to sit statically at world center with a 64 m radius covering
+	# the whole valley; it now follows at RUNTIME_VIEW_DISTANCE_WORLD).
+	if backend != null and backend.has_method("update_visual_focus"):
+		backend.update_visual_focus(camera.global_position)
+	last_frame_costs["focus_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
 	phase_started = Time.get_ticks_usec()
 	_update_brush_preview()
 	_update_cursor_reticle()
 	last_frame_costs["preview_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	phase_started = Time.get_ticks_usec()
 	_update_presentation()
+	last_frame_costs["presentation_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	phase_started = Time.get_ticks_usec()
 	_update_debug_overlay()
+	last_frame_costs["overlay_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	last_frame_costs["process_ms"] = (Time.get_ticks_usec() - process_started) / 1000.0
 	var focused := get_window().has_focus()
 	if not focused and _last_focus: _cancel_current_edit("Window focus lost")
 	_last_focus = focused
@@ -575,6 +644,7 @@ func _apply_world_lighting() -> void:
 	# + a light warm grade; a restrained SSAO pass for contact/AO softness.
 	# All Mobile-renderer-safe; no volumetrics, SDFGI, or SSR.
 	var sun := DirectionalLight3D.new()
+	sun.name = "WorldSun"  # stable name: debug tune target "light"
 	sun.rotation_degrees = Vector3(-33, -46, 0)
 	sun.light_color = Color("#ffd9a0")
 	sun.light_energy = 1.72
@@ -626,6 +696,7 @@ func _apply_world_lighting() -> void:
 	environment.adjustment_contrast = 1.04
 	environment.adjustment_brightness = 1.02
 	environment_node.environment = environment
+	environment_node.name = "WorldEnvironment"  # stable name: debug tune target "environment"
 	add_child(environment_node)
 
 ## Building-world factory: the base M1 world returns the base BuildingWorld; an
