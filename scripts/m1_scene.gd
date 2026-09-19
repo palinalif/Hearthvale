@@ -63,6 +63,10 @@ var stroke_aim_offset := Vector3.ZERO
 var keep_reference := false
 var status_text := "Loading cottage…"
 var last_frame_costs: Dictionary = {}
+# Frame-clock probe marks (debug builds only; the probe reads these across scripts).
+var _fc_scene_start := 0
+var _fc_scene_end := 0
+var _frame_clock_probe: Node = null
 var _last_focus := true
 var _shutting_down := false
 var _pause_buttons: Dictionary = {}
@@ -165,6 +169,13 @@ func _ready() -> void:
 		var bridge: Node = load("res://scripts/m1_debug_bridge.gd").new()
 		bridge.name = "virtual_controller_bridge"
 		add_child(bridge)
+		# Main-loop frame clock: first child of root, brackets pre/scene/post.
+		var fc: Node = load("res://scripts/frame_clock_probe.gd").new()
+		fc.name = "FrameClockProbe"
+		fc.set("scene", self)
+		get_tree().root.add_child(fc)
+		get_tree().root.move_child(fc, 0)
+		_frame_clock_probe = fc
 
 ## Debug-only semantic action API for the virtual-controller bridge (see
 ## scripts/m1_debug_bridge.gd). Each verb calls the *same handler functions the
@@ -307,6 +318,18 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 				"native": backend.stats() if backend != null and backend.has_method("stats") else {},
 				"water": water_perf,
 			}
+		"frame_clock":
+			# Main-loop bracketing from the root-level probe: pre (engine/input/
+			# pre-scene nodes), scene (the chain's measured process), post
+			# (post-scene nodes + physics + render hand-off + vsync wait).
+			if _frame_clock_probe != null:
+				var out := {"type": "ok"}
+				var lastv: Variant = _frame_clock_probe.get("last")
+				if lastv is Dictionary:
+					for k in (lastv as Dictionary).keys():
+						out[k] = lastv[k]
+				return out
+			return {"type": "error", "message": "no frame clock (release build?)"}
 		"probe_nodes":
 			# Debug A/B binary search over the scene tree: hide/show or disable/enable
 			# every node matching a class or name, one call. args: [selector, op],
@@ -520,6 +543,7 @@ func _process(delta: float) -> void:
 	if (stroke_active or landscape_active) and (menu_open or tools_open or detail_open or _restoring):
 		_cancel_current_edit("Sculpting cancelled")
 	var process_started := Time.get_ticks_usec()
+	_fc_scene_start = process_started
 	var phase_started := process_started
 	if not menu_open and not tools_open and not detail_open:
 		_read_camera_and_cursor(delta)
@@ -550,6 +574,7 @@ func _process(delta: float) -> void:
 	_update_debug_overlay()
 	last_frame_costs["overlay_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
 	last_frame_costs["process_ms"] = (Time.get_ticks_usec() - process_started) / 1000.0
+	_fc_scene_end = Time.get_ticks_usec()
 	var focused := get_window().has_focus()
 	if not focused and _last_focus: _cancel_current_edit("Window focus lost")
 	_last_focus = focused
