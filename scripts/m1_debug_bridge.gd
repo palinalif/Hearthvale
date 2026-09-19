@@ -213,6 +213,8 @@ func _handle_command(line: String) -> Dictionary:
 				var res: Variant = game.debug_test_action(String(cmd.get("name", "")), args)
 				return res if res is Dictionary else {"type": "error", "message": "action failed"}
 			return {"type": "error", "message": "no debug action host"}
+		"frame_clock":
+			return _frame_clock()
 		"tune":
 			# Top-level sugar for action/name=tune (keeps feature-perf scripts terse).
 			var tune_game := get_parent()
@@ -251,6 +253,30 @@ func _scene_costs() -> Dictionary:
 	if p != null and p.get("last_frame_costs") is Dictionary:
 		return (p.get("last_frame_costs") as Dictionary).duplicate(true)
 	return {}
+
+## Main-loop phase breakdown (ms): pre = engine steps before the gameplay scene's
+## _process; scene = the gameplay scene's _process (its children are NOT included
+## here - probe_nodes covers those); post = the rest of the iteration (physics
+## already counted separately; post ~ render handoff + main-loop tail).
+## Rolling 300-frame averages, warmup-excluded; read it ~30s after launch.
+func _frame_clock() -> Dictionary:
+	var p := get_parent()
+	if p == null or p.get("frame_clock_probe") == null:
+		return {"type": "error", "message": "no frame clock probe"}
+	var fc: Variant = p.get("frame_clock_probe")
+	if not fc.is_running():
+		fc.start()
+		return {"type": "ok", "started": true}
+	if fc.warm_frames < fc.warmup:
+		return {"type": "ok", "warmup_remaining": int(fc.warmup - fc.warm_frames)}
+	var total_ms := (fc.pre_total_ms + fc.scene_total_ms + fc.post_total_ms) / fc.samples
+	return {
+		"type": "frame_clock", "samples": fc.samples,
+		"pre_ms": round(fc.pre_total_ms / fc.samples, 3),
+		"scene_ms": round(fc.scene_total_ms / fc.samples, 3),
+		"post_ms": round(fc.post_total_ms / fc.samples, 3),
+		"total_ms": round(total_ms, 3),
+	}
 
 func _reply(dict: Dictionary) -> void:
 	if _client == null:
