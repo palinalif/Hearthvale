@@ -1,10 +1,12 @@
 extends RefCounted
 class_name LandscapeState
 
-const LIMIT := 320
-const TREE_LIMIT := 24
+const LIMIT := 2000
+const TREE_LIMIT := 256
 const PATH_STYLE_IDS: Array[String] = ["packed_earth", "cobblestone", "stepping_stones"]
-# Transitional caller-only limits while the scene tool is cut from point routes
+# Caller-side limits: the meadow scatter and MultiMesh presentation are
+# incremental, so the plant cap is comfortably above what a hand-built hamlet
+# needs (256 trees, 2000 plants total).
 # to hold-to-paint strokes. Saved path documents never use width or points.
 const PATH_MIN_POINTS := 2
 const PATH_MAX_POINTS := 64
