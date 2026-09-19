@@ -90,3 +90,34 @@ identical optimization; the user visually accepts.
 - Scene-chain flattening (todo #17): the 54-link gameplay scene
   inheritance chain is up for evaluation; flattening is a design-scope
   change and waits for the user's approval.
+
+---
+
+## 2026-09-19 (later) — device state + sculpt-freeze A/B result
+
+**Device:** `192.168.1.15:38865` (wireless ADB; the connection drops and must be
+`adb connect`'d again per command batch — restart the adb server if it vanishes).
+**Installed:** `org.hearthvale.game.test.m2night` **versionCode 39**
+= commit `3d96e70` (task/water-river): user-approved 16-cell baseline +
+`df7a095` house idle-cache + `e514b16` house roof fix. Built from worktree
+`/tmp/hv-perf` with a local `export_presets.cfg` override
+(`package/unique_name=org.hearthvale.game.test.m2night`, `version/code=39`;
+the committed preset says `org.hearthvale.game` v5 — that naming was never
+committed). One libvoxel, debug-signed. Game force-stopped after the
+sanity stroke (screen returns to screensaver; stroke was undone first).
+The live tree also carries the user's uncommitted water WIP — never ship
+that, never edit it.
+
+**Sculpt freeze investigation (this session, all on-device A/B,
+raise-sculpt 3×4s strokes, current starter valley):**
+- v37 profile (16-cell baseline): 25.3 fps / 40.0 ms avg / ~100–110 ms spikes
+  at stroke end (25.0/40.5ms in an earlier session too — repeatable).
+- 32-cell + GPU-generation variant (`6cdfa80`+`f6e6cc1`+`d04d743`):
+  18.7 fps / 53.5 ms / 167–250 ms spikes, 2,296 draws — **worse**.
+  Reverted: `3d96e70` (pushed).
+- GPU generation alone (16-cell): 25.0/41.4 ms — no effect.
+Conclusion: the spike is CPU work inside the voxel pipeline when sculpt
+commits re-mesh edited blocks; scene-layer process stays flat (~45 ms).
+Next candidate (todo #9): reduce per-edit re-mesh cost (pre-baked static
+mesh for untouched terrain). The user's uncommitted water WIP may also
+interact (WIP water rebuild vs native generation — open question).
