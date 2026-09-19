@@ -105,8 +105,18 @@ func _ready() -> void:
 	terrain.max_view_distance = maxi(128, ceili(Vector3(patch_size).length()))
 	# Pinned VoxelTerrain supports mesh blocks of 16 or 32 while its native
 	# data blocks stay 16. Group fine-grid surfaces to reduce draw overhead.
-	if patch_size.x > 96: terrain.mesh_block_size = 32
+	# Threshold is in NATIVE cells (patch size / voxel scale): the 64-unit fine
+	# valley is 512 native cells and its 32x32 grid of 16-cell mesh blocks cost
+	# ~950 draw calls at runtime; 32-cell mesh blocks quarter that. (The old
+	# fine-grid comparison `patch_size.x > 96` never fired on the 64-unit map.)
+	var native_cells := int(round(float(patch_size.x) / voxel_scale))
+	if native_cells > 96: terrain.mesh_block_size = 32
 	terrain.scale = Vector3.ONE * voxel_scale
+	# GPU-side mesh generation moves block remeshing off the main thread, which
+	# removes the input latency spikes seen while sculpting on the Thor. The
+	# dummy headless renderer has no GPU, so it keeps the CPU path there.
+	if OS.has_feature("vulkan3") or OS.has_feature("vulkan"):
+		terrain.use_gpu_generation = true
 	var generator_script: Script = initial_generator if initial_generator != null else PatchGenerator
 	var mesher: Object = ClassDB.instantiate("VoxelMesherBlocky")
 	mesher.library = generator_script.build_library()
