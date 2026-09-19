@@ -1,6 +1,8 @@
-# Hearthvale — valley 15 fps: cause found, fix pending
+# Hearthvale — water freezes: fixed and verified on device (v41)
 
-2026-09-19, branch `task/water-river` (head `bea51fa`).
+2026-09-19, branch `task/water-river` (head `a1821a5`). Current user focus:
+"fix the water issues first" — done, see v41 record at the bottom. Earlier
+sections below are the session's history.
 Read `AGENTS.md`, the active ticket (`tasks/M2-hamlet-building.md`) and the
 user's current request. The preceding packed-earth handoff (2026-09-12) is
 preserved verbatim in `reports/handoffs/HANDOFF-a85d28d.md`.
@@ -155,3 +157,45 @@ end points — with very different terrain heights it renders as a near-
 vertical white beam through the terrain (visible in the test screenshots,
 undone after). Question for the user: should stream ribbons follow the
 terrain height profile / clamp large elevation jumps?
+
+## 2026-09-19 (latest) — v41: path re-mesh skip, water-stroke freezes gone
+
+**Installed:** `org.hearthvale.game.test.m2night` **versionCode 41** =
+commit `a1821a5` (task/water-river, **pushed**). Built from `/tmp/hv-perf`
+(scripts+tests synced from the commit; local preset override v41; extension
+verified in place). Same debug keystore as v40 (in-place update OK).
+
+**Root cause of the residual freezes** (water itself was already fixed in
+v40): every terrain commit fires `THOR_TERRAIN_CHANGE`, and the path visual
+re-meshed its **entire** painted network (3,525 cells in m2night, 495–1,365
+ms on the Thor) even when the edit was meters from any path. Fix:
+`M2PathVisual.last_terrain_edit_touches_paths()` checks the commit's
+`get_last_edit_bounds()` (with the same 2-cell margin the height cache
+already uses) against the painted cells; `_refresh_path_visual` skips the
+re-mesh when the painted authority is unchanged and the edit reaches no
+path cell (height cache still re-probes the touched columns). Overlapping
+edits — including packed-earth excavation transitions, whose edits are by
+construction on path cells — still rebuild as before.
+
+**On-device evidence (v41, m2night):**
+- Water stroke over the previously-freezing band (cursor 18,7,30 + 4 s
+drift): **30 fps throughout**; commit log `path_rebuild_ms=25.2` (was
+323–530 ms in v40-era data) and **no** full `THOR_PATH_REBUILD {cells:3525}`
+line. Same for the RAISE control stroke → general fix, not water-only.
+- Terrain commit itself in this dense world (129k building voxels):
+total 539–910 ms per stroke commit (upstream 513–885 ms) — a single
+one-shot hitch per commit, same for raise and water; not the multi-second
+freeze the user reported. Candidate for follow-up chunking if the user
+still feels a hitch in dense worlds.
+- First stroke after a fresh load dipped to 6 fps for one round:
+once-off shader/mesh warm-up of the houses in view (re-running the
+identical stroke warm: 30 fps) — not the path rebuild.
+
+**Tests:** new `tests/m2_path_edit_reach_test.gd` (14 checks, registered in
+`tools/test-cottage-shard.ps1`) + scene-level far-edit/on-path assertions in
+`m2_path_render_test.gd`. Local: all paths-shard tests pass except
+`m2_path_plaza_integration`, which fails **identically on clean HEAD**
+(pre-existing, not a regression).
+
+**User visual acceptance: still pending** (test strokes were on the m2night
+test world). Device closed to screensaver after testing.
