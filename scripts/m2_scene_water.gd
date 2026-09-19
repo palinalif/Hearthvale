@@ -540,12 +540,15 @@ func _update_water_preview() -> void:
 		_stroke_reset_pending = false
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	if not water_placement_active: return
 	if target_label:
 		target_label.text = "%s • %s\n%s  B cancel/close  LB undo  RS orbit" % [water_kind.capitalize(), water_placement_reason, _water_status_line()]
 	_update_water_preview()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_water"] = (_ul_t1 - _ul_t0) / 1000.0
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
 	if not _tool_name or not _prompt_row or menu_open: return

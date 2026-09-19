@@ -101,9 +101,12 @@ func _update_placement_ghost() -> void:
 	placement_ghost.show_attachment(view.get("transform", Transform3D.IDENTITY), str(support.get("orientation", "front")), detail_move_position, str(detail.get("kind", "window")), detail, _attachment_preview_half(detail), _attachment_preview_valid(), not placement_kind.is_empty())
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	if detail_move_active: _update_placement_ghost()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_attachment_repair"] = (_ul_t1 - _ul_t0) / 1000.0
 func _commit_detail_move() -> bool:
 	if not detail_move_active: return false
 	if _attachment_preview_revision >= 0 and _attachment_preview_revision != building_world.get_revision():

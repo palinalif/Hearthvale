@@ -204,7 +204,7 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 			# frame-to-frame and defeats the idle skip. Debug builds only.
 			if not has_method("_massing_shell_key"):
 				return {"type": "error", "message": "no massing layer in this scene"}
-			var keys_out: Dictionary = {"type": "shell_keys", "revision": building_world.get_revision() if building_world else -1, "terrain_revision": int((backend.stats() as Dictionary).get("revision", -1)) if backend and backend.has_method("stats") else -1, "houses": {}}
+			var keys_out: Dictionary = {"type": "shell_keys", "revision": building_world.get_revision() if building_world else -1, "terrain_revision": int((backend.stats() as Dictionary).get("revision", -1)) if backend and backend.has_method("stats") else -1, "ops": call("_dbg_ops_read"), "houses": {}}
 			var last_variant: Variant = get("_last_shell_key")
 			var last_map: Dictionary = last_variant if last_variant is Dictionary else {}
 			for bid in cottage_visuals:
@@ -1604,6 +1604,7 @@ func _record_history(tag: String) -> void:
 	if _history_tags.size() > 50: _history_tags.pop_front(); _landscape_history.pop_front()
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	if not cottage_visual or not building_world: return
 	var revision: int = building_world.get_revision()
 	if revision != _last_requested_cottage_revision:
@@ -1669,6 +1670,8 @@ func _update_presentation() -> void:
 			_last_target_label_text = next_target_text
 	_update_resize_handles()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m1_scene"] = (_ul_t1 - _ul_t0) / 1000.0
 func _update_resize_handles() -> void:
 	if not resize_handles:
 		return

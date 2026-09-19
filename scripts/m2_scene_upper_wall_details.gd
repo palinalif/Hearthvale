@@ -138,11 +138,14 @@ func _sync_loaded_massing_surfaces() -> void:
 		_presentation_key = ""
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	var _fc_p := Time.get_ticks_usec()
 	_sync_loaded_massing_surfaces()
 	last_frame_costs["pres_upper_walls"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 	super._update_presentation()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_upper_wall_details"] = (_ul_t1 - _ul_t0) / 1000.0
 func _begin_new_attachment(kind: String) -> void:
 	_sync_loaded_massing_surfaces()
 	super._begin_new_attachment(kind)

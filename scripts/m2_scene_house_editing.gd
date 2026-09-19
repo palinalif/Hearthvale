@@ -382,6 +382,7 @@ func _preview_massing_view(view: Dictionary) -> Dictionary:
 	return result
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	if _section_edit_active and _section_result.has("view"):
 		var preview: Dictionary = _section_result["view"]
@@ -391,6 +392,8 @@ func _update_presentation() -> void:
 			_refresh_massing_shell_for_visual(visual, preview)
 			_apply_accent_to_visual(visual, preview, _accent_material_id(preview))
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_house_editing"] = (_ul_t1 - _ul_t0) / 1000.0
 func _open_roof_design_picker() -> void:
 	_part_building = selected_building_id
 	_part_revision = building_world.get_revision()

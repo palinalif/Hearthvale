@@ -602,6 +602,7 @@ func _refresh_fence_visual(force: bool = false) -> void:
 	_refresh_detail_visual(force)
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	var _fc_p := Time.get_ticks_usec()
 	_refresh_house_landing()
@@ -610,6 +611,8 @@ func _update_presentation() -> void:
 	target_label.text = "%s • %.0f° • %s\nA place  left/right rotate  B cancel  RS orbit" % [_detail_style_name(), detail_yaw_degrees, detail_placement_reason]
 	_update_detail_preview()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_hamlet_details"] = (_ul_t1 - _ul_t0) / 1000.0
 ## Presentation-only finishing pass: a committed home should read as grown into
 ## the landscape (a small grass tuft ring hugging the footprint plus a quiet
 ## packed-dirt shoulder where the foundation meets open ground). Everything is

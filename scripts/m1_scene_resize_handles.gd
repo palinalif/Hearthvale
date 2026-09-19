@@ -190,6 +190,7 @@ func _clear_handle_resize() -> void:
 	_refresh_controller_hud()
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	if resize_active and not _handle_preview.is_empty():
 		if building_world.get_revision() != _handle_revision: return
 		var view: Dictionary = _handle_preview["view"]
@@ -203,6 +204,8 @@ func _update_presentation() -> void:
 		return
 	super._update_presentation()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m1_scene_resize_handles"] = (_ul_t1 - _ul_t0) / 1000.0
 func _handle_candidates() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	if not camera or not building_world or view_context != "building": return result

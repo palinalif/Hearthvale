@@ -206,12 +206,15 @@ func _preview_hash(cells: Array) -> int:
 	return value
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	if path_placement_active and target_label:
 		var mode_name := "ERASE" if path_erase_mode else _path_style_name()
 		var action_name := "erase" if path_erase_mode else "paint"
 		target_label.text = "%s • %.3f m brush • %s\nD-pad L/R size  X paint/erase  Hold A %s  release commit  LB undo  RB redo  B cancel/close" % [mode_name, path_width, path_placement_reason, action_name]
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_path_erase"] = (_ul_t1 - _ul_t0) / 1000.0
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
 	if path_placement_active and not menu_open and _prompt_row:

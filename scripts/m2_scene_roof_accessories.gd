@@ -348,9 +348,12 @@ func _cycle_selected_roof_colour() -> void:
 		_set_status("%s colour: %s • A move • X colour • B deselect" % [_roof_accessory_label(str(record.get("asset_id", ""))), next_colour.capitalize()])
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	_refresh_roof_accessories()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_roof_accessories"] = (_ul_t1 - _ul_t0) / 1000.0
 func _refresh_roof_accessory_preview() -> void:
 	if not roof_accessory_placement_active: return
 	var view: Dictionary = building_world.get_building(selected_building_id)

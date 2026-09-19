@@ -24,6 +24,13 @@ var portion_reason := ""
 ## unchanged. Keyed on revision + shape/material fields, which every persisted
 ## change bumps; preview views hash differently, so preview end re-applies.
 var _last_shell_key: Dictionary = {}
+var _dbg_op_ms: Dictionary = {}
+
+func _dbg_ops_read() -> Dictionary:
+	var out := _dbg_op_ms
+	out["portion_active"] = portion_placement_active
+	_dbg_op_ms = {}
+	return out
 
 func _ready() -> void:
 	super._ready()
@@ -373,12 +380,15 @@ func _preview_massing_view(view: Dictionary) -> Dictionary:
 	return preview
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	_refresh_massing_shells()
 	var _fc_p := Time.get_ticks_usec()
 	_refresh_house_shape_label()
 	last_frame_costs["pres_house_shape_lbl"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_house_massing"] = (_ul_t1 - _ul_t0) / 1000.0
 func _refresh_house_shape_label() -> void:
 	if not _house_shape_button or not building_world: return
 	var view: Dictionary = building_world.get_building(selected_building_id)
@@ -399,21 +409,32 @@ func _refresh_massing_shells() -> void:
 			preview_view = _preview_massing_view(view)
 		var key := _massing_shell_key(preview_view)
 		var existing_shell := visual.get_node_or_null("M2JoinedMassing")
-		if not portion_placement_active and is_instance_valid(existing_shell) and str(_last_shell_key.get(building_id, "")) == key and HouseMassing.sections_for(view).size() > 1:
+		var _op0: int = Time.get_ticks_usec()
+		if not portion_placement_active and str(_last_shell_key.get(building_id, "")) == key:
 			# Idle, unchanged house: skip the heavy show_view. The light
 			# per-frame duties below mirror the full path without touching the
 			# shell mesh. (Section edits refresh via the house-editing layer's
 			# direct call, which never skips.)
-			_remove_portion_ghost(visual)
+			var ghost: Node = visual.get_node_or_null("M2PortionGhost")
+			if ghost: _remove_portion_ghost(visual)
 			_remove_raised_foundation(str(view.get("id", "")))
 			_remove_raised_quoins(str(view.get("id", "")))
-			if _world_mesh_highlight_id == str(view.get("id", "")) and view_context == "terrain" and existing_shell.has_method("set_highlight"):
+			if not is_instance_valid(existing_shell):
+				_set_native_shell_visible(visual, true)
+			elif _world_mesh_highlight_id == str(view.get("id", "")) and view_context == "terrain" and existing_shell.has_method("set_highlight"):
 				existing_shell.set_highlight(true, TERRAIN_HOUSE_OUTLINE_GROW_AMOUNT)
 			elif existing_shell.has_method("set_highlight"):
 				existing_shell.set_highlight(false)
 			continue
+		var _op1: int = Time.get_ticks_usec()
 		_last_shell_key[building_id] = key
 		_refresh_massing_shell_for_visual(visual, preview_view)
+		var _op2: int = Time.get_ticks_usec()
+		_dbg_op_ms["rebuild_ms"] = _dbg_op_ms.get("rebuild_ms", 0.0) + (_op2 - _op1) / 1000.0
+		_dbg_op_ms["rebuild_count"] = int(_dbg_op_ms.get("rebuild_count", 0)) + 1
+		_dbg_op_ms["rebuild_house_" + building_id + "_ms"] = _dbg_op_ms.get("rebuild_house_" + building_id + "_ms", 0.0) + (_op2 - _op1) / 1000.0
+		_dbg_op_ms["skip_ms"] = _dbg_op_ms.get("skip_ms", 0.0) + (_op1 - _op0) / 1000.0
+		_dbg_op_ms["skip_count"] = int(_dbg_op_ms.get("skip_count", 0)) + 1
 
 
 func _massing_shell_key(view: Dictionary) -> String:

@@ -338,6 +338,7 @@ func _colour_view(view: Dictionary, visual: Node3D) -> void:
 				geometry.material_override = material
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	if building_world and not selected_building_id.is_empty():
 		var view: Dictionary = building_world.get_building(selected_building_id)
 		if not view.is_empty():
@@ -370,6 +371,8 @@ func _update_presentation() -> void:
 	else:
 		_move_render_key = ""
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m1_scene_playtest_repair"] = (_ul_t1 - _ul_t0) / 1000.0
 func _camera_facing_wall() -> String:
 	var view: Dictionary = building_world.get_building(selected_building_id)
 	if view.is_empty() or not camera: return ""

@@ -29,11 +29,14 @@ var _raised_quoin_roots: Dictionary = {}
 var _raised_foundation_signature := ""
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	var _fc_p := Time.get_ticks_usec()
 	_refresh_raised_foundation_masonry()
 	last_frame_costs["pres_raised_foundation"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_raised_foundation"] = (_ul_t1 - _ul_t0) / 1000.0
 func _refresh_raised_foundation_masonry(force: bool = false) -> void:
 	if not building_world or not backend or not backend.has_method("voxel_at"):
 		return

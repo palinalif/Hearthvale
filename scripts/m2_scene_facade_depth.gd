@@ -15,11 +15,14 @@ func _ready() -> void:
 	_refresh_facade_depth(true)
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	var _fc_p := Time.get_ticks_usec()
 	_refresh_facade_depth()
 	last_frame_costs["pres_facade_depth"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_facade_depth"] = (_ul_t1 - _ul_t0) / 1000.0
 func _apply_surface_material_preview() -> void:
 	super._apply_surface_material_preview()
 	_refresh_facade_depth(true)

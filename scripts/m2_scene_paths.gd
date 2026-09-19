@@ -404,12 +404,15 @@ func _update_path_preview() -> void:
 	else: path_visual.show_cell_preview(path_style_id, preview_cells, path_placement_valid, path_placement_reason)
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	if not path_placement_active: return
 	if target_label:
 		target_label.text = "%s • %.2f m brush • %s\nHold A paint  release commit  B cancel/close  LB undo  RS orbit" % [_path_style_name(), path_width, path_placement_reason]
 	_update_path_preview()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_paths"] = (_ul_t1 - _ul_t0) / 1000.0
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
 	if not _tool_name or not _prompt_row or menu_open: return

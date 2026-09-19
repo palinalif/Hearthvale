@@ -84,9 +84,12 @@ func _apply_surface_material_preview() -> void:
 	_apply_extra_roof_materials()
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	_apply_extra_roof_materials()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_roof_materials"] = (_ul_t1 - _ul_t0) / 1000.0
 func _apply_extra_roof_materials() -> void:
 	if not building_world: return
 	var seen: Dictionary = {}

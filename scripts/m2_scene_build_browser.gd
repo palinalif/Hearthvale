@@ -302,9 +302,12 @@ func _update_camera() -> void:
 	camera.v_offset -= middle.distance_to(upper)
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	if _browser_open: _fit_build_browser()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_build_browser"] = (_ul_t1 - _ul_t0) / 1000.0
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
 	if not _browser_open: return
