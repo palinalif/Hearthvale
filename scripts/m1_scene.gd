@@ -586,9 +586,8 @@ func _process(delta: float) -> void:
 	if landscape_active: _update_plant_stroke(delta)
 	phase_started = Time.get_ticks_usec()
 	_update_camera()
-	# Keep native terrain mesh streaming centered on the camera (the visual
-	# viewer used to sit statically at world center with a 64 m radius covering
-	# the whole valley; it now follows at RUNTIME_VIEW_DISTANCE_WORLD).
+	# Keep native terrain mesh streaming centered on the camera, at a radius
+	# that still covers the whole finite valley (RUNTIME_VIEW_DISTANCE_WORLD).
 	if backend != null and backend.has_method("update_visual_focus"):
 		backend.update_visual_focus(camera.global_position)
 	last_frame_costs["focus_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0

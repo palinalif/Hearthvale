@@ -9,14 +9,18 @@ const CENTER := Vector3(24, 8, 24)
 const MAX_HISTORY := 50
 const MAX_HISTORY_BYTES := 128 * 1024 * 1024
 const VOXEL_BYTES := 2
-## Visual-viewer streaming radius in world metres. The historical 64.0 covered
-## the whole ~90 m valley from a static center position, meshing ~1.65 M terrain
-## primitives and holding the Thor at a CPU-bound 15 fps baseline (playtest
-## evidence 2026-07-09). The viewer now follows the camera at this radius; the
-## user approved the receding-horizon trade-off. Data residency is unchanged
-## (terrain.max_view_distance + the visuals-off data viewer keep the full map
-## editable).
-const RUNTIME_VIEW_DISTANCE_WORLD := 20.0
+## Visual-viewer streaming radius in world metres. The viewer follows the
+## camera at this radius. It must reach the valley's full corner-to-corner
+## diagonal (~90.5 m for the 64 m map; 128.0 keeps margin for cameras pulled
+## outside the box) from any camera position, or
+## the terrain beyond the radius simply never meshes and the world looks
+## truncated into void (user-confirmed 2026-09-19 with the previous 20.0 value,
+## which had traded that away for fps after a 2026-07-09 playtest showed the
+## old static 64.0 full-valley mesh at ~1.65 M primitives / 15 fps with
+## collisions on). The world is finite, so a larger radius never meshes more
+## than the map itself contains. Data residency is unchanged (terrain.max_view_distance +
+## the visuals-off data viewer keep the full map editable).
+const RUNTIME_VIEW_DISTANCE_WORLD := 128.0
 const SCULPT_FIXED_DT := 1.0 / 60.0
 const SCULPT_TOOL_RAISE := "raise"
 const SCULPT_TOOL_DIG := "dig"
