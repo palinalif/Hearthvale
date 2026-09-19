@@ -51,9 +51,11 @@ func _process(_delta: float) -> void:
 		var s_end: float = scene.get("_fc_scene_end")
 		var pre := s_start - float(_prev_t)
 		var scene_ms := s_end - s_start
-		# post = from the scene's end (last frame) to this probe tick:
-		# post-scene nodes + physics + render hand-off + vsync wait.
-		var post := now - _prev_scene_end
+		# post = from the scene's end (this same read pair) to this probe tick:
+		# post-scene nodes + physics + render hand-off + vsync wait. Must use
+		# s_end from THIS read, not _prev_scene_end (that lags a frame and
+		# double-counts the period).
+		var post := float(now) - s_end
 		if pre < 0 or post < 0 or pre > 500000 or post > 500000:
 			# first frame after attach / anomaly: skip, not average
 			_prev_t = now

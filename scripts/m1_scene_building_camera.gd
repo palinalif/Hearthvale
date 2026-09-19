@@ -26,18 +26,26 @@ func _process(delta: float) -> void:
 		_read_building_overlay_camera(delta)
 	if detail_move_active and not menu_open and not tools_open and not detail_open:
 		_read_detail_move(delta)
+	last_frame_costs["camera_ms"] = (Time.get_ticks_usec() - process_started) / 1000.0
 	var phase_started := Time.get_ticks_usec()
 	if stroke_active and backend and backend.has_method("update_stroke"):
 		backend.update_stroke(cursor + stroke_aim_offset, delta)
 	last_frame_costs["sculpt_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
 	if landscape_active: _update_plant_stroke(delta)
+	phase_started = Time.get_ticks_usec()
 	_update_camera()
+	last_frame_costs["focus_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
 	phase_started = Time.get_ticks_usec()
 	_update_brush_preview()
 	_update_cursor_reticle()
 	last_frame_costs["preview_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	phase_started = Time.get_ticks_usec()
 	_update_presentation()
+	last_frame_costs["presentation_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	phase_started = Time.get_ticks_usec()
 	_update_debug_overlay()
+	last_frame_costs["overlay_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	last_frame_costs["process_ms"] = (Time.get_ticks_usec() - process_started) / 1000.0
 	var focused := get_window().has_focus()
 	if not focused and _last_focus: _cancel_current_edit("Window focus lost")
 	_last_focus = focused
