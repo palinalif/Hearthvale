@@ -204,6 +204,45 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 			_redo(); return {"type": "ok"}
 		"world_stats":
 			return _debug_world_stats()
+		"mesh_survey":
+			return _debug_mesh_survey()
+		"tune":
+			# args: [target, key, value]; target is terrain or viewer.
+			# Debug A/B lever for the native terrain/viewer knobs found by
+			# mesh_survey. Only the allowlisted performance knobs are settable.
+			if args.size() < 3:
+				return {"type": "error", "message": "tune needs [target, key, value]"}
+			var target := String(args[0])
+			var key := String(args[1])
+			var raw := String(args[2])
+			var allow: Dictionary = {
+				"view_distance": "float", "view_distance_vertical_ratio": "float",
+				"max_view_distance": "float", "use_gpu_generation": "bool",
+				"generate_collisions": "bool", "automatic_loading_enabled": "bool",
+				"mesh_block_size": "float",
+			}
+			if not allow.has(key):
+				return {"type": "error", "message": "tune key not allowed: %s" % key}
+			var value: Variant
+			if allow[key] == "bool":
+				value = raw.to_lower() == "true" or raw == "1"
+			else:
+				value = raw.to_float()
+			var applied := 0
+			var last: Variant = null
+			if get_tree().current_scene != null:
+				var tstack: Array[Node] = [get_tree().current_scene]
+				while tstack.size() > 0:
+					var n: Node = tstack.pop_back()
+					for c in n.get_children():
+						tstack.push_back(c)
+					var want := (target == "terrain" and n.get_class() == "VoxelTerrain") \
+						or (target == "viewer" and n.get_class() == "VoxelViewer")
+					if want:
+						n.set(key, value)
+						applied += 1
+						last = n.get(key)
+			return {"type": "ok", "applied": applied, "key": key, "now": str(last)}
 		_:
 			return {"type": "error", "message": "unknown action: " + name}
 
@@ -258,6 +297,112 @@ func _debug_world_stats() -> Dictionary:
 		"type": "world_stats", "meshes": meshes, "tris": tris, "by_cat": by_cat,
 		"fps": Engine.get_frames_per_second(),
 	}
+
+## One-shot render survey: what is actually on the GPU. Complements
+## _debug_world_stats (which only sees MeshInstance3Ds in the scene graph) by
+## counting MultiMesh instances (meadow etc.) and probing the native
+## VoxelTerrain/VoxelViewer for their mesh payload, so an on-device playtest
+## can say exactly where the prims come from. Debug builds only.
+func _debug_mesh_survey() -> Dictionary:
+	var class_counts: Dictionary = {}
+	var multimesh: Dictionary = {}
+	var terrain_info: Dictionary = {}
+	var viewer_info: Array = []
+	var mesher_info: Dictionary = {}
+	var meshi_visible := 0
+	var meshi_tris := 0
+	var native_idx := 0
+	var root_node: Node = get_tree().current_scene
+	if root_node == null:
+		return {"type": "error", "message": "no current scene"}
+	var stack: Array[Node] = [root_node]
+	while stack.size() > 0:
+		var n: Node = stack.pop_back()
+		for c in n.get_children():
+			stack.push_back(c)
+		var cn := n.get_class()
+		class_counts[cn] = int(class_counts.get(cn, 0)) + 1
+		if cn == "VoxelTerrain":
+			terrain_info = _probe_mesh_holder(n)
+			var m_obj: Variant = n.get("mesher")
+			if m_obj != null:
+				mesher_info = _probe_mesh_holder(m_obj)
+		elif cn == "VoxelViewer":
+			var v: Dictionary = _probe_mesh_holder(n)
+			v["index"] = int(native_idx)
+			native_idx += 1
+			viewer_info.append(v)
+		elif cn == "VoxelMesherBlocky":
+			mesher_info = _probe_mesh_holder(n)
+		elif n is MultiMeshInstance3D:
+			var mmi := n as MultiMeshInstance3D
+			multimesh[str(n.name)] = {
+				"instances": mmi.multimesh.get_instance_count() if mmi.multimesh != null else 0,
+				"tris_each": _mesh_tri_count(mmi.multimesh.mesh) if mmi.multimesh != null else 0,
+				"visible": n.visible,
+			}
+		elif n is MeshInstance3D:
+			var mi := n as MeshInstance3D
+			if mi.visible and mi.mesh != null:
+				meshi_visible += 1
+				meshi_tris += _mesh_tri_count(mi.mesh)
+	return {
+		"type": "mesh_survey", "classes": class_counts, "multimesh": multimesh,
+		"terrain": terrain_info, "viewer": viewer_info, "mesher": mesher_info,
+		"meshi_visible": meshi_visible, "meshi_tris": meshi_tris,
+		"prims": int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)),
+		"draws": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+		"fps": Engine.get_frames_per_second(),
+	}
+
+func _probe_mesh_holder(obj: Object) -> Dictionary:
+	var info: Dictionary = {"class": obj.get_class()}
+	if "mesh" in obj:
+		var m: Variant = obj.get("mesh")
+		if m == null:
+			info["mesh"] = "null"
+		elif m is ArrayMesh:
+			info["mesh"] = "ArrayMesh tris=%d" % _mesh_tri_count(m)
+		else:
+			info["mesh"] = String((m as Object).get_class())
+			if (m as Object).has_method("get_mesh"):
+				var inner: Variant = (m as Object).call("get_mesh")
+				if inner is ArrayMesh:
+					info["inner"] = "ArrayMesh tris=%d" % _mesh_tri_count(inner)
+				elif inner != null:
+					info["inner"] = String((inner as Object).get_class())
+	else:
+		info["has_mesh_prop"] = false
+	# Native GDExtension objects (VoxelViewer/VoxelTerrain/VoxelMesherBlocky):
+	# enumerate the actual property surface of the pinned build so device
+	# evidence names the knobs that exist, without guessing.
+	var plist := obj.get_property_list()
+	var names := PackedStringArray()
+	var values: Dictionary = {}
+	for pd in plist:
+		var pname: String = str((pd as Dictionary).get("name", ""))
+		names.append(pname)
+		values[pname] = str(obj.get(pname))
+	names.sort()
+	info["props"] = names
+	info["values"] = values
+	return info
+
+func _mesh_tri_count(m: Mesh) -> int:
+	if m == null or not (m is ArrayMesh):
+		return 0
+	var am := m as ArrayMesh
+	var t := 0
+	for s in am.get_surface_count():
+		var arr: Array = am.surface_get_arrays(s)
+		var index: Variant = arr[Mesh.ARRAY_INDEX]
+		if index != null and index.size() > 0:
+			t += index.size() / 3
+		else:
+			var verts: Variant = arr[Mesh.ARRAY_VERTEX]
+			if verts != null and verts.size() > 0:
+				t += verts.size() / 3
+	return t
 
 func _process(delta: float) -> void:
 	if _shutting_down: return

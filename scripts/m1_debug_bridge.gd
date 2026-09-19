@@ -24,7 +24,7 @@ extends Node
 ##                                                     -> {"type":"ok","tool":"water"}
 ##     "action" forwards a semantic verb to the scene's debug_test_action():
 ##     state | select_tool [tool] | view_context [terrain|building]
-##     | cancel | undo | redo | world_stats. Strokes themselves stay real InputMap events
+##     | cancel | undo | redo | world_stats | mesh_survey. Strokes themselves stay real InputMap events
 ##     (button "a" + stick), so the gameplay path is exercised, not bypassed.
 
 const DEFAULT_PORT := 47123
