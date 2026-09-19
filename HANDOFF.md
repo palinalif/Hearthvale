@@ -121,3 +121,37 @@ commits re-mesh edited blocks; scene-layer process stays flat (~45 ms).
 Next candidate (todo #9): reduce per-edit re-mesh cost (pre-baked static
 mesh for untouched terrain). The user's uncommitted water WIP may also
 interact (WIP water rebuild vs native generation — open question).
+
+---
+
+## 2026-09-19 (late) — v40: water-freeze fix verified on device
+
+**Installed:** `org.hearthvale.game.test.m2night` **versionCode 40** =
+commit `612bec2` (task/water-river, **pushed**). Built from worktree
+`/tmp/hv-waterfix` (extension copied from `/tmp/hv-perf`; local preset
+override `org.hearthvale.game.test.m2night` v40). APK also stashed at
+`/tmp/hearthvale-v40-waterfix-debug.apk`; worktree deletable.
+Device still `192.168.1.15:38865`; game closed, screensaver restored.
+
+**The fix** (the user's reported "water freezes for a good few seconds"): a
+water region resample paid ~194 native voxel reads *per cell* (full 256-cell
+column scan) and drained synchronously — the ~1,750-cell starter river
+cost ~242k reads ≈ seconds, on every terrain edit near it. Now: (1) banded
+probes (32-cell window around the previous top; full scan only at region
+ingest) ≈ 8× fewer reads, (2) drains over 12ms/time frame once a region
+passes 2048 cells, (3) the 16-cell block size stays (32-cell was worse for
+sculpt — see above).
+
+**On-device evidence (v40):** fresh load with river visible: 54.9 → 61.2
+fps, no stall (v39-era baseline: multi-second freeze at load). Three
+4-second river strokes (same harness as the v38/v39 sculpt A/B): max
+process frame 181 ms (a single commit-time re-mesh spike, same family as
+the sculpt end-of-stroke spikes), fps 4–19 during the stroke — continuous
+drawing, no multi-second freeze. Strokes were undone before close.
+
+**New observation, NOT fixed (needs a design call):** a stream stroke whose
+drift travels up a steep hill draws a straight ribbon between the start and
+end points — with very different terrain heights it renders as a near-
+vertical white beam through the terrain (visible in the test screenshots,
+undone after). Question for the user: should stream ribbons follow the
+terrain height profile / clamp large elevation jumps?
