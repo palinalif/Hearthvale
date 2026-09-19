@@ -25,6 +25,23 @@ var last: Dictionary = {}
 func attach(scene_node: Node) -> void:
 	scene = scene_node
 
+## Window averages (ms) over the frames accumulated since the last 300-frame
+## reset. `samples` is that count (0 while the window is filling); the
+## averages divide by max(1, samples) so a fresh window never divides by zero.
+func read() -> Dictionary:
+	var n := maxi(1, _n)
+	return {
+		"samples": _n,
+		"period_ms": _r3(_sum_period / n),
+		"pre_ms": _r3(_sum_pre / n),
+		"scene_ms": _r3(_sum_scene / n),
+		"post_ms": _r3(_sum_post / n),
+	}
+
+func _r3(x: float) -> float:
+	# 4.7.2: round() takes at most ONE argument — round to 3 decimals manually.
+	return round(x * 1000.0) / 1000.0
+
 func _process(_delta: float) -> void:
 	var now := Time.get_ticks_usec()
 	if _prev_t > 0 and scene != null:
@@ -48,10 +65,7 @@ func _process(_delta: float) -> void:
 		_sum_post += post / 1000.0
 		_sum_period += (now - _prev_t) / 1000.0
 		if _n % 300 == 0:
-			last = {
-				"period_ms": _sum_period / _n, "pre_ms": _sum_pre / _n,
-				"scene_ms": _sum_scene / _n, "post_ms": _sum_post / _n,
-			}
+			last = read()
 			print("FRAME_CLOCK ", JSON.stringify(last))
 			_n = 0
 			_sum_pre = 0.0

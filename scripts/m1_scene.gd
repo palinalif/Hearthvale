@@ -323,11 +323,11 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 			# pre-scene nodes), scene (the chain's measured process), post
 			# (post-scene nodes + physics + render hand-off + vsync wait).
 			if _frame_clock_probe != null:
-				var out := {"type": "ok"}
-				var lastv: Variant = _frame_clock_probe.get("last")
-				if lastv is Dictionary:
-					for k in (lastv as Dictionary).keys():
-						out[k] = lastv[k]
+				# The probe is Node-typed in the scene; hop through Variant so the
+				# dynamic read() call still parses (typed Node has no read()).
+				var probe: Variant = _frame_clock_probe
+				var out: Dictionary = probe.read()
+				out["type"] = "ok"
 				return out
 			return {"type": "error", "message": "no frame clock (release build?)"}
 		"probe_nodes":
