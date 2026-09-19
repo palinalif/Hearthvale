@@ -35,6 +35,17 @@ const SPLASH_COLOR := Color(0.86, 0.96, 1.0, 0.55)
 # one 37-second stall (measured on Thor with a 5m-wide stream stroke).
 const RESAMPLE_BUDGET := 2048
 const BUILD_BUDGET := 2048
+# Wall-clock caps on each pass: the cell budgets above are fine on desktop but
+# translate into multi-second freezes on Thor, where one native voxel read
+# costs ~2.5us and a full 256-row column scan is ~194 reads (~0.5ms per cell,
+# so a 20k-cell river resample was several seconds). Any work that exceeds the
+# time budget spills into _pending_cells and drains over frames in _process.
+const RESAMPLE_TIME_BUDGET_MS := 6.0
+const BUILD_TIME_BUDGET_MS := 4.0
+# Voxel rows probed above/below a hinted column top before falling back to a
+# full column scan. Local terrain edits move a column by a few rows at most,
+# so the band almost always hits (2-6 native reads instead of ~194).
+const HINT_BAND_ROWS := 24
 
 var _backend: Node
 # region id -> MeshInstance3D. Nodes are reused across incremental updates.
@@ -61,6 +72,9 @@ var _build_state: Dictionary = {}
 # Cells awaiting resample (FIFO) plus a membership set for O(1) dedup.
 var _pending_cells: Array = []
 var _pending_set := {}
+# cell -> last known top, kept as a probe hint when the cell is invalidated
+# (the old value is almost always within a few rows of the new one).
+var _resample_hint := {}
 # region id -> true: its mesh must (re)build. Drained in budgeted passes.
 var _dirty_regions := {}
 # cell -> Array of region ids whose mesh may contain that cell: a terrain
@@ -154,16 +168,30 @@ func _on_terrain_changed() -> void:
 ## marks every region spanning that cell for a full (budgeted) rebuild; an
 ## unchanged value is left alone, so a distant edit is a no-op.
 func _localize_resample(rect: Rect2) -> void:
+	var cells: Array = []
 	for cell: Vector2i in _cell_cache.keys():
-		if not rect.has_point(Vector2(float(cell.x) * WATER_CELL, float(cell.y) * WATER_CELL)):
-			continue
+		if rect.has_point(Vector2(float(cell.x) * WATER_CELL, float(cell.y) * WATER_CELL)):
+			cells.append(cell)
+	var t_end := Time.get_ticks_msec() + int(RESAMPLE_TIME_BUDGET_MS)
+	var i := 0
+	while i < cells.size():
+		var cell: Vector2i = cells[i]
+		i += 1
 		var previous: Variant = _cell_cache.get(cell, null)
-		var top := _terrain_top(float(cell.x) * WATER_CELL + WATER_CELL * 0.5, float(cell.y) * WATER_CELL + WATER_CELL * 0.5)
+		var top := _terrain_top(float(cell.x) * WATER_CELL + WATER_CELL * 0.5, float(cell.y) * WATER_CELL + WATER_CELL * 0.5, previous)
 		_cell_cache[cell] = top
 		if _terrain_value_changed(previous, top):
 			var owners: Array = _cell_regions.get(cell, [])
 			for rid: int in owners:
 				_mark_rebuild(rid)
+		if Time.get_ticks_msec() >= t_end:
+			# Time budget spent mid-rect: hand the remainder to the drain so
+			# _process finishes it over frames instead of stalling this one
+			# (a 20k-cell river rect was several seconds of freeze on Thor).
+			while i < cells.size():
+				_queue_resample(cells[i])
+				i += 1
+			break
 
 func _process(_delta: float) -> void:
 	if _pending_cells.is_empty() and _dirty_regions.is_empty():
@@ -195,13 +223,16 @@ func _drain(max_passes: int) -> void:
 	_last_key = _key()
 
 func _resample_pass() -> int:
+	var t_end := Time.get_ticks_msec() + int(RESAMPLE_TIME_BUDGET_MS)
 	var count := 0
-	while not _pending_cells.is_empty() and count < RESAMPLE_BUDGET:
+	while not _pending_cells.is_empty() and count < RESAMPLE_BUDGET and Time.get_ticks_msec() < t_end:
 		var cell: Vector2i = _pending_cells.pop_back()
 		_pending_set.erase(cell)
 		var previous: Variant = _cell_cache.get(cell, null)
-		var top := _terrain_top(float(cell.x) * WATER_CELL + WATER_CELL * 0.5, float(cell.y) * WATER_CELL + WATER_CELL * 0.5)
+		var hint: Variant = _resample_hint.get(cell, previous)
+		var top := _terrain_top(float(cell.x) * WATER_CELL + WATER_CELL * 0.5, float(cell.y) * WATER_CELL + WATER_CELL * 0.5, hint)
 		_cell_cache[cell] = top
+		_resample_hint.erase(cell)
 		count += 1
 		if _terrain_value_changed(previous, top):
 			var owners: Array = _cell_regions.get(cell, [])
@@ -214,9 +245,10 @@ func _resample_pass() -> int:
 ## count is uploaded to its reused node; the work arrays stay resident so a
 ## growing candidate appends to them instead of reallocating.
 func _build_pass() -> void:
+	var t_end := Time.get_ticks_msec() + int(BUILD_TIME_BUDGET_MS)
 	var budget := BUILD_BUDGET
 	for rid: int in _dirty_regions.keys():
-		if budget <= 0:
+		if budget <= 0 or Time.get_ticks_msec() >= t_end:
 			break
 		var state: Dictionary = _build_state.get(rid, {})
 		if state.is_empty():
@@ -355,11 +387,24 @@ func _ensure_pending_one(cell: Vector2i) -> void:
 	_pending_set[cell] = true
 	_pending_cells.append(cell)
 
+## Queue a cell for resample even though it has a cached value: used when a
+## localized pass spills its remaining cells to the drain (they need
+## re-validation, not just first-time sampling).
+func _queue_resample(cell: Vector2i) -> void:
+	if _pending_set.has(cell):
+		return
+	_pending_set[cell] = true
+	_pending_cells.append(cell)
+
 ## A committed carve: this cell's terrain changed under the water. Drop the
 ## cached value so the next resample re-samples it (a changed value then
-## marks the owning regions for rebuild).
+## marks the owning regions for rebuild); the old value is kept as a probe
+## hint because a carve usually moves the column only a few rows.
 func _invalidate_cell(cell: Vector2i) -> void:
+	var old: Variant = _cell_cache.get(cell, null)
 	_cell_cache.erase(cell)
+	if old != null:
+		_resample_hint[cell] = old
 	_ensure_pending_one(cell)
 
 func _map_cell(id: int, cell: Vector2i) -> void:
@@ -385,6 +430,8 @@ func _unmap_cells(id: int, cells: Array) -> void:
 func _drop_region(id: int) -> void:
 	var state: Dictionary = _build_state.get(id, {})
 	_unmap_cells(id, state.get("cells", []))
+	for cell: Vector2i in state.get("cells", []):
+		_resample_hint.erase(cell)
 	_region_keys.erase(id)
 	_region_by_id.erase(id)
 	_build_state.erase(id)
@@ -434,9 +481,11 @@ static func _region_key(region: Dictionary, cells: Array) -> String:
 	return "%s|%.4f|%.4f|%.3f,%.3f|%d" % [str(region.get("type", "")), float(region.get("level", 0.0)), float(region.get("width", 0.0)), Geometry.flow_direction(region).x, Geometry.flow_direction(region).y, (region.get("points", []) as Array).size()]
 
 ## Full resample + synchronous build (startup / undo-redo / restore path).
-## Callers assert the surface is complete on return; small test regions
-## finish in one budgeted pass, and a large first-time region still only
-## allocates per-chunk, never the whole-at-once mesh that OOMed scudo.
+## Callers assert the surface is complete on return. The resample stays fast
+## because each column probe starts from the previous value's hint (a couple
+## of native reads for an unchanged column instead of a ~194-read full scan),
+## and each region allocates only its own mesh arrays, never the whole-at-once
+## mesh that OOMed scudo.
 func _rebuild() -> void:
 	if _backend == null or not _backend.has_method("voxel_at"):
 		return
@@ -453,7 +502,12 @@ func _rebuild() -> void:
 	_build_state = {}
 	_region_keys = {}
 	_region_by_id = {}
+	# The previous cache doubles as the hint source for the column probes: on
+	# undo/redo or a local edit only the moved columns scan more than a few
+	# rows; the first-ever build (no previous values) scans in full once.
+	var prev_top := _cell_cache
 	_cell_cache = {}
+	_resample_hint = {}
 	_cell_regions = {}
 	_clear()
 	var resampled := 0
@@ -466,7 +520,7 @@ func _rebuild() -> void:
 		for cell: Vector2i in cells:
 			var px := float(cell.x) * WATER_CELL + WATER_CELL * 0.5
 			var pz := float(cell.y) * WATER_CELL + WATER_CELL * 0.5
-			_cell_cache[cell] = _terrain_top(px, pz)
+			_cell_cache[cell] = _terrain_top(px, pz, prev_top.get(cell, null))
 			resampled += 1
 		_prepare_build(id, region, cells)
 		_build_region_full(id)
@@ -723,15 +777,28 @@ func _region_material(flow: Vector2) -> ShaderMaterial:
 	return material
 
 ## World Y of the top face of the topmost solid voxel in the column, or NAN when
-## the column is empty (a deep hole, which is always submerged).
-func _terrain_top(x: float, z: float) -> float:
+## the column is empty (a deep hole, which is always submerged). When a last-
+## known top (world Y, e.g. from _cell_cache) is given as `hint`, a band of
+## HINT_BAND_ROWS around it is probed first: an unchanged column resolves in a
+## couple of native reads instead of a ~194-read full 256-row scan (the scan
+## cost is what made resamples freeze the game on Thor).
+func _terrain_top(x: float, z: float, hint: Variant = null) -> float:
 	var scale := maxf(0.001, float(_backend.get("voxel_scale")))
 	var patch: Vector3i = _backend.get("patch_size")
 	var vx := int(floori(x / scale))
 	var vz := int(floori(z / scale))
 	if vx < 0 or vz < 0 or vx >= patch.x or vz >= patch.z:
 		return NAN
-	for y in range(patch.y - 1, -1, -1):
+	if hint != null and not (hint is float and is_nan(hint)):
+		var hint_row := int(floori(float(hint) / scale)) - 1
+		if hint_row >= 0:
+			var top_row := int(patch.y) - 1
+			var hi := mini(hint_row + HINT_BAND_ROWS, top_row)
+			var lo := maxi(hint_row - HINT_BAND_ROWS, 0)
+			for y in range(hi, lo - 1, -1):
+				if int(_backend.voxel_at(Vector3i(vx, y, vz))) != 0:
+					return float(y + 1) * scale
+	for y in range(int(patch.y) - 1, -1, -1):
 		if int(_backend.voxel_at(Vector3i(vx, y, vz))) != 0:
 			return float(y + 1) * scale
 	return NAN
