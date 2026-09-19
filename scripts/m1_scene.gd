@@ -277,15 +277,16 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 						or (target == "viewer" and n.get_class() == "VoxelViewer") \
 						or (target == "light" and n is DirectionalLight3D and n.name == "WorldSun") \
 						or (target == "environment" and n is WorldEnvironment)
-					if want and (want_index < 0 or match_index == want_index):
-						if target == "environment" and n.environment != null:
-							n.environment.set(key, value)
-							last = n.environment.get(key)
-						else:
-							n.set(key, value)
-							last = n.get(key)
-						applied += 1
-					match_index += 1
+					if want:
+						if want_index < 0 or match_index == want_index:
+							if target == "environment" and n.environment != null:
+								n.environment.set(key, value)
+								last = n.environment.get(key)
+							else:
+								n.set(key, value)
+								last = n.get(key)
+								applied += 1
+						match_index += 1
 			return {"type": "ok", "applied": applied, "key": key, "now": str(last)}
 		"perf":
 			# Phase-level CPU attribution for on-device profiling: the scene's own
@@ -306,6 +307,39 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 				"native": backend.stats() if backend != null and backend.has_method("stats") else {},
 				"water": water_perf,
 			}
+		"probe_nodes":
+			# Debug A/B binary search over the scene tree: hide/show or disable/enable
+			# every node matching a class or name, one call. args: [selector, op],
+			# selector = "class:MultiMeshInstance3D" or "name:WaterVisual";
+			# op = hide | show | disable | enable. Returns how many were touched.
+			if args.size() < 2:
+				return {"type": "error", "message": "probe_nodes needs [selector, op]"}
+			var sel := str(args[0])
+			var op := str(args[1])
+			var cls := ""
+			var nod := ""
+			if sel.begins_with("class:"): cls = sel.trim_prefix("class:")
+			elif sel.begins_with("name:"): nod = sel.trim_prefix("name:")
+			else:
+				return {"type": "error", "message": "selector must be class:X or name:X"}
+			var touched := 0
+			if get_tree().current_scene != null:
+				var pstack: Array[Node] = [get_tree().current_scene]
+				while pstack.size() > 0:
+					var p: Node = pstack.pop_back()
+					for c in p.get_children():
+						pstack.push_back(c)
+					var hit := (cls != "" and p.get_class() == cls) or (nod != "" and p.name == nod)
+					if not hit:
+						continue
+					match op:
+						"hide": p.visible = false
+						"show": p.visible = true
+						"disable": p.process_mode = Node.PROCESS_MODE_DISABLED
+						"enable": p.process_mode = Node.PROCESS_MODE_INHERIT
+						_: return {"type": "error", "message": "op must be hide|show|disable|enable"}
+					touched += 1
+			return {"type": "ok", "touched": touched, "selector": sel, "op": op}
 		_:
 			return {"type": "error", "message": "unknown action: " + name}
 
