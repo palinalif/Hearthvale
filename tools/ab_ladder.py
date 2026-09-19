@@ -29,7 +29,9 @@ import time
 DEFAULT_ADB = "adb"
 DEVICE = "192.168.1.15:33511"
 BRIDGE_PORT = 47123
-APK_DEFAULT = None
+# Diagnostic variant package (fresh install; leaves the user's org.hearthvale.game untouched).
+PACKAGE = "org.hearthvale.game.perf260719"
+ACTIVITY = "com.godot.game.GodotAppLauncher"
 
 def sh(args, timeout=60):
     """Run a command, return (rc, stdout+stderr). Never raises on timeout."""
@@ -80,9 +82,9 @@ def install_apk(apk, max_attempts=5):
 
 def launch_game(max_attempts=5):
     for i in range(max_attempts):
-        rc, out = adb("shell", "am", "force-stop", "org.hearthvale.game", timeout=20)
+        rc, out = adb("shell", "am", "force-stop", PACKAGE, timeout=20)
         rc2, out2 = adb("shell", "am", "start", "-n",
-                        "org.hearthvale.game/com.godot.game.GodotAppLauncher", timeout=30)
+                        "%s/%s" % (PACKAGE, ACTIVITY), timeout=30)
         if "Starting" in out2:
             return True
         time.sleep(5)
@@ -176,10 +178,12 @@ def main():
     ap.add_argument("--apk", default=None)
     ap.add_argument("--seconds", type=int, default=12, help="seconds per sample")
     ap.add_argument("--skip-install", action="store_true")
+    ap.add_argument("--running", action="store_true",
+                    help="skip install and launch: bridge already up, go straight to mesh-wait + ladder")
     args = ap.parse_args()
 
     if args.apk is None and not args.skip_install:
-        cands = sorted(glob.glob("builds/hearthvale-m2-dx-debug-*.apk"))
+        cands = sorted(glob.glob("builds/hearthvale-m2-perf260719-debug*.apk")) or sorted(glob.glob("builds/hearthvale-m2-dx-debug-*.apk"))
         if not cands:
             print("no builds/hearthvale-m2-dx-debug-*.apk found (use --apk)"); return 2
         args.apk = cands[-1]
@@ -188,19 +192,29 @@ def main():
     print("[1/5] ensuring adb device ...")
     if not ensure_device():
         print("FAIL: device never came up"); return 3
-    if not args.skip_install:
+    if args.running:
+        print("[2/5] install skipped (--running)")
+        print("[3/5] launch skipped (--running)")
+        sh([DEFAULT_ADB, "-s", DEVICE, "forward", "tcp:%d" % BRIDGE_PORT, "tcp:%d" % BRIDGE_PORT], timeout=15)
+        first = wait_bridge(max_seconds=30, poll=3)
+        if first is None:
+            print("FAIL: --running but bridge not answering; rerun without --running"); return 6
+    elif not args.skip_install:
         print("[2/5] installing ...")
         if not install_apk(args.apk):
             print("FAIL: install did not report Success"); return 4
     else:
         print("[2/5] install skipped")
-    print("[3/5] launching ...")
-    if not launch_game():
-        print("FAIL: launch did not start"); return 5
-    print("[4/5] waiting for bridge + meshing (up to ~7 min) ...")
-    first = wait_bridge()
-    if first is None:
-        print("FAIL: bridge never answered"); return 6
+        print("[3/5] launching ...")
+        if not launch_game():
+            print("FAIL: launch did not start"); return 5
+    if not args.running:
+        print("[4/5] waiting for bridge + meshing (up to ~7 min) ...")
+        first = wait_bridge()
+        if first is None:
+            print("FAIL: bridge never answered"); return 6
+    else:
+        print("[4/5] bridge up; waiting for meshing ...")
     stats = wait_meshing()
     print("  settled: %s" % json.dumps(stats)[:200])
 

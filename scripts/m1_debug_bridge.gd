@@ -65,12 +65,23 @@ func _ready() -> void:
 		set_process(false)
 		return
 	enabled = true
-	_server = TCPServer.new()
-	var err := _server.listen(DEFAULT_PORT, "127.0.0.1")  # loopback only
+	var err: Error = ERR_UNAVAILABLE
+	var attempt := 0
+	# Bounded retry: a just force-stopped previous instance can hold 127.0.0.1:47123
+	# for a few seconds, and a failed one-shot listen left the bridge dead for the
+	# whole session (silent game, no telemetry) — seen on the Thor, 2026-07-19.
+	while attempt < 15:
+		var srv := TCPServer.new()
+		err = srv.listen(DEFAULT_PORT, "127.0.0.1")  # loopback only
+		if err == OK:
+			_server = srv
+			break
+		attempt += 1
+		await get_tree().create_timer(0.7).timeout
 	if err != OK:
 		enabled = false
 		set_process(false)
-		push_warning("VirtualControllerBridge: listen on 127.0.0.1:%d failed (%s)" % [DEFAULT_PORT, error_string(err)])
+		push_warning("VirtualControllerBridge: listen on 127.0.0.1:%d failed after %d tries (%s)" % [DEFAULT_PORT, attempt, error_string(err)])
 		return
 	# Explicitly enable the per-frame pump. (A script-defined _process usually
 	# enables itself on ready; this makes it explicit and covers any future
