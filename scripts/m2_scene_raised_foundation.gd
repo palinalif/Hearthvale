@@ -39,7 +39,7 @@ func _refresh_raised_foundation_masonry(force: bool = false) -> void:
 		return
 	var signature_parts: Array[String] = [str(_terrain_revision())]
 	for building: Dictionary in building_world.get_buildings():
-		signature_parts.append("%s|%s|%s|%s" % [building.get("id", ""), building.get("style_id", ""), building.get("transform", Transform3D.IDENTITY), building.get("dimensions", Vector3.ZERO)])
+		signature_parts.append("%s|%s|%d|%d" % [building.get("id", ""), building.get("style_id", ""), hash(building.get("transform", Transform3D.IDENTITY)), hash(building.get("dimensions", Vector3.ZERO))])
 	var signature := "||".join(signature_parts)
 	if not force and signature == _raised_foundation_signature:
 		return

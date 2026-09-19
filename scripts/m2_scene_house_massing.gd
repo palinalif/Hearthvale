@@ -19,6 +19,12 @@ var portion_revision := -1
 var portion_valid := false
 var portion_reason := ""
 
+## Last applied shell key per building: skips the heavy show_view (whose JSON-
+## signature cache costs as much as the rebuild it guards) while a house is
+## unchanged. Keyed on revision + shape/material fields, which every persisted
+## change bumps; preview views hash differently, so preview end re-applies.
+var _last_shell_key: Dictionary = {}
+
 func _ready() -> void:
 	super._ready()
 	_install_house_shape_action()
@@ -385,9 +391,40 @@ func _refresh_massing_shells() -> void:
 		var visual := cottage_visuals.get(building_id, null) as Node3D
 		if not is_instance_valid(visual): continue
 		var view: Dictionary = building_world.get_building(building_id)
-		if view.is_empty(): continue
-		view = _preview_massing_view(view)
-		_refresh_massing_shell_for_visual(visual, view)
+		if view.is_empty():
+			_last_shell_key.erase(building_id)
+			continue
+		var preview_view := view
+		if portion_placement_active and str(view.get("id", "")) == selected_building_id:
+			preview_view = _preview_massing_view(view)
+		var key := _massing_shell_key(preview_view)
+		var existing_shell := visual.get_node_or_null("M2JoinedMassing")
+		if not portion_placement_active and is_instance_valid(existing_shell) and str(_last_shell_key.get(building_id, "")) == key and HouseMassing.sections_for(view).size() > 1:
+			# Idle, unchanged house: skip the heavy show_view. The light
+			# per-frame duties below mirror the full path without touching the
+			# shell mesh. (Section edits refresh via the house-editing layer's
+			# direct call, which never skips.)
+			_remove_portion_ghost(visual)
+			_remove_raised_foundation(str(view.get("id", "")))
+			_remove_raised_quoins(str(view.get("id", "")))
+			if _world_mesh_highlight_id == str(view.get("id", "")) and view_context == "terrain" and existing_shell.has_method("set_highlight"):
+				existing_shell.set_highlight(true, TERRAIN_HOUSE_OUTLINE_GROW_AMOUNT)
+			elif existing_shell.has_method("set_highlight"):
+				existing_shell.set_highlight(false)
+			continue
+		_last_shell_key[building_id] = key
+		_refresh_massing_shell_for_visual(visual, preview_view)
+
+
+func _massing_shell_key(view: Dictionary) -> String:
+	return "%d|%d|%s|%s|%s|%s" % [
+		building_world.get_revision(),
+		hash(view.get("dimensions", Vector3.ZERO)),
+		str(view.get("id", "")),
+		str(view.get("wall_material_id", view.get("material_id", ""))),
+		str(view.get("roof_material_id", "")),
+		hash(str(view.get("massing_sections", "")))]
+
 
 func _refresh_massing_shell_for_visual(visual: Node3D, view: Dictionary) -> void:
 	var active: bool = HouseMassing.sections_for(view).size() > 1
