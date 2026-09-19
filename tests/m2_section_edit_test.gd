@@ -14,12 +14,16 @@ func _initialize() -> void:
 			var world := World.new()
 			var id := "building-1"
 			var recipe: Dictionary = world._document["buildings"][0]
+			var fixture_before := world.get_document()
 			var sections := Massing.preset_sections(world.get_building(id), shape)
 			sections.append({"id": "upper", "level": 1, "size": Vector3(6,7,6), "offset": Vector3(0,7,0)})
 			recipe["massing_sections"] = _serial(sections)
 			check(Surfaces.sync_building(world, recipe), "fixture wall supports generated")
 			world._reflow_automatic_windows(recipe)
 			world._refresh_buckets(recipe)
+			# In-place fixture setup must go through the mutation funnel so the
+			# revision-keyed resolved-building cache sees the new document.
+			world._record_change(fixture_before)
 			var before := world.serialize_document()
 			var revision := world.get_revision()
 			var original := Edit.section(world.get_building(id), "upper")
@@ -56,10 +60,12 @@ func _initialize() -> void:
 	var world := World.new()
 	var recipe: Dictionary = world._document["buildings"][0]
 	var base_view := world.get_building("building-1")
+	var fixture_before := world.get_document()
 	var sections := Massing.preset_sections(base_view, "l_shape")
 	recipe["massing_sections"] = _serial(sections)
 	Surfaces.sync_building(world,recipe)
 	world._refresh_buckets(recipe)
+	world._record_change(fixture_before)
 	var original := Edit.section(world.get_building("building-1"),"core")
 	var candidate := Edit.resize_edge(original,"left",2)
 	var before := world.serialize_document()
