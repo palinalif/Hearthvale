@@ -410,21 +410,24 @@ func _refresh_massing_shells() -> void:
 		var key := _massing_shell_key(preview_view)
 		var existing_shell := visual.get_node_or_null("M2JoinedMassing")
 		var _op0: int = Time.get_ticks_usec()
-		if not portion_placement_active and str(_last_shell_key.get(building_id, "")) == key:
+		var skip: bool = not portion_placement_active and str(_last_shell_key.get(building_id, "")) == key
+		if skip:
 			# Idle, unchanged house: skip the heavy show_view. The light
 			# per-frame duties below mirror the full path without touching the
-			# shell mesh. (Section edits refresh via the house-editing layer's
-			# direct call, which never skips.)
+			# shell mesh or native visibility. Native nodes stay exactly as the
+			# presentation layers above left them: re-showing them here
+			# resurrected base gables over custom roof previews and legacy
+			# quoins/foundation under fine facade relief (their layers cache
+			# hidden state, so an idle re-show persists).
 			var ghost: Node = visual.get_node_or_null("M2PortionGhost")
 			if ghost: _remove_portion_ghost(visual)
 			_remove_raised_foundation(str(view.get("id", "")))
 			_remove_raised_quoins(str(view.get("id", "")))
-			if not is_instance_valid(existing_shell):
-				_set_native_shell_visible(visual, true)
-			elif _world_mesh_highlight_id == str(view.get("id", "")) and view_context == "terrain" and existing_shell.has_method("set_highlight"):
-				existing_shell.set_highlight(true, TERRAIN_HOUSE_OUTLINE_GROW_AMOUNT)
-			elif existing_shell.has_method("set_highlight"):
-				existing_shell.set_highlight(false)
+			if is_instance_valid(existing_shell):
+				if _world_mesh_highlight_id == str(view.get("id", "")) and view_context == "terrain" and existing_shell.has_method("set_highlight"):
+					existing_shell.set_highlight(true, TERRAIN_HOUSE_OUTLINE_GROW_AMOUNT)
+				elif existing_shell.has_method("set_highlight"):
+					existing_shell.set_highlight(false)
 			continue
 		var _op1: int = Time.get_ticks_usec()
 		_last_shell_key[building_id] = key
@@ -451,8 +454,13 @@ func _refresh_massing_shell_for_visual(visual: Node3D, view: Dictionary) -> void
 	var active: bool = HouseMassing.sections_for(view).size() > 1
 	var existing := visual.get_node_or_null("M2JoinedMassing") as Node3D
 	if not active:
+		var had_shell: bool = existing != null
 		if existing: visual.remove_child(existing); existing.queue_free()
-		_set_native_shell_visible(visual, true)
+		# Restore native visibility only when a shell actually went away. On
+		# steady-state no-shell frames the facade/roof layers own the hidden
+		# state of some native nodes and an unconditional re-show would persist.
+		if had_shell:
+			_set_native_shell_visible(visual, true)
 		_remove_portion_ghost(visual)
 		return
 	if not existing:
