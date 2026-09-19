@@ -43,7 +43,9 @@ func _ready() -> void:
 	_install_accent_colour_action()
 	_extend_surface_picker_with_accents()
 	_update_home_catalogue_copy()
+	var _fc_p := Time.get_ticks_usec()
 	_apply_all_house_accents()
+	last_frame_costs["pres_house_accents"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _install_accent_colour_action() -> void:
 	if not _building_panel: return
@@ -341,9 +343,12 @@ func _accent_material_id(view: Dictionary) -> String:
 	return ACCENT_MATERIALS[posmod(seed * 7 + 3, ACCENT_MATERIALS.size())]
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	_apply_all_house_accents()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_house_palette"] = (_ul_t1 - _ul_t0) / 1000.0
 func _apply_all_house_accents() -> void:
 	if not building_world: return
 	for building_id_value in cottage_visuals.keys():

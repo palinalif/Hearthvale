@@ -9,6 +9,14 @@ const CENTER := Vector3(24, 8, 24)
 const MAX_HISTORY := 50
 const MAX_HISTORY_BYTES := 128 * 1024 * 1024
 const VOXEL_BYTES := 2
+## Visual-viewer streaming radius in world metres. The historical 64.0 covered
+## the whole ~90 m valley from a static center position, meshing ~1.65 M terrain
+## primitives and holding the Thor at a CPU-bound 15 fps baseline (playtest
+## evidence 2026-07-09). The viewer now follows the camera at this radius; the
+## user approved the receding-horizon trade-off. Data residency is unchanged
+## (terrain.max_view_distance + the visuals-off data viewer keep the full map
+## editable).
+const RUNTIME_VIEW_DISTANCE_WORLD := 20.0
 const SCULPT_FIXED_DT := 1.0 / 60.0
 const SCULPT_TOOL_RAISE := "raise"
 const SCULPT_TOOL_DIG := "dig"
@@ -129,6 +137,10 @@ func _ready() -> void:
 			# Visual startup demand stays local to the initial cottage/play area.
 			var visual_viewer: Node3D = ClassDB.instantiate("VoxelViewer")
 			visual_viewer.position = startup_mesh_focus_world
+			# Gameplay is not physics-driven (manual camera, backend-sampled cursor),
+			# so skip collision mesh generation: on the Thor it was ~1.5 M of the
+			# ~1.8 M scene primitives (playtest A/B: off -> 167 k prims, 15 -> 17 fps).
+			visual_viewer.requires_collisions = false
 			# Readiness uses a smaller box than the viewer so mesh-block rounding
 			# cannot leave an edge block required-but-never-requested. One native
 			# mesh block is 4 world metres on the fine M1 grid.
@@ -176,7 +188,14 @@ func _expand_startup_visual_viewer() -> void:
 	if _startup_visual_viewer == null or not is_instance_valid(_startup_visual_viewer):
 		return
 	_startup_visual_viewer.view_distance_vertical_ratio = 1.0
-	_startup_visual_viewer.view_distance = 64.0
+	_startup_visual_viewer.view_distance = RUNTIME_VIEW_DISTANCE_WORLD
+
+## Keep the visual streaming box centered on the camera so a short
+## RUNTIME_VIEW_DISTANCE_WORLD still shows the terrain under and around the
+## player instead of a fixed region of the map.
+func update_visual_focus(world_pos: Vector3) -> void:
+	if _startup_visual_viewer != null and is_instance_valid(_startup_visual_viewer):
+		_startup_visual_viewer.global_position = world_pos
 
 static func startup_mesh_area(size: Vector3i, scale: float, focus_world: Vector3, radius_world: float, height_world: float = 0.0) -> AABB:
 	var full_area := AABB(Vector3.ZERO, Vector3(size))

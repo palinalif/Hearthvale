@@ -33,11 +33,15 @@ static func build_library() -> Object:
 	var stone_material := StandardMaterial3D.new()
 	stone_material.albedo_color = Color(0.52, 0.42, 0.30)
 	stone_material.vertex_color_use_as_albedo = true
+	stone_material.anisotropy_enabled = true
+	stone_material.anisotropy = 8.0
 	stone.set_material_override(0, stone_material)
 	var grass: Object = ClassDB.instantiate("VoxelBlockyModelCube")
 	var grass_material := StandardMaterial3D.new()
 	grass_material.albedo_color = Color(0.32, 0.62, 0.22)
 	grass_material.vertex_color_use_as_albedo = true
+	grass_material.anisotropy_enabled = true
+	grass_material.anisotropy = 8.0
 	grass.set_material_override(0, grass_material)
 	library.add_model(empty)
 	library.add_model(stone)

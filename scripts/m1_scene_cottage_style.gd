@@ -371,12 +371,17 @@ func _apply_style_preview() -> void:
 	_set_style_detail_highlight(true)
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	if _style_picker_mode != "":
 		_apply_style_preview()
 	else:
+		var _fc_p := Time.get_ticks_usec()
 		_apply_persisted_detail_colours()
+		last_frame_costs["pres_style_colours"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m1_scene_cottage_style"] = (_ul_t1 - _ul_t0) / 1000.0
 func _apply_persisted_detail_colours() -> void:
 	if not building_world:
 		return

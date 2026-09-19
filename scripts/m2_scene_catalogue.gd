@@ -470,9 +470,12 @@ func _cancel_current_edit(reason: String) -> void:
 	super._cancel_current_edit(reason)
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	if _surface_material_picker_open: _apply_surface_material_preview()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_catalogue"] = (_ul_t1 - _ul_t0) / 1000.0
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
 	if not _home_catalogue_panel: return

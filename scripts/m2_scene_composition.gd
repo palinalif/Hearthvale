@@ -297,12 +297,15 @@ func _refresh_bridge_visual(force: bool = false) -> void:
 	composition_visual.rebuild_bridges(landscape_state.bridges, backend)
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	if not bridge_placement_active or not target_label: return
 	var stage := "Choose first bank" if not bridge_start.is_finite() else "Choose far bank"
 	target_label.text = "%s • %s • %s\nA anchor  B cancel  RS orbit  LT/RT zoom" % [_bridge_style_name(), stage, bridge_placement_reason]
 	_update_bridge_preview()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_composition"] = (_ul_t1 - _ul_t0) / 1000.0
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
 	if menu_open or not _tool_name or not _prompt_row: return

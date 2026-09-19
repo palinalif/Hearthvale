@@ -1,7 +1,7 @@
 extends "res://scripts/m1_scene_ui_overhaul.gd"
 ## Tool list plus directly adjustable setting rows. Focus is retained between
 ## visits; held left/right repeats without reopening a menu for each increment.
-const TERRAIN_TOOLS: Array[String] = ["raise", "dig", "smooth", "level", "slope", "foliage", "tree"]
+const TERRAIN_TOOLS: Array[String] = ["raise", "dig", "smooth", "level", "slope", "water", "foliage", "tree"]
 var _terrain_panel: PanelContainer
 var _terrain_tool_column: VBoxContainer
 var _terrain_settings_column: VBoxContainer
@@ -158,7 +158,7 @@ func _refresh_terrain_panel() -> void:
 		else:
 			button.remove_theme_stylebox_override("normal")
 	var values := {"radius": "Radius   < %.2f >" % brush_radius, "strength": "Strength   < %d / 10 >" % brush_strength_level, "falloff": "Falloff   < %.1f >" % brush_falloff, "reference": "Reference   < %s >" % reference_mode.capitalize(), "keep": "Keep plane   < %s >" % ("On" if keep_reference else "Off"), "height_snap": "Height snap   < %s >" % ("On" if height_snap_enabled else "Off")}
-	var planting := sculpt_tool in ["foliage", "tree", "clear_planting"]
+	var planting := sculpt_tool in ["foliage", "tree", "clear_planting", "water"]
 	for key in _terrain_setting_buttons:
 		var button: Button = _terrain_setting_buttons[key]
 		button.text = str(values[key])
@@ -186,8 +186,8 @@ func _cycle_terrain_tool(direction: int) -> void:
 
 func _select_terrain_tool(tool: String) -> void:
 	var was_open := tools_open
-	if tool in ["foliage", "tree", "clear_planting"]:
-		_cancel_current_edit("Planting tool selected")
+	if tool in ["foliage", "tree", "clear_planting", "water"]:
+		_cancel_current_edit("Tool selected")
 		sculpt_tool = tool
 		reference_mode = "ground"
 		_preview_key = ""

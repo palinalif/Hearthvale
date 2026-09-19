@@ -33,8 +33,10 @@ func _initialize() -> void:
 		return
 	await _press(JOY_BUTTON_RIGHT_SHOULDER)
 	for i in 4: await process_frame
+	# Water is now a terrain tool, not a browser entry, so the category has the
+	# five path/bridge styles (three paths + two bridges), no stream/lake cards.
 	var paths_ready: bool = scene._browser_open and scene._build_browser.category == "paths" and scene._build_browser.cards.size() == 5
-	_check(paths_ready, "RB selects Paths & bridges with three paths and two bridge styles")
+	_check(paths_ready, "RB selects Paths & bridges with three paths and two bridges")
 	if not paths_ready:
 		await _finish()
 		return

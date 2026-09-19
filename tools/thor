@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# tools/thor — wireless-ADB harness for on-Heathvale perf testing on the Thor.
+#
+# Wraps the raw adb commands so the agent can: status / install / launch /
+# screenshot / logs / perf-start / perf-stop / report / key / swipe.
+#
+# The device + package are resolved from the live adb state (the connected
+# wireless device and the installed org.hearthvale.game.repair.* build), so it
+# tracks whatever build is current without hardcoding the SHA.
+set -uo pipefail
+
+# --- resolve the connected device -------------------------------------------
+pick_device() {
+  local d
+  d=$(adb devices 2>/dev/null | awk 'NR>1 && $2=="device" {print $1; exit}')
+  if [ -z "${d:-}" ]; then echo "no connected adb device (run: adb pair + adb connect)" >&2; return 1; fi
+  echo "$d"
+}
+
+# --- resolve the Hearthvale repair package (latest repair build) -------------
+pick_pkg() {
+  local D="$1" p
+  p=$(adb -s "$D" shell pm list packages 2>/dev/null | grep 'org.hearthvale.game.repair.' | sed 's/package://' | sort | tail -1)
+  if [ -z "${p:-}" ]; then p=$(adb -s "$D" shell pm list packages 2>/dev/null | grep '^package:org.hearthvale.game$' | sed 's/package://'); fi
+  echo "${p:-}"
+}
+
+DEV="${THOR_DEVICE:-}"
+[ -z "$DEV" ] && DEV=$(pick_device) || exit 1
+PKG="${THOR_PKG:-}"
+[ -z "$PKG" ] && PKG=$(pick_pkg "$DEV")
+
+OUT=".playtest"
+mkdir -p "$OUT"
+ts() { date +%H%M%S; }
+
+cmd="${1:-status}"; shift || true
+
+case "$cmd" in
+  status)
+    echo "device: $DEV"
+    echo "package: ${PKG:-<none>}"
+    echo "--- process ---"
+    adb -s "$DEV" shell "ps -A 2>/dev/null | grep -i hearthvale" | head
+    echo "--- storage ---"
+    adb -s "$DEV" shell df -h /sdcard 2>/dev/null | tail -1
+    echo "--- thermals (state) ---"
+    adb -s "$DEV" shell dumpsys thermalservice 2>/dev/null | grep -iE "current state|Current Temperature" | head -3
+    ;;
+
+  install)
+    apk="$1"
+    echo "installing $apk (-r)..."
+    adb -s "$DEV" install -r "$apk" 2>&1
+    ;;
+
+  launch)
+    adb -s "$DEV" shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 2>&1 | tail -2
+    ;;
+
+  stop)
+    adb -s "$DEV" shell am force-stop "$PKG" 2>&1
+    ;;
+
+  screenshot)
+    f="${1:-$OUT/shot-$(ts).png}"
+    adb -s "$DEV" exec-out screencap -p > "$f" 2>/dev/null
+    echo "$f"
+    ;;
+
+  logs)
+    f="${1:-$OUT/logcat-$(ts).txt}"
+    adb -s "$DEV" logcat -d > "$f" 2>/dev/null
+    echo "$f ($(wc -l < "$f") lines)"
+    ;;
+
+  perf-start)
+    adb -s "$DEV" logcat -c 2>/dev/null
+    adb -s "$DEV" shell dumpsys SurfaceFlinger --timestats -clear -enable 2>&1
+    echo "perf capture started (timestats + logcat cleared)"
+    ;;
+
+  perf-stop)
+    f="${1:-$OUT/surfaceflinger-$(ts).txt}"
+    adb -s "$DEV" shell dumpsys SurfaceFlinger --timestats -dump > "$f" 2>/dev/null
+    adb -s "$DEV" shell dumpsys SurfaceFlinger --timestats -disable 2>&1
+    lg="$OUT/logcat-$(ts).txt"
+    adb -s "$DEV" logcat -d > "$lg" 2>/dev/null
+    echo "$f + $lg"
+    ;;
+
+  report)
+    f="${1:-$(ls -t "$OUT"/surfaceflinger-*.txt 2>/dev/null | head -1)}"
+    if [ -z "${f:-}" ] || [ ! -f "$f" ]; then echo "no timestats file; run perf-stop first"; exit 1; fi
+    echo "=== SurfaceFlinger timestats: $f ==="
+    # timestats dump: per-window lines with frame intervals; surface = the game
+    # surface (the largest-window / 'SurfaceView' / the app layer).
+    grep -iE "Surface|Display" "$f" | head -30
+    ;;
+
+  key)
+    # key <KEYCODE...>  (e.g. KEYCODE_BUTTON_A, KEYCODE_DPAD_RIGHT)
+    code="$1"
+    adb -s "$DEV" shell input keyevent "$code" 2>&1
+    ;;
+
+  forward)
+    # forward [port]  — set up the adb forward for the debug bridge (default 47123)
+    port="${1:-47123}"
+    if adb -s "$DEV" forward "tcp:$port" "tcp:$port" 2>&1; then
+      echo "forwarded tcp:$port -> device"
+    else
+      echo "ERROR: adb forward failed (device disconnected?)" >&2
+      exit 1
+    fi
+    ;;
+
+  bridge)  # thin wrapper: forward + python client
+    port="${1:-47123}"
+    shift || true
+    adb -s "$DEV" forward "tcp:$port" "tcp:$port" >/dev/null 2>&1 || { echo "ERROR: adb forward failed" >&2; exit 1; }
+    python3 tools/thor_bridge.py --port "$port" "$@" 2>&1
+    ;;
+
+  swipe)
+    # swipe x1 y1 x2 y2 [ms]
+    adb -s "$DEV" shell input swipe "$1" "$2" "$3" "$4" "${5:-200}" 2>&1
+    ;;
+
+  *)
+    echo "usage: tools/thor status|install <apk>|launch|stop|screenshot [f]|logs [f]|perf-start|perf-stop [f]|report [f]|key <KEYCODE>|swipe x1 y1 x2 y2 [ms]"
+    ;;
+esac

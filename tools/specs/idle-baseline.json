@@ -1,0 +1,15 @@
+{
+  "name": "idle-baseline",
+  "description": "No input at all: measures the settled idle frame cadence (in-game telemetry + SurfaceFlinger timestats) to separate display-refresh caps from true CPU/GPU frame cost.",
+  "repeat": 2,
+  "stroke_seconds": 10.0,
+  "rest_seconds": 2.0,
+  "setup": [
+    {"do": "sleep", "seconds": 1.0},
+    {"do": "telemetry", "label": "idle_start"}
+  ],
+  "stroke": [
+    {"do": "sleep", "seconds": 9.0},
+    {"do": "telemetry", "label": "idle_settled"}
+  ]
+}

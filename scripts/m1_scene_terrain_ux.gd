@@ -166,6 +166,7 @@ func _update_cursor_reticle() -> void:
 		cursor_reticle.set_target_visible(false)
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	if not building_world: return
 	super._update_presentation()
 	if not target_label or view_context != "terrain": return
@@ -186,6 +187,8 @@ func _update_presentation() -> void:
 		else: summary = "No connected cells to change • void or terrain boundary"
 	target_label.text = "%s • Radius %.2f • Strength %d/10 • %s\n%s" % [sculpt_tool.capitalize(), brush_radius, brush_strength_level, "PRECISION (quarter speed)" if precision_mode else "L3 precision", summary]
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m1_scene_terrain_ux"] = (_ul_t1 - _ul_t0) / 1000.0
 func _update_debug_overlay() -> void:
 	super._update_debug_overlay()
 	if debug_label and debug_label.visible:

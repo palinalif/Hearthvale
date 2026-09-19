@@ -1,0 +1,22 @@
+{
+  "name": "raise-sculpt",
+  "description": "Raise sculpt tool (the default terrain tool): paint N sculpt strokes (hold A + drift LEFT stick to move the world cursor, release A to commit). The right stick only orbits the camera and never moves the cursor, so a right-stick drift cannot arm a stroke. No cycle needed (raise is index 0).",
+  "repeat": 3,
+  "stroke_seconds": 4.0,
+  "rest_seconds": 1.5,
+  "setup": [
+    {"do": "sleep", "seconds": 1.0},
+    {"do": "call", "name": "cursor_set", "args": [16.0, 8.0, 30.0], "label": "teleport cursor to house pad 1 (flat terrain at cursor height, from m1_patch_generator)"}
+  ],
+  "stroke": [
+    {"do": "telemetry", "label": "pre_stroke"},
+    {"do": "button", "button": "a", "pressed": true},
+    {"do": "sleep", "seconds": 0.35},
+    {"do": "stick_drift", "stick": "left", "x": 0.0, "y": 0.3},
+    {"do": "stick", "stick": "left", "x": 0.0, "y": 0.0},
+    {"do": "button", "button": "a", "pressed": false},
+    {"do": "sleep", "seconds": 0.6},
+    {"do": "reset"},
+    {"do": "telemetry", "label": "post_stroke"}
+  ]
+}

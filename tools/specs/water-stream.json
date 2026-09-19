@@ -1,0 +1,25 @@
+{
+  "name": "water-stream",
+  "description": "Water tool: select via the semantic select_tool verb, paint N stream strokes (real InputMap: press A + drift LEFT stick to move the world cursor, release A to commit). The right stick only orbits the camera and never moves the cursor, so a right-stick drift cannot arm a stroke.",
+  "repeat": 3,
+  "stroke_seconds": 4.0,
+  "rest_seconds": 1.5,
+  "setup": [
+    {"do": "call", "name": "select_tool", "args": ["water"], "label": "select water tool (_select_terrain_tool, same handler as D-pad cycle)"},
+    {"do": "call", "name": "cursor_set", "args": [16.0, 8.0, 30.0], "label": "teleport cursor to house pad 1"},
+    {"do": "state", "label": "after_setup"},
+    {"do": "sleep", "seconds": 1.0}
+  ],
+  "stroke": [
+    {"do": "telemetry", "label": "pre_stroke"},
+    {"do": "button", "button": "a", "pressed": true},
+    {"do": "sleep", "seconds": 0.35},
+    {"do": "stick_drift", "stick": "left", "x": 0.0, "y": 0.35},
+    {"do": "stick", "stick": "left", "x": 0.0, "y": 0.0},
+    {"do": "button", "button": "a", "pressed": false},
+    {"do": "sleep", "seconds": 0.6},
+    {"do": "state", "label": "post_stroke"},
+    {"do": "reset"},
+    {"do": "telemetry", "label": "post_stroke_settled"}
+  ]
+}

@@ -7,7 +7,9 @@ extends "res://scripts/m2_scene_roof_accessories.gd"
 func _ready() -> void:
 	super._ready()
 	_compact_home_options_for_roof_controls()
+	var _fc_p := Time.get_ticks_usec()
 	_align_base_roof_ridges()
+	last_frame_costs["pres_roof_ridges"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _compact_home_options_for_roof_controls() -> void:
 	if not _building_panel: return
@@ -21,9 +23,12 @@ func _compact_home_options_for_roof_controls() -> void:
 		button.custom_minimum_size.y = 31
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	_align_base_roof_ridges()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_roof_options"] = (_ul_t1 - _ul_t0) / 1000.0
 func _align_base_roof_ridges() -> void:
 	var seen: Dictionary = {}
 	for visual_value in cottage_visuals.values():

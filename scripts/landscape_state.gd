@@ -1,10 +1,12 @@
 extends RefCounted
 class_name LandscapeState
 
-const LIMIT := 320
-const TREE_LIMIT := 24
+const LIMIT := 2000
+const TREE_LIMIT := 256
 const PATH_STYLE_IDS: Array[String] = ["packed_earth", "cobblestone", "stepping_stones"]
-# Transitional caller-only limits while the scene tool is cut from point routes
+# Caller-side limits: the meadow scatter and MultiMesh presentation are
+# incremental, so the plant cap is comfortably above what a hand-built hamlet
+# needs (256 trees, 2000 plants total).
 # to hold-to-paint strokes. Saved path documents never use width or points.
 const PATH_MIN_POINTS := 2
 const PATH_MAX_POINTS := 64
@@ -28,6 +30,17 @@ const COMPOSITION_LIMIT := 96
 const COMPOSITION_MIN_SIZE := 0.125
 const COMPOSITION_MAX_SIZE := 6.0
 const COMPOSITION_RENDER_CELL_LIMIT := 24000
+const WATER_TYPE_IDS: Array[String] = ["lake", "stream"]
+const WATER_LIMIT := 24
+const WATER_MAX_POINTS := 96
+const WATER_MIN_POINTS_LAKE := 3
+const WATER_MIN_POINTS_STREAM := 2
+const WATER_MIN_LEVEL := 0.0
+const WATER_MAX_LEVEL := 32.0
+const WATER_MIN_WIDTH := 0.25
+const WATER_MAX_WIDTH := 8.0
+const WATER_RENDER_CELL_LIMIT := 24000
+const WATERFALL_SUPPRESSION_LIMIT := 64
 const EDITABLE_WORLD_SIZE := preload("res://scripts/m2_world_bounds.gd").SIZE
 const Grid = preload("res://scripts/visual_grid.gd")
 const PathRegion = preload("res://scripts/m2_painted_path_region.gd")
@@ -37,10 +50,21 @@ var records: Array = []
 var paths: Array = []
 var bridges: Array = []
 var composition: Array = []
+var water: Array = []
+var waterfall_suppressions: Array = []
 var next_id := 1
 
 func document() -> Dictionary:
-	return {"version": 1, "next_id": next_id, "records": records.duplicate(true), "paths": paths.duplicate(true), "bridges": bridges.duplicate(true), "composition": composition.duplicate(true)}
+	var document := {"version": 1, "next_id": next_id, "records": records.duplicate(true), "paths": paths.duplicate(true), "bridges": bridges.duplicate(true), "composition": composition.duplicate(true)}
+	# Omit the water key when empty so water-free saves keep an identical schema
+	# (presentation/record work stays save-authority neutral for existing saves).
+	if not water.is_empty():
+		document["water"] = water.duplicate(true)
+	# Omit the suppressions key when empty so existing saves keep an identical
+	# schema; only the falls the player dismissed are authoritative state.
+	if not waterfall_suppressions.is_empty():
+		document["waterfall_suppressions"] = waterfall_suppressions.duplicate(true)
+	return document
 
 static func validate(value: Dictionary) -> bool:
 	if not _integer(value.get("version", null)) or int(value["version"]) != 1 or not value.get("records", null) is Array: return false
@@ -94,6 +118,18 @@ static func validate(value: Dictionary) -> bool:
 		ids[id] = true
 		composition_cells += _estimated_composition_render_cells(object)
 		if composition_cells > COMPOSITION_RENDER_CELL_LIMIT: return false
+	var water_values = value.get("water", [])
+	if not water_values is Array or water_values.size() > WATER_LIMIT: return false
+	var water_cells := 0
+	for water_value in water_values:
+		if not _validate_water_record(water_value): return false
+		var region: Dictionary = water_value
+		var id := int(region["id"])
+		if id < 1 or id >= int(value["next_id"]) or ids.has(id): return false
+		ids[id] = true
+		water_cells += _estimated_water_render_cells(region)
+		if water_cells > WATER_RENDER_CELL_LIMIT: return false
+	if not _validate_waterfall_suppressions(value.get("waterfall_suppressions", [])): return false
 	return true
 
 func restore(value: Dictionary) -> bool:
@@ -102,6 +138,8 @@ func restore(value: Dictionary) -> bool:
 	paths = value.get("paths", []).duplicate(true)
 	bridges = value.get("bridges", []).duplicate(true)
 	composition = value.get("composition", []).duplicate(true)
+	water = value.get("water", []).duplicate(true)
+	waterfall_suppressions = value.get("waterfall_suppressions", []).duplicate(true)
 	next_id = int(value["next_id"])
 	for record_value in records:
 		var record: Dictionary = record_value
@@ -121,6 +159,11 @@ func restore(value: Dictionary) -> bool:
 		object["id"] = int(object["id"])
 		object["yaw_quarters"] = int(object["yaw_quarters"])
 		if object.has("yaw_degrees"): object["yaw_degrees"] = float(object["yaw_degrees"])
+	for region_value in water:
+		var region: Dictionary = region_value
+		region["id"] = int(region["id"])
+		region["level"] = float(region["level"])
+		if region.has("width"): region["width"] = float(region["width"])
 	return true
 
 static func position_of(record: Dictionary) -> Vector3:
@@ -298,6 +341,56 @@ func update_composition(object_id: int, position_value: Variant, yaw_quarters: i
 		return true
 	return false
 
+## Water is an authored scenery region, not a fluid simulation. A lake is a
+## closed boundary polygon at a chosen level; a stream is a centreline with a
+## width, level and a visual flow direction. Authoritative records only.
+func add_water(type_id: String, level_value: Variant, point_values: Array, width_value: Variant = NAN, flow_value: Variant = []) -> int:
+	if not WATER_TYPE_IDS.has(type_id): return -1
+	if not (level_value is int or level_value is float) or not is_finite(float(level_value)): return -1
+	if float(level_value) < WATER_MIN_LEVEL - 0.000001 or float(level_value) > WATER_MAX_LEVEL + 0.000001: return -1
+	var level := snappedf(float(level_value), Grid.UNIT)
+	var points := _water_points(point_values)
+	var min_points := WATER_MIN_POINTS_LAKE if type_id == "lake" else WATER_MIN_POINTS_STREAM
+	if points.is_empty() or points.size() < min_points: return -1
+	var candidate := {"id": next_id, "type": type_id, "level": level, "points": points}
+	if type_id == "stream":
+		if not (width_value is int or width_value is float) or not is_finite(float(width_value)): return -1
+		var width := snappedf(clampf(float(width_value), WATER_MIN_WIDTH, WATER_MAX_WIDTH), Grid.UNIT)
+		candidate["width"] = width
+		var flow := _water_flow(flow_value)
+		if flow.is_empty(): return -1
+		candidate["flow"] = flow
+	var proposed := document()
+	var proposed_water: Array = proposed.get("water", [])
+	proposed_water.append(candidate)
+	proposed["water"] = proposed_water
+	proposed["next_id"] = next_id + 1
+	if not validate(proposed): return -1
+	water.append(candidate)
+	next_id += 1
+	return int(candidate["id"])
+
+func erase_water(water_id: int) -> bool:
+	for index in water.size():
+		if int((water[index] as Dictionary).get("id", -1)) != water_id: continue
+		water.remove_at(index)
+		return true
+	return false
+
+## Dismiss a derived waterfall (keyed by its stable pair id) so it is not shown
+## until the water/terrain change enough to re-suggest it. Returns false when the
+## key is already suppressed (so the caller knows nothing changed).
+func suppress_waterfall(key: String) -> bool:
+	if key.is_empty() or waterfall_suppressions.has(key): return false
+	if waterfall_suppressions.size() >= WATERFALL_SUPPRESSION_LIMIT: return false
+	waterfall_suppressions.append(key)
+	return true
+
+func unsuppress_waterfall(key: String) -> bool:
+	if not waterfall_suppressions.has(key): return false
+	waterfall_suppressions.erase(key)
+	return true
+
 func clear_records_in_footprint(point_value: Variant, size_value: Variant, yaw_quarters: int, margin: float = 0.0, yaw_degrees: float = NAN) -> bool:
 	var point_array := _point_array(point_value)
 	var size_array := _size_array(size_value)
@@ -433,6 +526,98 @@ static func _validate_composition_record(value: Variant) -> bool:
 	var cosine := absf(cos(angle)); var sine := absf(sin(angle))
 	var half := Vector2(dimensions.x * cosine + dimensions.y * sine, dimensions.x * sine + dimensions.y * cosine) * 0.5
 	return center.x - half.x >= 0.0 and center.x + half.x <= EDITABLE_WORLD_SIZE and center.y - half.y >= 0.0 and center.y + half.y <= EDITABLE_WORLD_SIZE
+
+static func _water_points(value: Variant) -> Array:
+	if not value is Array: return []
+	var result: Array = []
+	for point_value in value:
+		if not point_value is Array or point_value.size() != 2: return []
+		var x = point_value[0]
+		var z = point_value[1]
+		if not (x is int or x is float) or not (z is int or z is float) or not is_finite(float(x)) or not is_finite(float(z)): return []
+		var point := Vector2(snappedf(float(x), Grid.UNIT), snappedf(float(z), Grid.UNIT))
+		if point.x < 0.0 or point.x > EDITABLE_WORLD_SIZE or point.y < 0.0 or point.y > EDITABLE_WORLD_SIZE: return []
+		result.append([point.x, point.y])
+	return result
+
+static func _water_flow(value: Variant) -> Array:
+	if not value is Array or value.size() != 2: return []
+	var x = value[0]
+	var z = value[1]
+	if not (x is int or x is float) or not (z is int or z is float) or not is_finite(float(x)) or not is_finite(float(z)): return []
+	var direction := Vector2(float(x), float(z))
+	if not direction.is_finite() or direction.length() < 0.000001: return []
+	direction = direction.normalized()
+	return [snappedf(direction.x, 0.001), snappedf(direction.y, 0.001)]
+
+static func _validate_waterfall_suppressions(value: Variant) -> bool:
+	if not value is Array or value.size() > WATERFALL_SUPPRESSION_LIMIT: return false
+	var seen := {}
+	for entry in value:
+		if not entry is String: return false
+		var key := str(entry)
+		if key.is_empty() or key.length() > 24 or seen.has(key): return false
+		seen[key] = true
+	return true
+
+static func _validate_water_record(value: Variant) -> bool:
+	if not value is Dictionary: return false
+	var region: Dictionary = value
+	if not _integer(region.get("id", null)) or int(region["id"]) < 1: return false
+	var type_id := str(region.get("type", ""))
+	if not WATER_TYPE_IDS.has(type_id): return false
+	if not (region.get("level", null) is int or region.get("level", null) is float): return false
+	var level := float(region["level"])
+	if not is_finite(level) or level < WATER_MIN_LEVEL - 0.000001 or level > WATER_MAX_LEVEL + 0.000001: return false
+	if not is_equal_approx(level, snappedf(level, Grid.UNIT)): return false
+	var point_values = region.get("points", null)
+	if not point_values is Array: return false
+	var min_points := WATER_MIN_POINTS_LAKE if type_id == "lake" else WATER_MIN_POINTS_STREAM
+	if point_values.size() < min_points or point_values.size() > WATER_MAX_POINTS: return false
+	for point_value in point_values:
+		if not point_value is Array or point_value.size() != 2: return false
+		for coordinate in point_value:
+			if not (coordinate is int or coordinate is float) or not is_finite(float(coordinate)): return false
+		var point := Vector2(float(point_value[0]), float(point_value[1]))
+		if point.x < 0.0 or point.x > EDITABLE_WORLD_SIZE or point.y < 0.0 or point.y > EDITABLE_WORLD_SIZE: return false
+		if not is_equal_approx(point.x, snappedf(point.x, Grid.UNIT)) or not is_equal_approx(point.y, snappedf(point.y, Grid.UNIT)): return false
+	if type_id == "lake":
+		if region.has("width") or region.has("flow"): return false
+		return _water_polygon_area(point_values) >= 0.25 - 0.000001
+	if not (region.get("width", null) is int or region.get("width", null) is float): return false
+	var width := float(region["width"])
+	if not is_finite(width) or width < WATER_MIN_WIDTH - 0.000001 or width > WATER_MAX_WIDTH + 0.000001: return false
+	if not is_equal_approx(width, snappedf(width, Grid.UNIT)): return false
+	var flow_value = region.get("flow", null)
+	if not flow_value is Array or flow_value.size() != 2: return false
+	var flow := Vector2(float(flow_value[0]), float(flow_value[1]))
+	return flow.is_finite() and flow.length() > 0.000001
+
+static func _water_polygon_area(point_values: Array) -> float:
+	var n := point_values.size()
+	if n < 3: return 0.0
+	var area := 0.0
+	for i in range(n):
+		var a = point_values[i]
+		var b = point_values[(i + 1) % n]
+		area += float(a[0]) * float(b[1]) - float(b[0]) * float(a[1])
+	return absf(area) * 0.5
+
+static func _water_polyline_length(point_values: Array) -> float:
+	var total := 0.0
+	for i in range(1, point_values.size()):
+		var a := Vector2(float(point_values[i - 1][0]), float(point_values[i - 1][1]))
+		var b := Vector2(float(point_values[i][0]), float(point_values[i][1]))
+		total += a.distance_to(b)
+	return total
+
+static func _estimated_water_render_cells(region: Dictionary) -> int:
+	var points: Array = region["points"]
+	if str(region.get("type", "")) == "lake":
+		return maxi(1, ceili(_water_polygon_area(points) / (Grid.UNIT * Grid.UNIT)))
+	var length := _water_polyline_length(points)
+	var width := float(region.get("width", WATER_MIN_WIDTH))
+	return maxi(1, ceili(length / 0.25)) * maxi(1, ceili(width / Grid.UNIT)) + 16
 
 static func _estimated_bridge_render_cells(bridge: Dictionary) -> int:
 	var points: Array = bridge["points"]

@@ -13,6 +13,8 @@ const Grid = preload("res://scripts/visual_grid.gd")
 const Flora = preload("res://scripts/vegetation_mesh.gd")
 
 const GardenVisualScript = preload("res://scripts/m1_garden_visual.gd")
+const WaterVisualScript = preload("res://scripts/water_visual.gd")
+const PremadeRiver = preload("res://scripts/premade_river.gd")
 
 @export var checkpoint_root := "user://m1_checkpoints"
 @export var test_mode := false
@@ -61,6 +63,10 @@ var stroke_aim_offset := Vector3.ZERO
 var keep_reference := false
 var status_text := "Loading cottage…"
 var last_frame_costs: Dictionary = {}
+# Frame-clock probe marks (debug builds only; the probe reads these across scripts).
+var _fc_scene_start := 0
+var _fc_scene_end := 0
+var _frame_clock_probe: Node = null
 var _last_focus := true
 var _shutting_down := false
 var _pause_buttons: Dictionary = {}
@@ -94,6 +100,7 @@ var cursor_reticle: Node3D
 var river_water: MeshInstance3D
 var _river_water_spans: Array[Vector2i] = []
 var garden_visual: Node3D
+var water_visual: Node3D
 var landscape_state := LandscapeScript.new()
 var landscape_active := false
 var _landscape_before: Dictionary = {}
@@ -156,27 +163,447 @@ func _ready() -> void:
 	_track_connect(Input, "joy_connection_changed", _on_joy_connection_changed)
 	_track_connect(building_world, "changed", _on_building_changed)
 	if backend and backend.has_method("is_ready") and backend.is_ready(): _on_backend_ready(true)
+	# Debug-only virtual-controller + telemetry bridge (localhost TCP, loopback
+	# only, OS.is_debug_build()-gated). Inert in release builds; see the script.
+	if OS.is_debug_build():
+		var bridge: Node = load("res://scripts/m1_debug_bridge.gd").new()
+		bridge.name = "virtual_controller_bridge"
+		add_child(bridge)
+		# Main-loop frame clock. Child of the scene root (children process
+		# before their parent, so it brackets the scene _process "pre").
+		# NOT get_tree().root.add_child(): during the main scene's _ready() the
+		# Window root is busy setting up children and the add fails silently
+		# (the probe then never runs and frame_clock reports all zeros).
+		var fc: Node = load("res://scripts/frame_clock_probe.gd").new()
+		fc.name = "FrameClockProbe"
+		fc.set("scene", self)
+		add_child(fc)
+		_frame_clock_probe = fc
+
+## Debug-only semantic action API for the virtual-controller bridge (see
+## scripts/m1_debug_bridge.gd). Each verb calls the *same handler functions the
+## real input uses* (virtual dispatch, so subclass overrides win); the bridge
+## stays the input-injection + telemetry path for the rest of the interaction.
+## Debug builds only, loopback only, unreachable in release.
+func debug_test_action(name: String, args: Array) -> Dictionary:
+	if not OS.is_debug_build():
+		return {"type": "error", "message": "debug build only"}
+	match name:
+		"state":
+			return {
+				"type": "state", "tool": sculpt_tool, "stroke_active": stroke_active,
+				"landscape_active": landscape_active, "view_context": view_context,
+				"menu_open": menu_open, "tools_open": tools_open,
+				"water_placement_active": get("water_placement_active"),
+				"water_stroking": get("water_stroking"), "water_kind": get("water_kind"),
+				"cursor": [cursor.x, cursor.y, cursor.z],
+			}
+		"shell_keys":
+			# Diagnostic (2026-09-19, idle-15fps hunt): per-house massing cache key plus
+			# its raw field components, so a two-call diff shows which field drifts
+			# frame-to-frame and defeats the idle skip. Debug builds only.
+			if not has_method("_massing_shell_key"):
+				return {"type": "error", "message": "no massing layer in this scene"}
+			var keys_out: Dictionary = {"type": "shell_keys", "revision": building_world.get_revision() if building_world else -1, "terrain_revision": int((backend.stats() as Dictionary).get("revision", -1)) if backend and backend.has_method("stats") else -1, "ops": call("_dbg_ops_read"), "houses": {}}
+			var last_variant: Variant = get("_last_shell_key")
+			var last_map: Dictionary = last_variant if last_variant is Dictionary else {}
+			for bid in cottage_visuals:
+				var bid_str := str(bid)
+				var v: Dictionary = building_world.get_building(bid_str) if building_world else {}
+				if v.is_empty(): continue
+				var secs: Variant = v.get("massing_sections")
+				var dims_variant: Variant = v.get("dimensions", Vector3.ZERO)
+				var tr_variant: Variant = v.get("transform", Transform3D.IDENTITY)
+				var k := str(call("_massing_shell_key", v))
+				(keys_out["houses"] as Dictionary)[bid_str] = {
+					"key": k, "last_match": str(last_map.get(bid_str, "")) == k,
+					"dims": str(dims_variant),
+					"transform_hash": hash(str(tr_variant)),
+					"wall": str(v.get("wall_material_id", v.get("material_id", ""))),
+					"roof": str(v.get("roof_material_id", "")),
+					"sections": str(secs), "sections_hash": hash(str(secs))
+				}
+			return keys_out
+		"cursor_set":
+			# args: [x, y, z]; debug teleport of the world cursor to a known
+			# terrain position (e.g. a house pad) so scripted strokes are
+			# deterministic. The cursor is the brush position; only the LEFT
+			# stick moves it in normal play (the right stick orbits the camera
+			# and can never arm a stroke).
+			if args.size() < 3:
+				return {"type": "error", "message": "cursor_set needs [x, y, z]"}
+			var p := Vector3(
+				clampf(float(args[0]), 0.5, float(PATCH_SIZE.x) - 0.5),
+				clampf(float(args[1]), 0.0, 31.0),
+				clampf(float(args[2]), 0.5, float(PATCH_SIZE.z) - 0.5)
+			)
+			cursor = p
+			if view_context == "terrain": terrain_cursor = p
+			else: cottage_cursor = p
+			return {"type": "ok", "cursor": [p.x, p.y, p.z]}
+		"select_tool":
+			if args.size() < 1: return {"type": "error", "message": "select_tool needs a tool name"}
+			if not has_method("_select_terrain_tool"):
+				return {"type": "error", "message": "no terrain tool selector in this scene"}
+			# Dynamic call: the selector lives in a downstream chain link (m1_scene_tool_ui)
+			# and is overridden further down (m2_scene_water), so dispatch must be virtual.
+			call("_select_terrain_tool", str(args[0]))
+			return {"type": "ok", "tool": sculpt_tool}
+		"view_context":
+			if args.size() < 1: return {"type": "error", "message": "view_context needs terrain|building"}
+			_set_view_context(str(args[0]), "debug")
+			return {"type": "ok", "view_context": view_context}
+		"cancel":
+			_cancel_current_edit("debug")
+			return {"type": "ok"}
+		"undo":
+			_undo(); return {"type": "ok"}
+		"redo":
+			_redo(); return {"type": "ok"}
+		"world_stats":
+			return _debug_world_stats()
+		"mesh_survey":
+			return _debug_mesh_survey()
+		"tune":
+			# args: [target, key, value]; target is terrain or viewer.
+			# Debug A/B lever for the native terrain/viewer knobs found by
+			# mesh_survey. Only the allowlisted performance knobs are settable.
+			if args.size() < 3:
+				return {"type": "error", "message": "tune needs [target, key, value]"}
+			# str(), not the String() constructor: in the pinned Godot 4.7.2 build a
+			# String() call on these arguments aborts the whole action with
+			# "Invalid call 'String' constructor" (tune silently no-ops, returns {}).
+			var target := str(args[0])
+			var key := str(args[1])
+			var raw := str(args[2])
+			var allow: Dictionary
+			match target:
+				"terrain", "viewer":
+					allow = {
+						"view_distance": "float", "view_distance_vertical_ratio": "float",
+						"max_view_distance": "float", "use_gpu_generation": "bool",
+						"generate_collisions": "bool", "automatic_loading_enabled": "bool",
+						"mesh_block_size": "float", "process_mode": "float",
+					"visible": "bool", # A/B isolation: which viewer's mesh is actually drawn
+					}
+				"light":
+					allow = {"shadow_enabled": "bool", "directional_shadow_max_distance": "float"}
+				"environment":
+					allow = {"glow_enabled": "bool", "fog_enabled": "bool"}
+				_:
+					return {"type": "error", "message": "tune target not allowed: %s" % target}
+			if not allow.has(key):
+				return {"type": "error", "message": "tune key not allowed: %s" % key}
+			var value: Variant
+			if allow[key] == "bool":
+				value = raw.to_lower() == "true" or raw == "1"
+			else:
+				value = raw.to_float()
+			if key == "process_mode":
+				value = int(value)
+			var applied := 0
+			var last: Variant = null
+			var want_index := -1
+			if args.size() >= 4:
+				want_index = int(args[3])
+			var match_index := 0
+			if get_tree().current_scene != null:
+				var tstack: Array[Node] = [get_tree().current_scene]
+				while tstack.size() > 0:
+					var n: Node = tstack.pop_back()
+					for c in n.get_children():
+						tstack.push_back(c)
+					var want := (target == "terrain" and n.get_class() == "VoxelTerrain") \
+						or (target == "viewer" and n.get_class() == "VoxelViewer") \
+						or (target == "light" and n is DirectionalLight3D and n.name == "WorldSun") \
+						or (target == "environment" and n is WorldEnvironment)
+					if want:
+						if want_index < 0 or match_index == want_index:
+							if target == "environment" and n.environment != null:
+								n.environment.set(key, value)
+								last = n.environment.get(key)
+							else:
+								n.set(key, value)
+								last = n.get(key)
+								applied += 1
+						match_index += 1
+			return {"type": "ok", "applied": applied, "key": key, "now": str(last)}
+		"perf":
+			# Phase-level CPU attribution for on-device profiling: the scene's own
+			# per-frame phase timers plus the native backend's last-edit cost.
+			var profile: Dictionary = call("path_profile_stats") if has_method("path_profile_stats") else {}
+			var water_perf: Dictionary = get("water_visual").get_perf() if get("water_visual") != null and get("water_visual").has_method("get_perf") else {}
+			var fps_now := Engine.get_frames_per_second()
+			return {
+				"type": "perf",
+				"fps": fps_now,
+				"frame_ms": 1000.0 / maxf(fps_now, 0.001),
+				"process_ms": Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+				"physics_ms": Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
+				"draws": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+				"prims": int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)),
+				"last_frame_costs": last_frame_costs.duplicate(true),
+				"path_profile": profile,
+				"native": backend.stats() if backend != null and backend.has_method("stats") else {},
+				"water": water_perf,
+			}
+		"frame_clock":
+			# Main-loop bracketing from the root-level probe: pre (engine/input/
+			# pre-scene nodes), scene (the chain's measured process), post
+			# (post-scene nodes + physics + render hand-off + vsync wait).
+			if _frame_clock_probe != null:
+				# The probe is Node-typed in the scene; hop through Variant so the
+				# dynamic read() call still parses (typed Node has no read()).
+				var probe: Variant = _frame_clock_probe
+				var out: Dictionary = probe.read()
+				out["type"] = "ok"
+				return out
+			return {"type": "error", "message": "no frame clock (release build?)"}
+		"probe_nodes":
+			# Debug A/B binary search over the scene tree: hide/show or disable/enable
+			# every node matching a class or name, one call. args: [selector, op],
+			# selector = "class:MultiMeshInstance3D" or "name:WaterVisual";
+			# op = hide | show | disable | enable. Returns how many were touched.
+			if args.size() < 2:
+				return {"type": "error", "message": "probe_nodes needs [selector, op]"}
+			var sel := str(args[0])
+			var op := str(args[1])
+			var cls := ""
+			var nod := ""
+			if sel.begins_with("class:"): cls = sel.trim_prefix("class:")
+			elif sel.begins_with("name:"): nod = sel.trim_prefix("name:")
+			else:
+				return {"type": "error", "message": "selector must be class:X or name:X"}
+			var touched := 0
+			if get_tree().current_scene != null:
+				var pstack: Array[Node] = [get_tree().current_scene]
+				while pstack.size() > 0:
+					var p: Node = pstack.pop_back()
+					for c in p.get_children():
+						pstack.push_back(c)
+					var hit := (cls != "" and p.get_class() == cls) or (nod != "" and p.name == nod)
+					if not hit:
+						continue
+					match op:
+						"hide": p.visible = false
+						"show": p.visible = true
+						"disable": p.process_mode = Node.PROCESS_MODE_DISABLED
+						"enable": p.process_mode = Node.PROCESS_MODE_INHERIT
+						_: return {"type": "error", "message": "op must be hide|show|disable|enable"}
+					touched += 1
+			return {"type": "ok", "touched": touched, "selector": sel, "op": op}
+		"tree_survey":
+			# Debug: enumerate the live scene tree (name/class/process flags) so an
+			# on-device binary search can target nodes by name (many preview nodes
+			# have generic classes and no class_name).
+			var rows: Array = []
+			var cap := 600
+			if get_tree().current_scene != null:
+				var sstack: Array[Node] = [get_tree().current_scene]
+				while sstack.size() > 0 and rows.size() < cap:
+					var sn: Node = sstack.pop_back()
+					rows.append({"n": sn.name, "c": sn.get_class(), "p": sn.is_processing()})
+					for c in sn.get_children():
+						sstack.push_back(c)
+			return {"type": "ok", "count": rows.size(), "rows": rows}
+		_:
+			return {"type": "error", "message": "unknown action: " + name}
+
+## One-shot render-cost snapshot: how many visible meshes we ship and where the
+## triangles live (terrain / trees / houses / water / props). Lets a playtest
+## answer "why is my world slow" without guessing — a stale dense forest world
+## shows up instantly (1.5M+ tris across thousands of tree meshes) versus the
+## ~158k-class current starter valley. Debug builds only.
+func _debug_world_stats() -> Dictionary:
+	var meshes := 0
+	var tris := 0
+	var by_cat: Dictionary = {}
+	var root_node: Node = get_tree().current_scene
+	if root_node == null:
+		root_node = self
+	var stack: Array[Node] = [root_node]
+	while stack.size() > 0:
+		var n: Node = stack.pop_back()
+		for c in n.get_children():
+			stack.push_back(c)
+		if n is MeshInstance3D:
+			var mi := n as MeshInstance3D
+			if not mi.visible or mi.mesh == null or not (mi.mesh is ArrayMesh):
+				continue
+			var am := mi.mesh as ArrayMesh
+			meshes += 1
+			var t := 0
+			for s in am.get_surface_count():
+				var arr: Array = am.surface_get_arrays(s)
+				var index: Variant = arr[Mesh.ARRAY_INDEX]
+				if index != null and index.size() > 0:
+					t += index.size() / 3
+				else:
+					var verts: Variant = arr[Mesh.ARRAY_VERTEX]
+					if verts != null and verts.size() > 0:
+						t += verts.size() / 3
+			tris += t
+			var path := String(n.get_path()).to_lower()
+			var cat := "other"
+			if path.contains("water"):
+				cat = "water"
+			elif path.contains("tree"):
+				cat = "trees"
+			elif path.contains("foliage") or path.contains("flower") or path.contains("mushroom") or path.contains("rock"):
+				cat = "foliage/props"
+			elif path.contains("house") or path.contains("cottage") or path.contains("roof") or path.contains("wall") or path.contains("door") or path.contains("window"):
+				cat = "houses/buildings"
+			elif path.contains("terrain") or path.contains("voxel") or path.contains("chunk"):
+				cat = "terrain"
+			by_cat[cat] = int(by_cat.get(cat, 0)) + t
+	return {
+		"type": "world_stats", "meshes": meshes, "tris": tris, "by_cat": by_cat,
+		"fps": Engine.get_frames_per_second(),
+	}
+
+## One-shot render survey: what is actually on the GPU. Complements
+## _debug_world_stats (which only sees MeshInstance3Ds in the scene graph) by
+## counting MultiMesh instances (meadow etc.) and probing the native
+## VoxelTerrain/VoxelViewer for their mesh payload, so an on-device playtest
+## can say exactly where the prims come from. Debug builds only.
+func _debug_mesh_survey() -> Dictionary:
+	var class_counts: Dictionary = {}
+	var multimesh: Dictionary = {}
+	var terrain_info: Dictionary = {}
+	var viewer_info: Array = []
+	var mesher_info: Dictionary = {}
+	var meshi_visible := 0
+	var meshi_tris := 0
+	var native_idx := 0
+	var root_node: Node = get_tree().current_scene
+	if root_node == null:
+		return {"type": "error", "message": "no current scene"}
+	var stack: Array[Node] = [root_node]
+	while stack.size() > 0:
+		var n: Node = stack.pop_back()
+		for c in n.get_children():
+			stack.push_back(c)
+		var cn := n.get_class()
+		class_counts[cn] = int(class_counts.get(cn, 0)) + 1
+		if cn == "VoxelTerrain":
+			terrain_info = _probe_mesh_holder(n)
+			var m_obj: Variant = n.get("mesher")
+			if m_obj != null:
+				mesher_info = _probe_mesh_holder(m_obj)
+		elif cn == "VoxelViewer":
+			var v: Dictionary = _probe_mesh_holder(n)
+			v["index"] = int(native_idx)
+			native_idx += 1
+			viewer_info.append(v)
+		elif cn == "VoxelMesherBlocky":
+			mesher_info = _probe_mesh_holder(n)
+		elif n is MultiMeshInstance3D:
+			var mmi := n as MultiMeshInstance3D
+			multimesh[str(n.name)] = {
+				"instances": mmi.multimesh.get_instance_count() if mmi.multimesh != null else 0,
+				"tris_each": _mesh_tri_count(mmi.multimesh.mesh) if mmi.multimesh != null else 0,
+				"visible": n.visible,
+			}
+		elif n is MeshInstance3D:
+			var mi := n as MeshInstance3D
+			if mi.visible and mi.mesh != null:
+				meshi_visible += 1
+				meshi_tris += _mesh_tri_count(mi.mesh)
+	return {
+		"type": "mesh_survey", "classes": class_counts, "multimesh": multimesh,
+		"terrain": terrain_info, "viewer": viewer_info, "mesher": mesher_info,
+		"meshi_visible": meshi_visible, "meshi_tris": meshi_tris,
+		"prims": int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)),
+		"draws": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+		"fps": Engine.get_frames_per_second(),
+	}
+
+func _probe_mesh_holder(obj: Object) -> Dictionary:
+	var info: Dictionary = {"class": obj.get_class()}
+	if "mesh" in obj:
+		var m: Variant = obj.get("mesh")
+		if m == null:
+			info["mesh"] = "null"
+		elif m is ArrayMesh:
+			info["mesh"] = "ArrayMesh tris=%d" % _mesh_tri_count(m)
+		else:
+			info["mesh"] = String((m as Object).get_class())
+			if (m as Object).has_method("get_mesh"):
+				var inner: Variant = (m as Object).call("get_mesh")
+				if inner is ArrayMesh:
+					info["inner"] = "ArrayMesh tris=%d" % _mesh_tri_count(inner)
+				elif inner != null:
+					info["inner"] = String((inner as Object).get_class())
+	else:
+		info["has_mesh_prop"] = false
+	# Native GDExtension objects (VoxelViewer/VoxelTerrain/VoxelMesherBlocky):
+	# enumerate the actual property surface of the pinned build so device
+	# evidence names the knobs that exist, without guessing.
+	var plist := obj.get_property_list()
+	var names := PackedStringArray()
+	var values: Dictionary = {}
+	for pd in plist:
+		var pname: String = str((pd as Dictionary).get("name", ""))
+		names.append(pname)
+		values[pname] = str(obj.get(pname))
+	names.sort()
+	info["props"] = names
+	info["values"] = values
+	return info
+
+func _mesh_tri_count(m: Mesh) -> int:
+	if m == null or not (m is ArrayMesh):
+		return 0
+	var am := m as ArrayMesh
+	var t := 0
+	for s in am.get_surface_count():
+		var arr: Array = am.surface_get_arrays(s)
+		var index: Variant = arr[Mesh.ARRAY_INDEX]
+		if index != null and index.size() > 0:
+			t += index.size() / 3
+		else:
+			var verts: Variant = arr[Mesh.ARRAY_VERTEX]
+			if verts != null and verts.size() > 0:
+				t += verts.size() / 3
+	return t
 
 func _process(delta: float) -> void:
 	if _shutting_down: return
 	if (stroke_active or landscape_active) and (menu_open or tools_open or detail_open or _restoring):
 		_cancel_current_edit("Sculpting cancelled")
+	var process_started := Time.get_ticks_usec()
+	_fc_scene_start = process_started
+	var phase_started := process_started
 	if not menu_open and not tools_open and not detail_open:
 		_read_camera_and_cursor(delta)
 	if detail_move_active and not menu_open and not tools_open and not detail_open:
 		_read_detail_move(delta)
-	var phase_started := Time.get_ticks_usec()
+	last_frame_costs["camera_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	phase_started = Time.get_ticks_usec()
 	if stroke_active and backend and backend.has_method("update_stroke"):
 		backend.update_stroke(cursor + stroke_aim_offset, delta)
 	last_frame_costs["sculpt_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
 	if landscape_active: _update_plant_stroke(delta)
+	phase_started = Time.get_ticks_usec()
 	_update_camera()
+	# Keep native terrain mesh streaming centered on the camera (the visual
+	# viewer used to sit statically at world center with a 64 m radius covering
+	# the whole valley; it now follows at RUNTIME_VIEW_DISTANCE_WORLD).
+	if backend != null and backend.has_method("update_visual_focus"):
+		backend.update_visual_focus(camera.global_position)
+	last_frame_costs["focus_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
 	phase_started = Time.get_ticks_usec()
 	_update_brush_preview()
 	_update_cursor_reticle()
 	last_frame_costs["preview_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	phase_started = Time.get_ticks_usec()
 	_update_presentation()
+	last_frame_costs["presentation_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	phase_started = Time.get_ticks_usec()
 	_update_debug_overlay()
+	last_frame_costs["overlay_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	last_frame_costs["process_ms"] = (Time.get_ticks_usec() - process_started) / 1000.0
+	_fc_scene_end = Time.get_ticks_usec()
 	var focused := get_window().has_focus()
 	if not focused and _last_focus: _cancel_current_edit("Window focus lost")
 	_last_focus = focused
@@ -317,13 +744,18 @@ func _axis(action: String, axis: JoyAxis, value: float) -> void:
 func _key(action: String, key: Key) -> void:
 	var event := InputEventKey.new(); event.keycode = key; InputMap.action_add_event(action, event)
 
-func _build_world() -> void:
+## World lighting, as a single overridable seam. This is the canonical M2 live
+## look; an environment that wants a different atmosphere overrides just this
+## method instead of re-copying the whole world build (which previously dropped
+## water_visual and other nodes).
+func _apply_world_lighting() -> void:
 	# M2 lighting polish -> golden-hour overhaul. Warm low sun for long,
 	# directional contrast; warm hazy procedural sky with depth; ordinary fog
 	# for atmospheric perspective; modest glow for a soft golden bloom; ACES
 	# + a light warm grade; a restrained SSAO pass for contact/AO softness.
 	# All Mobile-renderer-safe; no volumetrics, SDFGI, or SSR.
 	var sun := DirectionalLight3D.new()
+	sun.name = "WorldSun"  # stable name: debug tune target "light"
 	sun.rotation_degrees = Vector3(-33, -46, 0)
 	sun.light_color = Color("#ffd9a0")
 	sun.light_energy = 1.72
@@ -337,9 +769,9 @@ func _build_world() -> void:
 	var environment := Environment.new()
 	var sky_material := ProceduralSkyMaterial.new()
 	sky_material.sky_top_color = Color("#d8e1e5")
-	# 2026-09-15 wide-shot pass: horizon pushed to the warm golden hour tone so the
-	# empty backdrop reads as a low golden-hour glow instead of a blank cream void.
-	sky_material.sky_horizon_color = Color("#f2c98a")
+	# Canonical M2 live look (this is the build that actually ships; a prior
+	# m1-only "wide-shot" pass never reached the live level, so M2's values win).
+	sky_material.sky_horizon_color = Color("#f2d9a4")
 	sky_material.ground_bottom_color = Color("#c3b795")
 	sky_material.ground_horizon_color = Color("#e0d3b2")
 	sky_material.sky_energy_multiplier = 0.55
@@ -354,14 +786,12 @@ func _build_world() -> void:
 	environment.ambient_light_sky_contribution = 1.0
 	environment.fog_enabled = true
 	environment.fog_light_color = Color("#ead7b3")
-	# 2026-09-15 wide-shot pass: the old 0.0038 density + 150-unit depth made
-	# the hamlet read as a beige fog wall in wide framing (~half the frame a
-	# flat cream veil, no sky gradient). Cut density ~58% and pull the depth
-	# range in so mid-ground terrain stays readable and sky shows through.
-	environment.fog_density = 0.0016
-	environment.fog_sky_affect = 0.45
-	environment.fog_depth_begin = 10.0
-	environment.fog_depth_end = 95.0
+	# Canonical M2 live look: the single source of truth for world fog. Envs that
+	# want a different atmosphere override this (see _apply_world_lighting).
+	environment.fog_density = 0.0038
+	environment.fog_sky_affect = 0.8
+	environment.fog_depth_begin = 18.0
+	environment.fog_depth_end = 150.0
 	environment.glow_enabled = true
 	environment.glow_intensity = 0.5
 	environment.glow_bloom = 0.14
@@ -377,11 +807,22 @@ func _build_world() -> void:
 	environment.adjustment_contrast = 1.04
 	environment.adjustment_brightness = 1.02
 	environment_node.environment = environment
+	environment_node.name = "WorldEnvironment"  # stable name: debug tune target "environment"
 	add_child(environment_node)
+
+## Building-world factory: the base M1 world returns the base BuildingWorld; an
+## environment (e.g. M2) overrides this to construct its subclass once, in place,
+## so the base _build_world builds exactly one building world (no double-build).
+func _create_building_world() -> RefCounted:
+	return BuildingWorldScript.new()
+
+func _build_world() -> void:
+	_apply_world_lighting()
 	river_water = MeshInstance3D.new(); river_water.name = "RiverWater"; river_water.mesh = _build_river_water_mesh(); river_water.position.y = 5.0
 	var water_material := StandardMaterial3D.new(); water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; water_material.albedo_color = Color(0.30, 0.57, 0.56, 0.86); water_material.metallic = 0.05; water_material.roughness = 0.42; river_water.material_override = water_material; add_child(river_water)
 	decor_root = Node3D.new(); decor_root.name = "GardenDecor"; add_child(decor_root)
 	garden_visual = GardenVisualScript.new(); garden_visual.name = "M1GardenVisual"; garden_visual.set_wind_enabled(not test_mode); decor_root.add_child(garden_visual)
+	water_visual = WaterVisualScript.new(); water_visual.name = "M1WaterVisual"; decor_root.add_child(water_visual)
 	camera = Camera3D.new(); camera.current = true; camera.fov = 52; add_child(camera)
 	resize_handles = Node3D.new(); resize_handles.name = "ResizeHandles"; resize_handles.visible = false; add_child(resize_handles)
 	for axis_name in ["width", "depth", "height"]:
@@ -389,7 +830,7 @@ func _build_world() -> void:
 		var handle_mesh := BoxMesh.new(); handle_mesh.size = Vector3(0.22, 0.22, 0.22); handle.mesh = handle_mesh
 		var handle_material := StandardMaterial3D.new(); handle_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; handle_material.albedo_color = Color(1.0, 0.70, 0.28, 0.82); handle_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; handle.material_override = handle_material
 		resize_handles.add_child(handle)
-	building_world = BuildingWorldScript.new()
+	building_world = _create_building_world()
 	cottage_visual = CottageVisualScript.new(); cottage_visual.name = "CottageVisual"; add_child(cottage_visual); cottage_visuals[BUILDING_ID] = cottage_visual
 	brush_preview = BrushPreviewScript.new()
 	brush_preview.name = "BrushPreview"
@@ -507,6 +948,37 @@ func _create_backend() -> void:
 	add_child(backend)
 	if garden_visual and garden_visual.has_method("attach_backend"):
 		garden_visual.attach_backend(backend)
+	# The region-water surface is a heavy presentation mesh (tens of thousands of
+	# quads). Build it only for scenes that actually render; test_mode suites
+	# (placement/path) instantiate the world without rendering water and skip the
+	# build so they stay fast. The game (not test_mode) always builds it.
+	if not test_mode:
+		if water_visual and water_visual.has_method("attach_backend"):
+			water_visual.attach_backend(backend)
+		_sync_water_visual()
+
+func _sync_water_visual() -> void:
+	if test_mode:
+		return
+	if water_visual and water_visual.has_method("set_regions"):
+		water_visual.set_regions(landscape_state.water)
+	# set_waterfall_suppressions also re-derives the (bounded) waterfalls honouring
+	# the player's dismissals, so water commit / undo / redo / restore all stay in sync.
+	if water_visual and water_visual.has_method("set_waterfall_suppressions"):
+		water_visual.set_waterfall_suppressions(landscape_state.waterfall_suppressions)
+
+func _ensure_premade_river() -> void:
+	# The starter river is a water region so it shares the same presentation path,
+	# materials and editability as player-authored water. Deterministic + idempotent:
+	# derived from the generator, added once, and the generated bed already exists
+	# (no carve). Covers fresh and existing worlds.
+	# NOTE: the legacy static river mesh is kept VISIBLE alongside the region water
+	# until the player confirms the combined look in playtest (a visual call).
+	var river := PremadeRiver.region()
+	for existing: Dictionary in landscape_state.water:
+		if PremadeRiver.matches(existing, river): return
+	if landscape_state.add_water("stream", river["level"], river["points"], river["width"], river["flow"]) > 0:
+		_sync_water_visual()
 
 func _update_brush_preview() -> void:
 	if not brush_preview:
@@ -748,6 +1220,10 @@ func _on_backend_ready(ready: bool) -> void:
 		if not buttons.is_empty(): (buttons[0] as Button).grab_focus()
 	if garden_visual and garden_visual.has_method("refresh_terrain"):
 		garden_visual.refresh_terrain()
+	if water_visual and water_visual.has_method("refresh_terrain"):
+		water_visual.refresh_terrain()
+	if water_visual and water_visual.has_method("set_waterfall_suppressions"):
+		water_visual.set_waterfall_suppressions(landscape_state.waterfall_suppressions)
 	_update_presentation()
 
 func _apply_review_args() -> void:
@@ -819,6 +1295,15 @@ func _on_backend_changed() -> void:
 	_sync_meadow_exclusions()
 	if garden_visual and garden_visual.has_method("refresh_terrain"):
 		garden_visual.refresh_terrain()
+	# Localize the region-water surface to the edit bounds (like the river and
+	# waterfalls) so a local dig only re-samples the nearby cells; the full
+	# refresh_terrain() is the startup / unknown-bounds fallback.
+	if backend and backend.has_method("get_last_edit_bounds") and water_visual and water_visual.has_method("refresh_surface_from_bounds"):
+		water_visual.refresh_surface_from_bounds(backend.get_last_edit_bounds())
+	elif water_visual and water_visual.has_method("refresh_terrain"):
+		water_visual.refresh_terrain()
+	if water_visual and water_visual.has_method("refresh_waterfalls_from_bounds") and backend and backend.has_method("get_last_edit_bounds"):
+		water_visual.refresh_waterfalls_from_bounds(backend.get_last_edit_bounds())
 	var garden_ms := float(Time.get_ticks_usec() - started) / 1000.0
 	started = Time.get_ticks_usec()
 	_update_presentation()
@@ -1003,6 +1488,7 @@ func _end_stroke() -> void:
 	if ok:
 		landscape_state.clear_edited_cells(backend.get_last_edit_cells(), float(backend.voxel_scale))
 		garden_visual.apply_records(landscape_state.records)
+		_sync_water_visual()
 		_record_history("terrain")
 	_landscape_before.clear()
 	_set_status("Stroke committed" if ok else "Stroke unchanged")
@@ -1064,6 +1550,7 @@ func _cancel_current_edit(reason: String) -> void:
 	if landscape_active:
 		landscape_state.restore(_landscape_before)
 		garden_visual.reset_records(landscape_state.records)
+		_sync_water_visual()
 		landscape_active = false
 	_landscape_before.clear()
 	if stroke_active and backend and backend.has_method("cancel_stroke"): backend.cancel_stroke()
@@ -1093,7 +1580,7 @@ func _undo() -> void:
 		_history_tags.pop_back(); _redo_tags.append(tag)
 		var entry: Dictionary = _landscape_history.pop_back()
 		_landscape_redo.append(entry); landscape_state.restore(entry["before"])
-		garden_visual.reset_records(landscape_state.records); _building_dirty = true
+		garden_visual.reset_records(landscape_state.records); _building_dirty = true; _sync_water_visual()
 	_set_status("Undo complete" if ok else "Nothing to undo")
 
 func _redo() -> void:
@@ -1105,7 +1592,7 @@ func _redo() -> void:
 		_redo_tags.pop_back(); _history_tags.append(tag)
 		var entry: Dictionary = _landscape_redo.pop_back()
 		_landscape_history.append(entry); landscape_state.restore(entry["after"])
-		garden_visual.reset_records(landscape_state.records); _building_dirty = true
+		garden_visual.reset_records(landscape_state.records); _building_dirty = true; _sync_water_visual()
 	_set_status("Redo complete" if ok else "Nothing to redo")
 
 func _record_history(tag: String) -> void:
@@ -1117,6 +1604,7 @@ func _record_history(tag: String) -> void:
 	if _history_tags.size() > 50: _history_tags.pop_front(); _landscape_history.pop_front()
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	if not cottage_visual or not building_world: return
 	var revision: int = building_world.get_revision()
 	if revision != _last_requested_cottage_revision:
@@ -1182,6 +1670,8 @@ func _update_presentation() -> void:
 			_last_target_label_text = next_target_text
 	_update_resize_handles()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m1_scene"] = (_ul_t1 - _ul_t0) / 1000.0
 func _update_resize_handles() -> void:
 	if not resize_handles:
 		return
@@ -1214,7 +1704,20 @@ func _update_debug_overlay() -> void:
 	var path_profile_text := ""
 	if path_profile is Dictionary and not path_profile.is_empty():
 		path_profile_text = "\nPath ms total %.2f  camera %.2f  brush %.2f  valid %.2f  preview %.2f  HUD %.2f" % [float(path_profile.get("path_process_total_ms", 0.0)), float(path_profile.get("camera_cursor_ms", 0.0)), float(path_profile.get("brush_preview_ms", 0.0)), float(path_profile.get("validity_ms", 0.0)), float(path_profile.get("preview_ms", 0.0)), float(path_profile.get("hud_ms", 0.0))]
-	debug_label.text = "FPS %.0f  process %.2f ms\n%s / %s  %dx%d  draw %d  triangles %d\nStatic memory %s  sculpt %.2f ms\nNative mesh acknowledgement unavailable%s" % [Engine.get_frames_per_second(), process_ms, renderer, adapter, get_viewport().size.x, get_viewport().size.y, draw_calls, primitives, memory_text, float(native_stats.get("last_edit_ms", -1.0)), path_profile_text]
+	# Water perf: where the water surface frame time goes (resample vs mesh
+	# build, how many cells, how many quads, and full vs incremental vs
+	# localized) so we can see exactly which path is hot on the device.
+	var water_perf_text := ""
+	if water_visual and water_visual.has_method("get_perf"):
+		var rebuilds: int = water_visual.get_rebuilds() if water_visual.has_method("get_rebuilds") else 0
+		var wp: Dictionary = water_visual.get_perf()
+		if not wp.is_empty():
+			var kind := "FULL" if wp.get("full_rebuild", false) else ("LOCAL" if wp.get("localized", false) else "incr")
+			water_perf_text = "\nWATER[%s] rebuilds %d  resample %.1f  mesh %.1f  cells %d  regions %d  quads %d" % [kind, rebuilds, float(wp.get("resample_ms", 0.0)), float(wp.get("mesh_ms", 0.0)), int(wp.get("cells_resampled", 0)), int(wp.get("regions", 0)), int(wp.get("quads", 0))]
+		if water_visual.has_method("reset_rebuilds"):
+			water_visual.reset_rebuilds()
+	var costs_text := "\nCOSTS process %.1f  sculpt %.1f  preview %.1f  query %.1f  build %.1f" % [process_ms, float(last_frame_costs.get("sculpt_ms", 0.0)), float(last_frame_costs.get("preview_ms", 0.0)), float(last_frame_costs.get("preview_query_ms", 0.0)), float(last_frame_costs.get("preview_build_ms", 0.0))]
+	debug_label.text = "FPS %.0f  process %.2f ms\n%s / %s  %dx%d  draw %d  triangles %d\nStatic memory %s  sculpt %.2f ms%s%s%s" % [Engine.get_frames_per_second(), process_ms, renderer, adapter, get_viewport().size.x, get_viewport().size.y, draw_calls, primitives, memory_text, float(native_stats.get("last_edit_ms", -1.0)), water_perf_text, costs_text, path_profile_text]
 
 func _build_ui() -> void:
 	hud = CanvasLayer.new(); add_child(hud)
@@ -1532,6 +2035,7 @@ func _quit_cleanly() -> void:
 func _restore_landscape(document: Dictionary) -> void:
 	if document.has("landscape") and landscape_state.restore(document["landscape"]):
 		garden_visual.reset_records(landscape_state.records)
+		_sync_water_visual()
 		return
 	landscape_state = LandscapeScript.new()
 	var rng := RandomNumberGenerator.new(); rng.seed = 1042
@@ -1553,6 +2057,7 @@ func _restore_landscape(document: Dictionary) -> void:
 		var ground := _plant_ground(point, true)
 		if not ground.is_empty(): landscape_state.add("rock", ground["point"], rng.randi_range(0, 2))
 	garden_visual.reset_records(landscape_state.records)
+	_sync_water_visual()
 
 func _plant_ground(point: Vector3, from_top: bool = false) -> Dictionary:
 	if not backend or not backend.is_ready(): return {}
@@ -1613,6 +2118,7 @@ func _paint_plant_sample() -> void:
 			if not ground.is_empty(): landscape_state.add(sculpt_tool, ground["point"], rng.randi_range(0, Flora.variant_count(sculpt_tool) - 1), planting_yaw_degrees)
 	_plant_last = center; _plant_sequence += 1
 	garden_visual.apply_records(landscape_state.records)
+	_sync_water_visual()
 
 func _end_plant_stroke() -> void:
 	if not landscape_active: return

@@ -98,13 +98,32 @@ Allow players to paint roads and paths from a broad texture palette. Road surfac
 
 ### IDEA-007 — Free building placement and rotation
 
-**Status:** Approved milestone — M2
-**Priority:** M2
+**Status:** Implemented (foundation) — M2 active  
+**Priority:** M2  
 **Added:** 2026-09-09
 
 Allow the player to choose a home design, preview it, rotate it freely, and place a new independent building at a valid location instead of creating new buildings only by copying the default cottage. Existing homes can also be moved and rotated without losing their identities or edits. Placement is controller-first, cancellable, undoable, and compatible with terrain, foundations, saves, and stable building identities. Detailed UI, UX, safety, and acceptance requirements are authoritative in `tasks/M2-hamlet-building.md`.
 
-**Known dependencies:** Multiple home recipes, placement validation and previews, terrain/foundation response rules, controller targeting, collision policy, and save/undo compatibility. This is assigned to M2 but does not authorize implementation before M2 becomes active.
+**Status note (2026-09-16):** M2 is active and the placement/rotation foundation is implemented and CI/APK verified at `c9f83ec` (`tasks/M2-01-placement-rotation-foundation.md`); physical Thor feel remains player review. The broader hamlet-building scope (home recipes, catalogue art) continues under `tasks/M2-hamlet-building.md`.
+
+**Known dependencies:** Multiple home recipes, placement validation and previews, terrain/foundation response rules, controller targeting, collision policy, and save/undo compatibility.
+
+### IDEA-008 — Touchscreen fallback controls
+
+**Status:** Candidate  
+**Priority:** Unscheduled  
+**Added:** 2026-09-16
+
+A fully touchscreen-compatible, **gesture-based** control scheme that activates automatically when no controller is connected, so the player can playtest on a phone with fingers alone without the Thor. Controller connect hides the touch layer and restores controller behaviour; disconnect restores it, with no accidental commits during either handoff. One finger is the context-sensitive world hand (orbit in play, paint in sculpt, move-ghost in placement), two fingers are always the camera, tap is the confirm verb, edge swipes are system verbs, and a long-press radial carries undo/redo/tools/focus. All gestures synthesize the same `InputMap` actions the controller uses — no forked game logic. Full proposal: `docs/proposals/touchscreen-fallback.md`.
+
+**Implementation estimate:** 8–14 active hours (3 phases: input layer + camera + menus; sculpting; placement/rotation)
+**Estimate assumptions:** The existing action layer is the single mapping target; no new save schema, world, or rendering work; physical phone tuning time excluded.
+**Estimate confidence:** Medium — twist-to-rotate feel is the main unknown.
+**Recommended model:** Sol / medium
+**Model rationale:** Coupled input-layer and UI-state work with strict handoff, held-gesture, and menu-blocking safety contracts.
+**Acceptance outline:** A phone with no controller can sculpt, place/rotate/cancel a prop and a home, use every menu, undo and save entirely by touch; controller connect/disconnect handoffs are side-effect free; all existing regression suites stay green; gated playtest APK delivered.
+
+**Known dependencies:** Controller connection detection, the existing action/input layer, 720p touch UI layout, and a phone-only playtest route.
 
 ## Rejected and out of scope
 

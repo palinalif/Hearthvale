@@ -50,10 +50,13 @@ static func accepted(x: float, z: float, density: float = DENSITY) -> bool:
 
 ## Deterministic tuft plan over a world rectangle. `exclusions` is an array of
 ## Rect2 (world metres) to skip - paths, water, stone, foundation bands.
-## Returns an array in stable enumeration order.
-static func plan(origin: Vector2, size: Vector2, density: float = DENSITY, exclusions: Array = []) -> Array:
+## `occupied_seed` pre-marks fine cells already claimed by tufts that were
+## planned earlier in scan order, so a region-limited re-plan reproduces the
+## exact dedupe behaviour of a full-world plan (see M1GardenVisual incremental
+## rebuild). Returns an array in stable enumeration order.
+static func plan(origin: Vector2, size: Vector2, density: float = DENSITY, exclusions: Array = [], occupied_seed: Dictionary = {}) -> Array:
 	var result: Array = []
-	var occupied := {}
+	var occupied := occupied_seed.duplicate()
 	var min_x := int(floori(origin.x / COARSE_STEP))
 	var max_x := int(ceili((origin.x + size.x) / COARSE_STEP))
 	var min_z := int(floori(origin.y / COARSE_STEP))

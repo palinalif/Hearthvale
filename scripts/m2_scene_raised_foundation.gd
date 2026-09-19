@@ -29,15 +29,20 @@ var _raised_quoin_roots: Dictionary = {}
 var _raised_foundation_signature := ""
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
+	var _fc_p := Time.get_ticks_usec()
 	_refresh_raised_foundation_masonry()
+	last_frame_costs["pres_raised_foundation"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_raised_foundation"] = (_ul_t1 - _ul_t0) / 1000.0
 func _refresh_raised_foundation_masonry(force: bool = false) -> void:
 	if not building_world or not backend or not backend.has_method("voxel_at"):
 		return
 	var signature_parts: Array[String] = [str(_terrain_revision())]
 	for building: Dictionary in building_world.get_buildings():
-		signature_parts.append("%s|%s|%s|%s" % [building.get("id", ""), building.get("style_id", ""), building.get("transform", Transform3D.IDENTITY), building.get("dimensions", Vector3.ZERO)])
+		signature_parts.append("%s|%s|%d|%d" % [building.get("id", ""), building.get("style_id", ""), hash(building.get("transform", Transform3D.IDENTITY)), hash(building.get("dimensions", Vector3.ZERO))])
 	var signature := "||".join(signature_parts)
 	if not force and signature == _raised_foundation_signature:
 		return

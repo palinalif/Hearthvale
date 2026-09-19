@@ -141,6 +141,7 @@ func _update_detail_hover() -> void:
 	super._update_detail_hover()
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	if not detail_resize_active: return
 	var presentation: Dictionary = building_world.get_building(selected_building_id)
@@ -155,6 +156,8 @@ func _update_presentation() -> void:
 		visual.apply_building(presentation, revision)
 		_colour_view(presentation, visual)
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m1_scene_detail_resize"] = (_ul_t1 - _ul_t0) / 1000.0
 func _cancel_current_edit(reason: String) -> void:
 	if detail_resize_active: _cancel_detail_resize()
 	super._cancel_current_edit(reason)

@@ -21,7 +21,9 @@ var _window_overlay_signatures: Dictionary = {}
 func _ready() -> void:
 	super._ready()
 	_install_extra_window_styles()
+	var _fc_p := Time.get_ticks_usec()
 	_refresh_custom_window_overlays()
+	last_frame_costs["pres_window_overlays"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 
 func _install_extra_window_styles() -> void:
 	var box := _actions_box()
@@ -57,9 +59,12 @@ func _apply_style_preview() -> void:
 	_refresh_custom_window_overlays()
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	_refresh_custom_window_overlays()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_house_decor"] = (_ul_t1 - _ul_t0) / 1000.0
 func _refresh_custom_window_overlays() -> void:
 	var seen: Dictionary = {}
 	for visual_value in cottage_visuals.values():

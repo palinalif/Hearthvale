@@ -198,7 +198,7 @@ func _browser_landscape_options() -> void:
 func _choose_browser_item(item: Dictionary) -> void:
 	if not _browser_open or item not in _browser_entries: return
 	var kind := str(item["kind"])
-	if kind not in ["home", "path", "bridge", "garden", "fence", "furniture", "terrain_tool"] and (selected_building_id != _browser_building_id or building_world.get_building(selected_building_id).is_empty()):
+	if kind not in ["home", "path", "bridge", "garden", "fence", "furniture", "terrain_tool", "water"] and (selected_building_id != _browser_building_id or building_world.get_building(selected_building_id).is_empty()):
 		_build_browser.status.text = "Select a house first"
 		return
 	var hit := _browser_hit.duplicate(true)
@@ -302,9 +302,12 @@ func _update_camera() -> void:
 	camera.v_offset -= middle.distance_to(upper)
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	if _browser_open: _fit_build_browser()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_build_browser"] = (_ul_t1 - _ul_t0) / 1000.0
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
 	if not _browser_open: return
@@ -326,7 +329,7 @@ func _refresh_part_feedback() -> void:
 func _make_catalogue_model(item: Dictionary) -> Node3D:
 	var kind := str(item["kind"])
 	var id := str(item["id"])
-	if kind in ["path", "bridge", "garden", "fence", "furniture", "terrain_tool"]: return _make_world_catalogue_model(kind, id)
+	if kind in ["path", "bridge", "garden", "fence", "furniture", "terrain_tool", "water"]: return _make_world_catalogue_model(kind, id)
 	var visual := CottageVisual.new()
 	var target := Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * 0.25), Vector3.ZERO)
 	var view: Dictionary

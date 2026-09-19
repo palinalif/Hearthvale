@@ -514,6 +514,7 @@ func _cancel_current_edit(reason: String) -> void:
 	super._cancel_current_edit(reason)
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	if building_placement_active:
 		if building_placement_ghost:
 			building_placement_ghost.visible = true
@@ -534,6 +535,8 @@ func _update_presentation() -> void:
 	if placement_ghost: placement_ghost.hide_attachment()
 	super._update_presentation()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m1_scene_placement"] = (_ul_t1 - _ul_t0) / 1000.0
 func _update_placement_ghost() -> void:
 	if not placement_ghost or placement_kind.is_empty() or not detail_move_active: return
 	var view: Dictionary = building_world.get_building(selected_building_id)

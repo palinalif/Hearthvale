@@ -82,16 +82,36 @@ func load_document(document: Dictionary) -> bool:
 	changed.emit()
 	return true
 
+# Resolving every building (per-detail surface math, transforms, fits) is the
+# most expensive read the document offers, and several per-frame presenters
+# each used to resolve the full set on their own. Resolution is a pure
+# function of the document, and every document mutation funnels through
+# _record_change (undo/redo included) which bumps _revision, so the resolved
+# array can be cached per revision. Callers still receive fresh deep copies
+# on every call, so in-place edits of returned values keep today's semantics.
+var _resolved_cache: Array[Dictionary] = []
+var _resolved_cache_revision := -1
+
+func _resolved_buildings_cached() -> Array[Dictionary]:
+	if _resolved_cache_revision != _revision:
+		_resolved_cache.clear()
+		for building_value in _document["buildings"]:
+			_resolved_cache.append(_resolved_building(building_value as Dictionary))
+		_resolved_cache_revision = _revision
+	return _resolved_cache
+
 func get_buildings() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
-	for building_value in _document["buildings"]:
-		result.append(_resolved_building(building_value as Dictionary))
+	for resolved in _resolved_buildings_cached():
+		result.append(_copy(resolved) as Dictionary)
 	return result
 
 func get_building(building_id: String) -> Dictionary:
 	var index := _building_index(building_id)
 	if index < 0: return {}
-	return _resolved_building((_document["buildings"] as Array)[index] as Dictionary)
+	var cached := _resolved_buildings_cached()
+	if index >= cached.size(): return {}
+	return _copy(cached[index])
 
 static func home_catalogue() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []

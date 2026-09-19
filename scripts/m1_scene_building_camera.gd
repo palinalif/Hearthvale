@@ -15,27 +15,41 @@ func _process(delta: float) -> void:
 	if _shutting_down: return
 	if (stroke_active or landscape_active) and (menu_open or tools_open or detail_open or _restoring):
 		_cancel_current_edit("Sculpting cancelled")
+	# frame_clock probe marks: this is the LIVE gameplay loop (the base
+	# m1_scene._process never runs - this copy intentionally omits super.
+	# _process, see AGENTS.md scene-chain gotcha). Bracket the whole body.
+	var process_started := Time.get_ticks_usec()
+	_fc_scene_start = process_started
 	if not menu_open and not tools_open and not detail_open:
 		_read_camera_and_cursor(delta)
 	elif view_context == "building" and not menu_open and not _restoring:
 		_read_building_overlay_camera(delta)
 	if detail_move_active and not menu_open and not tools_open and not detail_open:
 		_read_detail_move(delta)
+	last_frame_costs["camera_ms"] = (Time.get_ticks_usec() - process_started) / 1000.0
 	var phase_started := Time.get_ticks_usec()
 	if stroke_active and backend and backend.has_method("update_stroke"):
 		backend.update_stroke(cursor + stroke_aim_offset, delta)
 	last_frame_costs["sculpt_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
 	if landscape_active: _update_plant_stroke(delta)
+	phase_started = Time.get_ticks_usec()
 	_update_camera()
+	last_frame_costs["focus_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
 	phase_started = Time.get_ticks_usec()
 	_update_brush_preview()
 	_update_cursor_reticle()
 	last_frame_costs["preview_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	phase_started = Time.get_ticks_usec()
 	_update_presentation()
+	last_frame_costs["presentation_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	phase_started = Time.get_ticks_usec()
 	_update_debug_overlay()
+	last_frame_costs["overlay_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
+	last_frame_costs["process_ms"] = (Time.get_ticks_usec() - process_started) / 1000.0
 	var focused := get_window().has_focus()
 	if not focused and _last_focus: _cancel_current_edit("Window focus lost")
 	_last_focus = focused
+	_fc_scene_end = Time.get_ticks_usec()
 
 func _read_camera_and_cursor(delta: float) -> void:
 	if view_context != "building":

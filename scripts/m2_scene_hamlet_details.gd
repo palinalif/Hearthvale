@@ -602,12 +602,17 @@ func _refresh_fence_visual(force: bool = false) -> void:
 	_refresh_detail_visual(force)
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
+	var _fc_p := Time.get_ticks_usec()
 	_refresh_house_landing()
+	last_frame_costs["pres_house_landing"] = (Time.get_ticks_usec() - _fc_p) / 1000.0
 	if not detail_placement_active or not target_label: return
 	target_label.text = "%s • %.0f° • %s\nA place  left/right rotate  B cancel  RS orbit" % [_detail_style_name(), detail_yaw_degrees, detail_placement_reason]
 	_update_detail_preview()
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_hamlet_details"] = (_ul_t1 - _ul_t0) / 1000.0
 ## Presentation-only finishing pass: a committed home should read as grown into
 ## the landscape (a small grass tuft ring hugging the footprint plus a quiet
 ## packed-dirt shoulder where the foundation meets open ground). Everything is
@@ -619,7 +624,7 @@ func _refresh_house_landing(force: bool = false) -> void:
 		return
 	var signature_parts: Array[String] = [str(_terrain_revision())]
 	for building: Dictionary in building_world.get_buildings():
-		signature_parts.append("%s|%s|%s|%s" % [building.get("id", ""), building.get("style_id", ""), building.get("transform", Transform3D.IDENTITY), building.get("dimensions", Vector3.ZERO)])
+		signature_parts.append("%s|%s|%d|%d" % [building.get("id", ""), building.get("style_id", ""), hash(building.get("transform", Transform3D.IDENTITY)), hash(building.get("dimensions", Vector3.ZERO))])
 	var signature := "||".join(signature_parts)
 	if not force and signature == _landing_signature:
 		return

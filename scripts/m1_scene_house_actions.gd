@@ -229,9 +229,12 @@ func _finish_house_move() -> void:
 	_refresh_controller_hud()
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	if _moving_house and is_instance_valid(_moving_visual): _moving_visual.visible = false
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m1_scene_house_actions"] = (_ul_t1 - _ul_t0) / 1000.0
 func _cancel_current_edit(reason: String) -> void:
 	_close_house_actions()
 	_resize_selecting = false

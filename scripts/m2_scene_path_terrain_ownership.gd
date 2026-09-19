@@ -45,10 +45,13 @@ func _adjust_path_brush(direction: int) -> void:
 	_refresh_controller_hud()
 
 func _update_presentation() -> void:
+	var _ul_t0 := Time.get_ticks_usec()
 	super._update_presentation()
 	if path_placement_active and target_label:
 		target_label.text = "%s • %.3f m brush • %s\nLB/RB size  Hold A paint  release commit  B cancel/close  RS orbit" % [_path_style_name(), path_width, path_placement_reason]
 
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m2_scene_path_terrain_ownership"] = (_ul_t1 - _ul_t0) / 1000.0
 func _refresh_controller_hud() -> void:
 	super._refresh_controller_hud()
 	if path_placement_active and not menu_open and _prompt_row:

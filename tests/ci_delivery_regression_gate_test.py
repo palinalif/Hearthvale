@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/m1-drive-delivery.yml"
-REQUIRED = {"delivery-contract", "build-candidates", "sculpt-feedback", "terrain-ux", "placement", "performance", "cottage-and-apk"}
+REQUIRED = {"delivery-contract", "build-candidates", "sculpt-feedback", "terrain-ux", "placement", "performance", "cottage-and-apk", "water"}
 
 
 def job_block(source, name):
