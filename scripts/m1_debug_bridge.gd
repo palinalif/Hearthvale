@@ -179,7 +179,8 @@ func _handle_command(line: String) -> Dictionary:
 	var cmd: Dictionary = json.data
 	match String(cmd.get("cmd", "")):
 		"ping":
-			return {"type": "pong", "ts": Time.get_ticks_msec()}
+			return {"type": "pong", "ts": Time.get_ticks_msec(),
+				"rendering": RenderingServer.get_current_rendering_method()}
 		"set_stick":
 			var stick := String(cmd.get("stick", "left"))
 			var x := float(cmd.get("x", 0.0)); var y := float(cmd.get("y", 0.0))
