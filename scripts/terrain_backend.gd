@@ -105,11 +105,7 @@ func _ready() -> void:
 	terrain.max_view_distance = maxi(128, ceili(Vector3(patch_size).length()))
 	# Pinned VoxelTerrain supports mesh blocks of 16 or 32 while its native
 	# data blocks stay 16. Group fine-grid surfaces to reduce draw overhead.
-	# Threshold is in NATIVE cells (patch size / voxel scale): the 64-unit fine
-	# valley is 512 native cells and its 32x32 grid of 16-cell mesh blocks cost
-	# ~950 draw calls at runtime; 32-cell mesh blocks quarter that. (The old
-	# fine-grid comparison `patch_size.x > 96` never fired on the 64-unit map.)
-	var native_cells := int(round(float(patch_size.x) / voxel_scale))
+	if patch_size.x > 96: terrain.mesh_block_size = 32
 	terrain.scale = Vector3.ONE * voxel_scale
 	var generator_script: Script = initial_generator if initial_generator != null else PatchGenerator
 	var mesher: Object = ClassDB.instantiate("VoxelMesherBlocky")
@@ -125,7 +121,6 @@ func _ready() -> void:
 		generator.voxel_type = 1
 		terrain.generator = generator
 	add_child(terrain)
-	_apply_generation_tuning(terrain, "create")
 	if ClassDB.class_exists("VoxelViewer"):
 		var bounded_startup := startup_mesh_radius_world > 0.0 and is_finite(startup_mesh_radius_world) and startup_mesh_focus_world.is_finite()
 		if bounded_startup:
@@ -640,10 +635,6 @@ func load_world() -> bool:
 	voxels = loaded
 	loaded_building_document = source_store.loaded_building_document.duplicate(true)
 	terrain.get_voxel_tool().paste(Vector3i.ZERO, voxels, 1)
-	# A fresh paste replaces the whole volume, so re-asserting generation
-	# tuning here costs no extra remesh; without this the live (restored) node
-	# would keep whatever it was created with.
-	_apply_generation_tuning(terrain, "load_world")
 	_undo.clear(); _redo.clear(); _history_bytes = 0
 	_last_edit_command = {}
 	_revision = loaded_revision
@@ -652,29 +643,6 @@ func load_world() -> bool:
 	_last_edit_submitted_at_ms = Time.get_ticks_msec()
 	changed.emit()
 	return true
-
-# The native pipeline resets generation settings when the mesher or generator
-# is (re)assigned, so these must be applied AFTER all pipeline members are in
-# place (verified on device: an earlier write left use_gpu_generation=false on
-# the live node). GPU-side block generation moves remeshing off the main
-# thread, removing input-latency spikes while sculpting on the Thor. The dummy
-# headless renderer has no GPU, so it keeps the CPU path there. The 32-cell
-# mesh-block grouping (native cells > 96) quarters the valley's draw calls.
-# Godot 4.7's mobile renderer reports neither the "vulkan" nor "vulkan3"
-# feature tag (verified on device), so gate on the rendering method.
-func _apply_generation_tuning(t: Object, site: String) -> void:
-	if t == null: return
-	var native_cells := int(round(float(patch_size.x) / voxel_scale))
-	var want_block := 32 if native_cells > 96 else 16
-	var vulkan := RenderingServer.get_current_rendering_method() in ["forward_plus", "mobile"]
-	var want_gpu := vulkan and DisplayServer.get_name() != "headless"
-	var before_gpu := bool(t.use_gpu_generation)
-	if int(t.mesh_block_size) != want_block:
-		t.mesh_block_size = want_block
-	if before_gpu != want_gpu:
-		t.use_gpu_generation = want_gpu
-	print("TUNE_APPLY site=" + site + " block=" + str(want_block) + " want_gpu=" + str(want_gpu)
-			+ " before_gpu=" + str(before_gpu) + " rendering=" + str(RenderingServer.get_current_rendering_method()))
 
 func _upsample_legacy_m1(source: Object) -> Object:
 	if source == null or source.get_size() != M1Generator.LEGACY_PATCH_SIZE: return null
