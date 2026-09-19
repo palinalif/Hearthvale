@@ -1,11 +1,40 @@
-# Hearthvale — water freezes: fixed and verified on device (v41)
+# Hearthvale — full-valley visibility restored, and faster (v43)
 
-2026-09-19, branch `task/water-river` (head `a1821a5`). Current user focus:
-"fix the water issues first" — done, see v41 record at the bottom. Earlier
-sections below are the session's history.
+2026-09-19, branch `task/water-river` (head `2a77725`). Current user focus:
+"the world is not being fully generated/visible — fix that, and measure fps
+before/after" — done, see the v43 record below. The v41 water/path records
+remain the history beneath it.
 Read `AGENTS.md`, the active ticket (`tasks/M2-hamlet-building.md`) and the
 user's current request. The preceding packed-earth handoff (2026-09-12) is
 preserved verbatim in `reports/handoffs/HANDOFF-a85d28d.md`.
+
+## v43 — world truncation fixed: visual viewer radius 20m -> 128m (`2a77725`)
+
+Symptom (user-reported, confirmed by `mesh_survey` on device): the valley
+ended in a hard diagonal cut into void. The drawing VoxelViewer had
+`view_distance = 20` — since 596c5b0 the visual viewer follows the camera
+at a 20 m radius, so only a 20 m patch of the 64 m world was ever meshed.
+Fix: `RUNTIME_VIEW_DISTANCE_WORLD` 20.0 -> 128.0 (exceeds the 96 m
+corner-to-corner diagonal, so every camera position sees the whole finite
+map; the data viewer and terrain.max_view_distance are unchanged, so
+correctness/data residency are untouched). `m1_scaled_backend_test`
+44/44 (it pins only the startup-viewer values, which are unchanged).
+
+**FPS A/B (user-requested), same m2night build otherwise, telemetry
+averages on the Thor:** v42 (20m): static 26.45 / drift 26.50 —
+v43 (128m): static 34.00 / drift 34.00. The fix is a ~28% fps *gain*,
+not a cost: at 20m every camera move streamed mesh blocks in and out
+(constant re-mesh churn); at 128m the finite world meshes once and the
+in-range set never changes. v43 also shows ~5.7M primitives / ~1600
+draw calls / ~565 MB static memory at 34 fps steady — the July 15 fps
+full-valley evidence predates collision-mesh removal, so it no longer
+applies. Screenshot verified: whole valley meshed, no void cut.
+
+Device: m2night test build v43 installed on 192.168.1.15:38865 (the
+production-preset build in `/tmp/hv-v42` is at versionCode 5, untouched).
+One-off diagnostics: `adb forward tcp:47123 tcp:47123` + the JSON bridge
+(`telemetry` for fps/memory, `mesh_survey` for per-VoxelViewer extents,
+`perf`'s fps field is not populated in these builds — use telemetry).
 
 ## Diagnosis (complete)
 
