@@ -40,7 +40,13 @@ func _process(delta: float) -> void:
 	_update_cursor_reticle()
 	last_frame_costs["preview_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
 	phase_started = Time.get_ticks_usec()
-	_update_presentation()
+	# Chain-level presentation gate: the ~10-class _update_presentation chain
+	# only re-runs when something the presentation depends on actually changed
+	# (revisions, selection, view, menus, or an active preview operation).
+	var presentation_gate_key := presentation_gate_key()
+	if presentation_gate_key != _presentation_gate_key:
+		_presentation_gate_key = presentation_gate_key
+		_update_presentation()
 	last_frame_costs["presentation_ms"] = (Time.get_ticks_usec() - phase_started) / 1000.0
 	phase_started = Time.get_ticks_usec()
 	_update_debug_overlay()
@@ -50,6 +56,25 @@ func _process(delta: float) -> void:
 	if not focused and _last_focus: _cancel_current_edit("Window focus lost")
 	_last_focus = focused
 	_fc_scene_end = Time.get_ticks_usec()
+	# Worst-frame peak (declared on the base m1_scene; this is the live loop).
+	if OS.is_debug_build():
+		_peak_window_frames += 1
+		if _peak_window_frames > 180:
+			worst_frame_costs = {}
+			worst_frame_ms = 0.0
+			worst_frame_delta_ms = 0.0
+			_peak_window_frames = 0
+		var pm: float = last_frame_costs.get("process_ms", 0.0)
+		if pm > worst_frame_ms:
+			worst_frame_ms = pm
+			worst_frame_at_ms = Time.get_ticks_msec()
+			worst_frame_costs = last_frame_costs.duplicate(true)
+		# Real-time period between process callbacks: the number that matches
+		# what the player perceives (a GPU stall shows up here as a big delta
+		# even when the CPU-side process_ms stayed small).
+		var dm: float = delta * 1000.0
+		if dm > worst_frame_delta_ms:
+			worst_frame_delta_ms = dm
 
 func _read_camera_and_cursor(delta: float) -> void:
 	if view_context != "building":

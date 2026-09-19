@@ -63,6 +63,19 @@ var stroke_aim_offset := Vector3.ZERO
 var keep_reference := false
 var status_text := "Loading cottage…"
 var last_frame_costs: Dictionary = {}
+# Worst-frame peak tracker (debug builds only): catches the hitch frames the
+# last-frame costs miss. A rolling 180-frame (3 s at 60) window so the record
+# decays when the game recovers; the "reset_peaks" action clears it on demand.
+var worst_frame_costs: Dictionary = {}
+var worst_frame_ms := 0.0
+# Peak real-time delta between _process callbacks (ms) over the same window.
+# Godot's delta includes the main loop's wait for the render pipeline, so a
+# GPU-side stall (the user's 1-2 s post-stroke freezes) shows up here even
+# when process_ms stays small. 2026-09-19: Godot 4.7 has no GPU frame-time
+# monitor, this is the closest in-app proxy for perceived frame time.
+var worst_frame_delta_ms := 0.0
+var worst_frame_at_ms := 0
+var _peak_window_frames := 0
 # Frame-clock probe marks (debug builds only; the probe reads these across scripts).
 var _fc_scene_start := 0
 var _fc_scene_end := 0
@@ -72,6 +85,41 @@ var _shutting_down := false
 var _pause_buttons: Dictionary = {}
 var _tool_buttons: Dictionary = {}
 var _presentation_key := ""
+
+## Shared per-frame presentation gate for the deep scene chain: true on the
+## first frame and on frames where the building or terrain revision changed.
+## Chain-level presentation gate (2026-09-19, v44 device profiling). The
+## _update_presentation chain cost ~15ms/frame even when nothing changed
+## (~10 feature classes x 1-2ms of per-frame key work), capping the game at
+## ~33fps. The live loop now computes presentation_gate_key() and only calls
+## the chain when it changes: building/terrain revision, selection, view,
+## menus, or any active preview operation (cursor included while one runs).
+var _presentation_gate_key := ""
+
+func presentation_gate_key() -> String:
+	var brev: int = building_world.get_revision() if building_world else -1
+	var trev: int = int((backend.stats() as Dictionary).get("revision", -1)) if backend and backend.has_method("stats") else -1
+	var s := "%d|%d|%s|%s" % [brev, trev, str(selected_building_id), view_context]
+	# Base-declared flags read directly; derived-class flags come from the same
+	# node instance (one inheritance chain = one object). Dynamic get stays
+	# isolated here, per the project's adapter rule.
+	var active_op: int = (1 if stroke_active else 0) + (1 if landscape_active else 0) + (1 if detail_move_active else 0) + (1 if resize_active else 0)
+	for derived_flag in ["building_placement_active", "portion_placement_active", "roof_accessory_placement_active", "_surface_material_picker_open", "_house_shape_picker_open", "_roof_design_picker_open", "water_placement_active"]:
+		if get(derived_flag) == true:
+			active_op += 1
+	s += "|%d|%d" % [active_op, 1 if _restoring else 0]
+	if active_op > 0:
+		# Cursor and preview center move every frame during an op (live preview
+		# needs the chain), but preview_center is recomputed from the camera
+		# raycast even while idle (2026-09-19: including it unconditionally
+		# re-dirtied the gate every idle frame, defeating the whole gate).
+		s += "|%.2f|%.2f|%.2f|%.2f|%.2f" % [cursor.x, cursor.z, preview_center.x, preview_center.y, preview_center.z]
+	if detail_move_active:
+		s += "|%.2f|%.2f|%.2f" % [detail_move_position.x, detail_move_position.y, detail_move_position.z]
+	if resize_active:
+		s += "|%.2f|%.2f|%.2f" % [resize_preview_dimensions.x, resize_preview_dimensions.y, resize_preview_dimensions.z]
+	s += "|%d|%d|%d|%d|%.1f|%.1f" % [1 if menu_open else 0, 1 if tools_open else 0, 1 if detail_open else 0, 1 if precision_mode else 0, brush_strength, brush_falloff]
+	return s
 var _last_requested_cottage_revision := -1
 var _last_target_label_text := ""
 var _history_tags: Array[String] = []
@@ -189,6 +237,13 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 	if not OS.is_debug_build():
 		return {"type": "error", "message": "debug build only"}
 	match name:
+		"reset_peaks":
+			worst_frame_costs = {}
+			worst_frame_ms = 0.0
+			worst_frame_at_ms = 0
+			worst_frame_delta_ms = 0.0
+			_peak_window_frames = 0
+			return {"type": "ok", "reset": true}
 		"state":
 			return {
 				"type": "state", "tool": sculpt_tool, "stroke_active": stroke_active,
@@ -343,6 +398,12 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 				"draws": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
 				"prims": int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)),
 				"last_frame_costs": last_frame_costs.duplicate(true),
+				"worst_frame": {
+					"ms": worst_frame_ms,
+					"delta_ms": worst_frame_delta_ms,
+					"age_ms": Time.get_ticks_msec() - worst_frame_at_ms,
+					"costs": worst_frame_costs.duplicate(true),
+				},
 				"path_profile": profile,
 				"native": backend.stats() if backend != null and backend.has_method("stats") else {},
 				"water": water_perf,
@@ -1606,10 +1667,10 @@ func _update_presentation() -> void:
 	var _ul_t0 := Time.get_ticks_usec()
 	if not cottage_visual or not building_world: return
 	var revision: int = building_world.get_revision()
+	var key := "%d|%s|%s|%s" % [revision, str(resize_preview_dimensions if resize_active else Vector3.ZERO), selected_detail_id if detail_move_active else "", str(detail_move_position) if detail_move_active else ""]
 	if revision != _last_requested_cottage_revision:
 		if cottage_visual.has_method("request_revision"): cottage_visual.request_revision(revision)
 		_last_requested_cottage_revision = revision
-	var key := "%d|%s|%s|%s" % [revision, str(resize_preview_dimensions if resize_active else Vector3.ZERO), selected_detail_id if detail_move_active else "", str(detail_move_position) if detail_move_active else ""]
 	if key != _presentation_key:
 		var presentation: Dictionary = building_world.get_building(selected_building_id)
 		if resize_active:
