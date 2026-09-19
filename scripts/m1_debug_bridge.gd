@@ -224,11 +224,7 @@ func _handle_command(line: String) -> Dictionary:
 				return tune_res if tune_res is Dictionary else {"type": "error", "message": "tune failed"}
 			return {"type": "error", "message": "no debug action host"}
 		"telemetry":
-			var t := _telemetry()
-			# Whole main-loop frame time (process + physics + waits), so a
-			# vsync-stretched process window is distinguishable from real work.
-			t["frame_total_ms"] = Performance.get_monitor(Performance.TIME_FRAME) * 1000.0
-			return t
+			return _telemetry()
 		"mark":
 			return {"type": "ok", "mark": String(cmd.get("name", ""))}
 		_:
