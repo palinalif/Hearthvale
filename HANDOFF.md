@@ -1,12 +1,117 @@
-# Hearthvale — full-valley visibility restored, and faster (v43)
+# Hearthvale — world-sized terrain viewers (v46); idle re-meshing fixed (v49)
 
-2026-09-19, branch `task/water-river` (head `2a77725`). Current user focus:
-"the world is not being fully generated/visible — fix that, and measure fps
-before/after" — done, see the v43 record below. The v41 water/path records
-remain the history beneath it.
-Read `AGENTS.md`, the active ticket (`tasks/M2-hamlet-building.md`) and the
-user's current request. The preceding packed-earth handoff (2026-09-12) is
-preserved verbatim in `reports/handoffs/HANDOFF-a85d28d.md`.
+## v46 — full-world visibility: viewer radii now derive from the world extent (2026-07-20, on-device verified)
+
+The user's "the world is not fully loading" complaint was real: the runtime
+visual viewer was hardcoded to a 128 m radius and the data viewer to 64 m,
+but the m2night test world is ~145 m wide (diagonal ~213 m), so terrain beyond
+those radii silently never meshed — permanent gaps at the world's edges no
+matter where the camera went. Fix (`terrain_backend.gd`): both radii now
+derive from the actual world extent — visual = 1.25 × (max half-extent +
+12 m camera overhang) → 266 m on the m2night world; data = half-diagonal ×
+1.414 → 106.5 m. Starter-world values stay byte-identical (128 m / 64 m);
+`m1_scaled_backend_test` pins updated to the formulas (44/44). On-device v46
+(versionCode 46, production preset, exactly one ARM64 libvoxel, debug
+keystore identity unchanged): **25 s + 20 s camera pans to the far corner of
+the valley — full terrain rendered everywhere, no pop-in, no gaps**; idle
+25.3–25.8 ms (~39 fps; pre_ms 13.8–14.9, scene 0.8) and 25.3 ms during
+panning — **no fps regression vs v45's 38–40 fps idle** (the bigger viewer
+costs nothing steady-state; the first load after install pays a one-time
+full-world meshing burst of ~2 min at ~13 fps that recovers on its own —
+expected, not a regression). v46 also carries the cottage brick-coursing
+cosmetic (see below) — it renders correctly in on-device screenshots (red
+brick + mortar coursing on the Tudor cottage); the user's explicit visual
+approval is still pending. **Bridge gotcha:** the debug bridge is a raw
+newline-delimited-JSON TCP server, **not HTTP** — `curl http://…:47123/…`
+always fails (rc:1 / "HTTP/0.9 when not allowed"); send
+`{"cmd":"ping"}\n` over a plain socket instead.
+
+2026-09-20, branch `task/water-river`. Current user focus: "the world is in
+fact not fully loading — measure avg FPS before/after" plus the newer
+reports (2026-09-20): still lots of lag during water creation, 1-2s freeze
+after raise/dig strokes. The v43 full-valley record below remains the
+history; the 2026-09-12 packed-earth handoff is preserved at
+`reports/handoffs/HANDOFF-a85d28d.md`.
+
+## v49 — idle terrain-tool re-meshing killed + real frame-delta peak probe
+
+The v43 "20m -> 128m viewer" fix was a red herring for the "world not
+loading" report: the user's world was fully meshed (mesh_survey), but the
+*live gameplay terrain backend* was pinned at `startup_view_distance = 20`
+(the old M1 constant the M2 water ticket never widened) and the live
+camera orbits at ~7-12 m, so most of the valley's gameplay-mesh cells were
+being streamed in and out of a 20 m residency radius as the camera moved —
+perpetual churn that showed up as (a) terrain that appeared to vanish at a
+distance and (b) a constant CPU floor. v48 (yesterday) set the live backend
+to the full 128 m world; on the user's test world (266k mesh cells, ~48k
+cottage cells, 37k water cells) that raised steady idle from ~30 fps
+(28.4 ms, CPU-saturated) — and it is the correct architecture (residency
+== whole finite world, same as the visual viewer).
+
+v49 adds two things on top of v48:
+
+1. **Presentation gate (the actual idle fix).** `_update_brush_preview()`
+   (m1_scene.gd) recomputes the sculpt preview + terrain target *every
+   frame while a terrain tool is selected* — and the user always has the
+   raise tool selected, so idle gameplay was re-meshing the brush preview
+   (~17 ms) and re-running the path terrain-ownership update (~16.5 ms) on
+   every single frame, even with zero input. Now the recompute is gated by
+   a key of (tool, brush radius, cursor, stroke active, view context,
+   target valid); the key changes only on real input, so idle frames
+   cost ~0 ms and the one-frame input latency is acceptable for a
+   controller-driven game. The gate lives next to the call in
+   `m1_scene_building_camera.gd` (`_should_update_brush_preview`); the
+   preview centre is only part of the key while a stroke is active
+   (the centre itself drifts every frame with the camera ray and must
+   not keep the gate open at idle).
+2. **Real worst-frame measurement.** The old worst-frame tracker only saw
+   `process`/`presentation` CPU; the multi-second freezes are GPU
+   backpressure that CPU probes never see. The tracker now keeps the
+   maximum real-time delta between `_process` callbacks (frame period the
+   player actually waited) alongside the CPU peak.
+
+**v48 -> v49 A/B, same m2night build otherwise, on-device bridge**
+(`/tmp/hv-v49-ab2.jsonl`, strokes + 12 s idle windows, peaks after
+`reset_peaks`):
+
+| window | v48 | v49 |
+|---|---|---|
+| idle, raise tool selected | 30 fps / 28.4 ms | **38-40 fps / 25-26 ms** (peak frame 28-33 ms) |
+| raise stroke (2.2 s, small) | ~30 fps steady | ~20 fps during; **one 145.8 ms spike frame** right after release (process 46 ms: sculpt 21.7 + presentation 17.4 + camera); recovers to 39 fps in ~1.5 s |
+| water stroke (small stream) | multi-second freezes (pre-v40 fix) | **fps drops to 7-19 and stays ~19 fps for 6-8 s** after the stroke (per-frame water update 16.7 ms; 149 ms spike at stroke start); recovers to 39-40 in ~8 s |
+
+Conclusions: the gate fix is worth +8 fps idle and is the fix for the
+"not loading" churn. The remaining user-visible issues are real but
+smaller than reported: a ~150 ms single-frame stutter on terrain stroke
+commit (scales with stroke size — a user's big raise/dig can approach the
+perceived "1-2 s"), and water strokes on the user's large test world leave
+a sustained 19 fps degradation for ~8 s (GPU-bound: 52 ms frames vs 34 ms
+CPU; the v40 banded probes + budgeted drain removed the multi-second
+freeze but not the rebuild load).
+
+Next (approved follow-ups, not yet done):
+- Water stroke cost: profile the per-stroke ribbon/extend rebuild on a
+  37k-cell body (per-frame `m2_scene_water` update 16.7 ms during stroke,
+  ~18 ms unaccounted GPU in the 52 ms frame); budget/split the post-stroke
+  water visual rebuild like the drain was.
+- Terrain stroke-commit spike: the rebuild batch (sculpt 21.7 ms +
+  presentation 17.4 ms in one frame) is unbudgeted; extend it over frames
+  or cap the per-frame cell budget so commit stays under ~30 ms.
+- Cottage brick coursing art pass is implemented in
+  `scripts/cottage_visual.gd` (1x1-cell bricks, 0.5-cell joints, same 33%
+  mortar ratio; Tudor tone patch bias 4x3 -> 8x6 cells); shipped inside v46
+  and visible on device — awaiting the user's explicit art approval.
+
+Device: m2night v46 (`versionCode 46`, `/tmp/hv-v42` production-preset
+export, exactly one ARM64 `libvoxel`) on 192.168.1.15:38865. Launcher
+activity on current Godot exports is `com.godot.game.GodotAppLauncher`
+(the plain `com.godot.game.GodotApp` in the manifest does not exist).
+Bridge: `adb forward tcp:47123 tcp:47123` + newline-delimited **JSON**
+actions over a plain TCP socket (NOT HTTP — curl will always fail): `state`,
+`telemetry`, `perf`, `reset_peaks`, `cursor_set [x,y,z]` to place the
+cursor on a known surface point, left stick moves the cursor, right stick
+orbits; `press a` + left-stick move = a stroke, `undo` to revert.
+The user's test world has 37,374 water cells — treat as the perf baseline.
 
 ## v43 — world truncation fixed: visual viewer radius 20m -> 128m (`2a77725`)
 
@@ -35,7 +140,6 @@ production-preset build in `/tmp/hv-v42` is at versionCode 5, untouched).
 One-off diagnostics: `adb forward tcp:47123 tcp:47123` + the JSON bridge
 (`telemetry` for fps/memory, `mesh_survey` for per-VoxelViewer extents,
 `perf`'s fps field is not populated in these builds — use telemetry).
-
 ## Diagnosis (complete)
 
 The M2 starter valley runs at **15.0 fps** (68 ms period) on the AYN Thor.
