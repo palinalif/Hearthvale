@@ -162,6 +162,7 @@ switch ($Shard) {
             'm2_path_history_test',
             'm2_painted_path_region_test',
             'm2_painted_path_authority_test',
+            'm2_path_edit_reach_test',
             'm2_path_terrain_excavation_test',
             'm2_path_plaza_integration_test',
             'm2_path_placement_test',

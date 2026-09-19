@@ -93,6 +93,19 @@ func _run_scene_checks(capture: bool) -> void:
 		await _capture_view("path-transitions-close.png", Vector3(25.2, 8.0, 26.0), 12.0, -0.96, 0.76, "phone-readable path transition close capture")
 		await EarthChecks.review(self, scene, screenshot_dir)
 	await EarthChecks.lifecycle(self, scene)
+	# Android freeze regression: a terrain edit that reaches no painted cell
+	# must not re-mesh the path network; an edit on it must.
+	_check(absf(scene.backend.voxel_scale - Grid.UNIT) < 0.001, "backend and path grids agree for edit-reach checks")
+	var packed_node: MeshInstance3D = scene.path_visual._style_nodes["packed_earth"]
+	var mesh_before: Mesh = packed_node.mesh
+	scene.backend._last_edit_command = {"min": Vector3i(300, 0, 300), "size": Vector3i(4, 8, 4), "before": 0, "after": 0}
+	scene.backend._revision += 1
+	scene._refresh_path_visual(true)
+	_check(scene.path_visual._style_nodes["packed_earth"].mesh == mesh_before, "terrain edit far from the painted network skips the full path re-mesh")
+	scene.backend._last_edit_command = {"min": Vector3i(112, 0, 112), "size": Vector3i(2, 4, 2), "before": 0, "after": 0}
+	scene.backend._revision += 1
+	scene._refresh_path_visual(true)
+	_check(scene.path_visual._style_nodes["packed_earth"].mesh != mesh_before, "terrain edit on the painted network re-meshes the path")
 	await _finish_scene()
 
 func _capture_view(file_name: String, target: Vector3, distance: float, yaw: float, pitch: float, label: String) -> void:

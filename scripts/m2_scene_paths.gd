@@ -35,6 +35,7 @@ var _path_before_serialized := ""
 var _path_building_revision := -1
 var _path_terrain_revision := -1
 var _path_render_signature := ""
+var _path_doc_signature := ""
 var _path_preview_signature := ""
 
 func _ready() -> void:
@@ -384,11 +385,23 @@ func _on_backend_changed() -> void:
 func _refresh_path_visual(force: bool = false) -> void:
 	if not path_visual: return
 	if backend and path_visual.has_method("attach_backend"): path_visual.attach_backend(backend)
+	var edit_bounds := AABB()
 	if backend and path_visual.has_method("set_authoritative_terrain_change"):
-		var edit_bounds: AABB = backend.get_last_edit_bounds() if backend.has_method("get_last_edit_bounds") else AABB()
+		if backend.has_method("get_last_edit_bounds"):
+			edit_bounds = backend.get_last_edit_bounds()
 		path_visual.set_authoritative_terrain_change(_terrain_revision(), edit_bounds)
-	var signature := JSON.stringify(landscape_state.paths) + "|" + str(_terrain_revision())
+	var paths_signature := JSON.stringify(landscape_state.paths)
+	var signature := paths_signature + "|" + str(_terrain_revision())
 	if not force and signature == _path_render_signature: return
+	# A terrain edit only moves path surfaces under (and beside) the cells it
+	# touched. When the painted authority is unchanged and the edit reaches no
+	# path cell, the committed geometry is still valid: skip the full re-mesh
+	# (the ~0.5 s Android cost that hit every water-stroke commit).
+	if _path_render_signature != "" and paths_signature == _path_doc_signature:
+		if path_visual.has_method("last_terrain_edit_touches_paths") and not path_visual.last_terrain_edit_touches_paths(landscape_state.paths, edit_bounds):
+			_path_render_signature = signature
+			return
+	_path_doc_signature = paths_signature
 	_path_render_signature = signature
 	path_visual.rebuild(landscape_state.paths, backend)
 

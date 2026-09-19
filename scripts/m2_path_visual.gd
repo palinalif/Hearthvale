@@ -37,6 +37,14 @@ func set_preview_terrain_revision(revision: int) -> void:
 	_preview_terrain_revision = revision
 	_preview_surface_heights.clear()
 
+## The 2-cell margin both the height-cache invalidation and the edit-reach
+## check use, so "heights stale" and "rebuild needed" can never disagree.
+static func _edit_cell_range(edit_bounds: AABB) -> PackedVector2Array:
+	var result := PackedVector2Array()
+	result.append(Vector2i(floori(edit_bounds.position.x / Grid.UNIT) - 2, floori(edit_bounds.position.z / Grid.UNIT) - 2))
+	result.append(Vector2i(ceili(edit_bounds.end.x / Grid.UNIT) + 2, ceili(edit_bounds.end.z / Grid.UNIT) + 2))
+	return result
+
 ## Committed path geometry usually survives a terrain edit unchanged. Retain
 ## sampled column heights for the whole path network and invalidate only cells
 ## around the exact edited terrain bounds, so a local sculpt does not rescan
@@ -47,12 +55,30 @@ func set_authoritative_terrain_change(revision: int, edit_bounds: AABB) -> void:
 	if edit_bounds.size == Vector3.ZERO:
 		_preview_surface_heights.clear()
 		return
-	var min_cell := Vector2i(floori(edit_bounds.position.x / Grid.UNIT) - 2, floori(edit_bounds.position.z / Grid.UNIT) - 2)
-	var max_cell := Vector2i(ceili(edit_bounds.end.x / Grid.UNIT) + 2, ceili(edit_bounds.end.z / Grid.UNIT) + 2)
+	var range_cells := _edit_cell_range(edit_bounds)
+	var min_cell: Vector2i = range_cells[0]
+	var max_cell: Vector2i = range_cells[1]
 	for key in _preview_surface_heights.keys():
 		var cell: Vector2i = key
 		if cell.x >= min_cell.x and cell.x <= max_cell.x and cell.y >= min_cell.y and cell.y <= max_cell.y:
 			_preview_surface_heights.erase(cell)
+
+## True when a terrain edit (with the same margin that invalidates cached
+## heights) reaches any committed path cell. The scene uses this to skip the
+## full path re-mesh when a far edit cannot move any path surface — the
+## ~0.5 s Android cost that hit every water-stroke commit. An empty (unknown)
+## edit extent stays conservative: it counts as touching.
+func last_terrain_edit_touches_paths(path_values: Array, edit_bounds: AABB) -> bool:
+	if edit_bounds.size == Vector3.ZERO:
+		return true
+	var range_cells := _edit_cell_range(edit_bounds)
+	var min_cell: Vector2i = range_cells[0]
+	var max_cell: Vector2i = range_cells[1]
+	for style_id in STYLE_ORDER:
+		for cell: Vector2i in _cells_for_style(path_values, style_id):
+			if cell.x >= min_cell.x and cell.x <= max_cell.x and cell.y >= min_cell.y and cell.y <= max_cell.y:
+				return true
+	return false
 
 func rebuild(path_values: Array, terrain_backend: Node = null) -> void:
 	if terrain_backend != null: backend = terrain_backend
