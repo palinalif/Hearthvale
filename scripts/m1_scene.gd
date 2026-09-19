@@ -340,6 +340,20 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 						_: return {"type": "error", "message": "op must be hide|show|disable|enable"}
 					touched += 1
 			return {"type": "ok", "touched": touched, "selector": sel, "op": op}
+		"tree_survey":
+			# Debug: enumerate the live scene tree (name/class/process flags) so an
+			# on-device binary search can target nodes by name (many preview nodes
+			# have generic classes and no class_name).
+			var rows: Array = []
+			var cap := 600
+			if get_tree().current_scene != null:
+				var sstack: Array[Node] = [get_tree().current_scene]
+				while sstack.size() > 0 and rows.size() < cap:
+					var sn: Node = sstack.pop_back()
+					rows.append({"n": sn.name, "c": sn.get_class(), "p": sn.is_processing()})
+					for c in sn.get_children():
+						sstack.push_back(c)
+			return {"type": "ok", "count": rows.size(), "rows": rows}
 		_:
 			return {"type": "error", "message": "unknown action: " + name}
 
