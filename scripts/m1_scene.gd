@@ -1069,8 +1069,19 @@ func _create_backend() -> void:
 func _sync_water_visual() -> void:
 	if test_mode:
 		return
-	if water_visual and water_visual.has_method("set_regions"):
-		water_visual.set_regions(landscape_state.water)
+	# One owner for water regions: LandscapeState records -> presentation only.
+	# Incremental, not full set_regions(): the old full path keyed the rebuild on
+	# the backend revision, so every committed terrain stroke, cancel, undo, redo
+	# and restore (in every scene, including the water tool scene) synchronously
+	# re-resampled and re-meshed the entire water surface - the 1 s release
+	# freeze on mobile. The incremental path keeps unchanged regions
+	# byte-identical (their cached columns stay valid), reconciles only regions
+	# that were added/removed/changed through the budgeted drain, and terrain
+	# edits beneath unchanged regions are already localized by the changed
+	# signal's refresh_surface_from_bounds, which runs before this sync in the
+	# same commit. The full _rebuild() remains the startup / unknown-bounds path.
+	if water_visual and water_visual.has_method("set_regions_incremental"):
+		water_visual.set_regions_incremental(landscape_state.water)
 	# set_waterfall_suppressions also re-derives the (bounded) waterfalls honouring
 	# the player's dismissals, so water commit / undo / redo / restore all stay in sync.
 	if water_visual and water_visual.has_method("set_waterfall_suppressions"):

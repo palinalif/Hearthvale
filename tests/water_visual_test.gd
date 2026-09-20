@@ -112,6 +112,52 @@ func _verify_dry() -> void:
 	check(visual.surface_quad_count() == 0, "terrain above the level produces no water")
 	visual.queue_free(); mock.queue_free()
 
+## The commit-path regression: a backend revision bump with unchanged region
+## payloads (a committed terrain stroke) must not resample or re-mesh anything.
+## The old full set_regions() path keyed on the revision and re-did everything.
+func _verify_revision_bump_is_inert() -> void:
+	var mock: Node = MockBackend.new()
+	root.add_child(mock)
+	var visual := _make(mock, [_whole_lake()])
+	var quads_before: int = visual.surface_quad_count()
+	mock.bump()  # committed stroke: revision changed, region records unchanged
+	visual.set_regions_incremental([_whole_lake()])
+	var perf: Dictionary = visual.water_perf
+	check(visual.surface_quad_count() == quads_before, "revision bump leaves the surface unchanged (quads=%d)" % quads_before)
+	check(int(perf.get("cells_resampled", -1)) == 0, "revision bump resamples no cells (resampled=%s)" % str(perf.get("cells_resampled")))
+	check(float(perf.get("mesh_ms", 1.0)) < 1.0, "revision bump rebuilds no meshes (mesh_ms=%s)" % str(perf.get("mesh_ms")))
+	visual.queue_free(); mock.queue_free()
+
+## A localized terrain edit (the changed-signal path) updates only the touched
+## column, and the following commit sync must still be a no-op, not a full
+## resample of the surface.
+func _verify_localized_edit_then_commit() -> void:
+	var mock: Node = MockBackend.new()
+	root.add_child(mock)
+	var visual := _make(mock, [_whole_lake()])
+	var before: int = visual.surface_quad_count()
+	mock.bumps[Vector2i(20, 20)] = 8  # raise one column to 2.0 m, above the 1.5 m level
+	mock.bump()
+	visual.refresh_surface_from_bounds(AABB(Vector3(-10.0, 0.0, -10.0), Vector3(40.0, 10.0, 40.0)))
+	check(visual.surface_quad_count() == before - 1, "localized edit dries one cell (before=%d after=%d)" % [before, visual.surface_quad_count()])
+	visual.set_regions_incremental([_whole_lake()])  # the commit sync after the signal
+	var perf: Dictionary = visual.water_perf
+	check(visual.surface_quad_count() == before - 1, "commit sync after localized edit keeps the dried cell")
+	check(int(perf.get("cells_resampled", -1)) == 0, "commit sync after localized edit resamples nothing (resampled=%s)" % str(perf.get("cells_resampled")))
+	visual.queue_free(); mock.queue_free()
+
+## The startup path now builds through the incremental entry point: a fresh
+## visual with a cold cache must still produce the full submerged surface.
+func _verify_first_build_incremental() -> void:
+	var mock: Node = MockBackend.new()
+	root.add_child(mock)
+	var visual: Node = Visual.new()
+	root.add_child(visual)
+	visual.attach_backend(mock)
+	visual.set_regions_incremental([_whole_lake()])
+	check(visual.surface_quad_count() >= 1500, "first incremental build covers the whole lake (quads=%d)" % visual.surface_quad_count())
+	visual.queue_free(); mock.queue_free()
+
 func _initialize() -> void:
 	_verify_build()
 	_verify_boundary_clip()
@@ -119,5 +165,8 @@ func _initialize() -> void:
 	_verify_determinism()
 	_verify_stream()
 	_verify_dry()
+	_verify_revision_bump_is_inert()
+	_verify_localized_edit_then_commit()
+	_verify_first_build_incremental()
 	print("water_visual_test checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures > 0 else 0)
