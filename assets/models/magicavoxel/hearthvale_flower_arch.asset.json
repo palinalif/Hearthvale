@@ -5,7 +5,7 @@
     48,
     24
   ],
-  "emitted_quads": 860,
+  "emitted_quads": 1709,
   "exposed_quads": 4934,
   "license": "Project-authored; MCP development tool is MIT",
   "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
@@ -34,10 +34,10 @@
     9
   ],
   "source": "hearthvale_flower_arch.vox",
-  "source_sha256": "87372eba4c2c8e428ee2f232af48263884d29fe02f1a80d3ae0496116b7c026c",
+  "source_sha256": "1078c3e79367e62d9945cfaeef574c764aca1e11f8c52c93ddbc38b1a8ad415d",
   "tool": "https://github.com/Mahinika/magicavoxel-mcp",
   "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
-  "triangles": 1720,
+  "triangles": 3418,
   "voxel_count": 6710,
   "voxel_tier": "prop/detail",
   "voxel_unit": 0.0625
