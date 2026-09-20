@@ -200,6 +200,9 @@ switch ($Shard) {
         )
     }
     'hamlet' {
+        Invoke-NativeTests @(
+            'm2_garden_asset_test'
+        )
         Invoke-MobileReview 'hamlet' 'tests/m2_hamlet_composition_render_test.gd' 180000 @(
             'M2_HAMLET_RENDER_RESULT',
             '"ok"\s*:\s*true'

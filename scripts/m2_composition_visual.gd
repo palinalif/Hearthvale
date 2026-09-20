@@ -4,6 +4,18 @@ class_name M2CompositionVisual
 ## Disposable presentation for saved hamlet-composition records. Authority stays
 ## compact: bridges save two bank points; small details save style, footprint and
 ## quarter-turn orientation. Everything visible here can be rebuilt from that.
+## Plots that have an authored 0.0625-grid voxel mesh use it; the procedural
+## builders remain as the fallback for any unmatched style or size.
+
+const GARDEN_MESH_CELL := 0.0625
+const GARDEN_MESHES := {
+	"cottage_flowers:16x32": "res://assets/models/magicavoxel/hearthvale_garden_flowers_16x32.res",
+	"cottage_flowers:48x32": "res://assets/models/magicavoxel/hearthvale_garden_flowers_48x32.res",
+	"kitchen_rows:48x28": "res://assets/models/magicavoxel/hearthvale_garden_kitchen_48x28.res",
+	"kitchen_rows:56x40": "res://assets/models/magicavoxel/hearthvale_garden_kitchen_56x40.res",
+	"herb_garden:24x16": "res://assets/models/magicavoxel/hearthvale_garden_herbs_24x16.res",
+	"herb_garden:36x36": "res://assets/models/magicavoxel/hearthvale_garden_herbs_36x36.res",
+}
 
 const BRIDGE_COLOURS := {
 	"timber": [Color("#8c6548"), Color("#5f4637")],
@@ -34,6 +46,7 @@ var _fence_nodes: Array[MeshInstance3D] = []
 var _bridge_preview_node: MeshInstance3D
 var _garden_preview_node: MeshInstance3D
 var _fence_preview_node: MeshInstance3D
+var _garden_mesh_cache: Dictionary = {}
 var _stats := {"bridge_count": 0, "garden_count": 0, "fence_count": 0, "geometry_cells": 0, "bridge_geometry_cells": 0, "garden_geometry_cells": 0, "fence_geometry_cells": 0, "preview_cells": 0}
 
 func attach_backend(value: Node) -> void:
@@ -77,15 +90,24 @@ func rebuild_gardens(composition_values: Array, terrain_backend: Node = null) ->
 		if str(record.get("kind", "")) != "garden": continue
 		var style_id := str(record.get("style_id", ""))
 		if not GARDEN_COLOURS.has(style_id): continue
-		var builder := _new_builder(4)
-		_append_garden(builder, record)
-		cells += _builder_cell_count(builder)
-		var mesh := _mesh_from_builder(builder, _record_colours(GARDEN_COLOURS[style_id], record))
-		if mesh == null: continue
 		var node := MeshInstance3D.new()
 		node.name = "Garden_%s" % int(record.get("id", 0))
 		node.set_meta("composition_id", int(record.get("id", 0)))
-		node.mesh = mesh
+		var authored := _garden_authored_mesh(record)
+		if authored != null:
+			node.mesh = _garden_variant(authored, _record_tint(GARDEN_COLOURS[style_id], record), false)
+			var aabb := authored.get_aabb()
+			var point := _point(record.get("position", []))
+			node.position = Vector3(point.x, _surface_height(point) + aabb.size.y * 0.5 - (aabb.end.y - aabb.size.y), point.y)
+			node.rotation.y = float(posmod(int(record.get("yaw_quarters", 0)), 4)) * PI * 0.5
+			cells += _mesh_cell_count(authored)
+		else:
+			var builder := _new_builder(4)
+			_append_garden(builder, record)
+			cells += _builder_cell_count(builder)
+			var mesh := _mesh_from_builder(builder, _record_colours(GARDEN_COLOURS[style_id], record))
+			if mesh == null: continue
+			node.mesh = mesh
 		add_child(node)
 		_garden_nodes.append(node)
 		count += 1
@@ -143,16 +165,27 @@ func show_garden_preview(style_id: String, point: Vector2, size: Vector2, yaw_qu
 	hide_garden_preview()
 	if not GARDEN_COLOURS.has(style_id) or not point.is_finite(): return
 	var record := {"kind": "garden", "style_id": style_id, "position": [point.x, point.y], "size": [size.x, size.y], "yaw_quarters": posmod(yaw_quarters, 4)}
-	var builder := _new_builder(4)
-	_append_garden(builder, record)
-	var mesh := _mesh_from_builder(builder, _preview_colours(GARDEN_COLOURS[style_id], valid), true)
+	var authored := _garden_authored_mesh(record)
+	var mesh: Mesh = null
+	if authored != null:
+		var tint := Color("#a7e0a0") if valid else Color("#ef8b78")
+		mesh = _garden_variant(authored, tint, true)
+		_stats["preview_cells"] = int(roundf(size.x / 0.0625)) * int(roundf(size.y / 0.0625))
+	else:
+		var builder := _new_builder(4)
+		_append_garden(builder, record)
+		mesh = _mesh_from_builder(builder, _preview_colours(GARDEN_COLOURS[style_id], valid), true)
+		_stats["preview_cells"] = _builder_cell_count(builder)
 	if mesh == null: return
 	_garden_preview_node = MeshInstance3D.new()
 	_garden_preview_node.name = "GardenPreview"
 	_garden_preview_node.mesh = mesh
 	_garden_preview_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if authored != null:
+		var aabb := authored.get_aabb()
+		_garden_preview_node.position = Vector3(point.x, _surface_height(point) + aabb.size.y * 0.5 - (aabb.end.y - aabb.size.y), point.y)
+		_garden_preview_node.rotation.y = float(posmod(yaw_quarters, 4)) * PI * 0.5
 	add_child(_garden_preview_node)
-	_stats["preview_cells"] = _builder_cell_count(builder)
 
 func hide_garden_preview() -> void:
 	if is_instance_valid(_garden_preview_node): _garden_preview_node.queue_free()
@@ -264,69 +297,126 @@ func _append_garden(builder: Dictionary, record: Dictionary) -> void:
 		"kitchen_rows": _append_kitchen_garden(builder, center, size, basis)
 		"herb_garden": _append_herb_garden(builder, center, size, basis)
 
+## Deterministic 0..1 sub-grid variation for the fine presentation units.
+static func _fine_variation(index: int, lane: int) -> float:
+	return fposmod(sin(float(index * 13 + lane * 59) * 12.9898) * 43758.5453, 1.0)
+
+## The baked voxel mesh for this record's style and exact 0.0625-grid footprint,
+## or null when only the procedural fallback exists.
+func _garden_authored_mesh(record: Dictionary) -> Mesh:
+	var style_id := str(record.get("style_id", ""))
+	var size_value: Array = record.get("size", [2.0, 2.0])
+	if size_value.size() != 2: return null
+	var key := "%s:%dx%d" % [style_id, roundi(float(size_value[0]) / GARDEN_MESH_CELL), roundi(float(size_value[1]) / GARDEN_MESH_CELL)]
+	if not GARDEN_MESHES.has(key): return null
+	if not _garden_mesh_cache.has(key): _garden_mesh_cache[key] = load(GARDEN_MESHES[key])
+	return _garden_mesh_cache[key] as Mesh
+
+## A tinted or preview copy of an authored plot mesh. The shared resource is
+## only mutated through duplicates, never in place.
+func _garden_variant(base_mesh: ArrayMesh, tint: Color, preview: bool) -> Mesh:
+	if tint.a <= 0.001 and not preview: return base_mesh
+	var mesh := base_mesh.duplicate()
+	for index in mesh.get_surface_count():
+		var original: StandardMaterial3D = mesh.surface_get_material(index)
+		var material := original.duplicate()
+		if tint.a > 0.001: material.albedo_color = material.albedo_color.lerp(tint, 0.42)
+		if preview:
+			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			material.albedo_color.a = 0.56
+			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mesh.surface_set_material(index, material)
+	return mesh
+
+func _record_tint(base_values: Array, record: Dictionary) -> Color:
+	var colour_id := str(record.get("colour_id", ""))
+	if not DETAIL_TINTS.has(colour_id): return Color(1, 1, 1, 0)
+	return DETAIL_TINTS[colour_id] as Color
+
+func _mesh_cell_count(mesh: Mesh) -> int:
+	var aabb := mesh.get_aabb()
+	return maxi(1, roundi(aabb.size.x / GARDEN_MESH_CELL)) * maxi(1, roundi(aabb.size.z / GARDEN_MESH_CELL))
+
 func _append_garden_base(builder: Dictionary, center: Vector3, size: Vector2, basis: Basis, border_material: int = 1) -> void:
-	_append_box(builder, center + Vector3.UP * 0.025, Vector3(size.x - 0.16, 0.05, size.y - 0.16), basis, 0)
-	var edge := 0.09
-	_append_box(builder, center + basis * Vector3(0, 0.065, -size.y * 0.5 + edge * 0.5), Vector3(size.x, 0.13, edge), basis, border_material)
-	_append_box(builder, center + basis * Vector3(0, 0.065, size.y * 0.5 - edge * 0.5), Vector3(size.x, 0.13, edge), basis, border_material)
-	_append_box(builder, center + basis * Vector3(-size.x * 0.5 + edge * 0.5, 0.065, 0), Vector3(edge, 0.13, maxf(0.1, size.y - edge * 2.0)), basis, border_material)
-	_append_box(builder, center + basis * Vector3(size.x * 0.5 - edge * 0.5, 0.065, 0), Vector3(edge, 0.13, maxf(0.1, size.y - edge * 2.0)), basis, border_material)
+	# Soil pad and a 0.0625-unit timber frame: fine rails, corner posts and a
+	# low centre cross, all at presentation-fine cell dimensions.
+	var rail := 0.0625
+	var inset := rail * 0.5
+	_append_box(builder, center + Vector3.UP * 0.025, Vector3(size.x - rail * 2.0, 0.05, size.y - rail * 2.0), basis, 0)
+	_append_box(builder, center + basis * Vector3(0, 0.05, -size.y * 0.5 + inset), Vector3(size.x, 0.10, rail), basis, border_material)
+	_append_box(builder, center + basis * Vector3(0, 0.05, size.y * 0.5 - inset), Vector3(size.x, 0.10, rail), basis, border_material)
+	_append_box(builder, center + basis * Vector3(-size.x * 0.5 + inset, 0.05, 0), Vector3(rail, 0.10, size.y - rail * 2.0), basis, border_material)
+	_append_box(builder, center + basis * Vector3(size.x * 0.5 - inset, 0.05, 0), Vector3(rail, 0.10, size.y - rail * 2.0), basis, border_material)
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			_append_box(builder, center + basis * Vector3(sx * (size.x * 0.5 - inset), 0.05, sz * (size.y * 0.5 - inset)), Vector3(0.075, 0.12, 0.075), basis, border_material)
 
 func _append_cottage_flower_garden(builder: Dictionary, center: Vector3, size: Vector2, basis: Basis) -> void:
 	_append_garden_base(builder, center, size, basis)
-	# Loose cottage flowers: five drifted rows of stems, each with a pair of
-	# low leaves and a bloom, so the bed reads as planted rather than sparsely dotted.
-	for index in 30:
-		var u := -0.42 + float(index % 6) * 0.168 + 0.035 * sin(float(index * 7))
-		var v := -0.40 + float(index / 6) * 0.20 + 0.05 * sin(float(index * 11 + 2))
+	# Loose cottage flowers at the presentation-fine scale: six drifted rows of
+	# thin two-segment stems, each with a pair of small leaves and a two-part
+	# bloom, so the bed reads as planted rather than sparsely dotted.
+	for index in 36:
+		var u := -0.43 + float(index % 6) * 0.17 + 0.045 * (sin(float(index * 7)) * 0.5 + 0.5)
+		var v := -0.40 + float(index / 6) * 0.16 + 0.06 * (sin(float(index * 11 + 2)) * 0.5 + 0.5)
 		var local := Vector3(u * size.x, 0, v * size.y)
-		var height := 0.16 + 0.14 * (sin(float(index * 5)) * 0.5 + 0.5)
-		var stem_center := center + basis * local + Vector3.UP * (0.08 + height * 0.5)
-		_append_box(builder, stem_center, Vector3(0.055, height, 0.055), basis, 2)
-		var leaf_top := 0.08 + height * 0.45
+		var height := 0.12 + 0.16 * (sin(float(index * 5)) * 0.5 + 0.5)
+		var stem_center := center + basis * local + Vector3.UP * (0.075 + height * 0.5)
+		_append_box(builder, stem_center, Vector3(0.03, height * 0.55, 0.03), basis, 2)
+		var top_center := center + basis * local + Vector3.UP * (0.075 + height * 0.85)
+		_append_box(builder, top_center, Vector3(0.045, height * 0.5, 0.045), basis, 2)
 		for side in [-1.0, 1.0]:
-			var leaf := stem_center + basis * Vector3(side * 0.045, 0, 0) - Vector3.UP * height * 0.18
-			_append_box(builder, leaf, Vector3(0.06, 0.05, 0.045), basis, 2)
-		var bloom_size := 0.075 + 0.03 * float(index % 3)
-		var bloom := center + basis * local + Vector3.UP * (0.08 + height + 0.03)
-		_append_box(builder, bloom, Vector3(bloom_size, 0.07, bloom_size), basis, 3)
+			var leaf := center + basis * (local + Vector3(side * 0.03, 0, 0)) + Vector3.UP * (0.085 + height * 0.28)
+			_append_box(builder, leaf, Vector3(0.05, 0.03, 0.035), basis, 2)
+		var bloom_size := 0.05 + 0.025 * _fine_variation(index, 3)
+		var bloom := center + basis * local + Vector3.UP * (0.075 + height + 0.025)
+		_append_box(builder, bloom, Vector3(bloom_size, 0.045, bloom_size), basis, 3)
+		var tip_size := bloom_size * 0.5
+		_append_box(builder, bloom + Vector3.UP * 0.035, Vector3(tip_size, 0.025, tip_size), basis, 3)
 
 func _append_kitchen_garden(builder: Dictionary, center: Vector3, size: Vector2, basis: Basis) -> void:
 	_append_garden_base(builder, center, size, basis, 1)
-	# Three raised soil rows, each planted with a staggered line of vegetables;
-	# every second plant carries a small lighter tip so the rows read from a distance.
+	# Three raised soil rows, each planted with a staggered line of fine vegetables:
+	# a small leaf cluster, a lighter top, and every third plant a small fruit.
 	for row in 3:
-		var row_x := (float(row) - 1.0) * size.x * 0.27
-		_append_box(builder, center + basis * Vector3(row_x, 0.055, 0), Vector3(size.x * 0.18, 0.11, size.y * 0.78), basis, 0)
-		for plant in 7:
-			var z := -size.y * 0.32 + float(plant) * size.y * 0.107
-			var h := 0.13 + 0.06 * float((row * 7 + plant) % 3)
-			var plant_center := center + basis * Vector3(row_x, 0, z) + Vector3.UP * (0.10 + h * 0.5)
-			_append_box(builder, plant_center, Vector3(0.12, h, 0.13), basis, 2 if (row + plant) % 2 == 0 else 3)
-			if (row + plant) % 2 == 1:
-				_append_box(builder, plant_center + Vector3.UP * (h * 0.55), Vector3(0.07, 0.06, 0.07), basis, 3)
+		var row_x := (float(row) - 1.0) * size.x * 0.28
+		_append_box(builder, center + basis * Vector3(row_x, 0.05, 0), Vector3(size.x * 0.2, 0.10, size.y * 0.76), basis, 0)
+		for plant in 13:
+			var z := -size.y * 0.33 + float(plant) * size.y * 0.053
+			var x := row_x + 0.045 * (sin(float(row * 13 + plant) * 7.3) * 0.5 + 0.5)
+			var h := 0.08 + 0.07 * (sin(float(row * 13 + plant) * 4.1) * 0.5 + 0.5)
+			var base_y := 0.10 + h * 0.5
+			var plant_center := center + basis * Vector3(x, 0, z) + Vector3.UP * base_y
+			_append_box(builder, plant_center, Vector3(0.08, h * 0.6, 0.08), basis, 2)
+			_append_box(builder, plant_center + Vector3.UP * h * 0.55, Vector3(0.055, h * 0.6, 0.055), basis, 2 if (row + plant) % 2 == 0 else 3)
+			if (row * 3 + plant) % 3 == 0:
+				_append_box(builder, plant_center + Vector3(0.035, 0.045, 0.03), Vector3(0.035, 0.035, 0.035), basis, 3)
 
 func _append_herb_garden(builder: Dictionary, center: Vector3, size: Vector2, basis: Basis) -> void:
 	_append_garden_base(builder, center, size, basis)
-	# Divided compact beds: a cross of low timber dividers, a denser 5 x 5 grid
-	# of mixed low herbs, and a short post at each arm end of the cross.
-	_append_box(builder, center + Vector3.UP * 0.075, Vector3(0.07, 0.15, size.y - 0.20), basis, 1)
-	_append_box(builder, center + Vector3.UP * 0.075, Vector3(size.x - 0.20, 0.15, 0.07), basis, 1)
+	# Divided compact beds at the presentation-fine scale: a thin cross of timber
+	# dividers with a post at each arm end and a 7 x 7 grid of small two-part
+	# herb tufts, so the patch reads as a tended plot rather than coarse blocks.
+	_append_box(builder, center + Vector3.UP * 0.06, Vector3(0.045, 0.12, size.y - 0.12), basis, 1)
+	_append_box(builder, center + Vector3.UP * 0.06, Vector3(size.x - 0.12, 0.12, 0.045), basis, 1)
 	for arm in 4:
 		var post := Vector3(0, 0, 0)
 		match arm:
-			0: post = basis * Vector3(0, 0, -size.y * 0.5 + 0.045)
-			1: post = basis * Vector3(0, 0, size.y * 0.5 - 0.045)
-			2: post = basis * Vector3(-size.x * 0.5 + 0.045, 0, 0)
-			3: post = basis * Vector3(size.x * 0.5 - 0.045, 0, 0)
-		_append_box(builder, center + post + Vector3.UP * 0.09, Vector3(0.08, 0.18, 0.08), basis, 1)
-	for index in 25:
-		var column := index % 5
-		var row := index / 5
-		var x := -size.x * 0.37 + float(column) * size.x * 0.185
-		var z := -size.y * 0.37 + float(row) * size.y * 0.185
-		var h := 0.09 + 0.09 * (sin(float(index * 4 + 1)) * 0.5 + 0.5)
-		_append_box(builder, center + basis * Vector3(x, 0, z) + Vector3.UP * (0.08 + h * 0.5), Vector3(0.10, h, 0.10), basis, 2 if index % 3 else 3)
+			0: post = basis * Vector3(0, 0, -size.y * 0.5 + 0.03)
+			1: post = basis * Vector3(0, 0, size.y * 0.5 - 0.03)
+			2: post = basis * Vector3(-size.x * 0.5 + 0.03, 0, 0)
+			3: post = basis * Vector3(size.x * 0.5 - 0.03, 0, 0)
+		_append_box(builder, center + post + Vector3.UP * 0.08, Vector3(0.06, 0.16, 0.06), basis, 1)
+	for index in 49:
+		var column := index % 7
+		var row := index / 7
+		var x := -size.x * 0.395 + float(column) * size.x * 0.119
+		var z := -size.y * 0.395 + float(row) * size.y * 0.119
+		var h := 0.07 + 0.08 * _fine_variation(index, 1)
+		var tuft := center + basis * Vector3(x, 0, z) + Vector3.UP * (0.065 + h * 0.5)
+		_append_box(builder, tuft, Vector3(0.065, h, 0.065), basis, 2 if index % 3 else 3)
+		var top_size := 0.045 + 0.02 * _fine_variation(index, 2)
+		_append_box(builder, tuft + Vector3.UP * h * 0.55, Vector3(top_size, 0.035, top_size), basis, 3)
 
 func _append_fence(builder: Dictionary, record: Dictionary) -> void:
 	var style_id := str(record.get("style_id", ""))

@@ -65,6 +65,16 @@ class DeliveryRegressionGateTest(unittest.TestCase):
         self.assertIn("PLANTER_MOBILE_CAPTURE", block.group(1))
         self.assertNotIn("--promote", block.group(1), "CI validates canonical exports without private MCP staging")
 
+    def test_garden_authored_asset_check_is_wired_in_hamlet_shard(self):
+        runner = (ROOT / "tools/test-cottage-shard.ps1").read_text(encoding="utf-8")
+        block = re.search(r"(?ms)^    'hamlet' \{(.*?)^    \}", runner)
+        self.assertIsNotNone(block)
+        self.assertIn("m2_garden_asset_test", block.group(1))
+        self.assertTrue((ROOT / "tests/m2_garden_asset_test.gd").is_file())
+        visual = (ROOT / "scripts/m2_composition_visual.gd").read_text(encoding="utf-8")
+        self.assertIn("GARDEN_MESHES", visual)
+        self.assertIn("_garden_authored_mesh", visual)
+
     def test_windows_candidate_proves_runtime_terrain_readiness(self):
         workflow = (ROOT / ".github/workflows/thor-repair-apk.yml").read_text(encoding="utf-8")
         build = job_block(workflow, "build-windows")
