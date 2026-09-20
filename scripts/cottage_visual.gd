@@ -32,13 +32,16 @@ const WOOD_MATERIAL := "timber"
 const BRICK_TONES: Array[Color] = [
 	Color("#8d422c"), Color("#9c5340"), Color("#a96247"), Color("#b5734f"), Color("#c1865f"),
 ]
-## Coursing pitch and mortar joint in fine cells: a 3x2 cell brick with a 1 cell
-## joint (18 bricks across the cottage front, 8 courses), so every emitted box
-## lands exactly on the fine grid. The joint reveals the wall material one cell
-## lower as the mortar bed, so the material record stays authoritative and the
-## shell keeps its authored tone.
-const BRICK_PITCH := Vector2(4.0, 3.0)
-const BRICK_JOINT := 1.0
+## Coursing pitch and mortar joint in fine cells (0.0625 m). 2026-09-20 art
+## pass: the original whole-cell 3x2 bricks with 1-cell joints read chunky and
+## grout-heavy, so the facing is refined to half scale: a 1x1 cell brick with a
+## half-cell joint (pitch 1.5 x 1.5, same 33% mortar ratio). The facing is
+## procedural box geometry standing one fine cell clear of the wall (no
+## z-fighting), so sub-cell edges are safe; authoritative structure stays on
+## the 0.125 grid. The joint reveals the wall material as the mortar bed, so
+## the material record stays authoritative and the shell keeps its tone.
+const BRICK_PITCH := Vector2(1.5, 1.5)
+const BRICK_JOINT := 0.5
 ## Hand-painted plaster patch size for the timber-framed village gable walls.
 const TUDOR_PATCH := Vector2(16.0, 12.0)
 const TUDOR_TONES := 3
@@ -172,7 +175,7 @@ func _tone_index(course: int, column: int) -> int:
 	# A coarse patch bias plus strong per-cell jitter: the reference wall reads as
 	# per-brick tonal noise inside soft hand-painted patches, never salt-and-pepper
 	# randomness, and it is identical for a given cell every time.
-	var patch := _tone_hash(column / 4, course / 3, _tone_salt) % count
+	var patch := _tone_hash(column / 8, course / 6, _tone_salt) % count
 	var jitter := _tone_hash(column, course, _tone_salt + 17) % TONE_NUDGE - 2
 	return posmod(patch + jitter, count)
 
@@ -209,7 +212,7 @@ func _collect_tone_faces(basis: Basis, origin: Vector3, pieces: Array, plane: fl
 			for column in range(floori((low_x - shift) / pitch.x + 0.0001), ceili((high_x - shift) / pitch.x - 0.0001)):
 				var brick_low := maxf(low_x, shift + float(column) * pitch.x)
 				var brick_high := minf(high_x, shift + float(column + 1) * pitch.x - joint_x)
-				if brick_high - brick_low < _detail_unit.x * 1.5: continue
+				if brick_high - brick_low < _detail_unit.x * 0.75: continue
 				var tone := _tone_index(course, column)
 				var local := Vector3((brick_low + brick_high) * 0.5, (row_low + row_high) * 0.5, face)
 				# Emit axis-aligned in the building frame: Grid.quantized_box snaps
