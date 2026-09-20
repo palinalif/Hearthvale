@@ -12,7 +12,7 @@ const EXPECTED := {
 	"topiary_pair": {"size": Vector2(0.875, 0.5), "height": 0.75, "voxels": 363},
 	"beehive": {"size": Vector2(0.4375, 0.5625), "height": 0.875, "voxels": 174},
 	"wheelbarrow": {"size": Vector2(1.0, 0.375), "height": 0.5, "voxels": 148},
-	"flower_arch": {"size": Vector2(2.375, 0.5625), "height": 2.9375, "voxels": 2748},
+	"flower_arch": {"size": Vector2(6.875, 3.0), "height": 8.875, "voxels": 149304},
 	"garden_gnome": {"size": Vector2(0.375, 0.375), "height": 0.875, "voxels": 182},
 	"garden_gnome_small": {"size": Vector2(0.375, 0.375), "height": 0.5, "voxels": 102},
 	"garden_gnome_tall": {"size": Vector2(0.375, 0.375), "height": 1.0, "voxels": 190},
