@@ -451,13 +451,15 @@ identical optimization; the user visually accepts.
   (verified 2026-09-21; ports change on reboot/sleep — re-pair then
   connect). The adb daemon on the workstation drops between some command
   batches: re-`adb connect` and re-`adb forward` at the top of each batch.
-- Test package `org.hearthvale.game.test.m2night` is at **versionCode 60**
-  (`b48da22`, built `builds/hearthvale-m2night-v60-b48da22.apk`) and is the
-  installed build, left running on the starter valley for user visual
-  review. Version codes are monotonic per package — always set
-  `version/code` **above** the installed one or `adb install -r` is
-  rejected as a downgrade (the repo preset pins 5; bump it in a sed-copied
-  `export_presets.cfg`, restore after export).
+- Test package `org.hearthvale.game.test.m2night` is running **v60-b48da22**
+  (installed base.apk hash `7ee469f1…`, 39,997,414 B = local
+  `builds/hearthvale-m2night-v60-b48da22.apk`; left on the starter valley
+  for user visual review). It is stamped `versionCode=59` — the concurrent
+  v59 chain's sed left `export_presets.cfg` at 59 and the v60 export
+  command re-used it without re-bumping; cosmetic only. Identify builds by
+  file name/hash, and bump the sed to a fresh code (≥60) on the next build.
+  The repo preset is kept clean (`version/code=5`,
+  `org.hearthvale.game`); sed a working copy per build and restore after.
 - In-game debug bridge: TCP 47123 (debug-gated, inert in release),
   `adb forward tcp:47123 tcp:47123`, **one fresh connection per command**
   (a second command on a reused connection dead-ends); read by chunk-recv
@@ -477,7 +479,7 @@ identical optimization; the user visually accepts.
 
 - **v58 (approved in game, `fabd47b`):** the street flower arch was re-authored natively at the 1/3 size (40 x 48 x 24 fine cells = 2.5 x 3 x 1.5 m) in MagicaVoxel staging — canopy, stems, vine and flower colours kept from the approved design, no scaling tricks. User confirmed the in-game result: the exact vibe they wanted.
 - **v59 (`0469d05`):** user found the cottage's full brick coursing too busy. Sparse proud accents instead: ~15% of course positions qualify as accent zones, ~55% of those carry a cell, 25% of those pop 2 fine cells (0.125 m) for the few real 3-D bricks; rest sit 1 fine cell clear (reads as tone at play distance). `house_wall_detail_test` 25/25 (408 bricks).
-- **v60 (`b48da22`, installed & running, `192.168.1.15:38865`):** user: no red bricks — darker versions of the main wall colour, plus colour-only bricks without bumps. Brick tones are now `wall_color.darkened()` over `BRICK_TONE_STEPS = [0.04, 0.09, 0.14, 0.19, 0.24]` (same warm hue, only weathered; other wall materials derive from their own tone); most accents stay 1 fine cell (colour at distance), the 2-cell pops are the only real relief. Tests on this commit: `house_wall_detail_test` 25/25, `facade_depth_layout_test` exit 0 (30 checks), `cottage_render_stability_test` exit 0 (35 checks) — all headless, no failures. APK verified: exactly one ARM64 `libvoxel`, signed with the debug keystore, 3 s in-place upgrade install, saves preserved.
+- **v60 (`b48da22`, installed & running, `192.168.1.15:38865`; APK hash `7ee469f1…`, stamped code 59):** user: no red bricks — darker versions of the main wall colour, plus colour-only bricks without bumps. Brick tones are now `wall_color.darkened()` over `BRICK_TONE_STEPS = [0.04, 0.09, 0.14, 0.19, 0.24]` (same warm hue, only weathered; other wall materials derive from their own tone); most accents stay 1 fine cell (colour at distance), the 2-cell pops are the only real relief. Tests on this commit: `house_wall_detail_test` 25/25, `facade_depth_layout_test` exit 0 (30 checks), `cottage_render_stability_test` exit 0 (35 checks) — all headless, no failures. APK verified: exactly one ARM64 `libvoxel`, signed with the debug keystore, 3 s in-place upgrade install, saves preserved.
 - **Awaiting the user's visual verdict on the v60 facade** (app left open on the starter valley; the cottage is at world ≈ 13.6/22.4). If the tone contrast wants to be subtler, `BRICK_TONE_STEPS` is the single knob; if the 3-D pops should be rarer, `BRICK_PROUD_RATE`. Close the app back to the Chrome screensaver when the review is done.
 - Camera gotcha from this session: the v58-era framing recipe (fresh launch → `cursor_set` on the subject → ~1 s gentle zoom from the 36 m start) is the reliable in-game close-up; the building camera clamps 3.5–28 m, so longer zooms slam into the minimum, and multi-second zoom-out/orbit drifts the framing off the subject. A fresh launch resets the camera to the default view, which already frames the cottage well — for facade shots, skip the zoom entirely.
 
