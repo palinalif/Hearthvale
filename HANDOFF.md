@@ -407,3 +407,28 @@ longer swallowed and pass through to the parent handlers that re-select terrain
 tools) + cottage
 half-scale brick art pass + world-diagonal viewer radius + `HARNESS_BRIDGE_TIMEOUT`.
 If the B button or water painting feels off again, `am force-stop` then relaunch.
+
+## 2026-09-20 — flower arch grown 2x to street scale (v51 in flight)
+
+The on-device arch from the previous rebuild was already 60 x 72 x 36 cells
+(3.75 x 4.5 x 2.25 m, 18,663 voxels) — but the user reports it still reads
+small against the street space it spans. Grew the *approved* design 2x linear
+with `tools/magicavoxel/scale_arch.py` (deterministic 2x2x2 supersample of the
+canonical .vox; palette verbatim, no voxel moved/recoloured):
+120 x 144 x 72 cells = 7.5 x 9 x 4.5 m, 149,304 voxels. Greedy mesh unchanged
+at 2,058 triangles / 9 surfaces / 4,002 verts (2x scale only doubles merged
+rectangle sizes), so no perf impact is expected.
+`m2_table_assets.gd` VOXEL_COUNTS updated to 149304; README documents the
+supersample. Tests: magicavoxel_asset_test 141/141, m2_furniture_placement_test
+29/29. Pushed as `0155730`.
+
+Note: an MCP "big_v2" rebuild (52 x 57 x 44) was started in staging against
+stale 2.3 x 3 x 0.56 m size data before the current canonical dimensions were
+checked; it is smaller than the existing arch and was discarded (staging
+files deleted). The 2x supersample of the approved source is the current
+approach.
+
+Device state when v51 lands: `192.168.1.15:38865`, package
+`org.hearthvale.game.test.m2night`, upgrading code 50 -> 51 in place (same
+debug keystore, saves preserved). Water-mode B-exit fix (efa5af2) is on main
+and in every build since v49.
