@@ -1,4 +1,47 @@
 # Hearthvale — idle presentation gate + B-button fix (2026-09-20); idle re-meshing fixed (v49)
+## 2026-09-20 (round 4) — v54 on device; 2× arch verified as placing, record check pending
+
+The v53 uninstall was **not** needed: the current device's debug.keystore
+(9/18, `D4:4A:…:4F`) matches the keystore v53 was signed with, so
+`adb install -r` updated v52 → v53 in place. On the v53 build the 2×
+arch **placed successfully** at (28, 8, 30.5) via
+`furniture_select` flower_arch → `cursor_set` → A: no rejection, no
+errors, +108 prop meshes (≈ the 2× arch's cell count). That placement was
+in-memory only — the v53 process was killed by the v54 update and the
+`m1_checkpoints/` directory is empty, so nothing persisted.
+
+**v54** = v53 + commit `f02fdd8` (debug-only `composition_dump` bridge
+verb that dumps `landscape_state.composition` records, so a placement can
+be verified against the authoritative record instead of mesh counts).
+APK: versionCode 54, signed with the same keystore, verified (exactly
+one ARM64 `libvoxel*`; the 99 KB 2× arch mesh resource is in the
+package), archived as `builds/hearthvale-m2night-v54-0415.apk` (+idsig).
+Installed in place and launched.
+
+**Device state at handoff:** the v54 cold start is in its first-load
+meshing burst, which has run unusually long (≈9+ min; the device is
+thermal-throttling — it ran 84 °C after overnight use and climbs back to
+≈79 °C during the burst; v53's identical burst took ≈3 min when the
+device was cooler). Main thread sleeps while a worker spins ≈70 % of one
+core with CPU time still rising — consistent with slow meshing, not a
+lock (no errors in logcat; all in-memory .res assets in v54 are
+byte-identical to v53's). The debug bridge listens on TCP :47123
+(forwarded) but does not answer pings while the main thread is blocked.
+A background waiter (`bg-44`, pings every 40 s for 20 min) is watching.
+
+**When the bridge answers:** run `/tmp/place_arch_v54.py` (context
+building → furniture_select flower_arch → cursor_set [28,8,30.5] → A →
+composition_dump) and confirm the dump shows one flower_arch record
+anchored at (28, 8, 30.5); then screencap from outside the cottage to
+capture the walk-through scale for visual acceptance. If the burst does
+not finish, force-stop, cool the device (screensaver, target < 70 °C),
+relaunch and repeat — a thermally throttled run is not valid evidence.
+
+Notes: `tests/m2_hamlet_composition_render_test.gd` reports
+`M2_HAMLET_RENDER_UNAVAILABLE` under `--headless` (needs a display) —
+not run here, same as prior rounds. Bridge = newline-JSON over
+`adb forward tcp:47123 tcp:47123` (not HTTP).
+
 ## 2026-09-20 (round 3) — street-scale arch placement fix (v53) + pending uninstall decision
 
 The 2× street-scale flower arch would not place on device: banner said
