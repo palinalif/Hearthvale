@@ -28,7 +28,9 @@ const COMPOSITION_STYLE_IDS := {
 }
 const COMPOSITION_LIMIT := 96
 const COMPOSITION_MIN_SIZE := 0.125
-const COMPOSITION_MAX_SIZE := 6.0
+# Street-scale props (the 2x flower arch anchors at 6.875m) may grow past the
+# original small-prop cap; keep this below building footprints (>= 11m).
+const COMPOSITION_MAX_SIZE := 7.5
 const COMPOSITION_RENDER_CELL_LIMIT := 24000
 const WATER_TYPE_IDS: Array[String] = ["lake", "stream"]
 const WATER_LIMIT := 24
