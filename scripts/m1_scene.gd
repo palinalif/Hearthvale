@@ -257,11 +257,15 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 			# Debug: dump the authoritative M2 composition records (id/kind/style/
 			# position/size/yaw/colour) so a scripted placement can be verified
 			# on-device without a save round-trip. M2-only: no-op elsewhere.
+			# landscape_state is a LandscapeState instance (RefCounted — no .has());
+			# a missing property simply reports null from .get().
 			var ls: Variant = get("landscape_state")
-			if ls == null or not ls.has("composition"):
-				return {"type": "error", "message": "no composition in this scene"}
+			if ls == null:
+				return {"type": "error", "message": "no landscape state in this scene"}
 			var rows: Array = []
 			var comp: Variant = ls.get("composition")
+			if comp == null:
+				return {"type": "error", "message": "no composition in this scene"}
 			if comp is Array:
 				for rec in comp:
 					if rec is Dictionary:

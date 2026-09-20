@@ -1,4 +1,36 @@
 # Hearthvale — idle presentation gate + B-button fix (2026-09-20); idle re-meshing fixed (v49)
+## 2026-09-20 (round 6) — v55 placed the arch on device at the lane end (28, 8, 28.5); user acceptance pending
+
+v55 (commit d4435e2, versionCode 55) installed in place over v54 and the
+2× flower arch is now **committed in the live world**: `furniture_select
+["flower_arch"]` → `cursor_set [28, 8, 28.5]` → `furniture_commit` →
+`{"committed": true}` on the **first candidate**. The v53/v54 anchor
+(28, 8, 30.5) is rejected by `_commit_detail` ("Furniture overlaps a
+home") because it sits inside the village_gable footprint (house centre
+(28, 35), front lane ends at (28, 32.75)); 28.5 is the first clear spot
+south of it — the arch now gates the lane end in front of the white
+house's entrance, matching the approved v53 composition.
+
+The bridge zombie-slot fix is proven live: three sequential bridge
+sessions in one app launch (load chain → placement probe → camera
+orbit) each got the slot — the failure mode that cost the v52/v53/v54
+sessions.
+
+`composition_dump` crash found on device: the handler called
+`ls.has("composition")` on the `LandscapeState` **instance**
+(RefCounted has no `.has()`) → SCRIPT ERROR → `{}`. Fixed in
+`m1_scene.gd` (use `.get()`; records are plain Dictionaries in
+`landscape_state.composition`). The record itself is already confirmed
+by the committed:true response + screenshots; the fixed dump will give
+the formal record in v56.
+
+Screenshots (device, 07:05, /tmp/arch_v55_placed_1..2.png): arch visible
+between the white house and the lane, well + paving in frame; second
+shot shows the hamlet from the opposite side with the arch over the
+lane end. **Pending: user visual acceptance**, then v56 (dump fix
+verified: composition_dump shows the flower_arch record) and the
+final M2 handoff build.
+
 ## 2026-09-20 (round 5) — v54 placement was an artifact; v55 adds real furniture-placement verbs + bridge zombie-slot fix
 
 **v54 verdict (revised):** the arch was **not** placed on the v54 build.
