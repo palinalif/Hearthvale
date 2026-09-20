@@ -1,4 +1,37 @@
 # Hearthvale — idle presentation gate + B-button fix (2026-09-20); idle re-meshing fixed (v49)
+## 2026-09-20 (round 9) — v62: planting plots re-authored as 1/16-grid MagicaVoxel meshes (d704b39 + 2e522ee), verified in-game on the Thor
+
+The user called the planting fields "at the coarser scale" and asked for them
+as voxel meshes via the MagicaVoxel MCP. Both halves of the job:
+
+- **Art (d704b39):** the six committed plot sizes (1.0×2.0, 1.5×1.0, 2.0×3.0,
+  2.25×2.25, 3.0×1.75, 3.0×2.0, 3.5×2.5) each authored natively on the 0.0625
+  presentation grid (16×32 … 56×40 cells, 544–2,832 tris) — wooden rims, furrowed
+  soil, individual crops/flowers, no cell stretching. Sources at
+  `assets/source/magicavoxel/hearthvale_garden_{style}_{W}x{H}.vox` (+ `.obj`,
+  `.mtl`, receipt) with `garden-plots.authoring.json`; provenance in the README
+  and the CI provenance script (new `assert_garden_assets` block).
+- **Runtime (2e522ee):** `m2_composition_visual.gd` loads the authored mesh for
+  a committed garden when `size×16` matches an authored variant (yaw rotates
+  the node, vertex-colour tint follows the record colour), else the old 0.125
+  procedural build stays as fallback. Preview meshes use the authored mesh too.
+  New headless `tests/m2_garden_asset_test.gd` (23k checks: variant coverage,
+  winding/solidity, cell counts ≤ 3,000/plot, tint path) registered in
+  `tools/test-cottage-shard.ps1` and the CI gate.
+
+**v62 built, verified and installed:** `builds/hearthvale-m2night-v62-2e522ee.apk`
+(versionCode 61, `…m2night`, exactly one ARM64 `libvoxel`, in-place update
+~0.5 s; CI green on push). In-game (bridge): all six committed gardens
+`Garden_<id>` render from the authored meshes — the starter-valley trio plus
+three the user placed in an earlier round; close-ups at (16, 33.75) and
+(20.25, 21) show the finer grid, framed beds, individual crops. The 1.0×2.0
+bed at (30.25, 35) sits against a cliff: every zoom drifts into the slope
+(known camera gotcha), so it was verified by record/mesh coverage instead.
+
+**Gotcha:** a bright fine white/yellow grid near the cursor in screenshots is
+the **user-session Precision overlay**, not an asset bug — confirmed by
+`probe_nodes` A/B (hiding all six `Garden_<id>` nodes left the grid in place).
+
 ## 2026-09-20 (round 8) — v58: arch canopy detail re-authored natively in MagicaVoxel (e0096f1), verified in-game on the Thor
 
 After the b9c79a4 1/3 reduction the user asked for the canopy to be "brought
