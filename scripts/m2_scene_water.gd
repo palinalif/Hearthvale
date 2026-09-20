@@ -117,6 +117,7 @@ func _input(event: InputEvent) -> void:
 			return
 		if event.is_action_pressed("m1_cancel"):
 			if water_stroking or not water_lake_points.is_empty(): _cancel_water_stroke("Cancelled")
+			else: _cancel_water_placement("Cancelled")
 			get_viewport().set_input_as_handled()
 			return
 		if event.is_action_released("m1_cancel"):
@@ -139,9 +140,12 @@ func _input(event: InputEvent) -> void:
 			if water_stroking: _cancel_water_stroke("Paused")
 			super._input(event)
 			return
-		if event.is_action_pressed("m1_mode_switch") or event.is_action_pressed("m1_view") or event.is_action_pressed("m1_cycle_left") or event.is_action_pressed("m1_cycle_right") or event.is_action_pressed("m1_height_up") or event.is_action_pressed("m1_height_down") or event.is_action_pressed("m1_tools"):
-			get_viewport().set_input_as_handled()
-			return
+		# The remaining buttons (dpad up = build catalogue / mode switch, BACK =
+		# context switch, dpad left/right = terrain tool cycle, tools, height)
+		# pass through untouched: they are the approved ways OUT of water mode.
+		# Each routes into a parent handler that either cancels the placement
+		# (via _cancel_current_edit) or re-selects a terrain tool (via
+		# _select_terrain_tool, which closes the placement above).
 	super._input(event)
 
 func _update_brush_preview() -> void:
