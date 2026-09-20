@@ -1,4 +1,20 @@
-# Hearthvale — idle presentation gate + B-button fix (2026-09-20); idle re-meshing fixed (v49)
+# Hearthvale — v66 perf-test build on the Thor (2026-09-20); water-sync fix (v63, v49 line)
+## 2026-09-20 (round 11) — v66 installed on the Thor for user performance testing (main @ 3467344)
+
+Built from exact `main` state (`3467344`; the wip cottage brick-band tweak in
+`scripts/cottage_visual.gd` was stashed out of the build and remains uncommitted).
+Preset bumped to v66 in `85ca612`. Exported with the local debug keystore
+(SHA-256 `D4:4A:59…`); APK verified: exactly one ARM64 `libvoxel` inside.
+
+**Device state:** `org.hearthvale.game.test.m2night` at **versionCode 66
+(2.0.1-m2night-v66)**, in-place update v64 → v66 (`adb install -r`, ~5 s,
+incremental). Package name note: the round-10 line below says
+`com.ayn.thor.hearthvale.m2night`, but `pm list` shows the m2night test package
+on this device is `org.hearthvale.game.test.m2night` (the AYN-branded name is
+not installed). App was not running after install; user launches for the perf
+run. ADB daemon was restarted this round (was down); device 192.168.1.15:38865
+reached as usual.
+
 ## 2026-09-20 (round 10) — v63: terrain→water sync localized (8d1e479) — no more full water resample on any tool's commit
 
 **Delivered on the Thor (v63, commit 8d1e479), installed and running.**
@@ -37,8 +53,8 @@ build's `--import` step OOM-killed on the CI runner, plus the Android
 `local.properties` gotcha); not caused by this session's commits. v63 was
 built and verified locally per AGENTS.md.**
 
-**Device:** 192.168.1.15:38865, installed `com.ayn.thor.hearthvale.m2night`
-(v63, versionCode 62, same debug keystore `D4:4A:59…`), auto-resumed from
+**Device:** 192.168.1.15:38865, m2night test package `org.hearthvale.game.test.m2night`
+(same debug keystore `D4:4A:59…`), auto-resumed from
 the saved world.
 
 ## 2026-09-20 (round 9) — v62: planting plots re-authored as 1/16-grid MagicaVoxel meshes (d704b39 + 2e522ee), verified in-game on the Thor
