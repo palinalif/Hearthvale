@@ -1,4 +1,52 @@
 # Hearthvale — idle presentation gate + B-button fix (2026-09-20); idle re-meshing fixed (v49)
+## 2026-09-20 (round 5) — v54 placement was an artifact; v55 adds real furniture-placement verbs + bridge zombie-slot fix
+
+**v54 verdict (revised):** the arch was **not** placed on the v54 build.
+`/tmp/place_arch_v54.py` used verbs that do not exist in the bridge: a
+top-level `context` command, a top-level `key` command, and
+`furniture_select` — which was never implemented in
+`m1_scene.debug_test_action` (the only verbs are state/composition_dump/
+shell_keys/cursor_set/select_tool/view_context/cancel/undo/redo/
+world_stats/mesh_survey/tune/perf/reset_peaks). So in v54 only
+cursor_set ever ran; the "no rejection, no errors" read in round 4 was
+the script talking to itself, not to the scene. (The v53 in-memory
+placement in round 4 remains the only real placement so far.)
+
+**Why the v54 process (pid 1895) went silent to bridge pings:** not a
+meshing burst. The game was healthy (27 ms frames, menu showing, 6 %
+CPU) — the debug bridge holds a **single client slot** and it was
+occupied by a zombie: the placement script's socket sent data, then
+the TCP close arrived *inside* Godot's buffered-packet processing, so
+the peer keeps reporting `CONNECTED` with 0 available bytes forever.
+The pump only recycled never-got-data peers (3 s) and `NONE`-status
+peers (EOF), so the zombie held the slot and every later session was
+silently dropped — one usable bridge session per app launch.
+
+**v55 = v54 + two changes (commit pending on tests):**
+1. `scripts/m1_debug_bridge.gd` — tracks `_last_data_ms`; recycles a
+   data-sent client after 60 s idle (hard cap) or 10 s idle when a new
+   connection is queued. Sequential debug sessions can't trip this.
+2. `scripts/m1_scene.gd` `debug_test_action` — new debug verbs that call
+   the **same handlers real input uses**: `furniture_select [style_id]`
+   → `_choose_furniture_style` (the build-browser entry point,
+   m2_scene_street_furniture) and `furniture_commit` → `_commit_furniture`
+   → shared `_commit_detail` transaction (add_composition). M2-only:
+   a scene without the furniture layer reports an error, not a silent
+   no-op.
+
+**Placement protocol (single long-lived session, `/tmp/place_arch_v55.py`):**
+ping → state → `action furniture_select ["flower_arch"]` →
+`action cursor_set [28, 8, 30.5]` → state → `action furniture_commit`
+→ `action composition_dump` (expect one record with kind=furniture,
+style_id=flower_arch anchored at (28, 8, 30.5)) → world_stats. Target
+spot: white-house garden side (same anchor v53 used).
+
+**Pending:** 4 local suites (debug_bridge_action, m2_bridge_placement,
+m2_furniture_placement, m2_bridge_state) → commit+push → build v55
+(same keystore, verify one ARM64 libvoxel) → install in place →
+launch → placement script after world load → composition_dump evidence
++ `adb exec-out screencap` → user visual acceptance.
+
 ## 2026-09-20 (round 4) — v54 on device; 2× arch verified as placing, record check pending
 
 The v53 uninstall was **not** needed: the current device's debug.keystore

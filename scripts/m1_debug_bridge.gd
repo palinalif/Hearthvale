@@ -52,6 +52,7 @@ var _client: StreamPeerTCP
 var _buffer := ""
 var _client_since_ms := 0
 var _client_got_data := false
+var _last_data_ms := 0
 var _ready_ms := 0
 var _world_stats_reported := false
 
@@ -121,7 +122,23 @@ func _pump_socket() -> void:
 	if _client == null and _server.is_connection_available():
 		_client = _server.take_connection()
 		_client_since_ms = Time.get_ticks_msec()
+		_last_data_ms = _client_since_ms
 		_client_got_data = false
+	# Recycle a dead-but-silent client (2026-09-21, v54->v55): a peer that SENT
+	# data and then closed can keep reporting CONNECTED with zero available
+	# bytes — the never-got-data grace window below never applies and the EOF
+	# path never sees a NONE status, so the single client slot stays occupied
+	# by a zombie and every later session goes silent (one usable bridge
+	# session per app launch). A debug client is strictly sequential: if a new
+	# connection is queued and this one has been quiet for 10 s it is done,
+	# and nothing legitimate idles a client for a full minute.
+	if _client != null:
+		var idle_ms := Time.get_ticks_msec() - _last_data_ms
+		if idle_ms > 60000 or (idle_ms > 10000 and _server.is_connection_available()):
+			_client.disconnect_from_host()
+			_client = null
+			_buffer = ""
+			_client_got_data = false
 	if _client == null:
 		return
 	# Pump first: 4.7.2 StreamPeerSocket statuses are 0=none 1=connecting
@@ -149,6 +166,7 @@ func _pump_socket() -> void:
 		if res.size() == 2 and int(res[0]) == OK:
 			var bytes: PackedByteArray = res[1]
 			_client_got_data = true
+			_last_data_ms = Time.get_ticks_msec()
 			_buffer += bytes.get_string_from_utf8()
 			var idx := _buffer.find("\n")
 			while idx >= 0:

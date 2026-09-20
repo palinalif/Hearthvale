@@ -330,6 +330,29 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 			if args.size() < 1: return {"type": "error", "message": "view_context needs terrain|building"}
 			_set_view_context(str(args[0]), "debug")
 			return {"type": "ok", "view_context": view_context}
+		"furniture_select":
+			# Debug: arm the real street-furniture placement mode through the
+			# same entry point the build browser calls (m2_scene_street_furniture).
+			# M2-only: an m1 scene without the furniture layer reports so.
+			if args.size() < 1:
+				return {"type": "error", "message": "furniture_select needs a style id"}
+			if not has_method("_choose_furniture_style"):
+				return {"type": "error", "message": "no furniture catalogue in this scene"}
+			call("_choose_furniture_style", str(args[0]))
+			return {
+				"type": "ok", "style": str(args[0]),
+				"placement": bool(get("detail_placement_active")),
+				"kind": str(get("detail_kind")),
+			}
+		"furniture_commit":
+			# Debug: commit the armed furniture placement at the current cursor
+			# (the same shared transaction the A button uses).
+			if not has_method("_commit_furniture"):
+				return {"type": "error", "message": "no furniture placement in this scene"}
+			if bool(call("_commit_furniture")):
+				return {"type": "ok", "committed": true}
+			var reason := str(get("detail_placement_reason"))
+			return {"type": "error", "message": reason if reason != "" else "placement not active"}
 		"cancel":
 			_cancel_current_edit("debug")
 			return {"type": "ok"}
