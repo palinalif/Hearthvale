@@ -34,7 +34,10 @@ as a leafy hedge with a scattered flower mosaic and woody framing, matching
 the approved original's character at 1/3 scale. Two screenshots shown to the
 user.
 
-**Awaiting user's visual verdict** on the in-game v58 arch. Device was
+**User visual verdict on the in-game v58 arch: APPROVED** ("yes that's the exact
+vibe"). The placed arch is the v55 review-round instance at [17.625, 22.375]
+(yaw 2), in front of the cottage; if a different spot is wanted it can be
+replaced with the furniture verbs or manual play. Device was
 force-stopped after the captures (screensaver; thermal cooldown). Bridge:
 port 47123, `cursor_set [x,y,z]` (flat args, not nested), `set_axis
 trigger_right/trigger_left` for zoom (8–52 m), right stick orbits the
