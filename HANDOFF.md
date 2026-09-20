@@ -1,4 +1,41 @@
 # Hearthvale — idle presentation gate + B-button fix (2026-09-20); idle re-meshing fixed (v49)
+## 2026-09-20 (round 3) — street-scale arch placement fix (v53) + pending uninstall decision
+
+The 2× street-scale flower arch would not place on device: banner said
+"Furniture is outside the editable world or detail limit". Root cause:
+`COMPOSITION_MAX_SIZE` in `scripts/landscape_state.gd` capped every
+composition anchor at 6.0 m (the original small-prop limit); the 2× arch
+anchors at 6.875 m. Fix (commit `08c1c99`): cap raised to 7.5 m (still far
+below building footprints) + regression block in
+`tests/m2_furniture_placement_test.gd` (6.875×3.0 commits, 8 m rejected) —
+32/32 checks pass headless.
+
+**v53 APK is built and verified** in `/tmp/hv-v42/builds/hearthvale-m1-debug.apk`
+(39,927,407 bytes, signed, exactly one ARM64 `libvoxel*` in the APK,
+versionCode 53). **NOT yet on device**: in-place update fails with
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE` — the installed v52 (updated 02:47
+Sept 20) was signed with a Godot debug keystore from a previous session's
+environment that no longer exists on this machine (only the Sep 18
+`/root/.local/share/godot/keystores/debug.keystore` is here, and the
+device rejects it).
+
+Device data check before any uninstall: the app's `files/` holds **no
+world data** — `m1_checkpoints/` is empty (the two stale Sep 19
+checkpoints were cleared at 02:55), only shader/vulkan caches remain.
+The current hamlet is a fresh starter regeneration, so a fresh install
+loses nothing of the user's. **PENDING USER DECISION** (asked, user went
+to sleep): approve one-time uninstall of `org.hearthvale.game.test.m2night`
++ fresh v53 install. Same one-time uninstall was needed for v51.
+
+Next steps when approved: `adb -s 192.168.1.15:38865 uninstall` →
+`adb install` the v53 APK (keep the standard debug keystore identity) →
+launch, init bridge (TCP :47123, newline JSON, **not** HTTP) → place arch
+via `furniture_select` flower_arch + `cursor_set([28, 8, 30.5])` + commit
+(known-good spot from the v47 session) → screenshots for visual
+acceptance of the walk-through scale. Game was force-stopped before the
+user went to sleep; the device app is currently the (uninstallable-over)
+v52.
+
 ## 2026-09-20 (round 2) — "B does nothing in water mode" root-caused + idle presentation gate
 
 User report: in water mode B no longer cancels the outline; later, dpad-right
