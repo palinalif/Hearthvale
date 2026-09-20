@@ -274,36 +274,59 @@ func _append_garden_base(builder: Dictionary, center: Vector3, size: Vector2, ba
 
 func _append_cottage_flower_garden(builder: Dictionary, center: Vector3, size: Vector2, basis: Basis) -> void:
 	_append_garden_base(builder, center, size, basis)
-	for index in 15:
-		var u := -0.42 + float(index % 5) * 0.21 + 0.035 * sin(float(index * 7))
-		var v := -0.32 + float(index / 5) * 0.32 + 0.045 * sin(float(index * 11 + 2))
+	# Loose cottage flowers: five drifted rows of stems, each with a pair of
+	# low leaves and a bloom, so the bed reads as planted rather than sparsely dotted.
+	for index in 30:
+		var u := -0.42 + float(index % 6) * 0.168 + 0.035 * sin(float(index * 7))
+		var v := -0.40 + float(index / 6) * 0.20 + 0.05 * sin(float(index * 11 + 2))
 		var local := Vector3(u * size.x, 0, v * size.y)
-		var height := 0.18 + 0.12 * (sin(float(index * 5)) * 0.5 + 0.5)
-		_append_box(builder, center + basis * local + Vector3.UP * (0.08 + height * 0.5), Vector3(0.055, height, 0.055), basis, 2)
-		var bloom_size := 0.075 + 0.025 * float(index % 3)
-		_append_box(builder, center + basis * local + Vector3.UP * (0.08 + height), Vector3(bloom_size, 0.07, bloom_size), basis, 3)
+		var height := 0.16 + 0.14 * (sin(float(index * 5)) * 0.5 + 0.5)
+		var stem_center := center + basis * local + Vector3.UP * (0.08 + height * 0.5)
+		_append_box(builder, stem_center, Vector3(0.055, height, 0.055), basis, 2)
+		var leaf_top := 0.08 + height * 0.45
+		for side in [-1.0, 1.0]:
+			var leaf := stem_center + basis * Vector3(side * 0.045, 0, 0) - Vector3.UP * height * 0.18
+			_append_box(builder, leaf, Vector3(0.06, 0.05, 0.045), basis, 2)
+		var bloom_size := 0.075 + 0.03 * float(index % 3)
+		var bloom := center + basis * local + Vector3.UP * (0.08 + height + 0.03)
+		_append_box(builder, bloom, Vector3(bloom_size, 0.07, bloom_size), basis, 3)
 
 func _append_kitchen_garden(builder: Dictionary, center: Vector3, size: Vector2, basis: Basis) -> void:
 	_append_garden_base(builder, center, size, basis, 1)
+	# Three raised soil rows, each planted with a staggered line of vegetables;
+	# every second plant carries a small lighter tip so the rows read from a distance.
 	for row in 3:
 		var row_x := (float(row) - 1.0) * size.x * 0.27
 		_append_box(builder, center + basis * Vector3(row_x, 0.055, 0), Vector3(size.x * 0.18, 0.11, size.y * 0.78), basis, 0)
-		for plant in 5:
-			var z := -size.y * 0.30 + float(plant) * size.y * 0.15
-			var h := 0.14 + 0.05 * float((row + plant) % 3)
-			_append_box(builder, center + basis * Vector3(row_x, 0, z) + Vector3.UP * (0.10 + h * 0.5), Vector3(0.13, h, 0.13), basis, 2 if (row + plant) % 2 == 0 else 3)
+		for plant in 7:
+			var z := -size.y * 0.32 + float(plant) * size.y * 0.107
+			var h := 0.13 + 0.06 * float((row * 7 + plant) % 3)
+			var plant_center := center + basis * Vector3(row_x, 0, z) + Vector3.UP * (0.10 + h * 0.5)
+			_append_box(builder, plant_center, Vector3(0.12, h, 0.13), basis, 2 if (row + plant) % 2 == 0 else 3)
+			if (row + plant) % 2 == 1:
+				_append_box(builder, plant_center + Vector3.UP * (h * 0.55), Vector3(0.07, 0.06, 0.07), basis, 3)
 
 func _append_herb_garden(builder: Dictionary, center: Vector3, size: Vector2, basis: Basis) -> void:
 	_append_garden_base(builder, center, size, basis)
+	# Divided compact beds: a cross of low timber dividers, a denser 5 x 5 grid
+	# of mixed low herbs, and a short post at each arm end of the cross.
 	_append_box(builder, center + Vector3.UP * 0.075, Vector3(0.07, 0.15, size.y - 0.20), basis, 1)
 	_append_box(builder, center + Vector3.UP * 0.075, Vector3(size.x - 0.20, 0.15, 0.07), basis, 1)
-	for index in 16:
-		var column := index % 4
-		var row := index / 4
-		var x := -size.x * 0.34 + float(column) * size.x * 0.225
-		var z := -size.y * 0.34 + float(row) * size.y * 0.225
-		var h := 0.10 + 0.08 * (sin(float(index * 4 + 1)) * 0.5 + 0.5)
-		_append_box(builder, center + basis * Vector3(x, 0, z) + Vector3.UP * (0.08 + h * 0.5), Vector3(0.11, h, 0.11), basis, 2 if index % 3 else 3)
+	for arm in 4:
+		var post := Vector3(0, 0, 0)
+		match arm:
+			0: post = basis * Vector3(0, 0, -size.y * 0.5 + 0.045)
+			1: post = basis * Vector3(0, 0, size.y * 0.5 - 0.045)
+			2: post = basis * Vector3(-size.x * 0.5 + 0.045, 0, 0)
+			3: post = basis * Vector3(size.x * 0.5 - 0.045, 0, 0)
+		_append_box(builder, center + post + Vector3.UP * 0.09, Vector3(0.08, 0.18, 0.08), basis, 1)
+	for index in 25:
+		var column := index % 5
+		var row := index / 5
+		var x := -size.x * 0.37 + float(column) * size.x * 0.185
+		var z := -size.y * 0.37 + float(row) * size.y * 0.185
+		var h := 0.09 + 0.09 * (sin(float(index * 4 + 1)) * 0.5 + 0.5)
+		_append_box(builder, center + basis * Vector3(x, 0, z) + Vector3.UP * (0.08 + h * 0.5), Vector3(0.10, h, 0.10), basis, 2 if index % 3 else 3)
 
 func _append_fence(builder: Dictionary, record: Dictionary) -> void:
 	var style_id := str(record.get("style_id", ""))

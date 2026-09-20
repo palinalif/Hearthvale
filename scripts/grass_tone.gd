@@ -22,14 +22,17 @@ class_name GrassTone
 
 ## Ordered deep -> light. The base colour stays dominant; the other greens lift
 ## or deepen broad hand-painted patches rather than forming salt-and-pepper noise.
+## Softened in the cozy pass: same lightness ladder, but a touch less saturated
+## and a touch darker, so the meadow reads as warm olive-sage instead of bright
+## spring green. Every tone (and every blend of them) stays inside FAMILY_*.
 const TONES: Array[Color] = [
-	Color("7aa058"), # deep shade
-	Color("8aad5c"), # shade
-	Color("96ba66"), # base meadow green
-	Color("a8c473"), # lifted green
-	Color("c3d68d"), # rare light accent
+	Color("7d965e"), # deep shade
+	Color("89a363"), # shade
+	Color("95af6d"), # base meadow green
+	Color("a2b878"), # lifted green
+	Color("b8c990"), # rare light accent
 ]
-const SIDE_SHADE := Color("688e52")
+const SIDE_SHADE := Color("6e8556")
 ## Coherent patch scales in metres: broad wash, mid drift, fine drift.
 const SCALES: Array[float] = [6.0, 1.5, 0.5]
 const WEIGHTS: Array[float] = [0.45, 0.35, 0.20]

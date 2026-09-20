@@ -12,12 +12,12 @@ render_mode diffuse_burley, specular_schlick_ggx;
 // Nothing here flattens, tiles or replaces the volumetric terrain: this is a
 // material over the existing native grass voxel faces, and terrain authority
 // remains on the native 0.125 grid.
-uniform vec4 tone_0 : source_color = vec4(0.478, 0.627, 0.345, 1.0);
-uniform vec4 tone_1 : source_color = vec4(0.541, 0.678, 0.361, 1.0);
-uniform vec4 tone_2 : source_color = vec4(0.588, 0.729, 0.400, 1.0);
-uniform vec4 tone_3 : source_color = vec4(0.659, 0.769, 0.451, 1.0);
-uniform vec4 tone_4 : source_color = vec4(0.765, 0.839, 0.553, 1.0);
-uniform vec4 tone_side_shade : source_color = vec4(0.408, 0.557, 0.322, 1.0);
+uniform vec4 tone_0 : source_color = vec4(0.490, 0.588, 0.369, 1.0);
+uniform vec4 tone_1 : source_color = vec4(0.537, 0.639, 0.388, 1.0);
+uniform vec4 tone_2 : source_color = vec4(0.584, 0.686, 0.427, 1.0);
+uniform vec4 tone_3 : source_color = vec4(0.635, 0.722, 0.471, 1.0);
+uniform vec4 tone_4 : source_color = vec4(0.722, 0.788, 0.565, 1.0);
+uniform vec4 tone_side_shade : source_color = vec4(0.431, 0.522, 0.337, 1.0);
 uniform float tone_span = 4.0;
 uniform float tone_base = 2.0;
 uniform vec3 tone_scales = vec3(6.0, 1.5, 0.5);
