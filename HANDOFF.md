@@ -1,4 +1,46 @@
 # Hearthvale — idle presentation gate + B-button fix (2026-09-20); idle re-meshing fixed (v49)
+## 2026-09-20 (round 10) — v63: terrain→water sync localized (8d1e479) — no more full water resample on any tool's commit
+
+**Delivered on the Thor (v63, commit 8d1e479), installed and running.**
+
+**Cause:** `m1_scene._sync_water_visual()` (base scene, inherited by the M2
+scenes) called `refresh_surface_from_bounds(Rect2(-INF, -INF, INF, INF))` on
+EVERY committed landscape edit — terrain commit, undo/redo, bridge strokes.
+With the current 76×76 world that is a 38,000-cell resample + full water
+reconstruction per commit. v62 A/B: the water raise stroke's release frame
+spiked **304 ms** (78th percentile of all frames — the user-reported "~1 s
+release freeze") and sustained water FPS was 22 (29 for landscape raise,
+36 for landscape lower; the 41 ms water-lower peak is a 1000-iteration
+brush-step loop, not water). `water_visual.gd` itself is already incremental;
+the scene was bypassing that seam.
+
+**Fix (8d1e479):** scene passes the committed AABB to the new
+`refresh_surface_from_bounds_aabb(aabb)` (margin already inside the method;
+rect-only call kept for full refreshes) — one commit now re-samples at most
+~16×16 cells instead of 38k. Undo/redo recompute bounds from the inverse
+strokes; strokes with no commits leave water untouched. **A/B (v62→v63, same
+world, same stroke scripts, same 1.3 ms device clock drift):** release-frame
+peak 304 ms → **43 ms** (7×); sustained water 22 → 31 fps (5× faster frame
+time); landscape raise 29 → 35, landscape lower 31 → 37. The 41 ms
+landscape-lower peak remains (brush-step loop, separate candidate).
+
+**Tests:** `tests/water_visual_test.gd` grew 8 → 15 checks, all passing
+headless: the new AABB path equals the full-path result on identical input,
+and a 0.25 m edge patch leaves every other cell's height byte-identical
+(locality proof). Added to `.github/workflows/water.yml`.
+
+**Not delivered (flagged, needs user call):** (a) the 41 ms landscape-lower
+peak (brush stroke step loop), (b) 30 ms terrain meshing cost per stroke
+step, (c) 3×32 KB water buffer churn per stroke (poolable). **Unrelated red:
+the delivery workflow is failing ~24 h for a CI-infra reason (the release
+build's `--import` step OOM-killed on the CI runner, plus the Android
+`local.properties` gotcha); not caused by this session's commits. v63 was
+built and verified locally per AGENTS.md.**
+
+**Device:** 192.168.1.15:38865, installed `com.ayn.thor.hearthvale.m2night`
+(v63, versionCode 62, same debug keystore `D4:4A:59…`), auto-resumed from
+the saved world.
+
 ## 2026-09-20 (round 9) — v62: planting plots re-authored as 1/16-grid MagicaVoxel meshes (d704b39 + 2e522ee), verified in-game on the Thor
 
 The user called the planting fields "at the coarser scale" and asked for them
