@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://b5dkblud1oy7g"
+path="res://.godot/imported/hearthvale_table_gathering.vox-d8cf398f92ea225b047812baf984a9a0.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_table_gathering.vox"
+dest_files=["res://.godot/imported/hearthvale_table_gathering.vox-d8cf398f92ea225b047812baf984a9a0.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

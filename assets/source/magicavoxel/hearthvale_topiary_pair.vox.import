@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://bgutp0b3gqrqw"
+path="res://.godot/imported/hearthvale_topiary_pair.vox-80e66ec32bf2f34ccabe434e10d977df.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_topiary_pair.vox"
+dest_files=["res://.godot/imported/hearthvale_topiary_pair.vox-80e66ec32bf2f34ccabe434e10d977df.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

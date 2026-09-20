@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://bbfqmen0ils66"
+path="res://.godot/imported/hearthvale_potted_trio.vox-7e37ef16ec313862380c58368cfefefe.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_potted_trio.vox"
+dest_files=["res://.godot/imported/hearthvale_potted_trio.vox-7e37ef16ec313862380c58368cfefefe.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

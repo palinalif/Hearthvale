@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://bvwdgio18gfox"
+path="res://.godot/imported/hearthvale_garden_herbs_24x16.vox-6a102575b51577f804388c43c248e55c.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_garden_herbs_24x16.vox"
+dest_files=["res://.godot/imported/hearthvale_garden_herbs_24x16.vox-6a102575b51577f804388c43c248e55c.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

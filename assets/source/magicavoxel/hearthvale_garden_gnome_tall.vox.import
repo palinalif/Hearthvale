@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://tut7ece21et7"
+path="res://.godot/imported/hearthvale_garden_gnome_tall.vox-91b212ddaa8b4983dd085be3384e17c5.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_garden_gnome_tall.vox"
+dest_files=["res://.godot/imported/hearthvale_garden_gnome_tall.vox-91b212ddaa8b4983dd085be3384e17c5.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

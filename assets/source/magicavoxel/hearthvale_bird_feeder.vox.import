@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://5iv472x3p4su"
+path="res://.godot/imported/hearthvale_bird_feeder.vox-25caaafabbdecd18374280de800eb1f2.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_bird_feeder.vox"
+dest_files=["res://.godot/imported/hearthvale_bird_feeder.vox-25caaafabbdecd18374280de800eb1f2.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

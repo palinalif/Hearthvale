@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://bry5mslerar0p"
+path="res://.godot/imported/hearthvale_garden_gnome.vox-e34c3dc7df694b1796a7df9707bd8cf9.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_garden_gnome.vox"
+dest_files=["res://.godot/imported/hearthvale_garden_gnome.vox-e34c3dc7df694b1796a7df9707bd8cf9.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

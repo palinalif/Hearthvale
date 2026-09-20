@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://c8q5rsqmfp7oc"
+path="res://.godot/imported/hearthvale_clothesline.vox-fcf431ca19c707006dba3b71f580262c.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_clothesline.vox"
+dest_files=["res://.godot/imported/hearthvale_clothesline.vox-fcf431ca19c707006dba3b71f580262c.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true
