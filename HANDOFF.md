@@ -1,4 +1,31 @@
-# Hearthvale — world-sized terrain viewers (v46); idle re-meshing fixed (v49)
+# Hearthvale — idle presentation gate + B-button fix (2026-09-20); idle re-meshing fixed (v49)
+## 2026-09-20 (round 2) — "B does nothing in water mode" root-caused + idle presentation gate
+
+User report: in water mode B no longer cancels the outline; later, dpad-right
+"does nothing" in water mode. On-device trace (temporary TRC-HEAD/TAIL event
+probes at the head and tail of the `_input` chain, bridge `input_trace`
+toggle — **removed after use**) found no missing press and no mid-chain
+swallowing: the "unresponsive" dpad press was auto-repeat (a ~300 ms hold
+generates 7-8 repeats that wrap the 8-tool list). **Root cause: the B-button
+passthrough at the top of `m2_scene_water._input` was lost in an earlier
+edit** — with `water_placement_active`, the B release event fell through to
+the root `_input`, where `m1_cancel` only maps to `ui_cancel` (back button),
+and the water placement was still active, so the cancel was refused.
+Fix restored: `if water_placement_active and event.is_action_pressed("m1_cancel"):
+return` in `m2_scene_water._input` (head of the chain, before super).
+
+**Second idle stall found the same day:** with the raise tool selected and
+no input, `_process` spent ~16 ms/frame on building/particle presentation
+(`cottage_visual` massing rebuilds + particle `process`) because the idle
+skip keyed on `(tool, radius, cursor, stroke, view)` changed every frame with
+the drifting camera cursor. New gate: presentation is skipped entirely while
+a terrain tool is active and no stroke is in progress
+(`m1_scene._skip_present`, re-verified on device with the debug
+`shell_keys` probe: idle key stable across 10 s, 38-40 fps).
+
+**FPS A/B (this round): in progress** — see below for the numbers.
+
+
 
 ## v46 — full-world visibility: viewer radii now derive from the world extent (2026-07-20, on-device verified)
 
@@ -332,3 +359,51 @@ identical stroke warm: 30 fps) — not the path rebuild.
 
 **User visual acceptance: still pending** (test strokes were on the m2night
 test world). Device closed to screensaver after testing.
+
+## 2026-09-20 — B-fix delivery + before/after FPS A/B (user requested "measure average fps before and after the fix")
+
+Context: the user re-played the device build (version code 47 — the previous session's
+v49 + `_skip_present` gate + B-fix) and reported: (a) dpad tool cycle "goes wrong" —
+**not a bug**: a 300 ms test hold generates ~7-8 auto-repeat events that wrap the 8-tool
+list; short taps cycle correctly in both directions (verified by matrix: dpad right/left
+each step one slot in the right order); (b) B button ignored in the water tool — fixed
+below; (c) "still lags a lot during water creation and freezes for a second or two after
+raising or digging" — measured below.
+
+The previous session's build-tree source (the `_skip_present` gate implementation) was
+overwritten by a later tar sync; only its compiled APK survived. Recovery was therefore
+tested empirically instead: built **before48** = HEAD (v49, no gate) and **after49** =
+HEAD + this session's uncommitted fixes (B-fix, cottage art pass, world-sized viewers,
+tool timeouts), and ran an identical device A/B (same script, same world, same stroke
+pattern: 30 s idle → 2.5 s raise stroke → 30 s → 2.5 s water stroke → 60 s; `perf` bridge
+endpoint, 2 s cadence):
+
+| window        | before48 (v49)      | after49 (v49 + fixes)   |
+| ------------- | ------------------- | ----------------------- |
+| idle          | 36-39 fps (27.0 ms) | 37-38 fps (26.3-27.0 ms)|
+| post-raise    | 36-38 fps           | 36-38 fps               |
+| post-water    | 40-42 fps (23.8-25 ms) | 35-42 fps (no dips) |
+
+Sustained-water stress on after49 (5×3 s water stroke bursts, 0.5 s cadence, 57 samples):
+min 33 / median 39 / mean 38.9 fps, **zero sub-25 fps samples**. The 19 fps for 6-8 s
+dip recorded in v49's own A/B did not reproduce this session. Raw data:
+`/tmp/hv-ab-before48.jsonl`, `/tmp/hv-ab-after49.jsonl`, `/tmp/hv-ab-bigwater-after49.jsonl`.
+
+Conclusions:
+
+- The pending fixes are **not** a measurable fps factor — v49's per-frame presentation
+  gate already covers what the lost `_skip_present` gate did. No need to recover the
+  previous session's source for perf reasons.
+- The user's remaining lag, if still felt, is the GPU-bound large-water-body case
+  (v49's open item), not CPU. Next lever if it persists: reduce water visual cost for
+  large bodies (chunk/LOD the water mesh), not more CPU gating.
+- World was restored after measurement (10× `undo` via bridge; revision back to 3,
+  water tris back to baseline 37,374).
+
+Delivered on device (code 49, `org.hearthvale.game.test.m2night`, upgrade install —
+saves preserved, same debug keystore): v49 + the water-mode exit fix (B now cancels
+the water placement when not stroking; dpad/mode-switch/view/height buttons are no
+longer swallowed and pass through to the parent handlers that re-select terrain
+tools) + cottage
+half-scale brick art pass + world-diagonal viewer radius + `HARNESS_BRIDGE_TIMEOUT`.
+If the B button or water painting feels off again, `am force-stop` then relaunch.
