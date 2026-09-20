@@ -1,0 +1,215 @@
+#!/usr/bin/env python3
+
+import argparse
+import os
+import re
+import selectors
+import signal
+import subprocess
+import sys
+import time
+
+DEFAULT_PATTERNS = [
+    r"SCRIPT ERROR:",
+    r"INSTALL_FAILED_[A-Z0-9_]+",
+    r"error:\s*device offline",
+    r"error:\s*no devices/emulators found",
+    r"ADB server didn't ACK",
+    r"Native VoxelTerrain/VoxelMesherBlocky unavailable",
+]
+
+FAILFAST_EXIT = 97
+TIMEOUT_EXIT = 124
+
+
+def kill_tree(proc: subprocess.Popen, grace: float) -> None:
+    if proc.poll() is not None:
+        return
+
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+
+    deadline = time.monotonic() + grace
+    while proc.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+    if proc.poll() is None:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Run a command with timeout + known-fatal output detection."
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=120,
+        help="Maximum runtime in seconds (default: 120).",
+    )
+    parser.add_argument(
+        "--grace",
+        type=float,
+        default=2,
+        help="Seconds between SIGTERM and SIGKILL (default: 2).",
+    )
+    parser.add_argument(
+        "--pattern",
+        action="append",
+        default=[],
+        help="Additional fatal regex; may be supplied more than once.",
+    )
+    parser.add_argument(
+        "--no-default-patterns",
+        action="store_true",
+        help="Use only patterns supplied with --pattern.",
+    )
+    parser.add_argument(
+        "--log",
+        help="Also save complete combined stdout/stderr to this file.",
+    )
+    parser.add_argument(
+        "command",
+        nargs=argparse.REMAINDER,
+        help="Command to execute after --.",
+    )
+
+    args = parser.parse_args()
+
+    command = args.command
+    if command and command[0] == "--":
+        command = command[1:]
+
+    if not command:
+        parser.error("missing command; use: failfast [options] -- command args...")
+
+    patterns = [] if args.no_default_patterns else list(DEFAULT_PATTERNS)
+    patterns.extend(args.pattern)
+    regexes = [(p, re.compile(p, re.IGNORECASE)) for p in patterns]
+
+    log = None
+    if args.log:
+        os.makedirs(os.path.dirname(os.path.abspath(args.log)), exist_ok=True)
+        log = open(args.log, "wb")
+
+    try:
+        proc = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            stdin=None,
+            start_new_session=True,
+            bufsize=0,
+        )
+    except FileNotFoundError:
+        print(f"[failfast] command not found: {command[0]}", file=sys.stderr)
+        if log:
+            log.close()
+        return 127
+
+    selector = selectors.DefaultSelector()
+    assert proc.stdout is not None
+    selector.register(proc.stdout, selectors.EVENT_READ)
+
+    start = time.monotonic()
+    scan_tail = ""
+    fatal_pattern = None
+    timed_out = False
+
+    try:
+        while True:
+            elapsed = time.monotonic() - start
+
+            if elapsed >= args.timeout:
+                timed_out = True
+                print(
+                    f"\n[failfast] timeout after {args.timeout:g}s; "
+                    "terminating process tree",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                kill_tree(proc, args.grace)
+                break
+
+            events = selector.select(timeout=min(0.25, args.timeout - elapsed))
+
+            for key, _ in events:
+                chunk = os.read(key.fd, 8192)
+
+                if not chunk:
+                    try:
+                        selector.unregister(key.fileobj)
+                    except Exception:
+                        pass
+                    continue
+
+                sys.stdout.buffer.write(chunk)
+                sys.stdout.buffer.flush()
+
+                if log:
+                    log.write(chunk)
+                    log.flush()
+
+                text = scan_tail + chunk.decode("utf-8", errors="replace")
+
+                for source, regex in regexes:
+                    if regex.search(text):
+                        fatal_pattern = source
+                        break
+
+                scan_tail = text[-16384:]
+
+                if fatal_pattern:
+                    print(
+                        f"\n[failfast] fatal output matched /{fatal_pattern}/; "
+                        "terminating process tree",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    kill_tree(proc, args.grace)
+                    break
+
+            if fatal_pattern:
+                break
+
+            if proc.poll() is not None and not selector.get_map():
+                break
+
+        # Drain anything emitted while the process was being terminated.
+        try:
+            remainder = proc.stdout.read()
+            if remainder:
+                sys.stdout.buffer.write(remainder)
+                sys.stdout.buffer.flush()
+                if log:
+                    log.write(remainder)
+        except Exception:
+            pass
+
+        proc.wait()
+
+    except KeyboardInterrupt:
+        print("\n[failfast] interrupted; terminating process tree", file=sys.stderr)
+        kill_tree(proc, args.grace)
+        return 130
+
+    finally:
+        selector.close()
+        if log:
+            log.close()
+
+    if fatal_pattern:
+        return FAILFAST_EXIT
+    if timed_out:
+        return TIMEOUT_EXIT
+
+    return proc.returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
