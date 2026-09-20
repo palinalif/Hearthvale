@@ -32,6 +32,16 @@ const WOOD_MATERIAL := "timber"
 const BRICK_TONES: Array[Color] = [
 	Color("#8d422c"), Color("#9c5340"), Color("#a96247"), Color("#b5734f"), Color("#c1865f"),
 ]
+## 2026-09-20 art pass, revised after device playtest (v58): full coursing read
+## as dense noise at play distance. The reference keeps the wall tone calm and
+## lets only the occasional brick sit proud, so accents are clumped into zones
+## instead of tiled: a coarse patch decides whether its area carries bricks at
+## all, then most cells inside do. The patch size matches the _tone_index patch
+## bias, so each zone keeps one coherent tone.
+const BRICK_ACCENT_PATCH := Vector2i(8, 6)
+const BRICK_ZONE_RATE := 15             # patch hash %% 100 below this -> zone carries bricks
+const BRICK_CELL_RATE := 55             # cell hash %% 100 below this -> that cell is a brick
+const BRICK_PROUD_RATE := 25            # cells that pop two cells instead of one
 ## Coursing pitch and mortar joint in fine cells (0.0625 m). 2026-09-20 art
 ## pass: the original whole-cell 3x2 bricks with 1-cell joints read chunky and
 ## grout-heavy, so the facing is refined to half scale: a 1x1 cell brick with a
@@ -169,6 +179,14 @@ static func _tone_hash(a: int, b: int, salt: int) -> int:
 	h = (h * 1274126177) & 0x7FFFFFFF
 	return (h ^ (h >> 16)) & 0x7FFFFFFF
 
+func _brick_accent_zone(course: int, column: int) -> bool:
+	# Clumped proud bricks, never salt-and-pepper: a coarse patch decides
+	# whether its zone carries accents at all, then most cells inside do. The
+	# hash is stable across runs, sessions and platforms, like _tone_index.
+	if _tone_hash(column / BRICK_ACCENT_PATCH.x, course / BRICK_ACCENT_PATCH.y, _tone_salt) % 100 >= BRICK_ZONE_RATE:
+		return false
+	return _tone_hash(column, course, _tone_salt + 29) % 100 < BRICK_CELL_RATE
+
 func _tone_index(course: int, column: int) -> int:
 	var count := _tone_colors.size()
 	if count <= 1: return 0
@@ -192,8 +210,6 @@ func _collect_tone_faces(basis: Basis, origin: Vector3, pieces: Array, plane: fl
 	if pitch.x <= 0.0 or pitch.y <= 0.0: return
 	var joint_x := _detail_unit.x * joint_source.x
 	var joint_y := _detail_unit.y * joint_source.y
-	var depth := _detail_unit.z * TONE_DEPTH
-	var face := plane + _detail_unit.z * (TONE_GAP + TONE_DEPTH * 0.5)
 	for piece_value in pieces:
 		var piece: Dictionary = piece_value
 		var quantized := Grid.quantized_box(piece["center"], piece["size"], _unit)
@@ -213,12 +229,19 @@ func _collect_tone_faces(basis: Basis, origin: Vector3, pieces: Array, plane: fl
 				var brick_low := maxf(low_x, shift + float(column) * pitch.x)
 				var brick_high := minf(high_x, shift + float(column + 1) * pitch.x - joint_x)
 				if brick_high - brick_low < _detail_unit.x * 0.75: continue
+				var depth_cells := TONE_DEPTH
+				if _tone_brick:
+					# Sparse proud accents, never full coursing: skip the majority
+					# of the lattice so the wall tone stays calm (see BRICK_*_RATE).
+					if not _brick_accent_zone(course, column): continue
+					if _tone_hash(column, course, _tone_salt + 7) % 100 < BRICK_PROUD_RATE:
+						depth_cells = 2.0
 				var tone := _tone_index(course, column)
-				var local := Vector3((brick_low + brick_high) * 0.5, (row_low + row_high) * 0.5, face)
+				var local := Vector3((brick_low + brick_high) * 0.5, (row_low + row_high) * 0.5, plane + _detail_unit.z * (TONE_GAP + depth_cells * 0.5))
 				# Emit axis-aligned in the building frame: Grid.quantized_box snaps
 				# centre and size together, so the extents must share one frame or a
 				# rotated wall would be snapped along the wrong axis.
-				var extents := Vector3(brick_high - brick_low, row_high - row_low, depth)
+				var extents := Vector3(brick_high - brick_low, row_high - row_low, _detail_unit.z * depth_cells)
 				(_tone_boxes[tone] as Array).append(_piece(origin + basis * local, _oriented_extents(basis, extents), Basis.IDENTITY))
 
 func _collect_gable_tone_faces(dimensions: Vector3) -> void:
