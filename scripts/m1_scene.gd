@@ -253,6 +253,28 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 				"water_stroking": get("water_stroking"), "water_kind": get("water_kind"),
 				"cursor": [cursor.x, cursor.y, cursor.z],
 			}
+		"composition_dump":
+			# Debug: dump the authoritative M2 composition records (id/kind/style/
+			# position/size/yaw/colour) so a scripted placement can be verified
+			# on-device without a save round-trip. M2-only: no-op elsewhere.
+			var ls: Variant = get("landscape_state")
+			if ls == null or not ls.has("composition"):
+				return {"type": "error", "message": "no composition in this scene"}
+			var rows: Array = []
+			var comp: Variant = ls.get("composition")
+			if comp is Array:
+				for rec in comp:
+					if rec is Dictionary:
+						rows.append({
+							"id": int(rec.get("id", -1)),
+							"kind": str(rec.get("kind", "")),
+							"style": str(rec.get("style_id", "")),
+							"pos": rec.get("position", []),
+							"size": rec.get("size", []),
+							"yaw": int(rec.get("yaw_quarters", 0)),
+							"colour": str(rec.get("colour_id", "")),
+						})
+			return {"type": "composition", "count": rows.size(), "records": rows}
 		"shell_keys":
 			# Diagnostic (2026-09-19, idle-15fps hunt): per-house massing cache key plus
 			# its raw field components, so a two-call diff shows which field drifts

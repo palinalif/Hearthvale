@@ -23,7 +23,7 @@ extends Node
 ##   {"cmd":"action","name":"select_tool","args":["water"]}
 ##                                                     -> {"type":"ok","tool":"water"}
 ##     "action" forwards a semantic verb to the scene's debug_test_action():
-##     state | select_tool [tool] | view_context [terrain|building]
+##     state | composition_dump | select_tool [tool] | view_context [terrain|building]
 ##     | cancel | undo | redo | world_stats | mesh_survey | perf | tune [target key value [index]]
 ##     | probe_nodes [class:X|name:Y, hide|show|disable|enable].
 ##     "tune" is also accepted as a top-level cmd (same args). Strokes themselves stay real
