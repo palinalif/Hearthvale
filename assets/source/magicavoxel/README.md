@@ -190,3 +190,20 @@ Re-export with `vox_to_obj.py --greedy`, import with the pinned editor, then
 bake with explicit `0.0625`. `tests/m2_street_prop_asset_test.gd` validates
 provenance, reproducible export, grid, winding, footprints, matte materials
 and preview parity for all five.
+
+## Flower arch (street scale)
+
+`hearthvale_flower_arch.vox` is the player-placed walk-through flower arch on
+the 0.0625 presentation grid. The current source is a deterministic 2x
+supersample of the player-approved 60 x 72 x 36 design, grown to
+120 x 144 x 72 cells (7.5 x 9 x 4.5 m) because the arch read small against
+the street space it spans. `tools/magicavoxel/scale_arch.py` performs the
+supersample: every voxel becomes a 2x2x2 block of the same palette index, the
+palette bytes are copied verbatim, and no voxel is moved, removed or
+recoloured.
+
+Re-export with the scaler, then `vox_to_obj.py --greedy`, the pinned editor
+import, and the bake script with explicit `0.0625`. The 2x scale doubles
+every merged rectangle, so the greedy mesh stays at the approved 2,058
+triangles (9 palette surfaces). `tests/magicavoxel_asset_test.gd` and
+`tests/m2_furniture_placement_test.gd` cover the runtime bounds and counts.
