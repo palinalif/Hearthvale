@@ -1,0 +1,40 @@
+{
+  "asset": "hearthvale_garden_flowers_48x32",
+  "declared_dimensions": [
+    48,
+    6,
+    32
+  ],
+  "emitted_quads": 1416,
+  "exposed_quads": 4972,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      48,
+      5,
+      32
+    ],
+    "min": [
+      0,
+      0,
+      0
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "source": "hearthvale_garden_flowers_48x32.vox",
+  "source_sha256": "29e1591b93847b6a64dcf6e041420db8657edc72d0c14d2391fc32c77fa7508f",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 2832,
+  "voxel_count": 2374,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}

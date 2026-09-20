@@ -153,6 +153,33 @@ uses the current controller catalogue and checks cancel, confirm, undo/redo,
 recolour, relocation, save/reload and invalid targets. The `planters` cottage
 CI shard also runs actual Mobile rendering. Real source contact sheets and
 
+## Garden plot family
+
+`hearthvale_garden_flowers_16x32`, `hearthvale_garden_flowers_48x32`,
+`hearthvale_garden_kitchen_48x28`, `hearthvale_garden_kitchen_56x40`,
+`hearthvale_garden_herbs_24x16` and `hearthvale_garden_herbs_36x36` are
+MCP-authored runtime presentation meshes for the hamlet's planting plots, in
+place of the old coarse procedural fields. Each plot is authored on the
+0.0625 presentation grid (the W×D suffix is cell counts, 1.0×2.0 m up to
+3.5×2.5 m) with a timber frame, soil bed and a per-style crop pattern
+(flower mosaic / kitchen rows / herb clumps).
+
+`GARDEN_MESHES` in `scripts/m2_composition_visual.gd` binds
+`style:size` to each mesh; plots whose recorded size has no authored mesh
+fall back to the existing procedural builder, so both paths coexist and old
+saves keep working without a schema change.
+
+Authoring provenance is `tools/magicavoxel/garden_plots_gen.js` (batched
+MagicaVoxel MCP `fill_box` patterns per model; palette convention in the
+file). The canonical `.vox` sources live here; runtime `.res` bakes use
+`tools/magicavoxel/bake_mesh.gd` with explicit `0.0625` pitch and a centred
+pivot. Greedy-mesh triangle counts are 430 / 1,416 / 284 / 344 / 331 / 1,235.
+
+`tests/m2_garden_asset_test.gd` (wired into the `hamlet` cottage CI shard)
+validates source presence, grid pitch, winding, bounds, the triangle budget
+and the tint/preview clone behaviour. Real visual acceptance happens on the
+Thor as usual.
+
 ## Gathering table and benches
 
 `hearthvale_table_gathering.vox` is an MCP-authored runtime street-furniture

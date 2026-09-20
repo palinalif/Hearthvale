@@ -1,0 +1,40 @@
+{
+  "asset": "hearthvale_garden_kitchen_48x28",
+  "declared_dimensions": [
+    48,
+    5,
+    28
+  ],
+  "emitted_quads": 284,
+  "exposed_quads": 3776,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      48,
+      5,
+      28
+    ],
+    "min": [
+      0,
+      0,
+      0
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "source": "hearthvale_garden_kitchen_48x28.vox",
+  "source_sha256": "8710dd8af1a6957d77c3ccaab6e49c9eaf3d12fef2116fe2d2c1ac7edc1fa240",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 568,
+  "voxel_count": 2385,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}

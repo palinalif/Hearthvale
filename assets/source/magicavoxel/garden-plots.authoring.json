@@ -1,0 +1,140 @@
+{
+  "authored_utc_date": "2026-09-20",
+  "tool": "MagicaVoxel MCP",
+  "provenance": "Six plots authored through MagicaVoxel MCP batched fill_box calls; the deterministic pattern script is .tools/magicavoxel/garden_plots_gen.js (ignored staging). MCP raw snapshots were taken for every model.",
+  "operations": [
+    "create_voxel_model",
+    "set_palette_color",
+    "fill_box",
+    "take_snapshot"
+  ],
+  "generation": "Scripted deterministic layout (drifted flower rows, three raised vegetable rows, divided herb quadrants) issued as MCP fill_box batches \u2014 the same authoring channel as every other Hearthvale voxel asset, with the 0.0625 presentation grid",
+  "sizes": {
+    "kitchen_rows:3.0x1.75": "hearthvale_garden_kitchen_48x28",
+    "kitchen_rows:3.5x2.5": "hearthvale_garden_kitchen_56x40",
+    "cottage_flowers:1.0x2.0": "hearthvale_garden_flowers_16x32",
+    "cottage_flowers:3.0x2.0": "hearthvale_garden_flowers_48x32",
+    "herb_garden:1.5x1.0": "hearthvale_garden_herbs_24x16",
+    "herb_garden:2.25x2.25": "hearthvale_garden_herbs_36x36"
+  },
+  "voxel_unit": 0.0625,
+  "placement": "scripts/m2_composition_visual.gd GARDEN_MESHES; the mesh AABB bottom snaps to the terrain surface and yaw rotates around the model centre",
+  "raw_preview_caveat": "render_vox.py orthographic sheets are source inspections, not Godot captures or visual approval",
+  "license": "Project-authored; development MCP upstream is MIT",
+  "records": [
+    {
+      "source": "hearthvale_garden_kitchen_48x28.vox",
+      "staged_source": "hearthvale_garden_kitchen_48x28.vox",
+      "staged_sha256": "8710dd8af1a6957d77c3ccaab6e49c9eaf3d12fef2116fe2d2c1ac7edc1fa240",
+      "source_sha256": "8710dd8af1a6957d77c3ccaab6e49c9eaf3d12fef2116fe2d2c1ac7edc1fa240",
+      "declared_dimensions": [
+        48,
+        5,
+        28
+      ],
+      "voxel_count": 2385,
+      "palette": {
+        "1": "8a6a4a",
+        "2": "6b4a31",
+        "3": "4e7142",
+        "4": "86a258",
+        "5": "c96f43"
+      }
+    },
+    {
+      "source": "hearthvale_garden_kitchen_56x40.vox",
+      "staged_source": "hearthvale_garden_kitchen_56x40.vox",
+      "staged_sha256": "2022b67de07474a045a6057302b4020fa8fb4dd6300c4459b47cc59c7f5d95a0",
+      "source_sha256": "2022b67de07474a045a6057302b4020fa8fb4dd6300c4459b47cc59c7f5d95a0",
+      "declared_dimensions": [
+        56,
+        5,
+        40
+      ],
+      "voxel_count": 3508,
+      "palette": {
+        "1": "8a6a4a",
+        "2": "6b4a31",
+        "3": "4e7142",
+        "4": "86a258",
+        "5": "c96f43"
+      }
+    },
+    {
+      "source": "hearthvale_garden_flowers_16x32.vox",
+      "staged_source": "hearthvale_garden_flowers_16x32.vox",
+      "staged_sha256": "72440433efbc4ad359e8e7b2f83107b0f9848c3d0b9c520890d96be4c38478f6",
+      "source_sha256": "72440433efbc4ad359e8e7b2f83107b0f9848c3d0b9c520890d96be4c38478f6",
+      "declared_dimensions": [
+        16,
+        6,
+        32
+      ],
+      "voxel_count": 813,
+      "palette": {
+        "1": "8a6a4a",
+        "2": "6b4a31",
+        "3": "4e7142",
+        "4": "86a258",
+        "5": "d8a2a0"
+      }
+    },
+    {
+      "source": "hearthvale_garden_flowers_48x32.vox",
+      "staged_source": "hearthvale_garden_flowers_48x32.vox",
+      "staged_sha256": "29e1591b93847b6a64dcf6e041420db8657edc72d0c14d2391fc32c77fa7508f",
+      "source_sha256": "29e1591b93847b6a64dcf6e041420db8657edc72d0c14d2391fc32c77fa7508f",
+      "declared_dimensions": [
+        48,
+        6,
+        32
+      ],
+      "voxel_count": 2374,
+      "palette": {
+        "1": "8a6a4a",
+        "2": "6b4a31",
+        "3": "4e7142",
+        "4": "86a258",
+        "5": "d8a2a0"
+      }
+    },
+    {
+      "source": "hearthvale_garden_herbs_24x16.vox",
+      "staged_source": "hearthvale_garden_herbs_24x16.vox",
+      "staged_sha256": "82f6a1be20edd0ff48d5e865e5f2c95e52b9dfe7e49ace4d9740573966f1f991",
+      "source_sha256": "82f6a1be20edd0ff48d5e865e5f2c95e52b9dfe7e49ace4d9740573966f1f991",
+      "declared_dimensions": [
+        24,
+        5,
+        16
+      ],
+      "voxel_count": 617,
+      "palette": {
+        "1": "8a6a4a",
+        "2": "6b4a31",
+        "3": "4e7142",
+        "4": "86a258",
+        "5": "9d8fa6"
+      }
+    },
+    {
+      "source": "hearthvale_garden_herbs_36x36.vox",
+      "staged_source": "hearthvale_garden_herbs_36x36.vox",
+      "staged_sha256": "c60bc7a95939e179be837c78d1b50fa844a05d0c7d403a26dd9bc85b151343b3",
+      "source_sha256": "c60bc7a95939e179be837c78d1b50fa844a05d0c7d403a26dd9bc85b151343b3",
+      "declared_dimensions": [
+        36,
+        5,
+        36
+      ],
+      "voxel_count": 2073,
+      "palette": {
+        "1": "8a6a4a",
+        "2": "6b4a31",
+        "3": "4e7142",
+        "4": "86a258",
+        "5": "9d8fa6"
+      }
+    }
+  ]
+}
