@@ -21,7 +21,7 @@ as voxel meshes via the MagicaVoxel MCP. Both halves of the job:
 
 **v62 built, verified and installed:** `builds/hearthvale-m2night-v62-2e522ee.apk`
 (versionCode 61, `…m2night`, exactly one ARM64 `libvoxel`, in-place update
-~0.5 s; CI green on push). In-game (bridge): all six committed gardens
+~0.5 s). In-game (bridge): all six committed gardens
 `Garden_<id>` render from the authored meshes — the starter-valley trio plus
 three the user placed in an earlier round; close-ups at (16, 33.75) and
 (20.25, 21) show the finer grid, framed beds, individual crops. The 1.0×2.0
@@ -31,6 +31,31 @@ bed at (30.25, 35) sits against a cliff: every zoom drifts into the slope
 **Gotcha:** a bright fine white/yellow grid near the cursor in screenshots is
 the **user-session Precision overlay**, not an asset bug — confirmed by
 `probe_nodes` A/B (hiding all six `Garden_<id>` nodes left the grid in place).
+
+## Delivery workflow state (2026-09-20) — not caused by this session's work
+
+`Hearthvale verified Drive delivery` has been RED on all 30 runs examined
+(~24 h; every push since ~v52). Failure mix across runs:
+- **Flaky ready/timeout gates on loaded Windows runners**: `m1_landscape_test`
+  ("native landscape scene ready", 30 s deadline), `m1_controller_test`
+  ("native backend ready"), joined-roof "Mobile review timed out", and one
+  roof-render count check captured while `WORLD_STATS` showed the scene at
+  1 fps. The same tests passed in earlier runs (e.g. fabd47b's run) —
+  timing-sensitive, not assertion regressions.
+- **Persistent pre-existing failures** (present before this session's code):
+  `m2_upper_storey_auto_windows_test` ("new upper storey is populated with
+  automatic windows" / "several exposed facade directions" — failed in both
+  of the two most recent runs) and one run's "packed-earth plaza remains
+  physically collidable after excavation".
+- **Local reproduction**: on this box the same ready-gate tests fail
+  identically on a worktree at `fabd47b` (pre-session v58 code) as on HEAD
+  (voxel backend never reports ready, `updated_blocks:0`) — so no commit in
+  this session is the cause. Local delivery evidence remains the targeted
+  green batches in the v58–v62 entries above.
+
+**Open question for the user**: treat the workflow red as the known
+M2 in-flight state (upper-storey auto-windows), or invest in stabilizing
+the timing-sensitive gates?
 
 ## 2026-09-20 (round 8) — v58: arch canopy detail re-authored natively in MagicaVoxel (e0096f1), verified in-game on the Thor
 
