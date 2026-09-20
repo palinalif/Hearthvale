@@ -19,8 +19,10 @@ const VOXEL_BYTES := 2
 ## old static 64.0 full-valley mesh at ~1.65 M primitives / 15 fps with
 ## collisions on). The world is finite, so a larger radius never meshes more
 ## than the map itself contains. Data residency is unchanged (terrain.max_view_distance +
-## the visuals-off data viewer keep the full map editable).
-const RUNTIME_VIEW_DISTANCE_WORLD := 128.0
+## the visuals-off data viewer keep the full map editable). Floor for the
+## camera-following visual radius; the live radius is the world diagonal
+## (_whole_world_view_distance) because user worlds grow beyond the starter.
+const RUNTIME_VIEW_DISTANCE_WORLD_FLOOR := 128.0
 const SCULPT_FIXED_DT := 1.0 / 60.0
 const SCULPT_TOOL_RAISE := "raise"
 const SCULPT_TOOL_DIG := "dig"
@@ -133,7 +135,7 @@ func _ready() -> void:
 			# ask this viewer to build visuals/collisions for the entire map at boot.
 			var data_viewer: Node3D = ClassDB.instantiate("VoxelViewer")
 			data_viewer.position = _world_size() * 0.5
-			data_viewer.view_distance = 64.0
+			data_viewer.view_distance = _whole_world_view_distance(64.0)
 			data_viewer.requires_visuals = false
 			data_viewer.requires_collisions = false
 			add_child(data_viewer)
@@ -158,7 +160,7 @@ func _ready() -> void:
 		else:
 			var viewer: Node3D = ClassDB.instantiate("VoxelViewer")
 			viewer.position = _world_size() * 0.5
-			viewer.view_distance = 64.0
+			viewer.view_distance = _whole_world_view_distance(64.0)
 			add_child(viewer)
 	voxels = generator_script.generate()
 	var full_area := AABB(Vector3.ZERO, Vector3(patch_size))
@@ -192,7 +194,7 @@ func _expand_startup_visual_viewer() -> void:
 	if _startup_visual_viewer == null or not is_instance_valid(_startup_visual_viewer):
 		return
 	_startup_visual_viewer.view_distance_vertical_ratio = 1.0
-	_startup_visual_viewer.view_distance = RUNTIME_VIEW_DISTANCE_WORLD
+	_startup_visual_viewer.view_distance = _whole_world_view_distance(RUNTIME_VIEW_DISTANCE_WORLD_FLOOR, false)
 
 ## Keep the visual streaming box centered on the camera so a short
 ## RUNTIME_VIEW_DISTANCE_WORLD still shows the terrain under and around the
@@ -227,6 +229,18 @@ func revision() -> int:
 
 func world_size() -> Vector3:
 	return _world_size()
+
+## Radius that reaches every point of the finite world: half the box
+## diagonal for a world-centred viewer, 1.25x the full diagonal for a
+## camera-following one (the camera orbits up to ~12m outside the box, so
+## plain diagonal leaves the far corner short). User worlds grow beyond the
+## starter valley, so the starter-sized constants left far corners of large
+## worlds unmeshed and unresident ("the world is not fully loading"). The
+## floor keeps starter-sized worlds on their original values.
+func _whole_world_view_distance(floor_value: float, from_center: bool = true) -> float:
+	var extent := _world_size().length()
+	extent *= 0.5 if from_center else 1.25
+	return maxf(floor_value, extent)
 
 func _world_size() -> Vector3:
 	return Vector3(patch_size) * voxel_scale
