@@ -28,9 +28,14 @@ const BRICK_STYLE := "riverside_cottage"
 const TUDOR_STYLE := "village_gable"
 const LODGE_STYLE := "woodland_lodge"
 const WOOD_MATERIAL := "timber"
-## Coherent red-brick/ochre family the cottage coursing is drawn from.
+## 2026-09-21 user direction: the brick accents are NOT a different hue. They
+## are darker versions of the wall's own tone, so the facade reads as weathered
+## masonry of one material, not painted brickwork. BRICK_TONES is that darker
+## family for the default wall (WALL_COLOR); other wall materials derive the
+## same darkening steps from their own tone in _brick_tones.
+const BRICK_TONE_STEPS: Array = [0.04, 0.09, 0.14, 0.19, 0.24]
 const BRICK_TONES: Array[Color] = [
-	Color("#8d422c"), Color("#9c5340"), Color("#a96247"), Color("#b5734f"), Color("#c1865f"),
+	Color("#dec6a4"), Color("#d2bc9b"), Color("#c6b292"), Color("#bba78a"), Color("#af9c82"),
 ]
 ## 2026-09-20 art pass, revised after device playtest (v58): full coursing read
 ## as dense noise at play distance. The reference keeps the wall tone calm and
@@ -149,7 +154,7 @@ func _arm_tone_layer(style_id: String, material_id: String, wall_color: Color) -
 	_tone_brick = false
 	_tone_salt = 0
 	if style_id == BRICK_STYLE and material_id != WOOD_MATERIAL:
-		_tone_colors = BRICK_TONES.duplicate()
+		_tone_colors = _brick_tones(wall_color)
 		_tone_pitch = BRICK_PITCH
 		_tone_joint = BRICK_JOINT
 		_tone_bond = true
@@ -160,6 +165,14 @@ func _arm_tone_layer(style_id: String, material_id: String, wall_color: Color) -
 		_tone_pitch = TUDOR_PATCH
 		_tone_salt = TUDOR_TONE_SALT
 	for tone in _tone_colors.size(): _tone_boxes.append([])
+
+func _brick_tones(wall_color: Color) -> Array[Color]:
+	# Darker versions of the wall's own tone, never another hue: the same warm
+	# family, only weathered. For the default wall these are BRICK_TONES.
+	var tones: Array[Color] = []
+	for step in BRICK_TONE_STEPS:
+		tones.append(wall_color.darkened(step as float))
+	return tones
 
 func _tudor_tones(wall_color: Color) -> Array[Color]:
 	# Slight plaster/plank mottling around whatever material the player chose,
@@ -231,8 +244,10 @@ func _collect_tone_faces(basis: Basis, origin: Vector3, pieces: Array, plane: fl
 				if brick_high - brick_low < _detail_unit.x * 0.75: continue
 				var depth_cells := TONE_DEPTH
 				if _tone_brick:
-					# Sparse proud accents, never full coursing: skip the majority
-					# of the lattice so the wall tone stays calm (see BRICK_*_RATE).
+					# Sparse accents, never full coursing (see BRICK_*_RATE): most
+					# accepted cells stay a single fine cell clear, which reads as
+					# tone at play distance, and only the few that pop two cells
+					# read as actual 3-D bricks.
 					if not _brick_accent_zone(course, column): continue
 					if _tone_hash(column, course, _tone_salt + 7) % 100 < BRICK_PROUD_RATE:
 						depth_cells = 2.0
