@@ -1,5 +1,80 @@
 # Hearthvale — idle presentation gate + B-button fix (2026-09-20); idle re-meshing fixed (v49)
+## 2026-09-20 (round 8) — v58: arch canopy detail re-authored natively in MagicaVoxel (e0096f1), verified in-game on the Thor
+
+After the b9c79a4 1/3 reduction the user asked for the canopy to be "brought
+up to the level of detail" of the other props and clarified the method: **no
+model scaling — re-author the detail in MagicaVoxel**.
+
+**Why the detail was lost:** a 3×3×3 majority-vote decimation cannot preserve
+a scattered mosaic. The original canopy face was ~14.5% flowers/leaves (1–2
+cell motifs on the 144 grid); after decimation the band is only 1–2 cells
+thick, so the motifs collapsed into sparse 2×2 blobs and a flat brown rim.
+A naive 2:1 position mapping of the original motifs was prototyped and
+rejected (it turned the thin band into confetti).
+
+**Fix (e0096f1, pushed to `task/water-river`; supersedes pre-amend hash
+7557398, which the v58 APK filename still carries):** re-authored the canopy
+faces in MagicaVoxel on the **same 40×48×24 grid** (no scaling, no geometry
+change — 6,710 voxels / 1,720 tris, identical bounds): face cells of both
+canopy bands re-painted into a scattered mosaic of 1–2 cell pink/white/
+purple flowers and light/dark leaf clusters approximating the original's
+face coverage; bumpy top edge preserved. `.obj`/`.mtl`/receipt re-baked; the
+tracked `.res` re-baked via `tools/magicavoxel/bake_mesh.gd` (157,847 B, 9
+surfaces, 6,534 verts — the first v58 build had picked up the stale pre-bake
+`.res`, hence a second export).
+
+**v58 built, verified and installed:** `builds/hearthvale-m2night-v58-7557398.apk`
+(versionCode 58, `org.hearthvale.game.test.m2night`, exactly one ARM64
+`libvoxel`, sha256 `e0284d4f…`, in-place update 2.98 s). World load → bridge
+up in ~38 s. `composition_dump`: arch record id 108 at [17.625, 22.375],
+size [2.375, 1.0], yaw 2 — the arch placed during the v55 review round
+survived the in-place reinstall. In-game camera
+close-up (cursor orbit to the arch + trigger zoom to 8 m): the canopy reads
+as a leafy hedge with a scattered flower mosaic and woody framing, matching
+the approved original's character at 1/3 scale. Two screenshots shown to the
+user.
+
+**Awaiting user's visual verdict** on the in-game v58 arch. Device was
+force-stopped after the captures (screensaver; thermal cooldown). Bridge:
+port 47123, `cursor_set [x,y,z]` (flat args, not nested), `set_axis
+trigger_right/trigger_left` for zoom (8–52 m), right stick orbits the
+camera around the cursor.
+
+## 2026-09-20 (round 7) — flower arch reduced to a third (b9c79a4); v57 verified, install pending on device drop
+
+The user rejected the 2× arch on review: "That's the FLOWER ARCH??? Way too
+big, make it a third" — and, from an earlier capture the 2× bake's voxels read
+chunkier than the trees. Root cause of the second point: the 2× supersample
+bake doubled every feature to 2 cells (0.125m) at the 0.0625m import pitch.
+
+**Fix (b9c79a4):** `hearthvale_flower_arch.vox` 120×144×72 → **40×48×24**
+cells via a deterministic majority-vote 3×3×3 decimation
+(`tools/magicavoxel/third_arch.py`) → **2.5m tall × 3.0m wide × 1.5m deep**,
+6,710 voxels / 1,720 tris, and 1-cell-thick features back at the 0.0625m
+pitch shared with the trees. `.obj`/`.mtl`/receipt re-baked, `.res` re-baked
+via `tools/magicavoxel/bake_mesh.gd` (9 surfaces, 3,312 verts). Placement
+footprint 2.375×1.0 (0.125-grid); `COMPOSITION_MAX_SIZE` reverted to its
+original 6.0 (the 7.5m exception only existed for the rejected 2× arch).
+Tests green: street_prop_asset checks=12751/0, furniture_placement
+32/0, build_browser 254/0. (`m2_build_browser_capture` still requires the
+actual Mobile renderer — not runnable in headless, unchanged.)
+
+**v57 built and verified:** `builds/hearthvale-m2night-v57-b9c79a4.apk`
+(versionCode 57, `org.hearthvale.game.test.m2night`, exactly one ARM64
+`libvoxel`, 39,948,262 B; same debug keystore → in-place update).
+
+**Pending (Thor dropped off ADB mid-build):** install v57 in place (never
+uninstall), launch, re-place the arch on the lane in front of the white
+house (`furniture_select flower_arch` → `cursor_set [28, 8, 28.5]` →
+`furniture_commit` — the v55 anchor; the round-6 placement did **not**
+survive the v56 force-stop), verify the record with `composition_dump`,
+clean-quit/reload survival check, and before/after screenshots for user
+visual acceptance.
+
 ## 2026-09-20 (round 6) — v55 placed the arch on device at the lane end (28, 8, 28.5); user acceptance pending
+(The round-6 placement was lost when the v56 update force-stopped the app
+before its autosave; the live world was back to the 14 starter compositions.
+) 
 
 v55 (commit d4435e2, versionCode 55) installed in place over v54 and the
 2× flower arch is now **committed in the live world**: `furniture_select
