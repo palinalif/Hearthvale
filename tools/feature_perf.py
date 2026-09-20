@@ -80,8 +80,15 @@ def _send(sock, payload: dict) -> dict:
     return json.loads(line) if line else {"type": "error", "message": "empty response"}
 
 
+# Bridge reads can legally take longer than the default 5s when the game is
+# mid-freeze (e.g. a multi-second first-time water build); the stall itself
+# is what we are measuring, so a longer read timeout captures the recovery
+# frame instead of erroring out. Override with HARNESS_BRIDGE_TIMEOUT.
+_BRIDGE_TIMEOUT = float(os.environ.get("HARNESS_BRIDGE_TIMEOUT", "5.0"))
+
+
 def _connect(port: int) -> socket.socket:
-    return socket.create_connection(("127.0.0.1", port), timeout=5.0)
+    return socket.create_connection(("127.0.0.1", port), timeout=_BRIDGE_TIMEOUT)
 
 
 # --- adb helpers -------------------------------------------------------------
