@@ -9,7 +9,7 @@ const FURNITURE_STYLES := {
 	"topiary_pair": {"name": "Topiary pair", "size": Vector2(0.875, 0.5), "summary": "A clipped ball and a rounded column, close together"},
 	"beehive": {"name": "Beehive", "size": Vector2(0.4375, 0.5625), "summary": "Banded skep on a post with a quiet entrance"},
 	"wheelbarrow": {"name": "Wheelbarrow", "size": Vector2(1.0, 0.375), "summary": "Timber barrow spilling pink and cream flowers"},
-	"flower_arch": {"name": "Flower arch", "size": Vector2(2.375, 0.5625), "summary": "Timber archway under a heavy canopy of leaves and blossom"},
+	"flower_arch": {"name": "Flower arch", "size": Vector2(3.4375, 1.5), "summary": "Timber archway under a heavy canopy of leaves and blossom"},
 	"garden_gnome": {"name": "Garden gnome", "size": Vector2(0.375, 0.375), "summary": "Bearded gnome with a pointed hat"},
 	"garden_gnome_small": {"name": "Small gnome", "size": Vector2(0.375, 0.375), "summary": "Armless gnome with a stubby hat"},
 	"garden_gnome_tall": {"name": "Tall gnome", "size": Vector2(0.375, 0.375), "summary": "Slim gnome with a very long hat"},
