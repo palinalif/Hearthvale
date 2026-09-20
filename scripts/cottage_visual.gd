@@ -30,12 +30,14 @@ const LODGE_STYLE := "woodland_lodge"
 const WOOD_MATERIAL := "timber"
 ## 2026-09-21 user direction: the brick accents are NOT a different hue. They
 ## are darker versions of the wall's own tone, so the facade reads as weathered
-## masonry of one material, not painted brickwork. BRICK_TONES is that darker
-## family for the default wall (WALL_COLOR); other wall materials derive the
-## same darkening steps from their own tone in _brick_tones.
-const BRICK_TONE_STEPS: Array = [0.04, 0.09, 0.14, 0.19, 0.24]
+## masonry of one material, not painted brickwork. Whatever main colour the
+## house's walls carry, _brick_tones re-derives this family from it, so
+## re-colouring the house re-tints the coursing. BRICK_TONES is that family for
+## the default wall (WALL_COLOR); other wall materials derive the same
+## darkening steps from their own tone.
+const BRICK_TONE_STEPS: Array = [0.05, 0.10, 0.15, 0.20, 0.25]
 const BRICK_TONES: Array[Color] = [
-	Color("#dec6a4"), Color("#d2bc9b"), Color("#c6b292"), Color("#bba78a"), Color("#af9c82"),
+	Color("#dbc5a2"), Color("#d0ba9a"), Color("#c4b091"), Color("#b9a689"), Color("#ad9b80"),
 ]
 ## 2026-09-20 art pass, revised after device playtest (v58): full coursing read
 ## as dense noise at play distance. The reference keeps the wall tone calm and
@@ -168,7 +170,9 @@ func _arm_tone_layer(style_id: String, material_id: String, wall_color: Color) -
 
 func _brick_tones(wall_color: Color) -> Array[Color]:
 	# Darker versions of the wall's own tone, never another hue: the same warm
-	# family, only weathered. For the default wall these are BRICK_TONES.
+	# family, only weathered. The family follows the house's main colour, so a
+	# recollected house never keeps stale bricks. For the default wall these are
+	# BRICK_TONES.
 	var tones: Array[Color] = []
 	for step in BRICK_TONE_STEPS:
 		tones.append(wall_color.darkened(step as float))
@@ -210,11 +214,16 @@ func _tone_index(course: int, column: int) -> int:
 	var jitter := _tone_hash(column, course, _tone_salt + 17) % TONE_NUDGE - 2
 	return posmod(patch + jitter, count)
 
-func _collect_tone_faces(basis: Basis, origin: Vector3, pieces: Array, plane: float, pitch_cells := Vector2.ZERO, joint_cells := Vector2(-1.0, -1.0)) -> void:
+func _collect_tone_faces(basis: Basis, origin: Vector3, pieces: Array, plane: float, pitch_cells := Vector2.ZERO, joint_cells := Vector2(-1.0, -1.0), left_edge := 0.0) -> void:
 	# Tile each surface piece on the fine grid. Row and column indices come from
 	# the surface's own cell grid, so a piece cut around an opening keeps the same
 	# tone as the wall around it and nothing depends on iteration order. A caller
 	# may override the pitch/joint to meet a surface whose bands are fixed.
+	# When left_edge is the wall's own left edge in local x, hash columns are
+	# counted from that edge instead of the piece: every wall of the building
+	# then samples the same accent map from a common origin, so a front cut up by
+	# openings reads with the same brick character as a clean side, and no wall
+	# can land in a sparse region the others never show.
 	if _tone_colors.is_empty(): return
 	var pitch_source := pitch_cells if pitch_cells != Vector2.ZERO else _tone_pitch
 	var joint_source := joint_cells if joint_cells.x >= 0.0 else Vector2(_tone_joint, _tone_joint)
@@ -238,7 +247,9 @@ func _collect_tone_faces(basis: Basis, origin: Vector3, pieces: Array, plane: fl
 			if row_high - row_low < _detail_unit.y * 0.5: continue
 			# Alternate courses step half a brick: readable running bond.
 			var shift := pitch.x * 0.5 if bond and posmod(course, 2) == 1 else 0.0
+			var edge_index := floori((-left_edge - shift) / pitch.x + 0.0001) if left_edge != 0.0 else 0
 			for column in range(floori((low_x - shift) / pitch.x + 0.0001), ceili((high_x - shift) / pitch.x - 0.0001)):
+				var hcol := column - edge_index
 				var brick_low := maxf(low_x, shift + float(column) * pitch.x)
 				var brick_high := minf(high_x, shift + float(column + 1) * pitch.x - joint_x)
 				if brick_high - brick_low < _detail_unit.x * 0.75: continue
@@ -248,10 +259,10 @@ func _collect_tone_faces(basis: Basis, origin: Vector3, pieces: Array, plane: fl
 					# accepted cells stay a single fine cell clear, which reads as
 					# tone at play distance, and only the few that pop two cells
 					# read as actual 3-D bricks.
-					if not _brick_accent_zone(course, column): continue
-					if _tone_hash(column, course, _tone_salt + 7) % 100 < BRICK_PROUD_RATE:
+					if not _brick_accent_zone(course, hcol): continue
+					if _tone_hash(hcol, course, _tone_salt + 7) % 100 < BRICK_PROUD_RATE:
 						depth_cells = 2.0
-				var tone := _tone_index(course, column)
+				var tone := _tone_index(course, hcol)
 				var local := Vector3((brick_low + brick_high) * 0.5, (row_low + row_high) * 0.5, plane + _detail_unit.z * (TONE_GAP + depth_cells * 0.5))
 				# Emit axis-aligned in the building frame: Grid.quantized_box snaps
 				# centre and size together, so the extents must share one frame or a
@@ -278,7 +289,9 @@ func _collect_gable_tone_faces(dimensions: Vector3) -> void:
 			strips.append(_piece(Vector3(0, level, 0), Vector3(span, row_height, GABLE_STRIP_THICKNESS)))
 		# The gable bands are fixed by the strip rows, so the coursing meets them
 		# exactly instead of clipping a sliver into every step.
-		_collect_tone_faces(basis, origin, strips, GABLE_STRIP_THICKNESS * 0.5, Vector2(BRICK_PITCH.x, row_height / _detail_unit.y), Vector2(BRICK_JOINT, 0.0))
+		# Anchor the gable to the wall below it (same left edge) so the coursing
+		# continues unbroken up into the triangle.
+		_collect_tone_faces(basis, origin, strips, GABLE_STRIP_THICKNESS * 0.5, Vector2(BRICK_PITCH.x, row_height / _detail_unit.y), Vector2(BRICK_JOINT, 0.0), -dimensions.z * 0.5)
 
 static func _oriented_extents(basis: Basis, size: Vector3) -> Vector3:
 	# House-frame extents of a box carried by a wall basis. Wall orientations are
@@ -702,8 +715,9 @@ func _build_wall(orientation: String, dimensions: Vector3, view: Dictionary, col
 			var log_face := _add_detail_boxes("LogCourses%s%d" % [orientation.capitalize(), shade], courses[shade], color.lightened(0.04 + shade * 0.07))
 			log_face.transform = Transform3D(basis, origin)
 	# Coursed masonry facing sits on the same wall plane, proud of the surface, so
-	# openings stay clear and the mortar bed behind reads at every joint.
-	_collect_tone_faces(basis, origin, pieces, 0.0)
+	# openings stay clear and the mortar bed behind reads at every joint. Columns
+	# are counted from this wall's left edge so every wall shares one accent map.
+	_collect_tone_faces(basis, origin, pieces, 0.0, Vector2.ZERO, Vector2(-1.0, -1.0), -span * 0.5)
 
 func _detail_size(detail: Dictionary, fallback: Vector2) -> Vector2:
 	var value = (detail.get("override", {}) as Dictionary).get("size", null)

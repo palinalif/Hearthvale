@@ -151,7 +151,7 @@ func _run() -> void:
 		family = family and colour.r > colour.g and colour.g > colour.b and colour.s > 0.25
 		lightest = maxf(lightest if lightest < 1.0 else colour.v, colour.v)
 		darkest = minf(darkest if darkest > 0.0 else colour.v, colour.v)
-	check(family, "every brick tone stays inside the warm red-brick/ochre family")
+	check(family, "every brick tone stays a darker cut of the warm wall tone (never a cold hue)")
 	check(lightest - darkest >= 0.15, "brick tones spread across the family (value spread %.3f)" % (lightest - darkest))
 
 	var brick_count := 0
@@ -207,6 +207,29 @@ func _run() -> void:
 	cottage.request_revision(1)
 	check(cottage.apply_building(second_view, 1), "cottage can re-apply a later revision")
 	check(_digest(cottage) == _digest(repeat), "re-applying the same recipe rebuilds identical coursing")
+
+	# --- every wall carries the accent-brick character -----------------------
+	# The user saw one wall read plain against a bricked side: hash columns used
+	# to count from a centred space, so a wide wall could expose outer regions no
+	# other wall ever showed. Columns now count from each wall's left edge, so
+	# all walls sample the same accent map. The boxes are pure math (no renderer
+	# needed), so this balance check runs headless too.
+	var per_wall := {"front": 0, "back": 0, "left": 0, "right": 0}
+	var dim: Vector3 = cottage_view["dimensions"]
+	for tone_boxes in (cottage as Node).get("_tone_boxes"):
+		for box in tone_boxes:
+			var c: Vector3 = box["center"]
+			var dx := absf(c.x) - dim.x * 0.5
+			var dz := absf(c.z) - dim.z * 0.5
+			var which := "front" if dz >= dx and c.z < 0 else ("back" if dz >= dx else ("left" if c.x < 0 else "right"))
+			per_wall[which] += 1
+	var wall_min := -1.0
+	var wall_max := 0.0
+	for k in per_wall:
+		check(per_wall[k] > 0, "wall %s carries accent bricks (count %d)" % [k, per_wall[k]])
+		wall_min = float(per_wall[k]) if wall_min < 0.0 else minf(wall_min, float(per_wall[k]))
+		wall_max = maxf(wall_max, float(per_wall[k]))
+	check(wall_min >= 0.0 and wall_min / wall_max >= 0.5, "accent density is balanced across walls (min/max %.2f, front %d back %d left %d right %d)" % [wall_min / wall_max, per_wall["front"], per_wall["back"], per_wall["left"], per_wall["right"]])
 
 	# --- part 2: timber-framed village gable ---------------------------------
 	var tudor_view := _view("village_gable")
