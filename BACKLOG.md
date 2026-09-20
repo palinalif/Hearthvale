@@ -54,6 +54,8 @@ Conversational shorthand:
 
 Mounted transportation and ambient farm horses may fit Hearthvale's pastoral setting. Horses are the furthest the transportation theme should go; this does not imply a larger world or authorize character, riding, navigation, or animation work.
 
+**Status note (2026-09-20):** the ambient-horse half is now explored in `docs/proposals/old-european-town-vibe.md` (IDEA-009) — tethered horses, carts as props, small animals; riding/mounted transport remains open but out of scope for that document.
+
 **Known dependencies:** A justified traversal need, character/animal animation, and navigation appropriate to the active milestone.
 
 ### IDEA-003 — Vertical house expansion
@@ -124,6 +126,16 @@ A fully touchscreen-compatible, **gesture-based** control scheme that activates 
 **Acceptance outline:** A phone with no controller can sculpt, place/rotate/cancel a prop and a home, use every menu, undo and save entirely by touch; controller connect/disconnect handoffs are side-effect free; all existing regression suites stay green; gated playtest APK delivered.
 
 **Known dependencies:** Controller connection detection, the existing action/input layer, 720p touch UI layout, and a phone-only playtest route.
+
+### IDEA-009 — Old European town vibe
+
+**Status:** Idea (discussion document)  
+**Priority:** future  
+**Added:** 2026-09-20
+
+The player wants the game to feel like a small old-timey European market town: walkable and dense, horses, weirdly uneven/crooked pathways, landmarks, and life (smoke, carts, laundry, animals). Full exploration in `docs/proposals/old-european-town-vibe.md`: lane hierarchy and ruts on the existing painted-path system, public building types (inn, chapel, stable, windmill), stepped-gable/jetted massing, a market square, tethered animals on the `design.md` §6 behaviour model, and a street-furniture wishlist — with implementation mapping, performance envelope, phasing (A: lane + square, B: public buildings, C: small life) and boundaries.
+
+**Known dependencies:** M2 completion; new furniture styles, new building `design_id`s, one animated building part (windmill), a critter runtime on the `design.md` §6 model, and a world-document version bump for critter records. Related to IDEA-001 (horses).
 
 ## Rejected and out of scope
 
