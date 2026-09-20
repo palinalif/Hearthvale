@@ -40,15 +40,24 @@ const BRICK_TONES: Array[Color] = [
 	Color("#dbc5a2"), Color("#d0ba9a"), Color("#c4b091"), Color("#b9a689"), Color("#ad9b80"),
 ]
 ## 2026-09-20 art pass, revised after device playtest (v58): full coursing read
-## as dense noise at play distance. The reference keeps the wall tone calm and
-## lets only the occasional brick sit proud, so accents are clumped into zones
-## instead of tiled: a coarse patch decides whether its area carries bricks at
-## all, then most cells inside do. The patch size matches the _tone_index patch
-## bias, so each zone keeps one coherent tone.
+## as dense noise at play distance. 2026-09-20 placement pass (v64): the random
+## zone clouds read as arbitrary smudges, so the accent follows a designed
+## masonry plan instead — a foundation band along each wall's base, a one-brick
+## border framing every window/door opening, and only sparse weathering
+## elsewhere. The sparse cells stay clumped into zones: a coarse patch decides
+## whether its area carries bricks at all, then most cells inside do. The
+## patch size matches the _tone_index patch bias, so each zone keeps one
+## coherent tone.
 const BRICK_ACCENT_PATCH := Vector2i(8, 6)
-const BRICK_ZONE_RATE := 15             # patch hash %% 100 below this -> zone carries bricks
-const BRICK_CELL_RATE := 55             # cell hash %% 100 below this -> that cell is a brick
+const BRICK_ZONE_RATE := 6              # patch hash %% 100 below this -> zone carries weathering bricks
+const BRICK_CELL_RATE := 50             # cell hash %% 100 below this -> that cell is a brick
 const BRICK_PROUD_RATE := 25            # cells that pop two cells instead of one
+## Designed placement rates (%% 100). The band runs from the wall's base up
+## BRICK_BAND_RATIO of its height; the border is one brick deep along any edge
+## that cuts an opening (never the wall silhouette).
+const BRICK_BAND_RATIO := 0.32
+const BRICK_BAND_RATE := 75
+const BRICK_SURROUND_RATE := 85
 ## Coursing pitch and mortar joint in fine cells (0.0625 m). 2026-09-20 art
 ## pass: the original whole-cell 3x2 bricks with 1-cell joints read chunky and
 ## grout-heavy, so the facing is refined to half scale: a 1x1 cell brick with a
@@ -232,6 +241,14 @@ func _collect_tone_faces(basis: Basis, origin: Vector3, pieces: Array, plane: fl
 	if pitch.x <= 0.0 or pitch.y <= 0.0: return
 	var joint_x := _detail_unit.x * joint_source.x
 	var joint_y := _detail_unit.y * joint_source.y
+	# Walls (default pitch/joint) get the designed masonry plan; the fixed gable
+	# strips keep only the sparse weathering.
+	var designed := _tone_brick and joint_cells.y < 0.0
+	var faces: Array = []
+	var wall_low_x := INF
+	var wall_high_x := -INF
+	var wall_low_y := INF
+	var wall_high_y := -INF
 	for piece_value in pieces:
 		var piece: Dictionary = piece_value
 		var quantized := Grid.quantized_box(piece["center"], piece["size"], _unit)
@@ -241,6 +258,24 @@ func _collect_tone_faces(basis: Basis, origin: Vector3, pieces: Array, plane: fl
 		var high_x := center.x + size.x * 0.5
 		var low_y := center.y - size.y * 0.5
 		var high_y := center.y + size.y * 0.5
+		wall_low_x = minf(wall_low_x, low_x)
+		wall_high_x = maxf(wall_high_x, high_x)
+		wall_low_y = minf(wall_low_y, low_y)
+		wall_high_y = maxf(wall_high_y, high_y)
+		faces.append({"low_x": low_x, "high_x": high_x, "low_y": low_y, "high_y": high_y})
+	var band_top := -INF
+	if designed: band_top = wall_low_y + (wall_high_y - wall_low_y) * BRICK_BAND_RATIO
+	for face_value in faces:
+		var face: Dictionary = face_value
+		var low_x: float = face["low_x"]
+		var high_x: float = face["high_x"]
+		var low_y: float = face["low_y"]
+		var high_y: float = face["high_y"]
+		# A piece edge that is not the wall's own silhouette is an opening cut.
+		var cut_left := designed and low_x > wall_low_x + 0.01
+		var cut_right := designed and high_x < wall_high_x - 0.01
+		var cut_bottom := designed and low_y > wall_low_y + 0.01
+		var cut_top := designed and high_y < wall_high_y - 0.01
 		for course in range(floori(low_y / pitch.y + 0.0001), ceili(high_y / pitch.y - 0.0001)):
 			var row_low := maxf(low_y, float(course) * pitch.y)
 			var row_high := minf(high_y, float(course + 1) * pitch.y - joint_y)
@@ -255,11 +290,19 @@ func _collect_tone_faces(basis: Basis, origin: Vector3, pieces: Array, plane: fl
 				if brick_high - brick_low < _detail_unit.x * 0.75: continue
 				var depth_cells := TONE_DEPTH
 				if _tone_brick:
-					# Sparse accents, never full coursing (see BRICK_*_RATE): most
-					# accepted cells stay a single fine cell clear, which reads as
-					# tone at play distance, and only the few that pop two cells
-					# read as actual 3-D bricks.
-					if not _brick_accent_zone(course, hcol): continue
+					# Designed masonry: the foundation band and the opening border
+					# carry the accent; elsewhere only sparse weathering. Accepted
+					# cells mostly sit one fine cell clear (tone at play distance);
+					# the few that pop two cells read as actual 3-D bricks.
+					var band := designed and float(course + 1) * pitch.y <= band_top
+					var surround := (cut_left and brick_low - low_x < pitch.x) or (cut_right and high_x - brick_high < pitch.x)
+					var surround_row := (cut_top and high_y - row_high < pitch.y) or (cut_bottom and row_low - low_y < pitch.y)
+					if band:
+						if _tone_hash(column, course, _tone_salt + 113) % 100 >= BRICK_BAND_RATE: continue
+					elif surround or surround_row:
+						if _tone_hash(column, course, _tone_salt + 131) % 100 >= BRICK_SURROUND_RATE: continue
+					elif not _brick_accent_zone(course, hcol):
+						continue
 					if _tone_hash(hcol, course, _tone_salt + 7) % 100 < BRICK_PROUD_RATE:
 						depth_cells = 2.0
 				var tone := _tone_index(course, hcol)
