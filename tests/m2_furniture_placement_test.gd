@@ -108,19 +108,18 @@ func _initialize() -> void:
 	_check(scene.furniture_placement_active and scene.landscape_state.composition.size() == 4, "invalid home-overlap furniture cannot commit")
 	scene._cancel_furniture_placement()
 
-	# The street-scale 2x flower arch anchors at 6.875m: still placeable because
-	# COMPOSITION_MAX_SIZE grew past the original 6.0 small-prop cap.
+	# The flower arch anchors at 2.375m: below the small-prop cap, placeable.
 	scene.furniture_style_id = "flower_arch"
-	scene.furniture_size = Vector2(6.875, 3.0)
+	scene.furniture_size = Vector2(2.375, 1.0)
 	scene.furniture_yaw_quarters = 0
 	scene._begin_furniture_placement()
 	_aim(Vector2(40.0, 20.0))
-	_check(scene.furniture_placement_valid, "street-scale flower arch has a valid placement target")
-	_check(scene._commit_furniture(), "street-scale flower arch commits")
+	_check(scene.furniture_placement_valid, "flower arch has a valid placement target")
+	_check(scene._commit_furniture(), "flower arch commits")
 	scene.furniture_size = Vector2(8.0, 3.0)
 	scene._begin_furniture_placement()
 	_aim(Vector2(40.0, 24.0))
-	_check(not scene.furniture_placement_valid and scene.furniture_placement_reason.contains("detail limit"), "furniture beyond the 7.5m cap is still rejected")
+	_check(not scene.furniture_placement_valid and scene.furniture_placement_reason.contains("detail limit"), "furniture beyond the 6.0m cap is still rejected")
 	scene._cancel_furniture_placement()
 	await _finish()
 
