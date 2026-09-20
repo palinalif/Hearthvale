@@ -44,7 +44,7 @@ const VOXEL_COUNTS := {
 	"topiary_pair": 363,
 	"beehive": 174,
 	"wheelbarrow": 148,
-	"flower_arch": 122,
+	"flower_arch": 2748,
 	"garden_gnome": 182,
 	"garden_gnome_small": 102,
 	"garden_gnome_tall": 190,
