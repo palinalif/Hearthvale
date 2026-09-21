@@ -55,9 +55,9 @@ const BRICK_PROUD_RATE := 12            # cells that pop two cells instead of on
 ## Designed placement rates (%% 100). The band runs from the wall's base up
 ## BRICK_BAND_RATIO of its height; the border is one brick deep along any edge
 ## that cuts an opening (never the wall silhouette).
-const BRICK_BAND_RATIO := 0.32
-const BRICK_BAND_RATE := 100
-const BRICK_SURROUND_RATE := 100
+const BRICK_BAND_RATIO := 0.12
+const BRICK_BAND_RATE := 85
+const BRICK_SURROUND_RATE := 90
 ## Coursing pitch and mortar joint in fine cells (0.0625 m). 2026-09-20 art
 ## pass: the original whole-cell 3x2 bricks with 1-cell joints read chunky and
 ## grout-heavy, so the facing is refined to half scale: a 1x1 cell brick with a

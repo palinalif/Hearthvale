@@ -135,7 +135,7 @@ func _ready() -> void:
 			# ask this viewer to build visuals/collisions for the entire map at boot.
 			var data_viewer: Node3D = ClassDB.instantiate("VoxelViewer")
 			data_viewer.position = _world_size() * 0.5
-			data_viewer.view_distance = _whole_world_view_distance(64.0)
+			data_viewer.view_distance = _whole_world_view_distance(80.0)
 			data_viewer.requires_visuals = false
 			data_viewer.requires_collisions = false
 			add_child(data_viewer)
@@ -160,14 +160,14 @@ func _ready() -> void:
 		else:
 			var viewer: Node3D = ClassDB.instantiate("VoxelViewer")
 			viewer.position = _world_size() * 0.5
-			viewer.view_distance = _whole_world_view_distance(64.0)
+			viewer.view_distance = _whole_world_view_distance(80.0)
 			add_child(viewer)
 	voxels = generator_script.generate()
 	var full_area := AABB(Vector3.ZERO, Vector3(patch_size))
 	var mesh_area := initial_mesh_area()
-	# The expanded 512-cell valley has 78% more native data than the previous
-	# 384-cell map. Keep a bounded cold-start allowance on slower devices, not
-	# just in test_mode; M0 and the previous map retain their original limits.
+	# The 640-cell valley holds twice the native data of the previous 512-cell
+	# map. Keep a bounded cold-start allowance on slower devices, not just in
+	# test_mode; M0 and the previous map retain their original limits.
 	var default_budget_ms := 45000 if patch_size.x > 96 else 15000
 	if patch_size.x > 384 or patch_size.z > 384: default_budget_ms = 90000
 	var initialization_budget_ms := initialization_budget_override_ms if initialization_budget_override_ms > 0 else default_budget_ms
@@ -624,8 +624,11 @@ func load_world() -> bool:
 	var source_store: RefCounted = _checkpoint
 	var migrated := false
 	if loaded == null and initial_generator == M1Generator and generator_id == M1Generator.GENERATOR_ID and patch_size == M1Generator.PATCH_SIZE and is_equal_approx(voxel_scale, M1Generator.VOXEL_SCALE):
-		# Validate both older envelopes before touching any authoritative data.
+		# Validate each older envelope before touching any authoritative data.
 		# CheckpointStore keeps other generator generations out of its GC domain.
+		# Chain: 512/v3 -> expand_previous (1:1); 384/v2 -> expand_legacy_v2
+		# (1:1); 96/v1 -> _upsample_legacy_m1 (4x nearest-neighbour into the
+		# 384 sub-volume of a freshly generated v4 volume).
 		var previous_store := CheckpointStore.new(checkpoint_root)
 		previous_store.expected_dimensions = M1Generator.Bounds.PREVIOUS_NATIVE_SIZE
 		previous_store.expected_generator_id = M1Generator.Bounds.PREVIOUS_GENERATOR_ID
@@ -639,14 +642,28 @@ func load_world() -> bool:
 			migrated = loaded != null
 		else:
 			var legacy_store := CheckpointStore.new(checkpoint_root)
-			legacy_store.expected_dimensions = M1Generator.LEGACY_PATCH_SIZE
-			legacy_store.expected_generator_id = M1Generator.LEGACY_GENERATOR_ID
+			legacy_store.expected_dimensions = M1Generator.LEGACY_V2_PATCH_SIZE
+			legacy_store.expected_generator_id = M1Generator.LEGACY_V2_GENERATOR_ID
 			legacy_store.require_building_document = require_building_document
 			var legacy: Object = legacy_store.load()
 			if legacy != null:
-				loaded = _upsample_legacy_m1(legacy)
+				# The v2 384-cell volume (48 m, 0.125 m voxels) is the same world
+				# region; its saved cells copy 1:1 into the v4 volume and the
+				# remaining land keeps the newly generated terrain.
+				loaded = M1Generator.expand_legacy_v2(legacy)
 				source_store = legacy_store
 				migrated = loaded != null
+			else:
+				var antique_store := CheckpointStore.new(checkpoint_root)
+				antique_store.expected_dimensions = M1Generator.LEGACY_PATCH_SIZE
+				antique_store.expected_generator_id = M1Generator.LEGACY_GENERATOR_ID
+				antique_store.require_building_document = require_building_document
+				var antique: Object = antique_store.load()
+				if antique != null:
+					# 96 -> 384 4x nearest-neighbour, then 1:1 into 640.
+					loaded = _upsample_legacy_m1(antique)
+					source_store = antique_store
+					migrated = loaded != null
 	if loaded == null:
 		_save_status = "error"; _error = _checkpoint.last_error; return false
 	var loaded_revision: int = source_store.loaded_revision
@@ -666,9 +683,10 @@ func _upsample_legacy_m1(source: Object) -> Object:
 	if source == null or source.get_size() != M1Generator.LEGACY_PATCH_SIZE: return null
 	var result: Object = M1Generator.generate()
 	result.set_channel_depth(PatchGenerator.CHANNEL_TYPE, source.get_channel_depth(PatchGenerator.CHANNEL_TYPE))
-	# Clear the ENTIRE old volume before copying runs, so saved excavations and
-	# air do not get refilled by the new starter generator.
-	result.fill_area(0, Vector3i.ZERO, M1Generator.Bounds.PREVIOUS_NATIVE_SIZE, PatchGenerator.CHANNEL_TYPE)
+	# Clear the ENTIRE old world region (0-48 m, the 384-cell v2 grid) before
+	# copying runs, so saved excavations and air do not get refilled by the new
+	# starter generator. Land beyond it stays freshly generated v4 terrain.
+	result.fill_area(0, Vector3i.ZERO, M1Generator.LEGACY_V2_PATCH_SIZE, PatchGenerator.CHANNEL_TYPE)
 	# Expand every vertical material run, including caves and disconnected
 	# overhangs. No sampling, surface reconstruction or save rewrite occurs.
 	var dimensions: Vector3i = source.get_size()

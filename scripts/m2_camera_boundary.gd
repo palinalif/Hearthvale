@@ -1,7 +1,7 @@
 extends RefCounted
 ## Clamp the physical camera to the native map without translating the subject.
 ## Kept separate from map generation so loaded worlds use their actual extent.
-const DEFAULT_EXTENT := Vector3(64.0, 32.0, 64.0)
+const DEFAULT_EXTENT := Vector3(80.0, 32.0, 80.0)
 const EDGE_MARGIN := 0.25
 
 static func frame(target: Vector3, offset: Vector3, extent: Vector3) -> Dictionary:

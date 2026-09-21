@@ -13,10 +13,10 @@ func check(ok: bool, message: String) -> void:
 		failures.append(message)
 		push_error(message)
 func _initialize() -> void:
-	check(Generator.PATCH_SIZE == Vector3i(512,256,512), "Expanded native dimensions")
+	check(Generator.PATCH_SIZE == Vector3i(640,256,640), "Expanded native dimensions")
 	check(is_equal_approx(Generator.VOXEL_SCALE,0.125), "Native cell scale preserved")
-	check(is_equal_approx(Landscape.EDITABLE_WORLD_SIZE,64.0), "Landscape reaches new edge")
-	check(is_equal_approx(Region.DEFAULT_WORLD_SIZE,64.0), "Paths reach new edge")
+	check(is_equal_approx(Landscape.EDITABLE_WORLD_SIZE,80.0), "Landscape reaches new edge")
+	check(is_equal_approx(Region.DEFAULT_WORLD_SIZE,80.0), "Paths reach new edge")
 	var world := World.new()
 	var before := JSON.stringify(world.get_document())
 	var documents := Starter.documents(world)

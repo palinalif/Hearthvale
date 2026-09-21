@@ -20,8 +20,8 @@ func _initialize() -> void:
 	if scene.backend == null or not scene.backend.is_ready():
 		if scene.backend: print("BACKEND: %s" % JSON.stringify(scene.backend.stats()))
 		_finish(); return
-	_check(scene.backend.patch_size == Vector3i(512, 256, 512), "M1 uses the current fine native terrain grid")
-	_check(Vector3(scene.backend.patch_size) * float(scene.backend.voxel_scale) == Vector3(64, 32, 64), "M1 preserves current authored world bounds")
+	_check(scene.backend.patch_size == Vector3i(640, 256, 640), "M1 uses the current fine native terrain grid")
+	_check(Vector3(scene.backend.patch_size) * float(scene.backend.voxel_scale) == Vector3(80, 32, 80), "M1 preserves the 80 metre valley bounds")
 	_check(scene.view_context == "terrain", "default context is terrain")
 	await process_frame
 	_check(scene._terrain_target_valid, "default terrain cursor has a target")

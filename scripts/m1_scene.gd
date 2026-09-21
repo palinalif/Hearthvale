@@ -1109,6 +1109,15 @@ func _ensure_premade_river() -> void:
 	var river := PremadeRiver.region()
 	for existing: Dictionary in landscape_state.water:
 		if PremadeRiver.matches(existing, river): return
+		# A starter river stored by an older (smaller) world size is still the
+		# same river truncated at the old edge; extend it in place to the new
+		# world instead of layering a second region over it. Player-modified
+		# regions (different level/width/centre line) are left untouched.
+		if PremadeRiver.is_starter_river(existing):
+			landscape_state.erase_water(int(existing.get("id", 0)))
+			if landscape_state.add_water("stream", river["level"], river["points"], river["width"], river["flow"]) > 0:
+				_sync_water_visual()
+			return
 	if landscape_state.add_water("stream", river["level"], river["points"], river["width"], river["flow"]) > 0:
 		_sync_water_visual()
 

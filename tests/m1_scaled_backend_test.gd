@@ -51,7 +51,7 @@ func _initialize() -> void:
 			_check(is_equal_approx(float(visual_viewer.get("view_distance_vertical_ratio")), 0.75), "visual voxel viewer limits cold-start vertical demand")
 		if data_viewers.size() == 1:
 			var data_viewer := data_viewers[0] as Node3D
-			_check(data_viewer.position.is_equal_approx(Vector3(32.0, 16.0, 32.0)), "data-only voxel viewer stays at valley center")
+			_check(data_viewer.position.is_equal_approx(Vector3(40.0, 16.0, 40.0)), "data-only voxel viewer stays at valley center")
 			_check(is_equal_approx(float(data_viewer.get("view_distance")), 64.0), "data-only voxel viewer keeps the full valley resident")
 			_check(not bool(data_viewer.get("requires_collisions")), "data-only voxel viewer does not request collision meshes")
 	var deadline := Time.get_ticks_msec() + 60000
@@ -60,8 +60,8 @@ func _initialize() -> void:
 	if not backend.is_ready():
 		_finish()
 		return
-	_check(backend.world_size().is_equal_approx(Vector3(64, 32, 64)), "Approved starter expansion uses 64x32x64 world bounds")
-	_check(backend.patch_size == Vector3i(512, 256, 512) and backend.patch_size == Generator.PATCH_SIZE, "Expanded map uses 512x256x512 index grid")
+	_check(backend.world_size().is_equal_approx(Vector3(80, 32, 80)), "Valley expansion uses 80x32x80 world bounds")
+	_check(backend.patch_size == Vector3i(640, 256, 640) and backend.patch_size == Generator.PATCH_SIZE, "Expanded map uses 640x256x640 index grid")
 	_check(is_equal_approx(backend.voxel_scale, 0.125), "M1 uses eighth-unit editable voxels")
 	_check(backend.terrain.bounds.size == Vector3(Generator.PATCH_SIZE), "native bounds use index dimensions")
 	_check(backend.terrain.scale.is_equal_approx(Vector3.ONE * Generator.VOXEL_SCALE), "native terrain scales geometry uniformly")

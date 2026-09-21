@@ -3,6 +3,9 @@ extends "res://scripts/m2_scene_style_preview_stability.gd"
 ## Old worlds gain space and scenery without acquiring unwanted houses/props.
 const StarterHamlet = preload("res://scripts/m2_starter_hamlet.gd")
 const ValleySurround = preload("res://scripts/m2_valley_surround.gd")
+# The mountain ring peaks at ~49 m; keeping orbit pitch below this keeps the
+# camera under the peaks in the default framing instead of seeing over them.
+const VALLEY_MAX_PITCH := 1.15
 @export var starter_hamlet_enabled := true
 # Existing tool regressions author their own empty-world fixtures. Dedicated
 # starter integration/capture tests explicitly opt into the production seed.
@@ -164,6 +167,7 @@ func _on_backend_changed() -> void:
 
 func _process(delta: float) -> void:
 	super._process(delta)
+	camera_pitch = minf(camera_pitch, VALLEY_MAX_PITCH)
 	if _shutting_down or not _surround_refresh_pending or stroke_active or _restoring: return
 	_surround_refresh_pending = false
 	if is_instance_valid(_valley_surround) and backend and backend.is_ready():

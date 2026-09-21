@@ -16,7 +16,7 @@ func _initialize() -> void:
 	for arg in args:
 		if arg.begins_with("--fixture-root="): fixture_root = arg.trim_prefix("--fixture-root=")
 	_check(Generator.VOXEL_SCALE == Grid.UNIT and Grid.UNIT == 0.125, "native terrain and visible geometry share .125 world cells")
-	_check(Generator.PATCH_SIZE == Vector3i(384, 256, 384), "finite fine-grid dimensions are explicit")
+	_check(Generator.PATCH_SIZE == Vector3i(640, 256, 640), "finite fine-grid dimensions are explicit")
 	var began := Time.get_ticks_msec()
 	backend = Backend.new(); backend.initial_generator = Generator; backend.generator_id = Generator.GENERATOR_ID
 	backend.patch_size = Generator.PATCH_SIZE; backend.voxel_scale = Generator.VOXEL_SCALE
@@ -25,9 +25,9 @@ func _initialize() -> void:
 	var deadline := Time.get_ticks_msec() + 60000
 	while not backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame
 	metrics["native_ready_ms"] = Time.get_ticks_msec() - began
-	_check(backend.is_ready(), "384x256x384 native volume initializes and meshes within bounded time")
+	_check(backend.is_ready(), "640x256x640 native volume initializes and meshes within bounded time")
 	if not backend.is_ready(): print(backend.stats()); _finish(); return
-	_check(backend.world_size() == Vector3(48, 32, 48), "world bounds stay fixed")
+	_check(backend.world_size() == Vector3(80, 32, 80), "world bounds stay fixed")
 	_check(backend.terrain.scale == Vector3.ONE * Grid.UNIT, "actual native terrain transform uses shared unit")
 	_check(backend.terrain.mesh_block_size == 32 and backend.terrain.get_data_block_size() == 16, "supported native mesh grouping preserves 16-cell data blocks")
 	if "--read-fixture" in args:
@@ -97,7 +97,12 @@ func _initialize() -> void:
 	old.fill_area(0, Vector3i(20, 6, 20), Vector3i(30, 12, 30), 0)
 	old.fill_area(2, Vector3i(40, 22, 40), Vector3i(45, 25, 45), 0)
 	old.set_voxel(65535, 95, 63, 95, 0)
-	var expected_fine: Object = ClassDB.instantiate("VoxelBuffer"); expected_fine.create(384, 256, 384)
+	# The migrated 640 volume must equal the fresh v4 generation everywhere
+	# outside the old 384 sub-volume, with the independent 4x upsample of the
+	# 96 source (zero-cleared first) occupying the 0..383 sub-volume.
+	var expected_fine: Object = ClassDB.instantiate("VoxelBuffer"); expected_fine.create(640, 256, 640)
+	expected_fine.copy_channel_from_area(Generator.generate(), Vector3i.ZERO, Vector3i.ZERO, Generator.PATCH_SIZE, 0)
+	expected_fine.fill_area(0, Vector3i.ZERO, Vector3i(384, 256, 384), 0)
 	expected_fine.fill_area(1, Vector3i.ZERO, Vector3i(384, 64, 384), 0)
 	expected_fine.fill_area(2, Vector3i(0, 60, 0), Vector3i(384, 64, 384), 0)
 	expected_fine.fill_area(0, Vector3i(80, 24, 80), Vector3i(120, 48, 120), 0)
@@ -117,7 +122,7 @@ func _initialize() -> void:
 	began = Time.get_ticks_usec()
 	_check(backend.load_world(), "fine backend finds validated legacy checkpoint")
 	metrics["legacy_load_and_upsample_ms"] = (Time.get_ticks_usec() - began) / 1000.0
-	_check(_hash(backend.voxels) == expected_hash, "migration preserves all 37748736 cells including cave overhang materials and bounds")
+	_check(_hash(backend.voxels) == expected_hash, "migration preserves the 384 upsample sub-volume and matches fresh generation in the ring")
 	_check(backend.stats().dirty and backend.stats().save_status == "migrated", "legacy migration is dirty until next explicit save")
 	_check(JSON.parse_string(JSON.stringify(backend.loaded_building_document)) == JSON.parse_string(JSON.stringify(document)), "migration preserves full cottage and planting document")
 	_check(backend.stats().revision == 17, "migration preserves authoritative revision")

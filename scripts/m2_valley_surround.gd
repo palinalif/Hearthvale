@@ -1,152 +1,135 @@
-extends Node3D
-## Disposable stepped scenery outside the editable native volume. There are no
-## collision shapes or saved records here. The player's terrain is never filled
-## or overwritten to disguise an edge. Border samples follow saved/sculpted land.
-const Generator = preload("res://scripts/m1_patch_generator.gd")
-const WIDTH := 16.0
-const STEP := 0.5
-const HEIGHT_STEP := 0.0625
-var backend: Node
-var _land: MeshInstance3D
-var _water: MeshInstance3D
-var _columns := 0
-var _faces := 0
-var _extent := Vector3.ZERO
-var _edge_heights: Dictionary = {}
+## Valley ring: a tall mountain wall around the M2 starter valley.
+##
+## Hides the skybox from every reachable camera pose. The ring follows the
+## world edge (radius = world_size/2) and rises monotonically from the
+## terrain edge to a peak band, then slopes outward. The peak height is
+## chosen to clear the camera's maximum reach (target_y + sin(max_pitch)
+## * max_dist, see m2_camera_boundary.gd).
+##
+## River corridors: at the world edges where the river flows out, the ring
+## drops to water level so the valley reads as a valley with a flowing-out
+## river, not a sealed box.
+##
+## The ring is pure presentation: no collision, no picking, no input,
+## excluded from save/load and undo. Uses a plain MeshInstance3D (never a
+## VoxelTerrain mesh) so it stays in scene-space and out of the native
+## 32 m height bound.
 
-func rebuild(terrain_backend: Node) -> void:
-	backend = terrain_backend
-	if backend == null or not backend.is_ready(): return
-	_extent = backend.world_size()
-	_edge_heights.clear()
-	var start := -roundi(WIDTH / STEP)
-	var finish_x := ceili((_extent.x + WIDTH) / STEP)
-	var finish_z := ceili((_extent.z + WIDTH) / STEP)
-	var heights := {}
-	for z in range(start, finish_z):
-		for x in range(start, finish_x):
-			var point := Vector2(float(x) + 0.5, float(z) + 0.5) * STEP
-			if _inside(point): continue
-			heights[Vector2i(x,z)] = _height(point)
-	_columns = heights.size()
-	var top := {"v": [], "n": [], "i": []}
-	var sides := {"v": [], "n": [], "i": []}
-	_faces = 0
-	for key: Vector2i in heights:
-		var x := float(key.x) * STEP
-		var z := float(key.y) * STEP
-		var y := float(heights[key])
-		_quad(top, [Vector3(x,y,z),Vector3(x+STEP,y,z),Vector3(x+STEP,y,z+STEP),Vector3(x,y,z+STEP)], Vector3.UP)
-		for direction: Vector2i in [Vector2i.RIGHT,Vector2i.LEFT,Vector2i.DOWN,Vector2i.UP]:
-			var neighbour := key + direction
-			var point := (Vector2(neighbour) + Vector2.ONE * 0.5) * STEP
-			var low := float(heights.get(neighbour, -0.5))
-			# At the playable boundary, use the native top rather than a guessed
-			# generated height. The skirt covers only outside-facing gaps.
-			if _inside(point): low = _border_height(point)
-			if low >= y - 0.00001: continue
-			match direction:
-				Vector2i.RIGHT: _quad(sides,[Vector3(x+STEP,low,z),Vector3(x+STEP,low,z+STEP),Vector3(x+STEP,y,z+STEP),Vector3(x+STEP,y,z)],Vector3.RIGHT)
-				Vector2i.LEFT: _quad(sides,[Vector3(x,low,z+STEP),Vector3(x,low,z),Vector3(x,y,z),Vector3(x,y,z+STEP)],Vector3.LEFT)
-				Vector2i.DOWN: _quad(sides,[Vector3(x+STEP,low,z+STEP),Vector3(x,low,z+STEP),Vector3(x,y,z+STEP),Vector3(x+STEP,y,z+STEP)],Vector3.BACK)
-				Vector2i.UP: _quad(sides,[Vector3(x,low,z),Vector3(x+STEP,low,z),Vector3(x+STEP,y,z),Vector3(x,y,z)],Vector3.FORWARD)
-	var mesh := ArrayMesh.new()
-	_add_surface(mesh,top,Color("#7d9957"))
-	_add_surface(mesh,sides,Color("#ac9677"))
-	if _land == null:
-		_land = MeshInstance3D.new()
-		_land.name = "ScenicTerracesOutsideEditableMap"
-		add_child(_land)
-	_land.mesh = mesh
-	_rebuild_water()
+class_name ValleySurround
+extends MeshInstance3D
 
-func affected_by(edit: AABB) -> bool:
-	if edit.size == Vector3.ZERO: return true
-	return edit.position.x < STEP or edit.position.z < STEP or edit.end.x > _extent.x - STEP or edit.end.z > _extent.z - STEP
+const _Gen := preload("res://scripts/m1_patch_generator.gd")
 
-func stats() -> Dictionary:
-	return {"columns":_columns,"faces":_faces,"editable":false,"width":WIDTH}
+const WORLD_SIZE := 80.0
+const RING_CENTER := Vector2(WORLD_SIZE * 0.5, WORLD_SIZE * 0.5)
+const RING_RADIUS := WORLD_SIZE * 0.5
 
-func _inside(point: Vector2) -> bool:
-	return point.x >= 0.0 and point.y >= 0.0 and point.x < _extent.x and point.y < _extent.z
+const PEAK_HEIGHT := 56.0
+const PEAK_BAND_RADIUS := 14.0
+const RIVER_WATER_LEVEL := 4.375
+const OUTER_MIN_HEIGHT := 20.0
+const EDGE_TERRAIN_LEVEL := 8.0
+const CORRIDOR_EXTRA_WIDTH := 3.0
+const _OUTER_SAMPLE_RADIUS := 30.0
 
-func _height(point: Vector2) -> float:
-	var nearest := point.clamp(Vector2.ZERO,Vector2(_extent.x,_extent.z))
-	var distance := point.distance_to(nearest)
-	var edge := _border_height(nearest)
-	# A broad shoulder rolls down through shallow steps into the distance.
-	var blend := smoothstep(1.0, WIDTH, distance)
-	var low := 1.0 + sin(point.x * 0.075 + 0.4) * 0.375 + sin(point.y * 0.09) * 0.375
-	var channel_distance := absf(point.x - Generator.river_center_x(point.y))
-	if point.y < 0.0 or point.y >= _extent.z:
-		low = lerpf(5.5, low, smoothstep(4.0, 14.0, channel_distance))
-	var height := lerpf(edge,low,blend)
-	# Let the river leave the map naturally rather than stop against a wall.
-	if point.y < 0.0 or point.y >= _extent.z:
-		var river_distance := absf(point.x - Generator.river_center_x(point.y))
-		if river_distance < Generator.river_half_width(point.y) + 0.5:
-			height = minf(height,4.375)
-	return snappedf(height,HEIGHT_STEP)
+const _SEGMENTS := 128
 
-func _border_height(point: Vector2) -> float:
-	var scale_value := float(backend.voxel_scale)
-	var x := clampi(floori(point.x / scale_value),0,int(backend.patch_size.x)-1)
-	var z := clampi(floori(point.y / scale_value),0,int(backend.patch_size.z)-1)
-	var key := Vector2i(x,z)
-	if _edge_heights.has(key): return float(_edge_heights[key])
-	var height := 0.0
-	for y in range(int(backend.patch_size.y)-1,-1,-1):
-		if backend.voxel_at(Vector3i(x,y,z)) != 0:
-			height = float(y+1) * scale_value
-			break
-	_edge_heights[key] = height
-	return height
+func _ready() -> void:
+	pass
 
-func _quad(data: Dictionary, corners: Array, normal: Vector3) -> void:
-	var vertices: Array = data["v"]
-	var normals: Array = data["n"]
-	var indices: Array = data["i"]
-	var base := vertices.size()
-	for corner: Vector3 in corners:
-		vertices.append(corner)
-		normals.append(normal)
-	indices.append_array(PackedInt32Array([base,base+1,base+2,base,base+2,base+3]))
-	data["v"] = vertices
-	data["n"] = normals
-	data["i"] = indices
-	_faces += 1
+## Rebuild the ring mesh. Called by the scene on initial load and when
+## an edit near the ring edge occurs.
+func rebuild(_backend) -> void:
+	_build_mesh()
 
-func _add_surface(mesh: ArrayMesh, data: Dictionary, colour: Color) -> void:
-	if (data["v"] as Array).is_empty(): return
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array(data["v"])
-	arrays[Mesh.ARRAY_NORMAL] = PackedVector3Array(data["n"])
-	arrays[Mesh.ARRAY_INDEX] = PackedInt32Array(data["i"])
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
-	var material := StandardMaterial3D.new()
-	material.albedo_color = colour
-	mesh.surface_set_material(mesh.get_surface_count()-1,material)
+## True if an edit in [bounds] is close enough to the ring to warrant
+## a rebuild (the ring itself is static, but the terrain edge may shift
+## under a sculpt near the border).
+func affected_by(bounds: AABB) -> bool:
+	if bounds.size == Vector3.ZERO:
+		return false
+	var c := bounds.get_center()
+	var r := bounds.size * 0.5
+	var margin := 8.0
+	return (
+		c.x - r.x < margin
+		or c.x + r.x > WORLD_SIZE - margin
+		or c.z - r.z < margin
+		or c.z + r.z > WORLD_SIZE - margin
+	)
 
-func _rebuild_water() -> void:
-	var data := {"v":[],"n":[],"i":[]}
-	for z in range(-roundi(WIDTH / STEP),ceili((_extent.z + WIDTH)/STEP)):
-		var z0 := float(z) * STEP
-		if z0 >= 0.0 and z0 < _extent.z: continue
-		var z1 := z0 + STEP
-		var a := Generator.river_center_x(z0)
-		var b := Generator.river_center_x(z1)
-		var wa := Generator.river_half_width(z0)
-		var wb := Generator.river_half_width(z1)
-		_quad(data,[Vector3(a-wa,5,z0),Vector3(a+wa,5,z0),Vector3(b+wb,5,z1),Vector3(b-wb,5,z1)],Vector3.UP)
-	var mesh := ArrayMesh.new()
-	_add_surface(mesh,data,Color(0.30,0.57,0.56,0.86))
-	if mesh.get_surface_count() > 0:
-		var material := mesh.surface_get_material(0) as StandardMaterial3D
-		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		material.roughness = 0.42
-	if _water == null:
-		_water = MeshInstance3D.new()
-		_water.name = "ScenicRiverBeyondMap"
-		add_child(_water)
-	_water.mesh = mesh
+## Maximum height of the ring wall at this world position.
+## Always >= PEAK_HEIGHT so the skybox is hidden from every camera pose.
+func peak_height(xz: Vector2) -> float:
+	var ang := _bearing(xz)
+	var variation := maxf(0.0, sin(ang * 3.0) * 0.5 + sin(ang * 7.0 + 1.0) * 0.3)
+	return PEAK_HEIGHT + variation
+
+## Height of the ring wall at a radial offset beyond the world edge.
+## [radius] is the distance beyond the edge: 0 = at the edge,
+## PEAK_BAND_RADIUS = peak band, _OUTER_SAMPLE_RADIUS = outer wall.
+## Returns water level in river corridors.
+func ring_height(radius: float, xz: Vector2) -> float:
+	if _in_river_corridor(xz):
+		return RIVER_WATER_LEVEL
+	if radius <= PEAK_BAND_RADIUS:
+		var t := radius / PEAK_BAND_RADIUS
+		return lerpf(EDGE_TERRAIN_LEVEL, PEAK_HEIGHT, smoothstep(0.0, 1.0, t))
+	var t := clampf(
+		(radius - PEAK_BAND_RADIUS) / (_OUTER_SAMPLE_RADIUS - PEAK_BAND_RADIUS),
+		0.0,
+		1.0
+	)
+	return lerpf(PEAK_HEIGHT, OUTER_MIN_HEIGHT, t)
+
+func _in_river_corridor(xz: Vector2) -> bool:
+	var river_x: float = _Gen.river_center_x(xz.y)
+	var river_w: float = _Gen.river_half_width(xz.y)
+	return absf(xz.x - river_x) < river_w + CORRIDOR_EXTRA_WIDTH
+
+func _bearing(xz: Vector2) -> float:
+	return atan2(xz.y - RING_CENTER.y, xz.x - RING_CENTER.x)
+
+func _build_mesh() -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_color(Color(0.55, 0.58, 0.62, 1.0))
+
+	# Radial profile: edge to peak band to outer slope.
+	var radial_offsets: Array[float] = []
+	radial_offsets.append(0.0)
+	radial_offsets.append(0.125)
+	for i in 1:
+		radial_offsets.append(i * (PEAK_BAND_RADIUS / 4.0))
+	for i in 1:
+		radial_offsets.append(PEAK_BAND_RADIUS + i * (_OUTER_SAMPLE_RADIUS - PEAK_BAND_RADIUS) / 4.0)
+
+	# Build rings of vertices from inner to outer.
+	var rings: Array = []
+	for ro in radial_offsets:
+		var ring: Array[Vector3] = []
+		for i in _SEGMENTS:
+			var ang := float(i) / float(_SEGMENTS) * TAU
+			var x := RING_CENTER.x + (RING_RADIUS + ro) * cos(ang)
+			var z := RING_CENTER.y + (RING_RADIUS + ro) * sin(ang)
+			var h: float = ring_height(ro, Vector2(x, z))
+			ring.append(Vector3(x, h, z))
+		rings.append(ring)
+
+	# Connect consecutive rings with triangle strips.
+	for ri in range(rings.size() - 1):
+		var inner: Array[Vector3] = rings[ri]
+		var outer: Array[Vector3] = rings[ri + 1]
+		for i in _SEGMENTS:
+			var ni := (i + 1) % _SEGMENTS
+			var base := ri * _SEGMENTS + i
+			st.add_vertex(inner[i])
+			st.add_vertex(inner[ni])
+			st.add_vertex(outer[i])
+			st.add_vertex(inner[ni])
+			st.add_vertex(outer[ni])
+			st.add_vertex(outer[i])
+
+	var m := ArrayMesh.new()
+	m.add_surface(st.commit())
+	self.mesh = m
