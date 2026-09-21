@@ -54,17 +54,7 @@ vec3 meadow_palette(float index) {
 
 void vertex() {
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	vec3 wn = normalize(MODEL_NORMAL_MATRIX * NORMAL);
-	// The voxel mesher uses smooth (averaged) normals: each vertex's normal is
-	// blended with its neighbours, so a 0.125 m step edge tilts the normal
-	// slightly. The directional light then shades each step differently, which
-	// reads as light-green contour bands across the meadow. Blend the normal
-	// toward the up-vector on any near-top-facing vertex so the meadow gets
-	// uniform lighting; truly side-facing vertices (y < 0.3) keep their real
-	// normal so cliff faces still read as raised terrain.
-	float top_factor = smoothstep(0.3, 0.9, wn.y);
-	NORMAL = normalize(mix(wn, vec3(0.0, 1.0, 0.0), top_factor));
-	world_normal = wn;
+	world_normal = normalize(MODEL_NORMAL_MATRIX * NORMAL);
 	// Evaluated per vertex and interpolated across the voxel face, so the field
 	// reads as broad patches rather than as one flat tone per cube.
 	float deviation = 0.0;

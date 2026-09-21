@@ -95,6 +95,14 @@ func _build_mesh() -> void:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_color(Color(0.55, 0.58, 0.62, 1.0))
 
+	# Simple unshaded material so vertex color shows through.
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.albedo_color = Color(1, 1, 1)
+	mat.rim = 0.15
+	mat.rim_tint = 0.3
+	st.set_material(mat)
+
 	# Radial profile: edge to peak band to outer slope.
 	var radial_offsets: Array[float] = []
 	radial_offsets.append(0.0)
@@ -117,19 +125,31 @@ func _build_mesh() -> void:
 		rings.append(ring)
 
 	# Connect consecutive rings with triangle strips.
+	# For each quad (inner[i], inner[ni], outer[ni], outer[i]) emit two triangles
+	# with face normals computed from the quad cross product.
 	for ri in range(rings.size() - 1):
 		var inner: Array[Vector3] = rings[ri]
 		var outer: Array[Vector3] = rings[ri + 1]
 		for i in _SEGMENTS:
 			var ni := (i + 1) % _SEGMENTS
-			var base := ri * _SEGMENTS + i
-			st.add_vertex(inner[i])
-			st.add_vertex(inner[ni])
-			st.add_vertex(outer[i])
-			st.add_vertex(inner[ni])
-			st.add_vertex(outer[ni])
-			st.add_vertex(outer[i])
+			var v0 := inner[i]
+			var v1 := inner[ni]
+			var v2 := outer[ni]
+			var v3 := outer[i]
+			# Face normal: cross of two edges of the quad
+			var n := (v1 - v0).cross(v2 - v0).normalized()
+			if n.y < 0.0:
+				n = -n  # ensure normals face outward (away from center)
+			var uv0 := Vector2(float(i), float(ri))
+			var uv1 := Vector2(float(ni), float(ri))
+			var uv2 := Vector2(float(ni), float(ri + 1))
+			var uv3 := Vector2(float(i), float(ri + 1))
+			st.set_normal(n); st.set_uv(uv0); st.add_vertex(v0)
+			st.set_normal(n); st.set_uv(uv1); st.add_vertex(v1)
+			st.set_normal(n); st.set_uv(uv2); st.add_vertex(v2)
+			st.set_normal(n); st.set_uv(uv1); st.add_vertex(v1)
+			st.set_normal(n); st.set_uv(uv2); st.add_vertex(v2)
+			st.set_normal(n); st.set_uv(uv3); st.add_vertex(v3)
 
-	var m := ArrayMesh.new()
-	m.add_surface(st.commit())
-	self.mesh = m
+	# SurfaceTool.commit() returns an ArrayMesh directly in Godot 4.
+	self.mesh = st.commit()
