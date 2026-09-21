@@ -101,7 +101,7 @@ func _initialize() -> void:
 	# outside the old 384 sub-volume, with the independent 4x upsample of the
 	# 96 source (zero-cleared first) occupying the 0..383 sub-volume.
 	var expected_fine: Object = ClassDB.instantiate("VoxelBuffer"); expected_fine.create(640, 256, 640)
-	expected_fine.copy_channel_from_area(Generator.generate(), Vector3i.ZERO, Vector3i.ZERO, Generator.PATCH_SIZE, 0)
+	expected_fine.copy_channel_from_area(Generator.generate(), Vector3i.ZERO, Generator.PATCH_SIZE, Vector3i.ZERO, 0)
 	expected_fine.fill_area(0, Vector3i.ZERO, Vector3i(384, 256, 384), 0)
 	expected_fine.fill_area(1, Vector3i.ZERO, Vector3i(384, 64, 384), 0)
 	expected_fine.fill_area(2, Vector3i(0, 60, 0), Vector3i(384, 64, 384), 0)
