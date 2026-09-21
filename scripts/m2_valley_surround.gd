@@ -34,6 +34,14 @@ const _OUTER_SAMPLE_RADIUS := 30.0
 
 const _SEGMENTS := 128
 
+## Radial ring samples per profile segment (0 to peak band, peak band to
+## outer wall). Dense enough that the per-vertex normal steps between rings
+## are far below the angular scale the eye resolves, so sunlight no longer
+## paints hard horizontal stripes around the rim. Total vertex budget stays
+## ~26k (35 rings x 128 segments x 6), a few-thousand-vertex mesh.
+const _INNER_SAMPLES := 16
+const _OUTER_SAMPLES := 16
+
 func _ready() -> void:
 	pass
 
@@ -103,14 +111,18 @@ func _build_mesh() -> void:
 	mat.rim_tint = 0.3
 	st.set_material(mat)
 
-	# Radial profile: edge to peak band to outer slope.
+	# Radial profile: edge to peak band to outer slope. Offsets are derived
+	# from the same profile ring_height() samples (PEAK_BAND_RADIUS / outer
+	# span), so adding density cannot drift the wall shape.
 	var radial_offsets: Array[float] = []
 	radial_offsets.append(0.0)
 	radial_offsets.append(0.125)
-	for i in 1:
-		radial_offsets.append(i * (PEAK_BAND_RADIUS / 4.0))
-	for i in 1:
-		radial_offsets.append(PEAK_BAND_RADIUS + i * (_OUTER_SAMPLE_RADIUS - PEAK_BAND_RADIUS) / 4.0)
+	for i in _INNER_SAMPLES:
+		radial_offsets.append((i + 1) * PEAK_BAND_RADIUS / _INNER_SAMPLES)
+	for i in _OUTER_SAMPLES:
+		radial_offsets.append(
+			PEAK_BAND_RADIUS + (i + 1) * (_OUTER_SAMPLE_RADIUS - PEAK_BAND_RADIUS) / _OUTER_SAMPLES
+		)
 
 	# Build rings of vertices from inner to outer.
 	var rings: Array = []
@@ -124,32 +136,54 @@ func _build_mesh() -> void:
 			ring.append(Vector3(x, h, z))
 		rings.append(ring)
 
+	# Per-vertex normals from central differences on the analytic profile:
+	# radial neighbour +/- one ring and angular neighbour +/- one segment.
+	# Each vertex gets its own interpolated normal (the surface API allows
+	# per-vertex normals via set_normal before each add_vertex), so the wall
+	# is smooth-shaded: brightness varies continuously up the slope and the
+	# flat per-ring face normal that caused the horizontal sun bands is gone.
+	var ring_normals: Array = []
+	for ri in range(rings.size()):
+		var prev_rings: Array[Vector3] = rings[ri - 1] if ri > 0 else rings[ri]
+		var next_rings: Array[Vector3] = rings[ri + 1] if ri + 1 < rings.size() else rings[ri]
+		var normals: Array[Vector3] = []
+		for i in _SEGMENTS:
+			var p: Vector3 = rings[ri][i]
+			var left: Vector3 = rings[ri][(i - 1 + _SEGMENTS) % _SEGMENTS]
+			var right: Vector3 = rings[ri][(i + 1) % _SEGMENTS]
+			var n := (next_rings[i] - prev_rings[i]).cross(right - left).normalized()
+			# Orient outward (away from the ring centre); on the flat outer
+			# annulus the radial dot is ~0, so prefer the upward normal there.
+			var r := Vector3(p.x - RING_CENTER.x, 0.0, p.z - RING_CENTER.y).normalized()
+			if n.dot(r) < 0.0 or (absf(n.dot(r)) < 0.001 and n.y < 0.0):
+				n = -n
+			normals.append(n)
+		ring_normals.append(normals)
+
 	# Connect consecutive rings with triangle strips.
-	# For each quad (inner[i], inner[ni], outer[ni], outer[i]) emit two triangles
-	# with face normals computed from the quad cross product.
+	# For each quad (inner[i], inner[ni], outer[ni], outer[i]) emit two
+	# triangles with the per-vertex interpolated normals from above.
 	for ri in range(rings.size() - 1):
 		var inner: Array[Vector3] = rings[ri]
 		var outer: Array[Vector3] = rings[ri + 1]
+		var inner_n: Array[Vector3] = ring_normals[ri]
+		var outer_n: Array[Vector3] = ring_normals[ri + 1]
 		for i in _SEGMENTS:
 			var ni := (i + 1) % _SEGMENTS
 			var v0 := inner[i]
 			var v1 := inner[ni]
 			var v2 := outer[ni]
 			var v3 := outer[i]
-			# Face normal: cross of two edges of the quad
-			var n := (v1 - v0).cross(v2 - v0).normalized()
-			if n.y < 0.0:
-				n = -n  # ensure normals face outward (away from center)
 			var uv0 := Vector2(float(i), float(ri))
 			var uv1 := Vector2(float(ni), float(ri))
 			var uv2 := Vector2(float(ni), float(ri + 1))
 			var uv3 := Vector2(float(i), float(ri + 1))
-			st.set_normal(n); st.set_uv(uv0); st.add_vertex(v0)
-			st.set_normal(n); st.set_uv(uv1); st.add_vertex(v1)
-			st.set_normal(n); st.set_uv(uv2); st.add_vertex(v2)
-			st.set_normal(n); st.set_uv(uv1); st.add_vertex(v1)
-			st.set_normal(n); st.set_uv(uv2); st.add_vertex(v2)
-			st.set_normal(n); st.set_uv(uv3); st.add_vertex(v3)
+			st.set_normal(inner_n[i]); st.set_uv(uv0); st.add_vertex(v0)
+			st.set_normal(inner_n[ni]); st.set_uv(uv1); st.add_vertex(v1)
+			st.set_normal(outer_n[ni]); st.set_uv(uv2); st.add_vertex(v2)
+			st.set_normal(inner_n[ni]); st.set_uv(uv1); st.add_vertex(v1)
+			st.set_normal(outer_n[ni]); st.set_uv(uv2); st.add_vertex(v2)
+			st.set_normal(outer_n[i]); st.set_uv(uv3); st.add_vertex(v3)
 
 	# SurfaceTool.commit() returns an ArrayMesh directly in Godot 4.
 	self.mesh = st.commit()
