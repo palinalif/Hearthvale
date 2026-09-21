@@ -437,6 +437,17 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 			# per-frame phase timers plus the native backend's last-edit cost.
 			var profile: Dictionary = call("path_profile_stats") if has_method("path_profile_stats") else {}
 			var water_perf: Dictionary = get("water_visual").get_perf() if get("water_visual") != null and get("water_visual").has_method("get_perf") else {}
+			# VoxelEngine is a C++ singleton reachable only through Engine, not the
+			# scene tree. Its task-queue depths are the native side of the
+			# post-stroke pipeline and let on-device runs show whether mesh work is
+			# still pending after a stroke.
+			var engine_stats: Dictionary = {}
+			if ClassDB.class_has_method("VoxelEngine", "get_stats"):
+				var engine: Variant = Engine.get_singleton("VoxelEngine")
+				if engine != null and "get_stats" in engine:
+					var raw: Variant = engine.get_stats()
+					if raw is Dictionary:
+						engine_stats = raw
 			var fps_now := Engine.get_frames_per_second()
 			return {
 				"type": "perf",
@@ -456,6 +467,7 @@ func debug_test_action(name: String, args: Array) -> Dictionary:
 				"path_profile": profile,
 				"native": backend.stats() if backend != null and backend.has_method("stats") else {},
 				"water": water_perf,
+				"engine": engine_stats,
 			}
 		"frame_clock":
 			# Main-loop bracketing from the root-level probe: pre (engine/input/

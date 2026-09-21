@@ -1,4 +1,101 @@
-# Hearthvale — v66 perf-test build on the Thor (2026-09-20); water-sync fix (v63, v49 line)
+# Hearthvale — v67 post-stroke-backlog fix on the Thor (2026-09-21)
+## 2026-09-21 (round 13) — v67: per-frame native-paste box reset shipped; backlog death-spiral eliminated, small residual single-frame spike remains
+
+**Fix (in this commit, `scripts/terrain_backend.gd`):** `_flush_native_updates` now
+resets `_pending_native_min/_max` after each per-frame native paste. Root cause:
+`_write_region` extended the pending box monotonically across the whole stroke, so
+each per-frame paste re-pasted the **entire accumulated stroke AABB** to
+`VoxelTerrain`. The engine's `try_schedule_mesh_update` dedupes only while a block
+is already in the pending list; once its previous mesh task completed, the next
+re-paste re-queued it for a **full re-mesh of identical data** — over a ~2.6 s
+stroke at 60 fps every touched block was re-meshed ~150×, building the unbounded
+backlog that saturated the main thread (the ~0.8 s user-visible freeze and the
+16 s death spiral from round 12). Per-frame pastes now cover only that frame's
+brush steps (~1–2 mesh blocks). Undo/redo (`_apply_command_region`) remains a
+single one-shot paste — a brief spike, not a repeated re-queue, so no chunking
+needed there; initial/checkpoint load paths untouched.
+
+**Also (in this commit, `scripts/m1_scene.gd`):** the bridge `perf` action now
+returns an `engine` field — `Engine.get_singleton("VoxelEngine").get_stats()`
+(thread-pool tasks/active threads, per-category task counts) — so native backlog
+can be watched live.
+
+**Tests (headless, all green, 0 failures):** m1_scaled_backend_test (44 checks),
+startup_mesh_vertical_band_test (4), sculpt_test (188), sculpt_smoothing_test (23),
+debug_bridge_action_test (15) — 274 checks total.
+
+**v67 built, verified, installed:** code 67, `org.hearthvale.game.test.m2night`,
+one ARM64 `libvoxel`, in-place update on the Thor (192.168.1.15:38865).
+
+**On-device result (announced strokes + undo each):**
+- Engine backlog mechanism **gone**: peak meshing+main_thread task count **2**
+  (vs unbounded growth on v66), `time_request_blocks_to_update` **0.00 ms**
+  through the whole post-stroke window (vs 97 ms on v66), no death-spiral on
+  repeated strokes. The user-reported multi-second freeze class is fixed.
+- **Residual:** one ~137–500 ms single-frame spike immediately after stroke
+  release (open-field stroke at [48,8,48]: 137 ms, scene 25.7 ms; house-pad
+  stroke: ~500 ms sustained, scene < 42 ms), then clean recovery. A distinct,
+  much smaller phenomenon from the v66 backlog freeze.
+- **Caveat — device was thermally throttled** the whole session (idle period
+  27 ms ≈ 37 Hz, not 60; the device had been running 1.5+ h since the v66
+  round). Per project rules these absolute numbers are not valid performance
+  evidence; the engine-task metrics above are refresh-rate-independent and
+  valid. The residual spike must be re-checked on a cooled Thor (reboot/
+  screensaver first), and dissecting it further needs a per-frame
+  pre/scene/post ring-buffer probe (current `frame_clock_probe.gd` only keeps
+  300-frame window averages, which dilute single-frame spikes).
+
+**Bracket-interpretation correction (supersedes a round-12 note):** the
+frame_clock brackets actually *partition* the frame (pre = previous probe tick →
+this scene start; post = scene end → next probe tick; pre+scene+post = period),
+so there is no unmeasured gap — the root-level `VoxelEngineUpdater` runs after
+`current_scene` and sits inside the `post` bracket. The v66 "only ~28 ms of a
+~111 ms frame" reading was a window-average dilution: the ~28 ms average period
+meant the *entire 12 s window* was degraded (backlog drain period), not a single
+spike frame.
+
+**Not in this commit:** the WIP cottage brick-band tweak in
+`scripts/cottage_visual.gd` (thinner/sparser band) remains uncommitted, pending
+the user's keep/revert decision.
+
+**Device state:** app running on the starter valley in the terrain (Raise) tool
+with the debug bridge up; all probe strokes were undone after measurement.
+Thor is still warm — cool to near-ambient before the next absolute-fps round.
+
+## 2026-09-20 (round 12) — post-stroke freeze: mechanism fully identified in the pinned voxel engine
+
+User confirmed the post-stroke freeze is still present on v66 (~0.8 s, fps 60 → 9 → recover). Investigation this round eliminated every candidate we could measure and **pinned the mechanism in the native engine** (Zylann/godot_voxel v1.7x, commit 75d3c6d996ed2331c80edcd8c3ebc947afc0f041, per `dependencies.lock.json`).
+
+**A/B results (bridge `tune`/`probe_nodes` on the live app, same world, same stroke):**
+
+| Arm | Post-stroke dip | Notes |
+|-----|----------------|-------|
+| v66 as-is (all native nodes on) | fps → 9 for ~0.8 s, then recover | baseline, user-confirmed freeze |
+| `VoxelTerrain` process disabled | dip reduced but NOT eliminated (~0.6 s, fps → 14; commit RTT 77 ms vs 131 ms) | terrain's per-frame sweep contributes, but the dip is not solely there |
+| `VoxelViewer` disabled (6-round interleaved) | **no measurable difference** (worst RTT ~2.65 s both arms, identical dip profile) | viewer / mesh rendering is NOT a contributor |
+
+**What was also eliminated:** the scene's own `_process` (frame_clock brackets pre ~10 ms / scene ~10–12 ms / post ~7.4 ms ≈ 28 ms of a ~111 ms stalled frame — the freeze happens in a *gap* outside our measured code); water re-simulation (0 cells pending/resampled after a raise stroke — the v63 fix holds); the native edit itself (`last_edit_ms` ~1 ms).
+
+**The mechanism (verified in engine source, v1.7x):**
+
+1. **`VoxelEngine::process()` is called every frame** by `VoxelEngineUpdater_dont_touch_this` — a root-level node (child of SceneTree root, outside the gameplay scene tree; created once by `ensure_existence()` when the first voxel node is ready; `process_mode = PROCESS_MODE_ALWAYS`). It lives outside both the scene tree and our frame_clock brackets, which is why the freeze was invisible to every in-scene probe.
+
+2. Inside `VoxelEngine::process()` there are **three phases**, and only one of them is budgeted:
+   - (a) **dequeue completed worker tasks** → `apply_result()` per task — **UNBOUNDED**. (`apply_result` itself is a cheap struct handoff — the `ArrayMesh` is fully built on the worker by `MeshBlockTask::build_mesh()` — so this is only a problem when the *count* of completed blocks is huge.)
+   - (b) **time-spread task runner** — budgeted by `main_thread_time_budget_usec` (the only budget knob).
+   - (c) **progressive task runner** — **UNBOUNDED**.
+
+3. **`VoxelTerrain::process()`** (fixed-lod terrain) runs its own per-frame **block-request sweep** on the main thread — the `time_request_blocks_to_update` stat, measured **97 ms** in one post-stroke sample. The stats API only exposes 7 fields (no worker-pool depth), so queue size during the dip can't be read today; `VoxelEngine::get_stats()` *does* exist in C++ (thread-pool tasks remaining, active/total threads, per-runner pending counts, gpu tasks) but is **not wired into the debug bridge**.
+
+4. **Death spiral observed:** after dozens of scripted probe strokes accumulated a mesh backlog, a single `tune` call didn't answer for **16+ seconds** before the app was force-stopped (21:28:18, `forceStopPackage` in logcat — a user/launcher stop, *not* a crash; no FATAL/SIGSEGV/ANR). The unbounded phases (a)+(c) plus the 97 ms sweep mean a large backlog keeps producing main-thread work every frame faster than workers clear it.
+
+**Fix candidates (none require rebuilding the engine extension):**
+- **Cap the main-thread drain rate** via the `main_thread_time_budget_usec` property (phase b only) — testable through the bridge if we extend `tune` to expose it, but phases (a)/(c) are still unbounded.
+- **Time-budget / rate-limit the request sweep** (phase in `VoxelTerrain::process`) — that's the 97 ms spike; our `terrain_backend.gd` wrapper could stagger which region is requested per frame.
+- **Wire `VoxelEngine::get_stats()` into the debug bridge** to finally *see* queue depth during the dip and A/B each phase (requires a small bridge-only GDScript change if the binding is reachable, or a one-time extension rebuild if not).
+
+**Device state at end of round:** the app was force-stopped during the test and is **not running** (user will relaunch; world save is intact — the user is fine with probe-stroke residue and we're not attached to the test world). **The Thor is hot (~51–55 °C)** from the stroke testing — let it cool to near-ambient (screensaver) before the next measurement round; throttled numbers are not valid evidence.
+
 ## 2026-09-20 (round 11) — v66 installed on the Thor for user performance testing (main @ 3467344)
 
 Built from exact `main` state (`3467344`; the wip cottage brick-band tweak in

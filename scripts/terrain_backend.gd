@@ -1162,11 +1162,22 @@ func _write_region(local: Object, region_min: Vector3i) -> void:
 func _flush_native_updates() -> void:
 	if not _pending_native_region: return
 	# Authoritative voxels already contain every time-integrated step. Publish
-	# the bounded union once, avoiding repeated remesh submissions when a slow
+	# this flush's union once, avoiding repeated remesh submissions when a slow
 	# frame consumes several fixed ticks. No simulation time is discarded.
+	#
+	# The union box is reset here, at every flush. A held stroke therefore
+	# publishes only the region touched since the previous frame, never the
+	# whole stroke AABB again: re-pasting blocks the brush already passed
+	# re-queues each of them for a full native remesh once its previous mesh
+	# task completes, so a per-stroke union would grow an unbounded backlog
+	# inside the voxel engine and saturate the main thread at stroke end (the
+	# post-stroke freeze). Incremental boxes keep the per-frame native work
+	# bounded by the brush motion of one frame.
 	var local: Object = _clone_region(voxels, _pending_native_min, _pending_native_max)
 	terrain.get_voxel_tool().paste(_pending_native_min, local, 1)
 	_pending_native_region = false
+	_pending_native_min = Vector3i.ZERO
+	_pending_native_max = Vector3i.ZERO
 	_last_edit_submitted_at_ms = Time.get_ticks_msec()
 
 func _record_stroke_change(position: Vector3i, current: int, desired: int) -> void:
