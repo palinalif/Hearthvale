@@ -51,6 +51,9 @@ const DETAIL_SELECT_RADIUS := 1.25
 var _landing_tuft_roots: Dictionary = {}
 var _landing_rim_roots: Dictionary = {}
 var _landing_signature := ""
+var _landing_building_signatures: Dictionary = {}
+var _landing_terrain_revision := -1
+var _landing_paths_hash := 0
 var house_landing_stats: Dictionary = {}
 
 # Explicit aliases used by tests and by feature-specific entry points.
@@ -630,12 +633,28 @@ func _refresh_house_landing(force: bool = false) -> void:
 		return
 	_landing_signature = signature
 	var site_value := LandingSite.site(backend, landscape_state)
+	var revision := _terrain_revision()
+	var paths_hash := hash(site_value["path_cells"])
+	var edit_bounds := AABB()
+	if revision == _landing_terrain_revision + 1 and backend.has_method("get_last_edit_bounds"):
+		edit_bounds = backend.get_last_edit_bounds()
 	var seen := {}
-	house_landing_stats = {}
 	for building: Dictionary in building_world.get_buildings():
 		var building_id := str(building.get("id", ""))
 		if building_id.is_empty(): continue
 		seen[building_id] = true
+		var building_signature := hash([building.get("style_id", ""), building.get("transform", Transform3D.IDENTITY), building.get("dimensions", Vector3.ZERO)])
+		if not force and _landing_building_signatures.get(building_id) == building_signature and paths_hash == _landing_paths_hash:
+			if revision == _landing_terrain_revision: continue
+			if edit_bounds.has_volume():
+				var dimensions: Vector3 = building.get("dimensions", Vector3.ZERO)
+				var transform_value: Transform3D = building.get("transform", Transform3D.IDENTITY)
+				var footprint: AABB = transform_value * AABB(-dimensions * 0.5, dimensions).grow(0.5)
+				# Includes the fine-cell rim, jitter and companion tufts beyond
+				# the transformed structural footprint, including rotated homes.
+				var area := Rect2(footprint.position.x, footprint.position.z, footprint.size.x, footprint.size.z).grow(1.0)
+				if not area.intersects(Rect2(edit_bounds.position.x, edit_bounds.position.z, edit_bounds.size.x, edit_bounds.size.z)): continue
+		_landing_building_signatures[building_id] = building_signature
 		var tufts: Dictionary = HouseEdgeFoliage.build(building, site_value)
 		var rim: Dictionary = HouseDirtRim.build(building, site_value)
 		_refresh_landing_root(_landing_tuft_roots, building_id, building, "HouseEdgeFoliage_%s" % building_id, tufts["mesh"], "TuftRing")
@@ -653,6 +672,12 @@ func _refresh_house_landing(force: bool = false) -> void:
 		if not seen.has(building_id): _remove_landing_root(_landing_tuft_roots, str(building_id))
 	for building_id in _landing_rim_roots.keys():
 		if not seen.has(building_id): _remove_landing_root(_landing_rim_roots, str(building_id))
+	for building_id in _landing_building_signatures.keys():
+		if not seen.has(building_id):
+			_landing_building_signatures.erase(building_id)
+			house_landing_stats.erase(building_id)
+	_landing_terrain_revision = revision
+	_landing_paths_hash = paths_hash
 
 func _refresh_landing_root(roots: Dictionary, building_id: String, building: Dictionary, node_name: String, mesh: Mesh, child_name: String) -> void:
 	_remove_landing_root(roots, building_id)

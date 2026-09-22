@@ -9,6 +9,7 @@ const CENTER := Vector3(24, 8, 24)
 const MAX_HISTORY := 50
 const MAX_HISTORY_BYTES := 128 * 1024 * 1024
 const VOXEL_BYTES := 2
+const EDIT_CELL_BYTES := 12 # PackedVector3Array, native-grid coordinates.
 ## Visual-viewer streaming radius in world metres. The viewer follows the
 ## camera at this radius. It must reach the valley's full corner-to-corner
 ## diagonal (~90.5 m for the 64 m map; 128.0 keeps margin for cameras pulled
@@ -36,6 +37,7 @@ const SmoothNeighbourhood = preload("res://scripts/smooth_neighbourhood.gd")
 
 var terrain: Node
 var voxels: Object
+var _column_query: Object
 var _startup_visual_viewer: Node3D
 ## Index dimensions remain 48×32×48 for M0. M1 supplies 384×256×384 at
 ## eighth-unit voxels, keeping the authored world bounds at 48×32×48.
@@ -268,7 +270,8 @@ func apply_sphere(center: Vector3, radius: float, remove: bool) -> bool:
 		return false
 	var region: Array[Vector3i] = simulation["region"]
 	var region_size: Vector3i = region[1] - region[0]
-	var command_bytes := region_size.x * region_size.y * region_size.z * VOXEL_BYTES * 2
+	var edit_cells := PackedVector3Array(simulation["changed"])
+	var command_bytes := region_size.x * region_size.y * region_size.z * VOXEL_BYTES * 2 + edit_cells.size() * EDIT_CELL_BYTES
 	var redo_bytes := _stack_bytes(_redo)
 	var projected_bytes := _history_bytes - redo_bytes + command_bytes
 	if _undo.size() >= MAX_HISTORY:
@@ -288,7 +291,7 @@ func apply_sphere(center: Vector3, radius: float, remove: bool) -> bool:
 	_redo.clear()
 	_history_bytes -= redo_bytes
 	voxels = after_full
-	_undo.append({"min": region_min, "size": region_size, "before": before_region, "after": after_region})
+	_undo.append({"min": region_min, "size": region_size, "before": before_region, "after": after_region, "cells": edit_cells})
 	_last_edit_command = _undo.back()
 	_history_bytes += command_bytes
 	if _undo.size() > MAX_HISTORY:
@@ -323,7 +326,7 @@ func apply_voxel_changes(changes: Array) -> bool:
 		if position.x < 0 or position.y < 0 or position.z < 0 or position.x >= patch_size.x or position.y >= patch_size.y or position.z >= patch_size.z:
 			_error = "voxel change outside terrain bounds"
 			return false
-		var key := "%d:%d:%d" % [position.x, position.y, position.z]
+		var key := position
 		if unique.has(key):
 			_error = "duplicate voxel change"
 			return false
@@ -337,7 +340,10 @@ func apply_voxel_changes(changes: Array) -> bool:
 		max_pos = max_pos.max(position + Vector3i.ONE)
 	var region_size := max_pos - min_pos
 	if region_size.x <= 0 or region_size.y <= 0 or region_size.z <= 0: return false
-	var command_bytes := region_size.x * region_size.y * region_size.z * VOXEL_BYTES * 2
+	var edit_cells := PackedVector3Array()
+	for change: Dictionary in unique.values():
+		if int(change["before"]) != int(change["after"]): edit_cells.append(Vector3(change["position"]))
+	var command_bytes := region_size.x * region_size.y * region_size.z * VOXEL_BYTES * 2 + edit_cells.size() * EDIT_CELL_BYTES
 	var redo_bytes := _stack_bytes(_redo)
 	var projected_bytes := _history_bytes - redo_bytes + command_bytes
 	if _undo.size() >= MAX_HISTORY:
@@ -357,7 +363,7 @@ func apply_voxel_changes(changes: Array) -> bool:
 		voxels.set_voxel(int(change["after"]), position.x, position.y, position.z, PatchGenerator.CHANNEL_TYPE)
 	_redo.clear()
 	_history_bytes -= redo_bytes
-	_undo.append({"min": min_pos, "size": region_size, "before": before_region, "after": after_region})
+	_undo.append({"min": min_pos, "size": region_size, "before": before_region, "after": after_region, "cells": edit_cells})
 	_last_edit_command = _undo.back()
 	_history_bytes += command_bytes
 	if _undo.size() > MAX_HISTORY:
@@ -479,11 +485,13 @@ func end_stroke() -> bool:
 	var region_size := region_max - region_min
 	var before_region: Object = _clone_region(voxels, region_min, region_max)
 	var after_region: Object = _clone_region(voxels, region_min, region_max)
+	var edit_cells := PackedVector3Array()
 	for position in _stroke_positions:
 		var key := _stroke_key(position)
 		if _stroke_before.has(key):
 			before_region.set_voxel(int(_stroke_before[key]), position.x - region_min.x, position.y - region_min.y, position.z - region_min.z, PatchGenerator.CHANNEL_TYPE)
-	var command_bytes := region_size.x * region_size.y * region_size.z * VOXEL_BYTES * 2
+			if voxel_at(position) != int(_stroke_before[key]): edit_cells.append(Vector3(position))
+	var command_bytes := region_size.x * region_size.y * region_size.z * VOXEL_BYTES * 2 + edit_cells.size() * EDIT_CELL_BYTES
 	var redo_bytes := _stack_bytes(_redo)
 	var projected_bytes := _history_bytes - redo_bytes + command_bytes
 	if _undo.size() >= MAX_HISTORY:
@@ -495,7 +503,7 @@ func end_stroke() -> bool:
 		return false
 	_redo.clear()
 	_history_bytes -= redo_bytes
-	_undo.append({"min": region_min, "size": region_size, "before": before_region, "after": after_region})
+	_undo.append({"min": region_min, "size": region_size, "before": before_region, "after": after_region, "cells": edit_cells})
 	_last_edit_command = _undo.back()
 	_history_bytes += command_bytes
 	if _undo.size() > MAX_HISTORY:
@@ -561,8 +569,8 @@ func get_stroke_preview_center(world_input_center: Vector3) -> Vector3:
 	return _cell_to_world(point)
 
 ## Last committed edit, undo or redo, in backend world coordinates. Derive
-## exact changed cells from the existing history buffers instead of retaining
-## a second per-cell list for every transaction. Cancel leaves this unchanged.
+## exact changed cells from sparse metadata recorded by the edit writer.
+## Cancel leaves this unchanged.
 func get_last_edit_bounds() -> AABB:
 	if _last_edit_command.is_empty(): return AABB()
 	return AABB(Vector3(_last_edit_command["min"]) * voxel_scale, Vector3(_last_edit_command["size"]) * voxel_scale)
@@ -570,6 +578,13 @@ func get_last_edit_bounds() -> AABB:
 func get_last_edit_cells() -> Array[Vector3]:
 	var result: Array[Vector3] = []
 	if _last_edit_command.is_empty(): return result
+	# The writer already knows the exact net changes. A long diagonal stroke's
+	# bounding box contains mostly untouched voxels; scanning it here twice at
+	# release (vegetation and path ownership) stalled the main thread.
+	if _last_edit_command.has("cells"):
+		for cell: Vector3 in _last_edit_command["cells"]:
+			result.append((cell + Vector3.ONE * 0.5) * voxel_scale)
+		return result
 	var origin: Vector3i = _last_edit_command["min"]
 	var size: Vector3i = _last_edit_command["size"]
 	var before: Object = _last_edit_command["before"]
@@ -706,6 +721,24 @@ func _upsample_legacy_m1(source: Object) -> Object:
 func voxel_at(pos: Vector3i) -> int:
 	if not _backend_ready or pos.x < 0 or pos.y < 0 or pos.z < 0 or pos.x >= patch_size.x or pos.y >= patch_size.y or pos.z >= patch_size.z: return 0
 	return int(voxels.get_voxel(pos.x, pos.y, pos.z, PatchGenerator.CHANNEL_TYPE))
+
+## Exact top of an authoritative native column, including detached overhangs.
+## A tiny native copy avoids crossing the GDScript/native boundary for every
+## empty sky voxel. Scratch storage holds one column, never a terrain cache.
+func column_top_y(cell: Vector2i) -> int:
+	if voxels == null or cell.x < 0 or cell.y < 0 or cell.x >= patch_size.x or cell.y >= patch_size.z: return -1
+	var channel := PatchGenerator.CHANNEL_TYPE
+	var depth: int = voxels.get_channel_depth(channel)
+	if _column_query == null:
+		_column_query = ClassDB.instantiate("VoxelBuffer")
+	_column_query.create(1, patch_size.y, 1)
+	_column_query.set_channel_depth(channel, depth)
+	_column_query.copy_channel_from_area(voxels, Vector3i(cell.x, 0, cell.y), Vector3i(cell.x + 1, patch_size.y, cell.y + 1), Vector3i.ZERO, channel)
+	var bytes: PackedByteArray = _column_query.get_channel_as_byte_array(channel)
+	var stride := 1 << depth
+	for offset in range(bytes.size() - 1, -1, -1):
+		if bytes[offset] != 0: return offset / stride
+	return -1
 
 func stats() -> Dictionary:
 	var age := -1
@@ -1430,7 +1463,7 @@ func _apply_command_region(command: Dictionary, region: Object) -> void:
 
 func _command_bytes(command: Dictionary) -> int:
 	var size: Vector3i = command["size"]
-	return size.x * size.y * size.z * VOXEL_BYTES * 2
+	return size.x * size.y * size.z * VOXEL_BYTES * 2 + command.get("cells", PackedVector3Array()).size() * EDIT_CELL_BYTES
 
 func _stack_bytes(stack: Array[Dictionary]) -> int:
 	var total := 0

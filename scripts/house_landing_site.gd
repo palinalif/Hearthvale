@@ -17,7 +17,7 @@ const FLAT_EPSILON := 0.0001
 
 ## Addressable site description handed to the decoration modules.
 static func site(backend: Object, landscape_state: Object) -> Dictionary:
-	return {"backend": backend, "path_cells": path_lookup(landscape_state)}
+	return {"backend": backend, "path_cells": path_lookup(landscape_state), "heights": {}}
 
 ## Painted path cells (structural 0.125 grid) for every path style, so a spot can
 ## be tested in O(1). Built once per presentation pass, never per cell.
@@ -49,6 +49,9 @@ static func surface_height(backend: Object, point: Vector2) -> float:
 	if point.x >= float(patch.x) * scale_value or point.y >= float(patch.z) * scale_value: return NAN
 	var x := clampi(floori(point.x / scale_value), 0, patch.x - 1)
 	var z := clampi(floori(point.y / scale_value), 0, patch.z - 1)
+	if backend.has_method("column_top_y"):
+		var top: int = backend.column_top_y(Vector2i(x, z))
+		return float(top + 1) * scale_value if top >= 0 else NAN
 	for y in range(patch.y - 2, -1, -1):
 		if int(backend.voxel_at(Vector3i(x, y, z))) != 0 and int(backend.voxel_at(Vector3i(x, y + 1, z))) == 0:
 			return float(y + 1) * scale_value
@@ -58,7 +61,14 @@ static func surface_height(backend: Object, point: Vector2) -> float:
 static func ground_height(site_value: Dictionary, point: Vector2) -> float:
 	if in_river(point): return NAN
 	if on_painted_path(site_value["path_cells"], point): return NAN
-	var height := surface_height(site_value["backend"], point)
+	# Fine decoration corners often share one native column. Sample it once
+	# per presentation pass; this cache never survives a terrain revision.
+	var scale_value := float(site_value["backend"].get("voxel_scale"))
+	var cell := Vector2i(floori(point.x / scale_value), floori(point.y / scale_value))
+	if not site_value.has("heights"): site_value["heights"] = {}
+	var heights: Dictionary = site_value["heights"]
+	if not heights.has(cell): heights[cell] = surface_height(site_value["backend"], point)
+	var height: float = heights[cell]
 	return NAN if is_nan(height) else height
 
 ## A decorative cell must agree with the terrain over its own footprint, not just

@@ -22,7 +22,9 @@ class StubBackend extends RefCounted:
 	var voxel_scale := 0.125
 	var patch_size := Vector3i(512, 256, 512)
 	var top := 63
+	var reads := 0
 	func voxel_at(cell: Vector3i) -> int:
+		reads += 1
 		if cell.y < 0: return 0
 		if cell.y == top: return 2
 		return 1 if cell.y < top else 0
@@ -33,6 +35,15 @@ class StubState extends RefCounted:
 		return painted if style_id == "packed_earth" else []
 
 func _initialize() -> void:
+	var terrain := StubBackend.new()
+	var cached_site := Site.site(terrain, StubState.new())
+	var sample := Vector2(20.01, 20.01)
+	var ground := Site.ground_height(cached_site, sample)
+	var first_reads: int = terrain.reads
+	_check(Site.flat_at(cached_site, sample + Vector2.ONE * 0.03, UNIT, ground), "fine corners agree with cached native ground")
+	_check(terrain.reads == first_reads, "fine corners sharing a native column sample it only once")
+	terrain.top -= 1
+	_check(Site.ground_height(Site.site(terrain, StubState.new()), sample) < ground, "a new presentation pass sees edited terrain")
 	var building := _building("home-1", Vector3(20.0, GROUND, 20.0))
 	var site_value := Site.site(StubBackend.new(), StubState.new())
 	var plan := Foliage.plan(building, site_value)

@@ -31,7 +31,7 @@ function Invoke-TerrainGate([string]$label) {
 }
 
 $groups = @{
-    'sculpt-core' = @('sculpt_strength_test','sculpt_next_layer_test','sculpt_live_next_layer_test')
+    'sculpt-core' = @('sculpt_strength_test','sculpt_next_layer_test','sculpt_live_next_layer_test','terrain_edit_cells_test')
     'preview-jobs' = @('sculpt_occupancy_runs_test','sculpt_preview_job_test','sculpt_preview_performance_test')
     'preview-live' = @('sculpt_preview_live_test','m1_terrain_ux_test')
 }
