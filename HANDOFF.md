@@ -1,3 +1,27 @@
+# Hearthvale — terrain diagonal moiré fix branch (2026-09-22)
+
+**Branch:** `codex/terrain-moire-fix`, source commit `d102c54` (v69 Android preset).
+The grass shader's value-noise lattice hashed different values for the same
+corner when adjacent cells met. That created visible square seams, which read as
+diagonal bands across the terrain in perspective. All four corner samples now
+use one salted lattice coordinate, so adjoining cells share each edge value.
+Native terrain geometry, saves, sculpting, and grass palette parameters are
+unchanged. Repaired the existing `grass_tone_test.gd` reference to the shader's
+current owner (`GroundMaterials`), which had caused a parse error.
+
+**Verification:** pinned Godot 4.7.2 headless grass-tone test: 27 checks,
+0 failures. Isolated D3D12 Forward Mobile shader render: successful, no shader
+errors; the previous shader shows patch seams in an otherwise identical probe,
+and the corrected shader renders a continuous field. The production starter
+Mobile capture did not finish scene restore within its 120 s desktop-renderer
+limit; no complete gameplay capture or Thor visual approval was obtained.
+The Thor was not connected to ADB during this session.
+
+**Delivery blocker:** v69 ARM64 export was attempted twice. The correctly
+quoted preset reaches validation but fails because this host has no configured
+Java SDK and no Android SDK build-tools/apksigner. No APK was produced or
+installed; an ARM64 `libvoxel` package check and on-device review remain due.
+The export-generated import metadata and UID file were removed from the branch.
 # Hearthvale — v67 post-stroke-backlog fix on the Thor (2026-09-21)
 ## 2026-09-21 (round 13) — v67: per-frame native-paste box reset shipped; backlog death-spiral eliminated, small residual single-frame spike remains
 
