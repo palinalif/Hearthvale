@@ -60,16 +60,17 @@ func _apply_cozy_valley_lighting() -> void:
 		# ponds) and the frame lost its sky. The gameplay camera looks DOWN at the
 		# terrain island, so the visible background is the LOWER hemisphere of the
 		# procedural sky: nadir (top of frame) = ground_bottom, horizon (bottom of
-		# frame) = ground_horizon. So that hemisphere is a warm golden sunset
-		# gradient (amber top fading to pale gold at the horizon) — matching the
-		# reference village shots — not the olive that the "green ground" pass left.
+		# frame) = ground_horizon. So that hemisphere is a RICH, saturated golden
+		# sunset: deep amber up top fading to warm gold at the horizon — matching
+		# the reference village shots. (A pale desaturated straw reads as "tan",
+		# not "sunset", so the gold is kept saturated and warm, not washed out.)
 		# Sky hemisphere (blue zenith -> warm gold horizon) stays for when the
 		# camera tilts up. Sky-sourced ambient + reflections keep it vivid/clear.
 		var sky_material := ProceduralSkyMaterial.new()
 		sky_material.sky_top_color = Color("#3a72b8")
-		sky_material.sky_horizon_color = Color("#f2d9a6")
-		sky_material.ground_bottom_color = Color("#d99a4e")
-		sky_material.ground_horizon_color = Color("#f5e2b4")
+		sky_material.sky_horizon_color = Color("#f2a94e")
+		sky_material.ground_bottom_color = Color("#c06c30")
+		sky_material.ground_horizon_color = Color("#f0b355")
 		sky_material.sky_energy_multiplier = 1.0
 		sky_material.ground_energy_multiplier = 1.0
 		var sky := Sky.new()
