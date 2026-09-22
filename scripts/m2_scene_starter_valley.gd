@@ -55,20 +55,23 @@ func _apply_cozy_valley_lighting() -> void:
 		var world_environment := node as WorldEnvironment
 		var environment := world_environment.environment
 		if environment == null: continue
-		# Restore the sky. The flat cream background from the "clear-air" pass made
-		# the near-mirror water (roughness 0.16) reflect a flat #ddd9c9 wall, which
-		# read as silver ponds on device, and the frame lost its sky entirely.
-		# The procedural sky is clear and bright: a saturated blue zenith into a
-		# warm pale-gold horizon, with a warm green ground. Sky-sourced ambient +
-		# reflections let water, grass and roofs pick up the same gradient the
-		# reference shots use — vivid and clear, not a haze.
+		# Restore the sky. The clear-air pass's flat cream background made the
+		# near-mirror water (roughness 0.16) reflect a flat #ddd9c9 wall (silver
+		# ponds) and the frame lost its sky. The gameplay camera looks DOWN at the
+		# terrain island, so the visible background is the LOWER hemisphere of the
+		# procedural sky: nadir (top of frame) = ground_bottom, horizon (bottom of
+		# frame) = ground_horizon. So that hemisphere is a warm golden sunset
+		# gradient (amber top fading to pale gold at the horizon) — matching the
+		# reference village shots — not the olive that the "green ground" pass left.
+		# Sky hemisphere (blue zenith -> warm gold horizon) stays for when the
+		# camera tilts up. Sky-sourced ambient + reflections keep it vivid/clear.
 		var sky_material := ProceduralSkyMaterial.new()
 		sky_material.sky_top_color = Color("#3a72b8")
 		sky_material.sky_horizon_color = Color("#f2d9a6")
-		sky_material.ground_bottom_color = Color("#7f9a6f")
-		sky_material.ground_horizon_color = Color("#c8c8a4")
+		sky_material.ground_bottom_color = Color("#d99a4e")
+		sky_material.ground_horizon_color = Color("#f5e2b4")
 		sky_material.sky_energy_multiplier = 1.0
-		sky_material.ground_energy_multiplier = 0.6
+		sky_material.ground_energy_multiplier = 1.0
 		var sky := Sky.new()
 		sky.sky_material = sky_material
 		environment.sky = sky
