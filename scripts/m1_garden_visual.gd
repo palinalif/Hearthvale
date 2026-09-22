@@ -49,7 +49,7 @@ var _tuft_extra_rects: Array = []
 var _tuft_plan: Array = []
 var _tuft_last_revision := -1
 var _tuft_last_exclusions: Array = []
-## Per-fine-cell column-top cache; invalidated only on terrain revision.
+## Per-fine-cell column-top cache; invalidated inside each terrain edit.
 var _tuft_heights: Dictionary = {}
 ## Per-tuft vertex-block cache keyed by main fine cell; fingerprint-checked.
 var _tuft_blocks: Dictionary = {}
@@ -59,6 +59,8 @@ func attach_backend(backend: Node) -> void:
 	if backend != null and backend.has_signal("changed") and not backend.is_connected("changed", _on_meadow_terrain_changed):
 		backend.connect("changed", _on_meadow_terrain_changed)
 	if _tuft_backend != null and backend != _tuft_backend:
+		if _tuft_backend.has_signal("changed") and _tuft_backend.is_connected("changed", _on_meadow_terrain_changed):
+			_tuft_backend.disconnect("changed", _on_meadow_terrain_changed)
 		# New world source: the kept plan and per-cell caches belong to the
 		# old world regardless of what revision number the new one reports.
 		_tuft_plan = []
@@ -156,20 +158,33 @@ func _rebuild_meadow_tufts() -> void:
 	var exclusions: Array = []
 	exclusions.append_array(_tuft_record_rects)
 	exclusions.append_array(_tuft_extra_rects)
-	if _tuft_plan.is_empty() or revision != _tuft_last_revision:
-		# World changed (or first build): re-derive the whole field and reset
-		# the per-cell caches that are only valid for one terrain revision.
+	if _tuft_last_revision < 0:
 		_tuft_heights.clear()
 		_tuft_blocks.clear()
 		_tuft_plan = Scatter.plan(Vector2.ZERO, world, Scatter.DENSITY, exclusions)
-		_tuft_last_revision = revision
-	elif _tuft_last_exclusions != exclusions:
-		# Only exclusion rects changed (e.g. a newly planted tree keeps its
-		# clearing): re-plan just the affected region and splice it into the
-		# kept plan, so a placement costs a region scan, not the whole world.
-		_tuft_plan = _merge_exclusion_change(world, exclusions)
+	else:
+		if revision != _tuft_last_revision:
+			_invalidate_tuft_heights(revision)
+		if _tuft_last_exclusions != exclusions:
+			# Re-plan only the region affected by changed exclusions.
+			_tuft_plan = _merge_exclusion_change(world, exclusions)
+	_tuft_last_revision = revision
 	_tuft_last_exclusions = exclusions.duplicate()
 	_commit_tuft_mesh()
+
+func _invalidate_tuft_heights(revision: int) -> void:
+	# The scatter candidates depend on exclusions, not terrain. Keep the plan
+	# and unchanged columns; cached geometry validates its heights on reuse.
+	var bounds := AABB()
+	if revision == _tuft_last_revision + 1 and _tuft_backend.has_method("get_last_edit_bounds"):
+		bounds = _tuft_backend.get_last_edit_bounds()
+	if not bounds.has_volume():
+		_tuft_heights.clear()
+		return
+	var area := Rect2(Vector2(bounds.position.x, bounds.position.z), Vector2(bounds.size.x, bounds.size.z))
+	for cell: Vector2i in _tuft_heights.keys():
+		var point := (Vector2(cell) + Vector2.ONE * 0.5) * MEADOW_UNIT
+		if area.has_point(point): _tuft_heights.erase(cell)
 
 ## Splice a region re-plan into the kept plan after an exclusion change.
 ## Scan order is (coarse z, then coarse x); the region span is the padded

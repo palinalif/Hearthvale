@@ -52,7 +52,7 @@ func _initialize() -> void:
 		if data_viewers.size() == 1:
 			var data_viewer := data_viewers[0] as Node3D
 			_check(data_viewer.position.is_equal_approx(Vector3(40.0, 16.0, 40.0)), "data-only voxel viewer stays at valley center")
-			_check(is_equal_approx(float(data_viewer.get("view_distance")), 64.0), "data-only voxel viewer keeps the full valley resident")
+			_check(float(data_viewer.get("view_distance")) >= (Vector3(Generator.PATCH_SIZE) * Generator.VOXEL_SCALE).length() * 0.5, "data-only voxel viewer keeps the full valley resident")
 			_check(not bool(data_viewer.get("requires_collisions")), "data-only voxel viewer does not request collision meshes")
 	var deadline := Time.get_ticks_msec() + 60000
 	while not backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame

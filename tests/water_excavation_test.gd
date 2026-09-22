@@ -15,9 +15,13 @@ class MockBackend:
 	var patch_size := Vector3i(40, 16, 40)
 	var surface := 8
 	var voids := {}
+	var sky_probes := {}
 	func is_ready() -> bool: return true
 	func voxel_at(p: Vector3i) -> int:
 		if p.x < 0 or p.z < 0 or p.x >= patch_size.x or p.z >= patch_size.z: return 0
+		if p.y == patch_size.y - 1:
+			var column := Vector2i(p.x, p.z)
+			sky_probes[column] = int(sky_probes.get(column, 0)) + 1
 		if voids.has(p): return 0
 		return 1 if p.y < surface else 0
 
@@ -54,6 +58,7 @@ func _initialize() -> void:
 	var plan := Excavation.plan_bed(mock, _whole_lake(1.5), world)
 	check(bool(plan["ok"]), "plan ok")
 	check(int(plan["changed_count"]) > 0, "floor above bed is carved (changes=%d)" % plan["changed_count"])
+	check(mock.sky_probes.values().all(func(count: int) -> bool: return count == 1), "bed planning and carving scan each sky column only once")
 	var center := Vector2i(20, 20)
 	var top := _top_after(mock, plan["changes"], center)
 	check(not is_nan(top) and is_equal_approx(top, 0.75), "bed cell top lowered to 0.75 (got %s)" % str(top))
@@ -85,6 +90,13 @@ func _initialize() -> void:
 	for change: Dictionary in plan_cave["changes"]:
 		if (change["position"] as Vector3i) == void_pos: touched_void = true
 	check(not touched_void, "void voxel is never removed")
+	cave.voids[Vector3i(20, 10, 20)] = true
+	var overhang := Excavation.plan_bed(cave, _whole_lake(1.5), world)
+	var cut_below_cave := false
+	for change: Dictionary in overhang["changes"]:
+		var pos: Vector3i = change["position"]
+		if pos.x == 20 and pos.z == 20 and pos.y <= 10: cut_below_cave = true
+	check(not cut_below_cave, "excavation stops at a cave below an overhang")
 
 	# determinism.
 	var a := Excavation.plan_bed(mock, _whole_lake(1.5), world)

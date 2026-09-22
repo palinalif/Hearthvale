@@ -29,11 +29,14 @@ static func plan(region: Dictionary, sample: Callable, world_size: float) -> Dic
 		if not is_nan(top) and top > bed_level + 0.000001:
 			bed.append([cell, bed_level])
 	var banks := {}
+	var sampled_banks := {}
+	var cell_limit := maxi(1, floori(world_size / Grid.UNIT))
 	for cell: Vector2i in cells:
 		for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 			var neighbor := cell + offset
-			if inside.has(neighbor) or neighbor.x < 0 or neighbor.y < 0:
+			if inside.has(neighbor) or sampled_banks.has(neighbor) or neighbor.x < 0 or neighbor.y < 0 or neighbor.x >= cell_limit or neighbor.y >= cell_limit:
 				continue
+			sampled_banks[neighbor] = true
 			var ntop: float = sample.call(_cell_center(neighbor))
 			if not is_nan(ntop) and ntop > level + 0.000001:
 				banks[neighbor] = true
