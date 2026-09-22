@@ -7,6 +7,9 @@ const Landscape = preload("res://scripts/landscape_state.gd")
 const Region = preload("res://scripts/m2_painted_path_region.gd")
 const Props = preload("res://scripts/m2_starter_props.gd")
 const Visual = preload("res://scripts/m2_hamlet_visual.gd")
+const Ponds = preload("res://scripts/premade_ponds.gd")
+const CarvePlan = preload("res://scripts/water_carve_plan.gd")
+const RegionGeometry = preload("res://scripts/water_region_geometry.gd")
 var failures: Array[String] = []
 func check(ok: bool, message: String) -> void:
 	if not ok:
@@ -56,6 +59,7 @@ func _initialize() -> void:
 			check(expanded.get_voxel(20,20,20,0) == 0, "Saved excavation remains air")
 			check(expanded.get_voxel(560,10,560,0) == 1, "New meadow generated outside old volume")
 			_check_ground_materials(expanded)
+			_check_ponds()
 			print("STARTER_MIGRATION Native old solids, air and boundary preserved")
 	else: check(false,"Native VoxelBuffer unavailable")
 	print("STARTER_VALLEY_RESULT " + JSON.stringify({"ok":failures.is_empty(),"failures":failures.size(),"messages":failures}))
@@ -79,6 +83,59 @@ func _check_ground_materials(expanded: Object) -> void:
 	check(Generator.surface_material(24.0, 27.5, 8.0) == 3, "Lane at the well is packed dirt (3)")
 	var library: Object = Generator.build_library()
 	check(library.get_models().size() == 10, "Generator library carries the full ground set (10 models)")
+
+func _check_ponds() -> void:
+	var ponds: Array = Ponds.regions()
+	check(ponds.size() == 2, "Two premade ponds defined")
+	check(JSON.stringify(ponds) == JSON.stringify(Ponds.regions()), "Premade ponds are deterministic")
+	var green := Generator.VILLAGE_GREEN
+	var river_clear := true
+	var hamlet_clear := true
+	var carved := {}
+	for pond: Dictionary in ponds:
+		for point: Array in pond["points"]:
+			var p := Vector2(float(point[0]), float(point[1]))
+			check(green.has_point(p), "Pond outline stays on the village green")
+			check(absf(p.x - Generator.river_center_x(p.y)) > Generator.river_half_width(p.y) + 0.5, "Pond outline clears the river")
+			check(p.y >= 26.0, "Pond stays off the flat hamlet plateau")
+			if p.x >= 12.0 and p.x <= 32.0 and p.y >= 10.0 and p.y <= 26.0: hamlet_clear = false
+			if absf(p.x - 21.5) < 10.0 and absf(p.y - 29.0) < 1.0: river_clear = false
+		var landscape := Landscape.new()
+		check(landscape.add_water("lake", pond["level"], pond["points"]) > 0 and Landscape.validate(landscape.document()), "Pond is a valid lake water region")
+		var cells: Array = RegionGeometry.footprint_cells(pond, Landscape.EDITABLE_WORLD_SIZE)
+		# The water tool's excavation profile against the analytical valley
+		# terrain: every footprint cell on the flat green takes the 6.75 m
+		# lake bed and the ring of green cells around the outline a 7.5 m
+		# bank shelf, so the water (7.5) sits below its surroundings.
+		var plan: Dictionary = CarvePlan.plan(pond, _pond_sampler(carved), Landscape.EDITABLE_WORLD_SIZE)
+		var bed: Array = plan.get("bed", [])
+		check(bed.size() == cells.size(), "Pond bed excavation covers the whole footprint (%d/%d cells)" % [bed.size(), cells.size()])
+		var bank: Array = plan.get("banks", [])
+		check(bank.size() >= 8, "Pond bank ring plans (%d cells)" % bank.size())
+		var profile_ok := true
+		for entry: Array in bed:
+			if not is_equal_approx(float(entry[1]), float(pond["level"]) - Ponds.BED_DEPTH): profile_ok = false
+		check(profile_ok, "Pond bed depth matches the lake tool profile")
+		check(not Ponds.already_carved(_pond_sampler({}), pond), "Fresh valley floor is not reported as carved")
+		for cell: Vector2i in bank:
+			carved[cell] = float(pond["level"])
+		for entry: Array in bed:
+			carved[Vector2i(entry[0])] = float(entry[1])
+		# Idempotency: once the bed is at the lake bed, the scene's guard
+		# recognises the pond and skips excavation, so a loaded save's shore
+		# ring never ratchets outward on each start.
+		check(Ponds.already_carved(_pond_sampler(carved), pond), "Carved pond bed is recognised (excavation idempotent)")
+	check(river_clear, "Ponds leave the premade river clear")
+	check(hamlet_clear, "Ponds stay out of the flat hamlet zone")
+
+
+func _pond_sampler(carved: Dictionary) -> Callable:
+	return func(c: Vector2) -> float:
+		var cell := Vector2i(roundi(c.x / 0.125), roundi(c.y / 0.125))
+		if carved.has(cell):
+			return carved[cell]
+		return Generator.terrain_height(c.x, c.y)
+
 
 func _paint_digest(voxels: Object) -> String:
 	var digest := 0

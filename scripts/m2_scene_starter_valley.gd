@@ -3,6 +3,10 @@ extends "res://scripts/m2_scene_style_preview_stability.gd"
 ## Old worlds gain space and scenery without acquiring unwanted houses/props.
 const StarterHamlet = preload("res://scripts/m2_starter_hamlet.gd")
 const ValleySurround = preload("res://scripts/m2_valley_surround.gd")
+const PremadePonds = preload("res://scripts/premade_ponds.gd")
+const WaterState = preload("res://scripts/landscape_state.gd")
+const WaterRegion = preload("res://scripts/water_region_geometry.gd")
+const WaterExcavation = preload("res://scripts/water_terrain_excavation.gd")
 # The mountain ring peaks at ~49 m; keeping orbit pitch below this keeps the
 # camera under the peaks in the default framing instead of seeing over them.
 const VALLEY_MAX_PITCH := 1.15
@@ -126,6 +130,7 @@ func _on_backend_ready(ready: bool) -> void:
 	# presentation path, materials and editability with player-authored water.
 	# Runs for both fresh (seeded) and existing (restored) worlds; idempotent.
 	_ensure_premade_river()
+	_ensure_premade_ponds()
 
 func _seed_starter_hamlet() -> bool:
 	if _starter_seeded or not backend.loaded_building_document.is_empty(): return false
@@ -158,6 +163,55 @@ func _seed_starter_hamlet() -> bool:
 	_update_presentation()
 	_update_camera()
 	return true
+
+func _ensure_premade_ponds() -> void:
+	# The ponds are water regions (lake polygons), exactly like the river, so
+	# they share the presentation path, materials and editability with
+	# player-authored water. Deterministic and idempotent: fixed outlines on
+	# the flat village green, added once per world. The bed is excavated with
+	# the same plan the water tool commits with, so each pond is one shallow
+	# depression with a shelf at the water level: the water sits 0.5 m below
+	# the surrounding green, and the village plateau is never carved.
+	for pond: Dictionary in PremadePonds.regions():
+		var present := false
+		for existing: Dictionary in landscape_state.water:
+			present = present or PremadePonds.matches(existing, pond)
+		if present:
+			# Region already saved; make sure its terrain is at the bed.
+			if not PremadePonds.already_carved(_terrain_top_sampler(), pond):
+				_carve_pond(pond)
+			continue
+		if not _ensure_premade_pond(pond):
+			push_error("Premade pond could not be added; leaving the world as-is")
+
+func _ensure_premade_pond(pond: Dictionary) -> bool:
+	if PremadePonds.already_carved(_terrain_top_sampler(), pond): return true
+	if landscape_state.add_water("lake", pond["level"], pond["points"]) < 1: return false
+	return _carve_pond(pond)
+
+func _carve_pond(pond: Dictionary) -> bool:
+	var cells: Array = WaterRegion.footprint_cells(pond, WaterState.EDITABLE_WORLD_SIZE)
+	var excavation: Dictionary = WaterExcavation.plan_bed(backend, pond, WaterState.EDITABLE_WORLD_SIZE)
+	if not bool(excavation.get("ok", false)): return false
+	var changes: Array = excavation.get("changes", [])
+	if changes.size() > 0 and (not backend.has_method("apply_voxel_changes")
+			or not backend.apply_voxel_changes(changes)):
+		return false
+	# Plants cannot live in the pond; reuse the water tool's footprint rule.
+	if landscape_state.clear_records_in_path_cells(cells):
+		if garden_visual: garden_visual.reset_records(landscape_state.records)
+	_sync_water_visual()
+	return true
+
+func _terrain_top_sampler() -> Callable:
+	var patch: Vector3i = backend.get("patch_size")
+	return func(c: Vector2) -> float:
+		var x := clampi(floori(c.x / 0.125), 0, patch.x - 1)
+		var z := clampi(floori(c.y / 0.125), 0, patch.z - 1)
+		for y in range(patch.y - 1, -1, -1):
+			if int(backend.voxel_at(Vector3i(x, y, z))) != 0:
+				return float(y + 1) * 0.125
+		return NAN
 
 func _on_backend_changed() -> void:
 	super._on_backend_changed()

@@ -2,6 +2,8 @@ extends SceneTree
 
 const Generator = preload("res://scripts/m1_patch_generator.gd")
 const SceneScript = preload("res://scripts/m2_scene_starter_valley.gd")
+const PremadeRiver = preload("res://scripts/premade_river.gd")
+const PremadePonds = preload("res://scripts/premade_ponds.gd")
 
 var failures: Array[String] = []
 var scene: Node
@@ -45,9 +47,16 @@ func run() -> void:
 	check(buildings.size() == 3, "three starter buildings (got %d)" % buildings.size())
 	check(scene._starter_seeded, "starter hamlet seeded for the new world")
 	_check_flat_hamlet()
+	_check_ponds()
 	_check_home_anchor_support(buildings)
 	check(_check_library(), "terrain library has the full 10-model ground set")
 	_check_material_round_trip()
+	var regions: Array = scene.landscape_state.water
+	var ponds_after := 0
+	for region: Dictionary in regions:
+		for pond: Dictionary in PremadePonds.regions():
+			if PremadePonds.matches(region, pond): ponds_after += 1
+	check(regions.size() == 3 and ponds_after == 2, "starter water (river + two ponds) survives the save/load round trip")
 	scene._shutting_down = true
 	scene._save_all()
 	scene.queue_free()
@@ -67,6 +76,29 @@ func _check_flat_hamlet() -> void:
 
 ## Every home anchor (building origin) stands on solid ground: the voxel
 ## column under each anchor must contain material within two meters down.
+## The two starter ponds are water regions on the village green: the region
+## records exist, each basin floor sits at the 0.75 m lake bed, and the
+## ground around the shore stays above the water level (7.5 < 8.0).
+func _check_ponds() -> void:
+	var regions: Array = scene.landscape_state.water
+	var river := false
+	var ponds := 0
+	for region: Dictionary in regions:
+		if PremadeRiver.is_starter_river(region): river = true
+		for pond: Dictionary in PremadePonds.regions():
+			if PremadePonds.matches(region, pond): ponds += 1
+	check(regions.size() == 3 and river and ponds == 2, "water holds the starter river and both ponds (got %d regions)" % regions.size())
+	var tool: Object = scene.backend.terrain.get_voxel_tool()
+	for pond: Dictionary in PremadePonds.regions():
+		var center := Vector2.ZERO
+		for point: Array in pond["points"]:
+			center += Vector2(float(point[0]), float(point[1]))
+		center /= float(pond["points"].size())
+		var floor := _top_world(tool, center.x, center.y)
+		check(is_equal_approx(floor, float(pond["level"]) - PremadePonds.BED_DEPTH), "pond floor at (%.1f, %.1f) is the %.2f m lake bed (got %.3f)" % [center.x, center.y, float(pond["level"]) - PremadePonds.BED_DEPTH, floor])
+		var shore := _top_world(tool, center.x + 3.0, center.y)
+		check(shore > float(pond["level"]), "ground %d m from the pond is above the water (got %.2f vs level %.2f)" % [3, shore, float(pond["level"])])
+
 func _check_home_anchor_support(buildings: Array) -> void:
 	for building in buildings:
 		var transform: Dictionary = building.get("transform", {})
@@ -120,6 +152,12 @@ func _top_voxel(tool: Object, center: Vector3) -> int:
 		if int(tool.get_voxel(Vector3i(int(center.x * 8.0), y, int(center.z * 8.0)))) != 0:
 			return y
 	return -1
+
+func _top_world(tool: Object, world_x: float, world_z: float) -> float:
+	for y in range(64, -1, -1):
+		if int(tool.get_voxel(Vector3i(int(world_x * 8.0), y, int(world_z * 8.0)))) != 0:
+			return float(y + 1) * 0.125
+	return -1.0
 
 func _clear_dir(path: String) -> void:
 	if not DirAccess.dir_exists_absolute(path):
