@@ -116,6 +116,16 @@ func _ready() -> void:
 	var generator_script: Script = initial_generator if initial_generator != null else PatchGenerator
 	var mesher: Object = ClassDB.instantiate("VoxelMesherBlocky")
 	mesher.library = generator_script.build_library()
+	# The fixed 0.125 m M1 grid renders 1-voxel height steps as hard 0.125 m
+	# contour bands: every terrace top face has the identical flat (0,1,0)
+	# normal and uniform per-model vertex color, so the directional sun lights
+	# each height step uniformly and step edges read as sharp contour lines.
+	# The pinned VoxelMesherBlocky exposes no slope-normal/AO knobs, so the
+	# library's plain-cube stone/grass models are replaced with beveled cubes
+	# (45-degree chamfer around each block's top edge): a step now lights as
+	# vertical face -> chamfer band -> flat top, softening the contour.
+	if patch_size.x > 96:
+		_apply_beveled_blocky_models(mesher)
 	terrain.mesher = mesher
 	# The deterministic patch script supplies authoritative voxel contents, but
 	# the native empty generator is still needed to initialize streaming/data
@@ -1436,3 +1446,99 @@ func _stack_bytes(stack: Array[Dictionary]) -> int:
 	var total := 0
 	for command in stack: total += _command_bytes(command)
 	return total
+
+## Chamfer width, as a fraction of the unit block, for the top-edge bevel.
+const _BEVEL := 0.15
+
+## Replaces the blocky library's plain-cube stone/grass models with
+## beveled-cube VoxelBlockyModelMesh models, then re-bakes the library.
+##
+## Geometry rules (VoxelBlockyModelMesh bake, v1.7x): the mesher classifies
+## a triangle as a cullable "side" only when all of its vertices lie within
+## tolerance on one cube face plane; every other triangle is an always-drawn
+## "regular" surface. The six axis-aligned faces therefore stay fully on the
+## cube planes (the top face is shrunken to [BEVEL, 1-BEVEL] and the side
+## faces stop at 1-BEVEL) and only the four chamfer ring quads are
+## off-plane. Interior faces of a run of same-material voxels are culled as
+## before; a 1-voxel step exposes a 45-degree chamfer band; flat plateaus
+## show a shallow (BEVEL) V-groove at voxel seams, which reads as fine
+## blocky texture at the 0.125 m grid size. UVs are plain 0..1 per face:
+## the pinned bake requires UVs (or pre-baked tangents) to accept a model
+## in editor builds, and the stone/grass shaders key off vertex color.
+static func _apply_beveled_blocky_models(mesher: Object) -> void:
+	if not ClassDB.class_exists("VoxelBlockyModelMesh"):
+		return
+	var library: Object = mesher.get("library")
+	if library == null:
+		return
+	var models: Array = library.get_models()
+	if models.size() < 3:
+		return
+	var stone_model: Object = _make_beveled_block_model(models[1], "stone")
+	var grass_model: Object = _make_beveled_block_model(models[2], "grass")
+	if stone_model == null or grass_model == null:
+		return
+	models[1] = stone_model
+	models[2] = grass_model
+	library.set_models(models)
+	library.bake()
+
+static func _make_beveled_block_model(source_model: Object, label: String) -> Object:
+	if source_model == null:
+		return null
+	var material: Material = source_model.get_material_override(0)
+	if material == null:
+		push_warning("TerrainBackend: no material on %s blocky model; keeping plain cube" % label)
+		return null
+	var mesh := _build_beveled_block_mesh()
+	# The baked model reads its per-surface materials from the mesh itself
+	# (mesh->surface_get_material in the v1.7x bake), not from overrides.
+	mesh.surface_set_material(0, material)
+	var model: Object = ClassDB.instantiate("VoxelBlockyModelMesh")
+	model.set_mesh(mesh)
+	return model
+
+static func _bevel_quad(st: SurfaceTool, p0: Vector3, p1: Vector3, p2: Vector3,
+		p3: Vector3, n: Vector3) -> void:
+	_bevel_tri(st, p0, p1, p2, n, Vector2(0, 0), Vector2(1, 0), Vector2(1, 1))
+	_bevel_tri(st, p0, p2, p3, n, Vector2(0, 0), Vector2(1, 1), Vector2(0, 1))
+
+static func _bevel_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3,
+		n: Vector3, uv_a: Vector2, uv_b: Vector2, uv_c: Vector2) -> void:
+	if (b - a).cross(c - a).dot(n) < 0.0:
+		var t := b
+		b = c
+		var t2 := uv_b
+		uv_b = uv_c
+		uv_c = t2
+	st.set_normal(n)
+	st.set_uv(uv_a)
+	st.add_vertex(a)
+	st.set_normal(n)
+	st.set_uv(uv_b)
+	st.add_vertex(b)
+	st.set_normal(n)
+	st.set_uv(uv_c)
+	st.add_vertex(c)
+	st.index()
+
+static func _build_beveled_block_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var q := _BEVEL
+	var qt := 1.0 - _BEVEL
+	# Six axis-aligned faces: every vertex sits on its cube face plane, so
+	# the mesher classifies them as cullable sides (per-cell + per-side).
+	_bevel_quad(st, Vector3(0,0,0), Vector3(1,0,0), Vector3(1,0,1), Vector3(0,0,1), Vector3.DOWN)
+	_bevel_quad(st, Vector3(q,1,q), Vector3(q,1,qt), Vector3(qt,1,qt), Vector3(qt,1,q), Vector3.UP)
+	_bevel_quad(st, Vector3(1,0,0), Vector3(1,qt,0), Vector3(1,qt,1), Vector3(1,0,1), Vector3.RIGHT)
+	_bevel_quad(st, Vector3(0,0,1), Vector3(0,qt,1), Vector3(0,qt,0), Vector3(0,0,0), Vector3.LEFT)
+	_bevel_quad(st, Vector3(0,0,1), Vector3(1,0,1), Vector3(1,qt,1), Vector3(0,qt,1), Vector3(0,0,1))
+	_bevel_quad(st, Vector3(1,0,0), Vector3(0,0,0), Vector3(0,qt,0), Vector3(1,qt,0), Vector3(0,0,-1))
+	# 45-degree chamfer ring around the top edge: always drawn, and it is
+	# what softens the lighting across 1-voxel step edges.
+	_bevel_quad(st, Vector3(1,qt,0), Vector3(1,qt,1), Vector3(qt,1,qt), Vector3(qt,1,q), Vector3(1,1,0).normalized())
+	_bevel_quad(st, Vector3(0,qt,1), Vector3(0,qt,0), Vector3(q,1,q), Vector3(q,1,qt), Vector3(-1,1,0).normalized())
+	_bevel_quad(st, Vector3(0,qt,1), Vector3(1,qt,1), Vector3(qt,1,qt), Vector3(q,1,qt), Vector3(0,1,1).normalized())
+	_bevel_quad(st, Vector3(1,qt,0), Vector3(0,qt,0), Vector3(q,1,q), Vector3(qt,1,q), Vector3(0,1,-1).normalized())
+	return st.commit()
