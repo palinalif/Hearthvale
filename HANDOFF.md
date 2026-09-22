@@ -1,4 +1,25 @@
 # Hearthvale — v67 post-stroke-backlog fix on the Thor (2026-09-21)
+## 2026-09-22 — terrain commit and water placement responsiveness
+
+Branch: `codex/fix-terrain-water-freezes`. See
+[terrain-water-responsiveness.md](reports/terrain-water-responsiveness.md) for
+the changes, desktop benchmarks, verification and device limitations.
+
+Terrain release now consumes sparse net-change metadata. Meadow and house
+decoration refresh locally. Water avoids repeated raster unions, idle lake
+sampling and mesh readback, and queues surface work once per frame. Exact native
+column queries reduce empty-sky sampling. Native water/terrain undo and redo now
+restore the correct shared pre-edit snapshot; cancel leaves both unchanged.
+The missing inherited starter-valley readiness call is restored.
+
+Desktop native water commit improved from 2.5–4.1 seconds during investigation
+to 177 ms. The 20 m footprint benchmark improved from 23 seconds to 272 ms with
+identical cells. These are headless desktop measurements, not Thor FPS claims.
+Targeted native water/history, terrain, grass and house integration checks pass.
+The pushed source uses the existing CI workflow for a separately installed,
+commit-specific verified ARM64 APK; its receipt identifies the delivered commit.
+No physical Thor/controller or visual-approval run has occurred in this session.
+
 ## 2026-09-21 (round 13) — v67: per-frame native-paste box reset shipped; backlog death-spiral eliminated, small residual single-frame spike remains
 
 **Fix (in this commit, `scripts/terrain_backend.gd`):** `_flush_native_updates` now
