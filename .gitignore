@@ -18,3 +18,7 @@ build/
 export_presets.cfg.bak*
 tests/tmp_*.gd
 tests/tmp_*.gd.uid
+.mcp.json
+AGENTS.md.bak-*
+_valley_shot.gd
+_valley_shot.gd.uid
