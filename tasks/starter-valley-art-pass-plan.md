@@ -6,8 +6,10 @@ settlement, water, forest, elevation; no visible skybox/floating boundary; cozy 
 Hearthvale's voxel language. References = attached images (mood, not literal layout).
 
 Execution: sequential single-agent stages (heavy overlap — no parallel implementation agents),
-one writer per subsystem, small reviewable commits. Visual evidence via headless Godot
-`SubViewport` captures (device currently offline); user approves visuals.
+one writer per subsystem, small reviewable commits. Visual evidence via on-device Thor
+screenshots (local headless has no renderer — `valley_screenshot.png` is a white box).
+Note: several subagent sessions died silently on a stale-extension-ctx harness bug;
+mechanical changes were done inline when a worker went dark.
 
 ## Stage 1 — read-only audit (DONE, explorer agent)
 
@@ -40,16 +42,18 @@ mountain ring fills the rim view; lake + tributary + green visible from the high
 Remaining cosmetic gap: at the *highest* reachable camera pose the ring can read low — Stage 3/5
 polish should keep rim coverage in mind (PEAK_HEIGHT=56 vs max target_y≈59.6).
 
-## Stage 3 — Ground variation + player terrain paint (IN PROGRESS)
+## Stage 3 — Ground variation + player terrain paint (DONE; bevel reverted)
 
-In main checkout on `main`. Agent tasks:
-- Add layered terrain paint (grass tones, dirt, stone, sand/gravel, moss, rock) via the existing
-  paint machinery (m2_terrain_paint / m1 terrain paint tools).
-- Paint the new composition: slopes, banks, riverbed, paths, clearing floor, green, lake shore.
-- Ensure sculpted terrain survives save/load and stays within the 256 m height band.
-- Tests: paint round-trip + starter-valley invariants (paths reachable, buildings on solid ground).
+Landed as `6bbda22` (layered paint, palette, tests). The beveled-cube model from that stage
+tiled 45-degree chamfer faces into a chevron pattern across flat ground on the Thor, and the
+olive DENSE/DRY tints pulled the meadow off the green family — both reverted in `8a52ed4`;
+plain cubes and green tints remain, approved patch variety kept.
 
-## Stage 4 — Village art pass (not started)
+## Stage 4 — Village art pass (IN PROGRESS)
+
+Landed so far: `a3d7902` ponds and shoreline (two deterministic organic lakes, water 7.5 m /
+bed 6.75 m, idempotent re-carve guard, tests green; pre-existing m1_landscape_test failure is
+unrelated). Remaining per below:
 
 - Grow the settlement toward the reference mood: denser, irregular, contour-following;
   stone/timber/plaster mix, steep roofs, small tower/clock-tower landmark, tavern/inn,
