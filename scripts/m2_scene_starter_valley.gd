@@ -100,18 +100,24 @@ func _apply_cozy_valley_lighting() -> void:
 		environment.set("glow_levels/6", 0.0)
 		environment.set("glow_levels/7", 0.0)
 
-		# Warm distance haze: softens the far hills and separates the village from
-		# the backdrop, as in the reference frames. Same canonical M2 values.
+		# Warm distance haze: softens the layered mountain range and separates
+		# the village from the backdrop, as in the reference frames. Same
+		# canonical M2 values. Extended to 320 m so the haze fades out across
+		# the full 120–260 m surround.
 		environment.fog_enabled = true
 		environment.fog_light_color = Color("#ead7b3")
 		environment.fog_density = 0.0038
 		environment.fog_sky_affect = 0.8
 		environment.fog_depth_begin = 18.0
-		environment.fog_depth_end = 150.0
+		environment.fog_depth_end = 320.0
 
 	# Push the miniature-camera cue slightly further while keeping the playable
 	# village crisp and reserving most of the blur for distant hills.
 	if camera != null:
+		# The valley surround is a layered range out to ~260 m (ridges at
+		# 120/170/225 m). The camera's default 100 m far plane would clip all
+		# of it, so extend it well past the far ridge.
+		camera.far = 400.0
 		var attributes := CameraAttributesPractical.new()
 		attributes.dof_blur_far_enabled = true
 		attributes.dof_blur_far_distance = 40.0
