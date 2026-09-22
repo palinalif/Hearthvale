@@ -23,9 +23,9 @@ func _ready() -> void:
 	_apply_cozy_valley_lighting()
 
 func _apply_cozy_valley_lighting() -> void:
-	# Cozy valley lighting: a warm shadowed key plus two soft unshadowed fills,
-	# a golden-hour procedural sky for ambient/reflections/background, and warm
-	# distance haze. Stronger plane separation than the flat clear-air pass.
+	# Crisp clear-air lighting: a warm shadowed key plus two soft unshadowed
+	# fills, a bright warm procedural sky for ambient/reflections/background,
+	# and only a subtle depth cue — not a veil. Clear, vivid, high contrast.
 	for node in find_children("*", "DirectionalLight3D", true, false):
 		var light := node as DirectionalLight3D
 		if light.name in ["CozySkyFill", "CozyWarmRim"]: continue
@@ -41,14 +41,14 @@ func _apply_cozy_valley_lighting() -> void:
 	_ensure_directional_fill(
 		"CozySkyFill",
 		Vector3(-58.0, 148.0, 0.0),
-		Color("#d8e5e2"),
-		0.13
+		Color("#bcd8e8"),
+		0.15
 	)
 	_ensure_directional_fill(
 		"CozyWarmRim",
 		Vector3(-28.0, 92.0, 0.0),
 		Color("#ffd0a0"),
-		0.10
+		0.12
 	)
 
 	for node in find_children("*", "WorldEnvironment", true, false):
@@ -58,16 +58,17 @@ func _apply_cozy_valley_lighting() -> void:
 		# Restore the sky. The flat cream background from the "clear-air" pass made
 		# the near-mirror water (roughness 0.16) reflect a flat #ddd9c9 wall, which
 		# read as silver ponds on device, and the frame lost its sky entirely.
-		# The procedural sky uses the canonical M2 look: blue-grey zenith into a
-		# warm golden horizon. Sky-sourced ambient + reflections let water, grass
-		# and roofs pick up the same gradient the reference shots use.
+		# The procedural sky is clear and bright: a saturated blue zenith into a
+		# warm pale-gold horizon, with a warm green ground. Sky-sourced ambient +
+		# reflections let water, grass and roofs pick up the same gradient the
+		# reference shots use — vivid and clear, not a haze.
 		var sky_material := ProceduralSkyMaterial.new()
-		sky_material.sky_top_color = Color("#d8e1e5")
-		sky_material.sky_horizon_color = Color("#f2d9a4")
-		sky_material.ground_bottom_color = Color("#c3b795")
-		sky_material.ground_horizon_color = Color("#e0d3b2")
-		sky_material.sky_energy_multiplier = 0.55
-		sky_material.ground_energy_multiplier = 0.35
+		sky_material.sky_top_color = Color("#3a72b8")
+		sky_material.sky_horizon_color = Color("#f2d9a6")
+		sky_material.ground_bottom_color = Color("#7f9a6f")
+		sky_material.ground_horizon_color = Color("#c8c8a4")
+		sky_material.sky_energy_multiplier = 1.0
+		sky_material.ground_energy_multiplier = 0.6
 		var sky := Sky.new()
 		sky.sky_material = sky_material
 		environment.sky = sky
@@ -82,39 +83,35 @@ func _apply_cozy_valley_lighting() -> void:
 		environment.tonemap_exposure = 1.03
 		environment.tonemap_white = 1.42
 
-		# Tight highlight glow instead of screen-wide bloom. Nudge it harder while
-		# keeping the threshold high enough that the whole frame stays clear.
+		# Tight highlight glow only — the threshold stays high enough that the
+		# glow is a small specular cue, not a screen-wide veil.
 		environment.glow_enabled = true
 		environment.glow_normalized = true
-		environment.glow_intensity = 1.02
-		environment.glow_strength = 1.28
-		environment.glow_mix = 0.025
-		environment.glow_bloom = 0.02
+		environment.glow_intensity = 0.45
+		environment.glow_strength = 0.7
+		environment.glow_mix = 0.01
+		environment.glow_bloom = 0.005
 		environment.glow_hdr_threshold = 0.84
 		environment.glow_hdr_scale = 2.50
-		environment.set("glow_levels/1", 0.80)
-		environment.set("glow_levels/2", 0.62)
-		environment.set("glow_levels/3", 0.28)
-		environment.set("glow_levels/4", 0.06)
+		environment.set("glow_levels/1", 0.5)
+		environment.set("glow_levels/2", 0.3)
+		environment.set("glow_levels/3", 0.0)
+		environment.set("glow_levels/4", 0.0)
 		environment.set("glow_levels/5", 0.0)
 		environment.set("glow_levels/6", 0.0)
 		environment.set("glow_levels/7", 0.0)
 
-		# Warm distance haze: softens the layered mountain range and separates
-		# the village from the backdrop, while the sky keeps its deep blue —
-		# the sky affect is reduced to 0.25 for exactly that reason (at 0.8
-		# the haze fogs the whole sky cream). Same canonical M2 values.
-		# Extended to 320 m so the haze fades out across the full 120–260 m
-		# surround.
+		# Subtle depth cue, not a veil: low density, near-zero sky affect, and a
+		# short 30–110 m range so the air stays clear and the frame stays crisp.
 		environment.fog_enabled = true
-		environment.fog_light_color = Color("#ead7b3")
-		environment.fog_density = 0.0038
-		environment.fog_sky_affect = 0.25
-		environment.fog_depth_begin = 18.0
-		environment.fog_depth_end = 320.0
+		environment.fog_light_color = Color("#ddd2b8")
+		environment.fog_density = 0.0010
+		environment.fog_sky_affect = 0.08
+		environment.fog_depth_begin = 30.0
+		environment.fog_depth_end = 110.0
 
-	# Push the miniature-camera cue slightly further while keeping the playable
-	# village crisp and reserving most of the blur for distant hills.
+	# Minimal camera depth cue: the village stays in focus and only the distant
+	# hills take a light blur.
 	if camera != null:
 		# The valley surround is a layered range out to ~260 m (ridges at
 		# 120/170/225 m). The camera's default 100 m far plane would clip all
@@ -122,10 +119,10 @@ func _apply_cozy_valley_lighting() -> void:
 		camera.far = 400.0
 		var attributes := CameraAttributesPractical.new()
 		attributes.dof_blur_far_enabled = true
-		attributes.dof_blur_far_distance = 40.0
-		attributes.dof_blur_far_transition = 18.0
+		attributes.dof_blur_far_distance = 55.0
+		attributes.dof_blur_far_transition = 25.0
 		attributes.dof_blur_near_enabled = false
-		attributes.dof_blur_amount = 0.070
+		attributes.dof_blur_amount = 0.025
 		camera.attributes = attributes
 
 func _ensure_directional_fill(fill_name: String, rotation: Vector3, color: Color, energy: float) -> void:

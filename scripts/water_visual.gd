@@ -24,7 +24,7 @@ const WATER_SHADER = preload("res://shaders/water_surface.gdshader")
 const FALL_SHADER = preload("res://shaders/waterfall_fall.gdshader")
 
 const WATER_CELL := Grid.UNIT
-const WATER_COLOR := Color(0.16, 0.44, 0.52, 0.82)
+const WATER_COLOR := Color(0.20, 0.52, 0.55, 0.85)
 const WATER_DEEP_COLOR := Color(0.07, 0.26, 0.36, 0.82)
 const DEPTH_SCALE := 4.0
 const FALL_COLOR := Color(0.62, 0.80, 0.88, 0.70)

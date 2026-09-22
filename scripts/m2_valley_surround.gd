@@ -380,9 +380,9 @@ func _build_plain() -> Mesh:
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	st.set_material(mat)
 
-	const _MEADOW := Color(0.46, 0.51, 0.40)
-	const _MEADOW_DRY := Color(0.52, 0.55, 0.45)
-	const _HAZE := Color(0.62, 0.63, 0.57)
+	const _MEADOW := Color(0.60, 0.68, 0.30)
+	const _MEADOW_DRY := Color(0.66, 0.70, 0.36)
+	const _HAZE := Color(0.56, 0.63, 0.34)
 	const _STEPS := 10
 
 	var rings: Array = []
@@ -414,7 +414,7 @@ func _build_plain() -> Mesh:
 				# Fade the outer third into the valley haze.
 				var r := (p - Vector3(RING_CENTER.x, 0.0, RING_CENTER.y)).length()
 				var fade := clampf((r - PLAIN_INNER_RADIUS * 1.5) / (PLAIN_OUTER_RADIUS - PLAIN_INNER_RADIUS * 1.5), 0.0, 1.0)
-				c = c.lerp(_HAZE, fade * 0.85)
+				c = c.lerp(_HAZE, fade * 0.30)
 				st.set_normal(up)
 				st.set_color(c)
 				st.set_uv(Vector2(float(pair[1]), float(pair[0])))
