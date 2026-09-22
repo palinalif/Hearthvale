@@ -124,7 +124,7 @@ In the retained M0 scene, open Start → Run 60s fixture. It saves dirty player 
 
 ## Reproduce the Astra M1 review
 
-From the project root, `./tools/check.ps1` runs the full regressions. `./tools/capture-m1.ps1 -View cottage -Clean -Name my-normal` renders the actual Mobile scene in an isolated review world. Use `-View close -Clean -Edited -Front -Name my-edited` for a resized cottage with a moved window. These captures hide HUD/debug; they are not performance measurements.
+From the project root, `./tools/check.ps1` runs the full regressions. `./tools/capture-m1.ps1 -View cottage -Clean -Name my-normal` renders the actual Mobile scene in an isolated review world. Use `-View close -Clean -Edited -Front -Name my-edited` for a resized cottage with a moved window. These captures hide HUD/debug; they are not performance measurements. On this host (no PowerShell), capture the actual Mobile render via a virtual X display (Xvfb) + a SceneTree `get_texture().get_image()` script instead — see `docs/render-screenshots.md`.
 
 For a bounded desktop profile, run the pinned Godot executable with `--path . --disable-vsync --max-fps 60 --script res://tools/m1_visual_profile.gd`. The script uses a separate temporary save root. Compare results only under the recorded renderer/resolution and distinguish desktop from Thor.
 

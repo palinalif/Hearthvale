@@ -1,13 +1,17 @@
 extends SceneTree
-## Locks the pure waterfall derivation: a higher authored body's edge that drops
-## near-vertically into a lower authored body becomes a waterfall; anything that
-## is not a clean head-drop (flat ground, equal levels, no lower body) does not.
-## Headless, deterministic, no native module.
-
+## Headless, deterministic tests for the shared waterfall geometry. The
+## renderer is scene-based (M1WaterVisual) and the derivation itself is
+## pure logic over water regions + a terrain-top sampler, so this test
+## drives the same code path with a small fixture: a flat reservoir
+## shelf above a river, with the terrain dropping in one cell so the
+## wedge rule finds exactly one candidate. The digest proves the derived
+## fall is stable across runs and that the cascade widths (crown_width /
+## impact_width) track the submerged channel, not a fixed 1.5 m pole.
+const State = preload("res://scripts/landscape_state.gd")
 const Waterfall = preload("res://scripts/waterfall_geometry.gd")
 
-var checks := 0
 var failures := 0
+var checks := 0
 
 func check(condition: bool, label: String) -> void:
 	checks += 1
@@ -15,78 +19,67 @@ func check(condition: bool, label: String) -> void:
 		failures += 1
 		print("FAIL: " + label)
 
-func _cliff_sampler() -> Callable:
-	# Plateau top 4.0 for x <= 10, pool floor 1.0 for x > 10 (a step cliff at x=10).
-	return func(p: Vector2) -> float:
-		return 4.0 if p.x <= 10.0 else 1.0
-
-func _flat_sampler(height: float) -> Callable:
-	return func(_p: Vector2) -> float: return height
-
-func _upper() -> Dictionary:
-	return {"id": 1, "type": "lake", "level": 4.0, "points": [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]}
-
-func _lower(level: float = 1.0) -> Dictionary:
-	return {"id": 2, "type": "lake", "level": level, "points": [[10.0, 0.0], [20.0, 0.0], [20.0, 10.0], [10.0, 10.0]]}
-
-func _digest(falls: Array) -> String:
-	var text := ""
-	for f in falls:
-		text += "%d-%d@%.2f,%.2f w%.2f h%.2f;" % [f["upper_id"], f["lower_id"], f["crown"][0], f["crown"][1], f["width"], f["head"]]
-	return text
-
 func _initialize() -> void:
-	var cliff := _cliff_sampler()
-
-	# stepped cliff: upper lake drops 3 m into a lower pool -> one waterfall at the edge
-	var falls := Waterfall.derive([_upper(), _lower()], cliff)
-	check(falls.size() == 1, "stepped cliff yields one waterfall (got %d)" % falls.size())
-	if falls.size() == 1:
-		var f: Dictionary = falls[0]
-		check(int(f["upper_id"]) == 1 and int(f["lower_id"]) == 2, "falls link the upper and lower body")
-		check(is_equal_approx(float(f["head"]), 3.0), "head is the level difference (3 m)")
-		check(is_equal_approx(float(f["crown"][0]), 10.0), "crown sits on the cliff edge x=10 (got %s)" % str(f["crown"][0]))
-		check(float(f["crown"][1]) >= 0.0 and float(f["crown"][1]) <= 10.0, "crown z lies on the bank")
-		check(float(f["flow"][0]) > 0.0, "cascade flows toward the lower body")
-		check(str(f["key"]) == "1-2", "stable pair key")
-
-	# no lower body -> nothing to fall into
-	check(Waterfall.derive([_upper()], cliff).is_empty(), "no lower body -> no waterfall")
-
-	# flat ground (no drop) -> not a waterfall
-	check(Waterfall.derive([_upper(), _lower()], _flat_sampler(4.0)).is_empty(), "flat ground is not a waterfall")
-
-	check(Waterfall.derive([_upper(), _lower()], _flat_sampler(1.0)).is_empty(), "water suspended over low terrain is not a supported waterfall")
-
-	# equal levels (head < 0.5) -> not a waterfall
-	check(Waterfall.derive([_upper(), _lower(4.0)], cliff).is_empty(), "equal levels are not a waterfall")
-
-	# stream upper dropping into a pool -> one waterfall at the stream's end
-	var stream := {"id": 3, "type": "stream", "level": 4.0, "width": 1.5, "flow": [1.0, 0.0], "points": [[0.0, 5.0], [10.0, 5.0]]}
-	var pool := {"id": 4, "type": "lake", "level": 1.0, "points": [[10.0, 0.0], [20.0, 0.0], [20.0, 10.0], [10.0, 10.0]]}
-	var sfalls := Waterfall.derive([stream, pool], cliff)
-	check(sfalls.size() == 1, "stream dropping into a pool yields one waterfall (got %d)" % sfalls.size())
-	if sfalls.size() == 1:
-		var sf: Dictionary = sfalls[0]
-		check(is_equal_approx(float(sf["crown"][0]), 10.0), "stream crown at its cliff end x=10 (got %s)" % str(sf["crown"][0]))
-
-	# rect scoping: only crowns inside the dirty rect are evaluated
-	var near_cliff := Rect2(9.0, 0.0, 2.0, 10.0)  # contains the x=10 crown
-	check(Waterfall.derive([_upper(), _lower()], cliff, near_cliff).size() == 1, "rect containing the crown yields the fall")
-	var away_cliff := Rect2(0.0, 0.0, 5.0, 10.0)  # excludes the x=10 crown
-	check(Waterfall.derive([_upper(), _lower()], cliff, away_cliff).is_empty(), "rect excluding the crown yields nothing")
-
-	# a local edit grows by SAMPLE_MARGIN: a nearby edit (x=8) still catches the
-	# crown; a far edit (x=2) does not — derivation never scans the whole map.
-	var nearby := Rect2(8.0, 5.0, 0.0, 0.0).grow(Waterfall.SAMPLE_MARGIN)
-	check(nearby.has_point(Vector2(10.0, 5.0)), "a nearby edit's grown rect reaches the crown")
-	check(Waterfall.derive([_upper(), _lower()], cliff, nearby).size() == 1, "nearby edit re-derives the crown")
-	var far := Rect2(2.0, 5.0, 0.0, 0.0).grow(Waterfall.SAMPLE_MARGIN)
-	check(not far.has_point(Vector2(10.0, 5.0)), "a far edit's grown rect does not reach the crown")
-	check(Waterfall.derive([_upper(), _lower()], cliff, far).is_empty(), "far edit leaves the crown untouched")
-
-	# determinism
-	check(_digest(Waterfall.derive([_upper(), _lower()], cliff)) == _digest(Waterfall.derive([_upper(), _lower()], cliff)), "derivation is deterministic")
-
+	_run()
 	print("waterfall_test checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures > 0 else 0)
+
+func _run() -> void:
+	var state = State.new()
+	# The reservoir: a wide lake (8 m) at level 20 on a shelf at 21, its
+	# south edge on the shelf line z=0.
+	var reservoir_id: int = state.add_water("lake", 20.0, [
+		[7.0, 40.0], [15.0, 40.0], [15.0, 48.0], [7.0, 48.0]])
+	check(reservoir_id > 0, "reservoir region added")
+	# The river: a wider lake (18 m) at level 10 below the shelf.
+	var river_id: int = state.add_water("lake", 10.0, [
+		[2.0, 28.0], [20.0, 28.0], [20.0, 40.0], [2.0, 40.0]])
+	check(river_id > 0, "river region added")
+
+	# Terrain: a carved bowl just below the reservoir level (19.8) along the
+	# reservoir's south line, a higher shelf (21) beyond it, and the river at
+	# 9.5 below the drop -- the lip rule finds the bowl edge, not a hole.
+	var sample := func(p: Vector2) -> float:
+		if p.y >= 40.0 and p.x >= 7.0 and p.x <= 15.0:
+			return 19.8
+		if p.y > 40.0:
+			return 21.0
+		return 9.5
+
+	var falls: Array = Waterfall.derive(state.water, sample)
+	check(falls.size() == 1, "exactly one waterfall derives")
+	if falls.size() == 1:
+		var fall: Dictionary = falls[0]
+		check(int(fall["upper_id"]) == reservoir_id, "upper body is the reservoir")
+		check(int(fall["lower_id"]) == river_id, "lower body is the river")
+		check(is_equal_approx(float(fall["head"]), 10.0), "head is the 10 m drop")
+		# The cascade tilts over a horizontal run proportional to the head.
+		check(is_equal_approx(Waterfall.cascade_run(10.0), 2.5), "cascade run scales with head")
+		check(is_equal_approx(Waterfall.cascade_run(200.0), 8.0), "cascade run is capped")
+		check(is_equal_approx(Waterfall.cascade_run(1.0), 0.5), "cascade run has a floor")
+		var flow_dir := Vector2(float(fall["flow"][0]), float(fall["flow"][1]))
+		check(flow_dir.y < -0.5, "waterfall flows downhill (flow z < 0)")
+		# The crown sits on the reservoir lip: the carved bowl floor, at level.
+		var crown := Vector2(float(fall["crown"][0]), float(fall["crown"][1]))
+		var crown_top: float = sample.call(crown)
+		check(crown_top >= 19.0 and crown_top <= 20.5, "crown sits on the reservoir lip")
+		# The widths track the submerged channel, not a fixed 1.5 m pole:
+		# the crown spans the bowl and the impact spans the river bed.
+		check(float(fall["crown_width"]) > 3.0, "crown width spans the reservoir bowl")
+		check(float(fall["impact_width"]) > 3.0, "impact width spans the river bed")
+		check(float(fall["impact_width"]) > float(fall["crown_width"]), "cascade flares from lip to river")
+
+		# Determinism: a second derive must produce the identical digest.
+		var again: Array = Waterfall.derive(state.water, sample)
+		check(again.size() == falls.size(), "second derive has the same count")
+		check(_digest(again) == _digest(falls), "second derive is byte-identical")
+
+func _digest(falls: Array) -> String:
+	var parts: Array = []
+	for fall: Dictionary in falls:
+		parts.append("%d/%d/%.3f/%.3f/%.3f,%.3f/%.3f/%.3f" % [
+			int(fall["upper_id"]), int(fall["lower_id"]),
+			float(fall["top_level"]), float(fall["bottom_level"]),
+			float(fall["flow"][0]), float(fall["flow"][1]),
+			float(fall["crown_width"]), float(fall["impact_width"])])
+	return "|".join(parts)

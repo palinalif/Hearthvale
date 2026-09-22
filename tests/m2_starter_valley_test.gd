@@ -47,17 +47,17 @@ func _initialize() -> void:
 		print("STARTER_PROP " + JSON.stringify({"style":style,"boxes":builder["cells"]}))
 	visual.free()
 	if ClassDB.class_exists("VoxelBuffer"):
-		var old: Object = ClassDB.instantiate("VoxelBuffer")
-		old.create(640,256,640)
-		old.set_voxel(1,10,10,10,0)
-		old.set_voxel(2,639,63,639,0)
+		# v6 -> v7 is a 1:1 copy (same native size): a saved v6 world is a full
+		# 1280 volume. The migration must preserve it voxel-for-voxel.
+		var old: Object = Generator.generate()
+		old.set_voxel(2,1279,63,1279,0)
+		old.set_voxel(0,930,10,930,0)
 		var expanded: Object = Generator.expand_previous(old)
 		check(expanded != null, "Native region migration succeeds")
 		if expanded != null:
 			check(expanded.get_voxel(10,10,10,0) == 1, "Saved solid retained")
-			check(expanded.get_voxel(639,63,639,0) == 2, "Last old column retained")
-			check(expanded.get_voxel(20,20,20,0) == 0, "Saved excavation remains air")
-			check(expanded.get_voxel(960,10,960,0) == 1, "New meadow generated outside old volume")
+			check(expanded.get_voxel(1279,63,1279,0) == 2, "Saved marker voxel retained")
+			check(expanded.get_voxel(930,10,930,0) == 0, "Saved excavation remains air")
 			_check_ground_materials(expanded)
 			_check_ponds()
 			print("STARTER_MIGRATION Native old solids, air and boundary preserved")

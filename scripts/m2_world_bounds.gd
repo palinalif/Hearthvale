@@ -5,5 +5,5 @@ const SIZE := 160.0
 const HEIGHT := 32.0
 const EXTENT := Vector3(SIZE, HEIGHT, SIZE)
 const NATIVE_SIZE := Vector3i(1280, 256, 1280)
-const PREVIOUS_NATIVE_SIZE := Vector3i(640, 256, 640)
-const PREVIOUS_GENERATOR_ID := "m2_starter_valley_v4"
+const PREVIOUS_NATIVE_SIZE := Vector3i(1280, 256, 1280)
+const PREVIOUS_GENERATOR_ID := "m2_starter_valley_v6"

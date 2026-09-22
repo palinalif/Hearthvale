@@ -95,6 +95,12 @@ func _run() -> void:
 		# The crown sits on the reservoir's edge (the mountain rim), not in the river.
 		var crown := Vector2(float(fall["crown"][0]), float(fall["crown"][1]))
 		check(sample.call(crown) >= PremadeRiver.RESERVOIR_LEVEL - 1.0, "crown is supported by the rocky shelf")
-		check(sample.call(crown + flow_dir * 2.0) < PremadeRiver.LEVEL, "cascade lands in the carved river bed")
+		var impact := crown + flow_dir * WaterfallGeometry.cascade_run(float(fall["head"]))
+		check(sample.call(impact) < PremadeRiver.LEVEL, "cascade lands in the carved river bed")
+		# The curtain is as wide as the water it carries, not a 1.5 m pole:
+		# the lip spans the reservoir shelf and the base spans the river.
+		check(float(fall["crown_width"]) >= 3.0, "crown spans the reservoir lip")
+		check(float(fall["impact_width"]) >= 7.0, "cascade lands across the river")
+		check(float(fall["impact_width"]) > float(fall["crown_width"]), "cascade flares from lip to pool")
 		check(crown.distance_to(PremadeRiver.RESERVOIR_CENTER) <= PremadeRiver.RESERVOIR_RADIUS + 1.5,
 			"waterfall crown is at the reservoir edge")

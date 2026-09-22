@@ -40,7 +40,8 @@ const WATER_MIN_LEVEL := 0.0
 const WATER_MAX_LEVEL := 32.0
 const WATER_MIN_WIDTH := 0.25
 const WATER_MAX_WIDTH := 8.0
-const WATER_RENDER_CELL_LIMIT := 24000
+# 24000 covered river + ponds; the v7 premade plunge pool adds ~3150 cells.
+const WATER_RENDER_CELL_LIMIT := 28000
 const WATERFALL_SUPPRESSION_LIMIT := 64
 const EDITABLE_WORLD_SIZE := preload("res://scripts/m2_world_bounds.gd").SIZE
 const Grid = preload("res://scripts/visual_grid.gd")

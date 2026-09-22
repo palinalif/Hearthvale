@@ -48,16 +48,24 @@ func run() -> void:
 	check(scene._starter_seeded, "starter hamlet seeded for the new world")
 	_check_flat_hamlet()
 	_check_ponds()
-	check(preload("res://scripts/waterfall_geometry.gd").derive(scene.landscape_state.water, scene._terrain_top_sampler()).size() == 1, "native starter cliff supports one waterfall")
+	var falls: Array = preload("res://scripts/waterfall_geometry.gd").derive(scene.landscape_state.water, scene._terrain_top_sampler())
+	var cliff_fall := false
+	for fall: Dictionary in falls:
+		if int(fall.get("upper_id", -1)) == 120 and absf(float(fall.get("head", 0.0)) - 20.0) < 1.0:
+			cliff_fall = true
+	check(falls.size() == 2 and cliff_fall, "native starter cliff drops the reservoir into the plunge pool (plus the 2 m river step)")
 	_check_home_anchor_support(buildings)
 	check(_check_library(), "terrain library has the full 10-model ground set")
 	_check_material_round_trip()
 	var regions: Array = scene.landscape_state.water
 	var ponds_after := 0
+	var pool_after := 0
 	for region: Dictionary in regions:
 		for pond: Dictionary in PremadePonds.regions():
 			if PremadePonds.matches(region, pond): ponds_after += 1
-	check(regions.size() == 4 and ponds_after == 2, "starter water (river + reservoir + two ponds) survives the save/load round trip")
+		if PremadeRiver.matches_pool(region, PremadeRiver.plunge_pool_region()): pool_after += 1
+	check(regions.size() == 5 and ponds_after == 2 and pool_after == 1,
+		"starter water (river + reservoir + two ponds + plunge pool) survives the save/load round trip")
 	scene._shutting_down = true
 	scene._save_all()
 	scene.queue_free()
@@ -81,18 +89,20 @@ func _check_flat_hamlet() -> void:
 ## records exist, each basin floor sits at the 0.75 m lake bed, and the
 ## ground around the shore stays above the water level (7.5 < 8.0). The
 ## mountain reservoir at the river's head is a fourth region: it exists and
-## sits at its 10.0 m level, above the 5.0 m river (the 5 m waterfall head).
+## sits at its 23.0 m level, above the 5.0 m river (the 20 m waterfall head). The v7 plunge pool is a fifth region at 3.0 m.
 func _check_ponds() -> void:
 	var regions: Array = scene.landscape_state.water
 	var river := false
 	var reservoir := false
+	var pool := false
 	var ponds := 0
 	for region: Dictionary in regions:
 		if PremadeRiver.is_starter_river(region): river = true
 		if PremadeRiver.matches_reservoir(region, PremadeRiver.reservoir_region()): reservoir = true
+		if PremadeRiver.matches_pool(region, PremadeRiver.plunge_pool_region()): pool = true
 		for pond: Dictionary in PremadePonds.regions():
 			if PremadePonds.matches(region, pond): ponds += 1
-	check(regions.size() == 4 and river and reservoir and ponds == 2, "water holds the starter river, the mountain reservoir, and both ponds (got %d regions)" % regions.size())
+	check(regions.size() == 5 and river and reservoir and ponds == 2 and pool, "water holds the starter river, the mountain reservoir, both ponds, and the plunge pool (got %d regions)" % regions.size())
 	var tool: Object = scene.backend.terrain.get_voxel_tool()
 	for pond: Dictionary in PremadePonds.regions():
 		var center := Vector2.ZERO

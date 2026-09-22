@@ -16,7 +16,7 @@ const LEGACY_GENERATOR_ID := "m1_cottage_pad_v1"
 const LEGACY_V2_PATCH_SIZE := Vector3i(384, 256, 384)
 const LEGACY_V2_GENERATOR_ID := "m1_cottage_pad_v2"
 const CHANNEL_TYPE := 0
-const GENERATOR_ID := "m2_starter_valley_v5"
+const GENERATOR_ID := "m2_starter_valley_v7"
 const GroundMaterials = preload("res://scripts/terrain_ground_materials.gd")
 
 ## Meadow pads (new-world generation only; migrated saves keep their saved
@@ -32,6 +32,13 @@ const MOUNTAIN_RADIUS := 80.0
 const SOURCE_CENTER := Vector2(82.0, 143.5)
 const SOURCE_LEVEL := 23.0
 const SOURCE_LIP_Z := 140.0
+## v6: the spill's razor-thin 0.5 m step becomes a natural rock cliff (lip
+## overhang -> steep mid-face with two ledges -> gentle talus foot) and the
+## river bed below the spill deepens into a plunge pool that the river drains.
+const CLIFF_FOOT_Z := 135.5
+const POOL_CENTER := Vector2(82.0, 136.0)
+const POOL_RADIUS := Vector2(5.0, 3.25)
+const POOL_FLOOR := 2.25
 
 static func river_center_x(world_z: float) -> float:
 	# Doubled v4 centre line: 2 * f(z/2) == 2*f(z) at the doubled wavelength.
@@ -70,7 +77,54 @@ static func terrain_height(world_x: float, world_z: float) -> float:
 		height = SOURCE_LEVEL - 0.75
 	if world_z < SOURCE_LIP_Z and absf(world_x - river_center_x(world_z)) <= river_half_width(world_z):
 		height = 4.375 + snappedf(sin(world_z * 0.145) * 0.125, VOXEL_SCALE)
+	# v6: rock face below the reservoir lip and a plunge pool in the river
+	# bed, so the cascade reads reservoir -> cliff -> sheet -> pool. Both are
+	# deterministic (no RNG); the pool carves through the talus foot into the
+	# river bed. All heights land on the 0.125 m grid.
+	var cliff := _cliff_face_weight(world_x, world_z)
+	if cliff > 0.0:
+		height = lerpf(height, _cliff_face_height(world_z), cliff)
+	var pool := _plunge_pool_weight(world_x, world_z)
+	if pool > 0.0:
+		height = lerpf(height, POOL_FLOOR, pool)
 	return height
+
+## How strongly the cliff profile replaces the base terrain. v7: the lip
+## spans the WHOLE river bed, not a 7 m column. The meander keeps the channel
+## within |x - SOURCE_CENTER.x| <= river_half_width (4.3 +/- 0.6, max ~5 m),
+## so the face stays full out to 5.5 m and blends over a further 1.75 m to
+## the reservoir shoulders: a 14.5 m cliff that the ~9 m cascade can hang
+## from edge to edge, with rock (not dry ground) at the river's widest bend.
+static func _cliff_face_weight(world_x: float, world_z: float) -> float:
+	if world_z >= SOURCE_LIP_Z or world_z < CLIFF_FOOT_Z:
+		return 0.0
+	return 1.0 - smoothstep(5.5, 7.25, absf(world_x - SOURCE_CENTER.x))
+
+## The cliff profile, z from the lip (140) down to the talus foot (135.5):
+## a 0.5 m overhang at the lip, a near-vertical mid-face dropping to a ledge,
+## a second steep drop to a lower ledge, then a gentle talus slope into the
+## river/pool. ~17.75 m of head over ~4 m of run.
+static func _cliff_face_height(world_z: float) -> float:
+	if world_z >= 139.5:
+		return 22.25                                        # lip overhang
+	if world_z >= 139.0:
+		return lerpf(22.25, 12.75, smoothstep(139.5, 139.0, world_z))
+	if world_z >= 138.75:
+		return 12.75                                        # ledge 1
+	if world_z >= 138.2:
+		return lerpf(12.75, 5.0, smoothstep(138.75, 138.2, world_z))
+	if world_z >= 137.9:
+		return 5.0                                          # ledge 2
+	if world_z >= 136.5:
+		return lerpf(5.0, 4.75, smoothstep(137.9, 136.5, world_z))
+	return lerpf(4.75, 4.5, smoothstep(136.5, CLIFF_FOOT_Z, world_z))
+
+## Elliptical basin under the spill: full depth inside 70% of the rim,
+## smoothly blended out to the river bed.
+static func _plunge_pool_weight(world_x: float, world_z: float) -> float:
+	var d := Vector2(world_x, world_z) - POOL_CENTER
+	var r := Vector2(d.x / POOL_RADIUS.x, d.y / POOL_RADIUS.y).length()
+	return 1.0 - smoothstep(0.7, 1.0, r)
 
 static func _meadow_weight(rect: Rect2, world_x: float, world_z: float, blend: float) -> float:
 	var point := Vector2(world_x, world_z)
@@ -127,6 +181,12 @@ static func surface_material(world_x: float, world_z: float, height: float) -> i
 		return GroundMaterials.SAND if height <= 4.5 else GroundMaterials.GRAVEL
 	if distance <= half + 5.0:
 		return GroundMaterials.GRAVEL
+	# v6: rock face on the waterfall cliff; the plunge pool keeps the pool
+	# sand even where the basin spills onto the gravel bank.
+	if _cliff_face_weight(world_x, world_z) > 0.5 and height > 5.5:
+		return GroundMaterials.ROCK_FACE
+	if _plunge_pool_weight(world_x, world_z) > 0.5 and height <= POOL_FLOOR + 1.0:
+		return GroundMaterials.SAND
 	# Hamlet highland stays the exact GrassTone grass, with a dirt lane from
 	# the well to the bridge landing (v5: 2x bounds).
 	if world_x >= 26.0 and world_x <= 62.0 and world_z >= 22.0 and world_z <= 50.0:

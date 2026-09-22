@@ -167,6 +167,7 @@ func _on_backend_ready(ready: bool) -> void:
 		_ensure_premade_river()
 		_ensure_premade_ponds()
 		_ensure_premade_reservoir()
+		_ensure_premade_pool()
 
 func _seed_starter_hamlet() -> bool:
 	if _starter_seeded or not backend.loaded_building_document.is_empty(): return false
@@ -224,6 +225,20 @@ func _ensure_premade_pond(pond: Dictionary) -> bool:
 	if PremadePonds.already_carved(_terrain_top_sampler(), pond): return true
 	if landscape_state.add_water("lake", pond["level"], pond["points"]) < 1: return false
 	return _carve_pond(pond)
+
+## The plunge-pool water (v7): the v7 generator already carved the basin
+## floor (POOL_FLOOR), so no excavation is needed -- the water (3.0, two
+## metres below the river level) is simply floated into the basin. The
+## cascade plunges into the pool and the river drains it.
+func _ensure_premade_pool() -> void:
+	var pool: Dictionary = PremadeRiver.plunge_pool_region()
+	for existing: Dictionary in landscape_state.water:
+		if PremadeRiver.matches_pool(existing, pool):
+			return
+	if landscape_state.add_water("lake", pool["level"], pool["points"]) < 1:
+		push_error("Premade plunge pool could not be added; leaving the world as-is")
+		return
+	_sync_water_visual()
 
 func _ensure_premade_reservoir() -> void:
 	# New-world water sits on the generated northern shelf. Its spill lip

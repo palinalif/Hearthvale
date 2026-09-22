@@ -24,6 +24,12 @@ const RESERVOIR_CENTER := Generator.SOURCE_CENTER
 const RESERVOIR_RADIUS := 3.75
 const RESERVOIR_LEVEL := Generator.SOURCE_LEVEL
 
+## The plunge-pool basin at the cliff foot (v7): the floor is carved to
+## POOL_FLOOR (2.25) and this region floats its water 0.75 m above the floor
+## (3.0), two metres below the river level, so the cascade plunges INTO the
+## pool and the river drains it. The ellipse matches the generated basin.
+const POOL_LEVEL := 3.0
+
 static func region() -> Dictionary:
 	var points: Array = []
 	var z := 0.0
@@ -50,6 +56,15 @@ static func reservoir_region() -> Dictionary:
 		point[1] = maxf(float(point[1]), Generator.SOURCE_LIP_Z)
 	return {"type": "lake", "level": RESERVOIR_LEVEL, "points": points}
 
+## The plunge-pool region (lake) at the base of the reservoir spill (v7).
+static func plunge_pool_region() -> Dictionary:
+	var points: Array = []
+	for i in 16:
+		var theta: float = i / 16.0 * TAU
+		var point := (Generator.POOL_CENTER + Vector2(cos(theta), sin(theta)) * Generator.POOL_RADIUS).snapped(Vector2(Grid.UNIT, Grid.UNIT))
+		points.append([point.x, point.y])
+	return {"type": "lake", "level": POOL_LEVEL, "points": points}
+
 
 ## A saved lake region is the mountain reservoir when its level and
 ## footprint match the derived polygon (idempotency check).
@@ -58,6 +73,19 @@ static func matches_reservoir(existing: Dictionary, reservoir: Dictionary) -> bo
 	if not is_equal_approx(float(existing.get("level", -1.0)), RESERVOIR_LEVEL): return false
 	var existing_points: Array = existing.get("points", [])
 	var points: Array = reservoir["points"]
+	if existing_points.size() != points.size(): return false
+	for i in points.size():
+		if not is_equal_approx(float(existing_points[i][0]), float(points[i][0])): return false
+		if not is_equal_approx(float(existing_points[i][1]), float(points[i][1])): return false
+	return true
+
+## A saved lake region is the plunge pool when its level and footprint match
+## the derived ellipse (idempotency check).
+static func matches_pool(existing: Dictionary, pool: Dictionary) -> bool:
+	if str(existing.get("type", "")) != "lake": return false
+	if not is_equal_approx(float(existing.get("level", -1.0)), POOL_LEVEL): return false
+	var existing_points: Array = existing.get("points", [])
+	var points: Array = pool["points"]
 	if existing_points.size() != points.size(): return false
 	for i in points.size():
 		if not is_equal_approx(float(existing_points[i][0]), float(points[i][0])): return false

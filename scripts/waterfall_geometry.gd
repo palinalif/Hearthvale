@@ -19,6 +19,17 @@ const DROP_REACH := 2.0     # how far beyond the crown to sample the cliff base
 const DROP_TOL := 0.25      # base must drop to within this of the lower level
 const LANDING_REACH := 2.0  # crown must be this close to the lower body
 const CASCADE_WIDTH := 1.5  # default cascade width (metres)
+# The cascade sheet spans the submerged run of each body: terrain is scanned
+# perpendicular to the flow from the crown (lip) and the impact point
+# (plunge) until it rises above the water surface. On a flat plateau the scan
+# runs out at the cap and the region's own width is used instead (so a 200 m
+# lake does not produce a 48 m sheet). The sheet is a trapezoid, wider at the
+# plunge, so a narrow lip flares out into the full river bed at the pool.
+const MAX_SPAN_SCAN := 24.0
+# Two falls sharing the same source and nearly the same lip (e.g. a river and
+# the plunge pool beneath it) would render the same sheet twice; keep only
+# the best-scored one per lip.
+const CROWN_DEDUP := 2.0
 
 ## How far beyond a crown the derivation samples (cliff base + landing reach). The
 ## caller grows a dirty rect by this before a partial re-derive so every sample a
@@ -46,10 +57,102 @@ static func derive(regions: Array, sample: Callable, dirty_rect: Rect2 = FULL_RE
 			if head < MIN_HEAD:
 				continue
 			var fall := _best_crown(upper, lower, up_level, lo_level, sample, dirty_rect)
-			if not fall.is_empty():
-				falls.append(fall)
+			if fall.is_empty():
+				continue
+			var crown := Vector2(float(fall["crown"][0]), float(fall["crown"][1]))
+			var flow := Vector2(float(fall["flow"][0]), float(fall["flow"][1]))
+			var perp := flow.rotated(PI / 2.0)
+			var impact := crown + flow * cascade_run(float(fall["head"]))
+			fall["crown_width"] = _submerged_span(sample, crown, perp, up_level, LIP_TOL, upper)
+			fall["impact_width"] = _submerged_span(sample, impact, perp, lo_level, DROP_TOL, lower)
+			falls.append(fall)
+	falls = _dedupe_same_lip(falls)
 	falls.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["upper_id"]) < int(b["upper_id"]))
 	return falls
+
+## Horizontal run of the sheet from the lip to the plunge, derived from the
+## head so a taller fall lands a little farther out (matching the cliff's
+## slight overhang). Shared by the mesh, splash and spray so they agree.
+static func cascade_run(head: float) -> float:
+	return clampf(head * 0.25, 0.5, 8.0)
+
+## Total submerged span around `p` along `dir` (both directions). The scan
+## stops where the terrain rises above `level + tol`; when both sides run out
+## at the cap (flat plateau) the region-based fallback is used instead.
+static func _submerged_span(sample: Callable, p: Vector2, dir: Vector2, level: float,
+		tol: float, region: Dictionary) -> float:
+	var a: float = _scan_span(sample, p, dir, level + tol)
+	var b: float = _scan_span(sample, p, -dir, level + tol)
+	if Geometry.is_lake(region):
+		# The water body is polygon-clipped: a scan that runs out at the cap
+		# is terrain, not water, so it falls back to the polygon chord.
+		var pts := Geometry.points(region)
+		if a >= MAX_SPAN_SCAN:
+			a = _chord_to(pts, p, dir)
+		if b >= MAX_SPAN_SCAN:
+			b = _chord_to(pts, p, -dir)
+	else:
+		# A stream's polygon is a centerline; the scan is the channel, but a
+		# dry bed inside the corridor must still count as the corridor width.
+		var corridor := float(region.get("width", CASCADE_WIDTH))
+		if a + b < corridor:
+			a += (corridor - a - b)
+	return maxf(a + b, CASCADE_WIDTH)
+
+static func _scan_span(sample: Callable, p: Vector2, dir: Vector2, above: float) -> float:
+	var d := 0.0
+	for _i in 192: # 24 m at 0.125 m
+		d += 0.125
+		if d >= MAX_SPAN_SCAN:
+			return MAX_SPAN_SCAN
+		var h: float = sample.call(p + dir * d)
+		if not is_nan(h) and h > above:
+			return d
+	return MAX_SPAN_SCAN
+
+## Region-based width fallback: a stream is a fixed corridor; a lake is the
+## polygon chord through `p` along `dir`.
+static func _chord_to(pts: PackedVector2Array, p: Vector2, dir: Vector2) -> float:
+	if pts.size() < 3:
+		return 0.0
+	var d := 0.0
+	for _i in 192:
+		d += 0.125
+		if d >= MAX_SPAN_SCAN:
+			return MAX_SPAN_SCAN
+		if not Geometry.point_in_polygon(pts, p + dir * d):
+			return d
+	return MAX_SPAN_SCAN
+
+## Keep one fall per (source, lip): the best-scored wins, mirroring the
+## _best_crown score (head minus landing reach).
+static func _dedupe_same_lip(falls: Array) -> Array:
+	var kept: Array = []
+	for fall: Dictionary in falls:
+		var dropped := false
+		var best_index := -1
+		for i in kept.size():
+			var other: Dictionary = kept[i]
+			if int(other["upper_id"]) != int(fall["upper_id"]):
+				continue
+			var oc := Vector2(float(other["crown"][0]), float(other["crown"][1]))
+			var fc := Vector2(float(fall["crown"][0]), float(fall["crown"][1]))
+			if oc.distance_to(fc) > CROWN_DEDUP:
+				continue
+			if _fall_score(fall) > _fall_score(other):
+				best_index = i
+				dropped = true
+			break
+		if dropped and best_index >= 0:
+			kept[best_index] = fall
+		elif not dropped:
+			kept.append(fall)
+	return kept
+
+## The _best_crown score, recomputed without the region list (landing reach is
+## within ~2 m of the shared lip for both candidates, so the head decides).
+static func _fall_score(fall: Dictionary) -> float:
+	return float(fall["head"])
 
 static func _bodies(regions: Array) -> Array:
 	var result: Array = []

@@ -17,9 +17,9 @@ func run() -> void:
 	store.expected_generator_id = Generator.Bounds.PREVIOUS_GENERATOR_ID
 	store.require_building_document = true
 	var source: Object = ClassDB.instantiate("VoxelBuffer")
-	source.create(640,256,640)
-	source.fill_area(1,Vector3i.ZERO,Vector3i(640,63,640),0)
-	source.fill_area(2,Vector3i(0,63,0),Vector3i(640,64,640),0)
+	source.create(1280,256,1280)
+	source.fill_area(1,Vector3i.ZERO,Vector3i(1280,63,1280),0)
+	source.fill_area(2,Vector3i(0,63,0),Vector3i(1280,64,1280),0)
 	source.fill_area(0,Vector3i(50,30,50),Vector3i(60,50,60),0)
 	source.set_voxel(1,120,150,120,0)
 	var world := World.new()

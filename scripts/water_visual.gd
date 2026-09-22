@@ -628,7 +628,6 @@ func _rebuild_falls() -> void:
 
 func _build_cascade(fall: Dictionary) -> MeshInstance3D:
 	var crown := _fall_crown(fall)
-	var width := maxf(0.25, float(fall["width"]))
 	var top := float(fall["top_level"])
 	var bottom := float(fall["bottom_level"])
 	if bottom >= top:
@@ -637,24 +636,39 @@ func _build_cascade(fall: Dictionary) -> MeshInstance3D:
 	if flow.length() < 0.0001:
 		flow = Vector2(1.0, 0.0)
 	flow = flow.normalized()
+	# The curtain is NOT a thin 1.5 m pole: it spans the submerged channel.
+	# The top edge is the wide lip at the crown, the bottom edge flares to
+	# the full plunge-pool run, and the sheet tilts downstream over
+	# cascade_run so its base lands where the cliff foot meets the pool
+	# (matching the ~4 m run of the generated cliff face).
+	var crown_width := maxf(Waterfall.CASCADE_WIDTH, float(fall.get("crown_width", Waterfall.CASCADE_WIDTH)))
+	var impact_width := maxf(crown_width, float(fall.get("impact_width", crown_width)))
+	var run := Waterfall.cascade_run(top - bottom)
+	var impact := crown + flow * run
 	# Lift the curtain off the voxel face to avoid coplanar flicker.
 	crown += flow * 0.04
 	var perp := Vector2(-flow.y, flow.x)
-	var half := width * 0.5
 	var mesh := ArrayMesh.new()
-	# Surface 0: the falling curtain, a vertical sheet from lip down to the pool.
-	var a := crown + perp * half
-	var b := crown - perp * half
-	var cv := PackedVector3Array([Vector3(a.x, top, a.y), Vector3(b.x, top, b.y), Vector3(b.x, bottom, b.y), Vector3(a.x, bottom, a.y)])
-	var cn := PackedVector3Array([Vector3(flow.x, 0.0, flow.y), Vector3(flow.x, 0.0, flow.y), Vector3(flow.x, 0.0, flow.y), Vector3(flow.x, 0.0, flow.y)])
+	# Surface 0: the falling curtain, a tilted trapezoid sheet from the lip
+	# down to the pool.
+	var a := crown + perp * (crown_width * 0.5)
+	var b := crown - perp * (crown_width * 0.5)
+	var c := impact + perp * (impact_width * 0.5)
+	var d := impact - perp * (impact_width * 0.5)
+	var cv := PackedVector3Array([Vector3(a.x, top, a.y), Vector3(b.x, top, b.y), Vector3(d.x, bottom, d.y), Vector3(c.x, bottom, c.y)])
+	var down3 := Vector3(impact.x - crown.x, bottom - top, impact.y - crown.y)
+	var n3 := Vector3(perp.x, 0.0, perp.y).cross(down3).normalized()
+	if n3.dot(Vector3(flow.x, 0.0, flow.y)) < 0.0:
+		n3 = -n3
+	var cn := PackedVector3Array([n3, n3, n3, n3])
 	var cc := PackedColorArray([Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE])
 	var ci := PackedInt32Array([0, 1, 2, 0, 2, 3])
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _surface_arrays(cv, cn, cc, ci))
 	mesh.surface_set_material(0, _fall_material(top - bottom, top))
-	# Surface 1: a flat foam splash just above the pool at the base.
-	var s := width * 0.7
+	# Surface 1: a flat foam splash just above the pool where the curtain lands.
+	var s := impact_width * 0.6
 	var eps := 0.02
-	var sv := PackedVector3Array([Vector3(crown.x - s, bottom + eps, crown.y - s), Vector3(crown.x + s, bottom + eps, crown.y - s), Vector3(crown.x + s, bottom + eps, crown.y + s), Vector3(crown.x - s, bottom + eps, crown.y + s)])
+	var sv := PackedVector3Array([Vector3(impact.x - s, bottom + eps, impact.y - s), Vector3(impact.x + s, bottom + eps, impact.y - s), Vector3(impact.x + s, bottom + eps, impact.y + s), Vector3(impact.x - s, bottom + eps, impact.y + s)])
 	var sn := PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP])
 	var sc := PackedColorArray([SPLASH_COLOR, SPLASH_COLOR, SPLASH_COLOR, SPLASH_COLOR])
 	var si := PackedInt32Array([0, 1, 2, 0, 2, 3])
@@ -670,8 +684,8 @@ func _build_cascade(fall: Dictionary) -> MeshInstance3D:
 	node.mesh = mesh
 	# The particle aspect of the fall: a short-lived base spray (droplets thrown
 	# up and out, pulled back by gravity) plus a prewarmed, slowly rising soft mist.
-	node.add_child(_make_spray(crown, bottom, width))
-	node.add_child(_make_mist(crown, bottom, width))
+	node.add_child(_make_spray(impact, bottom, impact_width))
+	node.add_child(_make_mist(impact, bottom, impact_width))
 	return node
 
 func _surface_arrays(vertices: PackedVector3Array, normals: PackedVector3Array, colors: PackedColorArray, indices: PackedInt32Array) -> Array:
