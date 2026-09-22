@@ -8,11 +8,13 @@
 ##   * DistantPlain — a flat unshaded meadow annulus (72 → 520 m) just below
 ##     the terrain-edge level, so the mountains sit on ground and fade into
 ##     haze instead of floating in sky.
-##   * InnerRidge — the original jagged ridge, pushed out to 240 m (was 80 m).
-##     Peak band 112–140 m (floor 112 must stay above the camera's max reach,
-##     see tests/valley_ring_occlusion_test.gd). Carries the subtle
-##     rock detail: low-frequency radial wobble and vertex-colour mottling
-##     with darker scree patches.
+##   * InnerRidge — the rugged near range at 240 m (was 80 m). Jagged
+##     value-noise crest 70–160 m (passes stay above the camera's max reach,
+##     peaks stay below the mid ridge's 190 m floor for depth; see
+##     tests/valley_ring_occlusion_test.gd). Carries the subtle rock detail:
+##     low-frequency radial wobble and vertex-colour mottling with darker
+##     scree patches. The large crest amplitude is what stops it reading as
+##     a uniform ring.
 ##   * MidRidge — 340 m, peaks 190–240 m, deep-blue atmospheric layers.
 ##   * FarRidge — 450 m, peaks 270–340 m, lighter deep-blue atmospheric
 ##     layers (farther ridge stays lighter for atmospheric depth).
@@ -49,9 +51,16 @@ const RING_RADIUS := INNER_RADIUS
 const MID_RADIUS := 340.0
 const FAR_RADIUS := 450.0
 
-## Inner ridge profile (the 112 m peak floor is a hard contract against
-## the camera's maximum reach; unchanged by the 2x expansion).
-const PEAK_HEIGHT := 112.0
+## Inner ridge profile: a rugged mountain range, not a uniform ring. The
+## jagged crest runs between a lowest pass (PEAK_PASS, kept above the
+## camera's max reach of ~63.5 m) and its highest peak (PEAK_MAX, kept
+## below the mid ridge's 190 m floor so the near range sits lower than the
+## distant one - natural atmospheric depth). The large amplitude is what
+## stops the wall reading as a cylinder / ring.
+const PEAK_PASS := 70.0
+const PEAK_MAX := 160.0
+const _INNER_RIDGE_SEED := 7.7
+const _INNER_RIDGE_FREQS: Array = [3, 6, 11]
 const PEAK_BAND_RADIUS := 28.0
 const RIVER_WATER_LEVEL := 8.75
 const OUTER_MIN_HEIGHT := 40.0
@@ -117,7 +126,8 @@ func stats() -> Dictionary:
 			if not arrays.is_empty() and arrays[0] is PackedVector3Array:
 				vertices += arrays[0].size()
 	return {
-		"peak_height": PEAK_HEIGHT,
+		"peak_min": PEAK_PASS,
+		"peak_max": PEAK_MAX,
 		"segments": int(_SEGMENTS),
 		"vertices": vertices,
 		"water_level": RIVER_WATER_LEVEL,
@@ -142,42 +152,42 @@ func affected_by(bounds: AABB) -> bool:
 		or c.z + r.z > WORLD_SIZE - margin
 	)
 
-## Maximum height of the inner ridge at this bearing.
-## Always >= PEAK_HEIGHT (112 m), which clears the camera's maximum reach
-## (2x world: target_y + sin(max_pitch) * max_dist ≈ 98.2 m, see
-## tests/valley_ring_occlusion_test.gd). The ridge profile is a sum of
-## slow/medium/fast sinusoids, folded positive and sharpened, so the
-## silhouette reads as a jagged mountain ridge (several pronounced peaks,
-## deep passes) instead of a uniform cylinder.
+## Height of the inner ridge's jagged crest at this bearing. Value-noise
+## with several pronounced peaks and deep passes (70-160 m): the passes
+## stay above the camera's max reach (~63.5 m, see
+## tests/valley_ring_occlusion_test.gd) and the peaks stay below the mid
+## ridge (190 m) for natural depth. The large amplitude variation is what
+## stops the wall reading as a uniform cylinder / ring.
 func peak_height(xz: Vector2) -> float:
-	var ang := _bearing(xz)
-	var raw := sin(ang * 2.0 + 0.7) * 0.45 + sin(ang * 5.0 + 2.1) * 0.35 + sin(ang * 9.0 + 4.4) * 0.2
-	var sharpened := pow(maxf(raw, 0.0), 1.6)
-	return PEAK_HEIGHT + 28.0 * sharpened
+	var u := fposmod(_bearing(xz), TAU) / TAU
+	var n := _ridge_noise(u, _INNER_RIDGE_SEED, _INNER_RIDGE_FREQS)
+	return PEAK_PASS + (PEAK_MAX - PEAK_PASS) * n
 
-## Normalised ridge height at a bearing (0 at the floor, 1 at the tallest
-## peak). Used to drive the vertex-colour gradient and per-peak tint.
+## Normalised ridge height at a bearing (0 at the lowest pass, 1 at the
+## tallest peak). Drives the vertex-colour gradient and per-peak tint.
 func ridge_elevation(xz: Vector2) -> float:
-	var ang := _bearing(xz)
-	var raw := sin(ang * 2.0 + 0.7) * 0.45 + sin(ang * 5.0 + 2.1) * 0.35 + sin(ang * 9.0 + 4.4) * 0.2
-	return pow(maxf(raw, 0.0), 1.6)
+	var u := fposmod(_bearing(xz), TAU) / TAU
+	return _ridge_noise(u, _INNER_RIDGE_SEED, _INNER_RIDGE_FREQS)
 
 ## Height of the inner ridge wall at a radial offset beyond the ring.
 ## [radius] is the distance beyond the ring: 0 = at the ring,
-## PEAK_BAND_RADIUS = peak band, _OUTER_SAMPLE_RADIUS = outer wall.
-## Returns water level in river corridors.
+## PEAK_BAND_RADIUS = crest band, _OUTER_SAMPLE_RADIUS = outer wall. The
+## wall rises to the jagged crest (peak_height) at the band and descends
+## from it, so the whole wall follows the irregular ridgeline. Returns
+## water level in river corridors.
 func ring_height(radius: float, xz: Vector2) -> float:
 	if _in_river_corridor(xz):
 		return RIVER_WATER_LEVEL
+	var crest := peak_height(xz)
 	if radius <= PEAK_BAND_RADIUS:
 		var t := radius / PEAK_BAND_RADIUS
-		return lerpf(EDGE_TERRAIN_LEVEL, PEAK_HEIGHT, smoothstep(0.0, 1.0, t))
+		return lerpf(EDGE_TERRAIN_LEVEL, crest, smoothstep(0.0, 1.0, t))
 	var t := clampf(
 		(radius - PEAK_BAND_RADIUS) / (_OUTER_SAMPLE_RADIUS - PEAK_BAND_RADIUS),
 		0.0,
 		1.0
 	)
-	return lerpf(PEAK_HEIGHT, OUTER_MIN_HEIGHT, t)
+	return lerpf(crest, OUTER_MIN_HEIGHT, t)
 
 func _in_river_corridor(xz: Vector2) -> bool:
 	var river_x: float = _Gen.river_center_x(xz.y)
@@ -272,7 +282,7 @@ func _build_inner_ridge() -> Mesh:
 			for pair in quad:
 				var p: Vector3 = rings[pair[0]][pair[1]]
 				var elev := ridge_elevation(Vector2(p.x, p.z))
-				var t := clampf((p.y - EDGE_TERRAIN_LEVEL) / (PEAK_HEIGHT + 28.0 - EDGE_TERRAIN_LEVEL), 0.0, 1.0)
+				var t := clampf((p.y - EDGE_TERRAIN_LEVEL) / (PEAK_MAX - EDGE_TERRAIN_LEVEL), 0.0, 1.0)
 				var c: Color
 				if t < 0.5:
 					c = _BASE_COLOUR.lerp(_MID_COLOUR, t * 2.0)

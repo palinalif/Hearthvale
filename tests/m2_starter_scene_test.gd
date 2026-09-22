@@ -35,7 +35,7 @@ func run() -> void:
 			quit(1)
 			return
 	check(scene._valley_surround != null, "valley surround is mounted")
-	check(scene._valley_surround.stats()["peak_height"] == 56.0, "valley surround peak height is the 56 m ring")
+	check(is_equal_approx(scene._valley_surround.stats()["peak_max"], 160.0), "valley surround inner-ridge crest peaks at 160 m (rugged mountain silhouette)")
 	check(scene.river_water != null, "river water is mounted")
 	check(
 		is_equal_approx(scene.landscape_state.bridges.size(), 1)

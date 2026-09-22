@@ -3,10 +3,12 @@
 # The valley ring (ValleySurround) must keep the skybox hidden from every
 # reachable camera pose in the starter valley. Two contracts:
 #   1. Max camera reach: the starter scene caps orbit pitch at 1.15 rad and
-#      the building camera distance at 52 m, so the highest camera position
-#      is target_y + sin(1.15) * 52 ≈ 63.5 m above the 16 m target below.
-#      Ring peaks (112–140 m) must sit above that from the
-#      player's vantage region.
+#      orbit distance (conservatively 52 m, the live cap is lower), so the
+#      highest camera position is ≈ 63.5 m. The valley surround keeps the
+#      sky hidden with a rugged inner ridge (passes ~70 m, peaks ~160 m)
+#      plus mid/far ranges (190–340 m); the inner ridge's lowest pass (70 m)
+#      clears the 63.5 m reach at every bearing, and the mid/far ranges carry
+#      the depth far beyond it.
 #   2. River exits: the ring must stay open (water level 8.75 m) where the
 #      river leaves the map, so the world still reads as a valley with a
 #      river flowing out, not a sealed box.
