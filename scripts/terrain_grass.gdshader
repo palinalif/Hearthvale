@@ -39,8 +39,11 @@ float lattice(vec2 point, float scale, float salt) {
 	vec2 base = floor(p);
 	vec2 fraction = p - base;
 	vec2 blend = fraction * fraction * (3.0 - 2.0 * fraction);
-	float low = mix(hash21(base + vec2(salt, 0.0)), hash21(base + vec2(1.0, salt)), blend.x);
-	float high = mix(hash21(base + vec2(0.0, salt + 1.0)), hash21(base + vec2(1.0, salt + 1.0)), blend.x);
+	// Adjacent lattice cells must reuse the same hashed corner. Offsetting
+	// only some corners by salt made the field jump at every cell boundary.
+	vec2 salted = base + vec2(salt, 0.0);
+	float low = mix(hash21(salted), hash21(salted + vec2(1.0, 0.0)), blend.x);
+	float high = mix(hash21(salted + vec2(0.0, 1.0)), hash21(salted + vec2(1.0, 1.0)), blend.x);
 	return mix(low, high, blend.y);
 }
 
