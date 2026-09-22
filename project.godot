@@ -6,6 +6,8 @@ config/name="Hearthvale M0"
 run/main_scene="res://scenes/m1.tscn"
 config/icon="res://assets/icon.svg"
 config/features=PackedStringArray("4.7", "Mobile")
+version/code=72
+version/name="2.0.1-m2night-v72"
 
 [autoload]
 TerrainRuntimeProbe="*res://scripts/terrain_runtime_probe.gd"
