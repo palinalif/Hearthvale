@@ -11,3 +11,10 @@ addons/zylann.voxel/
 .codex/config.toml
 override.cfg
 __pycache__/
+.pi/
+.playtest/
+.probe/
+build/
+export_presets.cfg.bak*
+tests/tmp_*.gd
+tests/tmp_*.gd.uid
