@@ -57,8 +57,12 @@ const FAR_RADIUS := 450.0
 ## below the mid ridge's 190 m floor so the near range sits lower than the
 ## distant one - natural atmospheric depth). The large amplitude is what
 ## stops the wall reading as a cylinder / ring.
-const PEAK_PASS := 70.0
-const PEAK_MAX := 160.0
+## Crest of the near valley wall. Gentle first pass (35-70 m): a visible,
+## present ridgeline that frames the valley without reading as a giant
+## sky-blocking dome. Lower than the original 70-160 m, which the user found
+## huge.
+const PEAK_PASS := 35.0
+const PEAK_MAX := 70.0
 const _INNER_RIDGE_SEED := 7.7
 const _INNER_RIDGE_FREQS: Array = [3, 6, 11]
 const PEAK_BAND_RADIUS := 28.0
@@ -104,14 +108,14 @@ func _build_all() -> void:
 	_plain.mesh = _build_plain()
 	_mid_ridge.mesh = _build_ridge(
 		MID_RADIUS, _MID_SEGMENTS, 36.0, 44.0,
-		190.0, 50.0, 60.0,
+		55.0, 45.0, 30.0,
 		Color("#4c5d70"), Color("#62748a"), Color("#778da0"),
 		2.3, [3, 7, 13],
 		0.0, 0.0
 	)
 	_far_ridge.mesh = _build_ridge(
 		FAR_RADIUS, _FAR_SEGMENTS, 48.0, 56.0,
-		270.0, 70.0, 70.0,
+		85.0, 55.0, 40.0,
 		Color("#606e7f"), Color("#768598"), Color("#90a2b2"),
 		5.9, [5, 9, 17],
 		0.0, 0.0
