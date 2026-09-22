@@ -1,7 +1,7 @@
 extends SceneTree
 ## Actual main-scene cold start, native Mobile captures and a real border edit.
 ## Uses a unique checkpoint root; player saves and the live scene are untouched.
-const OUTPUT := "res://reports/screenshots/circular-mountain-valley"
+const OUTPUT := "res://reports/screenshots/detailed-mountains"
 var failures: Array[String] = []
 var captures: Array[String] = []
 
@@ -84,6 +84,12 @@ func run() -> void:
 	scene.camera.position = Vector3(98, 36, 111)
 	scene.camera.look_at(Vector3(82, 16, 141))
 	await capture("waterfall")
+	scene.camera.position = Vector3(95, 28, 65)
+	scene.camera.look_at(Vector3(80, 64, 175))
+	await capture("mountain-detail")
+	scene.camera.position = Vector3(132, 34, 111)
+	scene.camera.look_at(Vector3(147, 27, 124))
+	await capture("voxel-transition")
 	frame_scene(scene, Vector3(155.0, 25.0, 80.0), -0.85, 0.74, 22.0)
 	await capture("edge-before")
 	var point := Vector3(158.0, 25.0, 80.0)

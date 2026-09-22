@@ -1,3 +1,13 @@
+# 2026-09-22 - v78 detailed terrain-colored mountains
+
+Follow-up to v77: branching mountain ribs/gullies, ledges and crest crags. Every mountain layer uses the native grass palette, darkening with elevation. A cached 0.125-grid voxel shoulder continues the native foothills into the smooth mountain face. Derived scenery only; existing worlds gain these visuals without a reset. Native terrain, save/edit authority and water sources are unchanged.
+
+Geometry/palette/outlet checks: 715,702 passed; river checks: 50 passed. Eleven production Mobile captures passed, including full-world mesh readiness, voxel-transition view and border edit. Smooth ranges total 30,272 triangles; cached voxel shoulder 128,638. Signed v78 ARM64 APK verified against the pinned native library; SHA-256 `a328830c23c7732e5a78307c94afbd7a332b126dd03902cf2c60dd4dc74accfd`. No Thor performance/controller test. User visual acceptance outstanding.
+
+Details: [detailed mountains report](reports/detailed-mountains.md). Images: `reports/screenshots/detailed-mountains/`.
+
+---
+
 # 2026-09-22 — v77 circular mountain valley
 
 Implemented from main `81297b1` on `fix/circular-mountain-valley`: rounded native basin, surrounding mountain range and an 18 m reservoir waterfall feeding the river. Fresh starter homes/paths now match the doubled map. Existing checkpoint terrain/water remain authoritative; the missing parent startup callback was restored.

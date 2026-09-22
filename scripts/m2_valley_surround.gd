@@ -6,6 +6,8 @@
 class_name ValleySurround
 extends MeshInstance3D
 
+const Apron := preload("res://scripts/mountain_voxel_apron.gd")
+const Ground := preload("res://scripts/terrain_ground_materials.gd")
 const _Gen := preload("res://scripts/m1_patch_generator.gd")
 
 const WORLD_SIZE := 160.0
@@ -30,15 +32,20 @@ const PLAIN_OUTER_RADIUS := 410.0
 # Below the river and native surface; never a green lid over the outlet.
 const PLAIN_LEVEL := -1.0
 
-const _SEGMENTS := 128
+const _SEGMENTS := 256
 const _MID_SEGMENTS := 192
 const _FAR_SEGMENTS := 160
 
+var _voxel_apron: MeshInstance3D
+var _apron_rings: Array = []
 var _plain: MeshInstance3D
 var _mid_ridge: MeshInstance3D
 var _far_ridge: MeshInstance3D
 
 func _ready() -> void:
+	_voxel_apron = MeshInstance3D.new()
+	_voxel_apron.name = "VoxelMountainShoulder"
+	add_child(_voxel_apron)
 	_plain = MeshInstance3D.new()
 	_plain.name = "DistantPlain"
 	_mid_ridge = MeshInstance3D.new()
@@ -56,20 +63,23 @@ func rebuild(_backend) -> void:
 
 func _build_all() -> void:
 	mesh = _build_inner_ridge()
+	# Derived from fixed scenery, not edited native buffers: build once.
+	if _voxel_apron.mesh == null:
+		_voxel_apron.mesh = Apron.build(_apron_rings, _mountain_material())
 	_plain.mesh = _build_plain()
 	_mid_ridge.mesh = _build_ridge(
 		MID_RADIUS, _MID_SEGMENTS, 36.0, 44.0,
 		82.0, 62.0, 30.0,
-		Color("#4c5d70"), Color("#62748a"), Color("#778da0"),
+		Color(0.70, 0.70, 0.70), Color(0.57, 0.57, 0.57), Color(0.64, 0.64, 0.64),
 		2.3, [3, 7, 13],
-		0.0, 0.0
+		12.0, 0.7
 	)
 	_far_ridge.mesh = _build_ridge(
 		FAR_RADIUS, _FAR_SEGMENTS, 48.0, 56.0,
 		114.0, 76.0, 40.0,
-		Color("#606e7f"), Color("#768598"), Color("#90a2b2"),
+		Color(0.61, 0.61, 0.61), Color(0.55, 0.55, 0.55), Color(0.63, 0.63, 0.63),
 		5.9, [5, 9, 17],
-		0.0, 0.0
+		18.0, 0.4
 	)
 
 ## Presentation ring stats (used by tests and capture reports).
@@ -111,7 +121,8 @@ func affected_by(bounds: AABB) -> bool:
 func peak_height(xz: Vector2) -> float:
 	var u := fposmod(_bearing(xz), TAU) / TAU
 	var n := _ridge_noise(u, _INNER_RIDGE_SEED, _INNER_RIDGE_FREQS)
-	return PEAK_PASS + (PEAK_MAX - PEAK_PASS) * n
+	var crags := (_crest_noise(u, 59, 12.8) - 0.5) * 10.0
+	return PEAK_PASS + (PEAK_MAX - PEAK_PASS) * n + crags
 
 ## Normalised ridge height at a bearing (0 at the lowest pass, 1 at the
 ## tallest peak). Drives the vertex-colour gradient and per-peak tint.
@@ -129,6 +140,7 @@ func ring_height(radius: float, xz: Vector2) -> float:
 	var crest := peak_height(xz)
 	var edge := _Gen.terrain_height(clampf(xz.x, 0.0, WORLD_SIZE - 0.125), clampf(xz.y, 0.0, WORLD_SIZE - 0.125)) - 0.25
 	var height := _layer_height(radius, PEAK_BAND_RADIUS, _OUTER_SAMPLE_RADIUS - PEAK_BAND_RADIUS, edge, crest, OUTER_MIN_HEIGHT)
+	height += _slope_relief(radius / PEAK_BAND_RADIUS, _bearing(xz) / TAU, _INNER_RIDGE_SEED, 18.0)
 	return lerpf(RIVER_WATER_LEVEL - 0.25, height, _outlet_weight(xz))
 
 func _outlet_weight(xz: Vector2) -> float:
@@ -163,7 +175,7 @@ func _crest_noise(u: float, freq: int, seed: float) -> float:
 	return lerpf(_hash(float(i % freq), seed), _hash(float((i + 1) % freq), seed), scaled - float(i))
 
 func _value_noise(u: float, freq: int, seed: float) -> float:
-	var scaled := fmod(u, 1.0) * float(freq)
+	var scaled := fposmod(u, 1.0) * float(freq)
 	var i := int(floorf(scaled))
 	var f := scaled - float(i)
 	var a := _hash(float(i % freq), seed)
@@ -179,43 +191,22 @@ func _build_inner_ridge() -> Mesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	# Lit standard material carrying the mountain gradient in vertex colour:
-	# dark mossy rock at the base, muted rock grey through the middle, hazy
-	# blue-grey at the peaks. Smooth per-vertex normals let the sun shade the
-	# ridges continuously (no flat-column stripes).
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.albedo_color = Color(1, 1, 1)
-	mat.rim = 0.15
-	mat.rim_tint = 0.3
-	st.set_material(mat)
-
-	const _BASE_COLOUR := Color("#405262")
-	const _MID_COLOUR := Color("#4e5f70")
-	const _PEAK_COLOUR := Color("#5f7489")
-	const _ROCK_COLOUR := Color(0.48, 0.50, 0.46)
-	const _SCREE_COLOUR := Color(0.22, 0.24, 0.23)
-	const _JITTER_SEED := 9.4
-
-	var radial_offsets := _ring_offsets(PEAK_BAND_RADIUS, _OUTER_SAMPLE_RADIUS)
+	st.set_material(_mountain_material())
+	var radial_offsets := _ring_offsets(PEAK_BAND_RADIUS, _OUTER_SAMPLE_RADIUS, 24)
 	var rings: Array = []
 	for ro in radial_offsets:
 		var ring: Array[Vector3] = []
 		for i in _SEGMENTS:
 			var ang := float(i) / float(_SEGMENTS) * TAU
-			var x := RING_CENTER.x + (RING_RADIUS + ro) * cos(ang)
-			var z := RING_CENTER.y + (RING_RADIUS + ro) * sin(ang)
-			var p := Vector2(x, z)
-			var h: float = ring_height(ro, p)
-			# Low-frequency radial wobble: ±1 m (2x) so the wall silhouette
-			# stops reading as a perfect circle from any vantage.
-			var wobble := 12.0 * (_value_noise(ang / TAU, 3, _JITTER_SEED) * 0.6
-				+ _value_noise(ang / TAU, 7, _JITTER_SEED) * 0.4) - 6.0
-			var displaced := Vector2(x + wobble * cos(ang), z + wobble * sin(ang))
-			h = ring_height(ro, displaced)
-			ring.append(Vector3(displaced.x, h, displaced.y))
+			var u := ang / TAU
+			# Shift whole spurs forward/back without crossing neighbouring rows.
+			var wobble := 12.0 * (_value_noise(u, 3, 9.4) * 0.6 + _value_noise(u, 7, 9.4) * 0.4) - 6.0
+			var spread := lerpf(0.72, 1.32, _value_noise(u, 11, 3.8))
+			var displaced := RING_CENTER + Vector2(cos(ang), sin(ang)) * (RING_RADIUS + wobble + ro * spread)
+			ring.append(Vector3(displaced.x, ring_height(ro, displaced), displaced.y))
 		rings.append(ring)
 
+	_apron_rings = rings.slice(0, 5)
 	var normals := _smooth_normals(rings, RING_CENTER)
 
 	for ri in range(rings.size() - 1):
@@ -227,21 +218,9 @@ func _build_inner_ridge() -> Mesh:
 			]
 			for pair in quad:
 				var p: Vector3 = rings[pair[0]][pair[1]]
-				var elev := ridge_elevation(Vector2(p.x, p.z))
-				var t := clampf((p.y - EDGE_TERRAIN_LEVEL) / (PEAK_MAX - EDGE_TERRAIN_LEVEL), 0.0, 1.0)
-				var c: Color
-				if t < 0.5:
-					c = _BASE_COLOUR.lerp(_MID_COLOUR, t * 2.0)
-				else:
-					c = _MID_COLOUR.lerp(_PEAK_COLOUR, (t - 0.5) * 2.0)
-				# Slight per-peak tint: taller peaks get a touch lighter.
-				c = c.lerp(c.lightened(0.08), elev * 0.5)
-				# Rock mottling: low-frequency grey-green rock tone, and a
-				# sparser darker scree pattern on the upper wall.
-				var mottle := _value_noise(_bearing(Vector2(p.x, p.z)) / TAU, 5, 6.1)
-				c = c.lerp(_ROCK_COLOUR, mottle * 0.30)
-				var scree := _value_noise(_bearing(Vector2(p.x, p.z)) / TAU, 9, 8.3)
-				c = c.lerp(_SCREE_COLOUR, clampf((scree - 0.55) / 0.45, 0.0, 1.0) * 0.35 * t)
+				var normal: Vector3 = normals[pair[0]][pair[1]]
+				var c := Apron.shade(p.y)
+				c = _rock_color(p, normal, c, _INNER_RIDGE_SEED, smoothstep(30.0, 65.0, p.y))
 				st.set_normal(normals[pair[0]][pair[1]])
 				st.set_color(c)
 				st.set_uv(Vector2(float(pair[1]), float(pair[0])))
@@ -250,34 +229,32 @@ func _build_inner_ridge() -> Mesh:
 	st.index()
 	return st.commit()
 
-## A generic smooth-normal ridge ring for the two distant layers: flat plain
-## base up a clean smooth slope to a jagged top ridgeline, then a broad
-## descent. [seed]/[freqs] differ per ring so the silhouettes never align.
+## Distant layers use coarser relief and quieter shading than the near spurs.
+## Different seeds keep their saddles and crests from lining up.
 func _build_ridge(
 	radius: float, segments: int, band: float, outer_extend: float,
 	peak_floor: float, peak_amp: float, outer_min: float,
 	base_color: Color, mid_color: Color, peak_color: Color,
 	seed: float, freqs: Array,
-	_radial_jitter: float, _mottle: float
+	radial_jitter: float, detail: float
 ) -> Mesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.albedo_color = Color(1, 1, 1)
-	st.set_material(mat)
-
-	var radial_offsets := _ring_offsets(band, outer_extend)
+	st.set_material(_mountain_material())
+	var radial_offsets := _ring_offsets(band, outer_extend, 10)
 	var rings: Array = []
 	for ro in radial_offsets:
 		var ring: Array[Vector3] = []
 		for i in segments:
 			var ang := float(i) / float(segments) * TAU
-			var x := RING_CENTER.x + (radius + ro) * cos(ang)
-			var z := RING_CENTER.y + (radius + ro) * sin(ang)
+			var spread := lerpf(0.8, 1.25, _value_noise(ang / TAU, 9, seed))
+			var displaced_radius := radius + ro * spread + radial_jitter * (_value_noise(ang / TAU, 7, seed) - 0.5)
+			var x := RING_CENTER.x + displaced_radius * cos(ang)
+			var z := RING_CENTER.y + displaced_radius * sin(ang)
 			var h := _layer_height(ro, band, outer_extend, PLAIN_LEVEL,
 				peak_floor + peak_amp * _ridge_noise(ang / TAU, seed, freqs), outer_min)
+			h += _slope_relief(ro / band, ang / TAU, seed, 15.0 * detail)
 			h = lerpf(RIVER_WATER_LEVEL - 0.25, h, _outlet_weight(Vector2(x, z)))
 			ring.append(Vector3(x, h, z))
 		rings.append(ring)
@@ -302,6 +279,7 @@ func _build_ridge(
 					c = base_color.lerp(mid_color, t * 2.0)
 				else:
 					c = mid_color.lerp(peak_color, (t - 0.5) * 2.0)
+				c = _rock_color(p, normals[pair[0]][pair[1]], c, seed, detail)
 				st.set_normal(normals[pair[0]][pair[1]])
 				st.set_color(c)
 				st.set_uv(Vector2(float(pair[1]), float(pair[0])))
@@ -310,12 +288,45 @@ func _build_ridge(
 	st.index()
 	return st.commit()
 
-func _ring_offsets(band: float, outer: float) -> Array[float]:
+## Branching, metre-scale erosion reads from the village without a noisy texture.
+## Relief fades out at the native seam, crest and outer skirt; the outlet mask
+## is applied afterwards so even deep spurs cannot dam the river.
+func _slope_relief(t: float, u: float, seed: float, amplitude: float) -> float:
+	if t <= 0.0 or t >= 2.0:
+		return 0.0
+	var envelope := sin(PI * clampf(t, 0.0, 1.0)) if t <= 1.0 else sin(PI * (t - 1.0)) * 0.45
+	var bend := 0.025 * sin(t * 3.8 + _value_noise(u, 7, seed) * 5.0)
+	var ribs := _crest_noise(u + bend, 37, seed + 4.1)
+	var branches := _crest_noise(u - bend * 0.7, 71, seed + 8.3)
+	var crags := _crest_noise(u + t * 0.012, 113, seed + 2.6)
+	var relief := (ribs - 0.48) * 1.7 + (branches - 0.5) * 0.85 + (crags - 0.5) * 0.40
+	# Broad rock benches break the otherwise uniformly sloping face.
+	var bench := sin(t * 26.0 + _value_noise(u, 13, seed) * 4.0) * 0.22
+	return (relief + bench) * envelope * amplitude
+
+func _mountain_material() -> ShaderMaterial:
+	# Exactly the native meadow palette and side shading, darkened by vertex
+	# tint with elevation rather than switching to unrelated blue-grey rock.
+	return Ground.grass_material(0)
+
+## Broad mineral bands and darker gullies follow the actual shape. All colour
+## is baked once into vertices: no textures, shader noise or per-frame work.
+func _rock_color(p: Vector3, normal: Vector3, base: Color, seed: float, strength: float) -> Color:
+	var u := _bearing(Vector2(p.x, p.z)) / TAU
+	var strata := sin(p.y * 0.55 + _value_noise(u, 11, seed) * 6.0)
+	var band := smoothstep(0.15, 0.65, strata)
+	var rock := base.lightened(band * 0.08 * strength)
+	var steep := 1.0 - smoothstep(0.35, 0.8, normal.y)
+	rock = rock.darkened(steep * 0.30 * strength)
+	var ribs := _crest_noise(u + 0.015 * sin(p.y * 0.04), 37, seed + 4.1)
+	return rock.darkened((1.0 - ribs) * 0.34 * strength)
+
+func _ring_offsets(band: float, outer: float, steps: int = 4) -> Array[float]:
 	var offsets: Array[float] = [0.0, 0.125]
-	for i in 4:
-		offsets.append(band * (i + 1) / 4.0)
-	for i in 4:
-		offsets.append(band + outer * (i + 1) / 4.0)
+	for i in steps:
+		offsets.append(band * float(i + 1) / float(steps))
+	for i in 8:
+		offsets.append(band + outer * float(i + 1) / 8.0)
 	return offsets
 
 ## Smooth profile for a layered ridge: plain base, eased rise to the (already
@@ -405,7 +416,8 @@ func _smooth_normals(rings: Array, _center: Vector2) -> Array:
 				var above: Vector3 = rings[ring_above][i]
 				var below: Vector3 = rings[ring_below][i]
 				tangent_r = (above - below).normalized()
-			var tangent_c: Vector3 = ((rings[ri][ni] as Vector3) - p).normalized()
+			var previous := (i + segments - 1) % segments
+			var tangent_c: Vector3 = ((rings[ri][ni] as Vector3) - (rings[ri][previous] as Vector3)).normalized()
 			var n: Vector3 = tangent_c.cross(tangent_r).normalized()
 			# Both sides face the sky. Flipping toward radial-outward makes
 			# the valley-facing slopes point down and shade incorrectly.

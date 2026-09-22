@@ -1,0 +1,21 @@
+{
+	"captures": [
+		"res://reports/screenshots/detailed-mountains/opening-ui.png",
+		"res://reports/screenshots/detailed-mountains/normal.png",
+		"res://reports/screenshots/detailed-mountains/commons-close.png",
+		"res://reports/screenshots/detailed-mountains/woodcutters-close.png",
+		"res://reports/screenshots/detailed-mountains/reverse.png",
+		"res://reports/screenshots/detailed-mountains/basin-overview.png",
+		"res://reports/screenshots/detailed-mountains/waterfall.png",
+		"res://reports/screenshots/detailed-mountains/mountain-detail.png",
+		"res://reports/screenshots/detailed-mountains/voxel-transition.png",
+		"res://reports/screenshots/detailed-mountains/edge-before.png",
+		"res://reports/screenshots/detailed-mountains/edge-edited.png"
+	],
+	"failures": 0,
+	"messages": [],
+	"ok": true,
+	"production_start": true,
+	"renderer": "mobile",
+	"size": "1280x720"
+}
