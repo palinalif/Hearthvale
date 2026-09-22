@@ -116,6 +116,7 @@ func _ready() -> void:
 	var generator_script: Script = initial_generator if initial_generator != null else PatchGenerator
 	var mesher: Object = ClassDB.instantiate("VoxelMesherBlocky")
 	mesher.library = generator_script.build_library()
+	mesher.occlusion_enabled = false
 	terrain.mesher = mesher
 	# The deterministic patch script supplies authoritative voxel contents, but
 	# the native empty generator is still needed to initialize streaming/data
