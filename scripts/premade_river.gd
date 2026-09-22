@@ -14,31 +14,15 @@ const Grid = preload("res://scripts/visual_grid.gd")
 ## previous static mesh at 5.0. Width is generous so the region fully covers the
 ## channel; the terrain (terrain-top < level) clips it to the actual bed.
 const LEVEL := 5.0
-const WIDTH := 5.0
-## The river spans the plain (mouth z=0) up to the foot of the mountains
-## (head z=LENGTH), where its source is the mountain reservoir (see
-## `reservoir_region()`). It flows downhill from the reservoir to the plain.
-## Older saves have a 160 m river spanning the whole world; `is_starter_river`
-## still recognises it so it can be replaced by this shorter version.
-const LENGTH := 110.0
-## Centerline sample spacing. The stream schema caps a region at 96 points
-## (WATER_MAX_POINTS), so the 110 m river is sampled every 1.25 m (89 points)
-## -- a multiple of the 0.125 m grid, and far finer than the meander scale.
-const POINT_STEP := 1.25
+const WIDTH := 4.0
+## The river runs from the downstream boundary to a northern mountain shelf.
+## Sampling plus an explicit endpoint fits the 96-point water-region limit.
+const LENGTH := Generator.SOURCE_LIP_Z
+const POINT_STEP := 1.5
 const FLOW := [0.0, -1.0]
-
-## The mountain reservoir at the head of the river: a lake region sitting
-## above the 8.75 m plain floor at the foot of the inner ridge. Its south
-## edge (z≈100) is adjacent to the river, and the cliff there drops ~5 m from
-## the reservoir surface (10.0) to the river (5.0) -- the waterfall that
-## `WaterfallGeometry` derives from these two regions. No waterfall-specific
-## geometry is stored; the fall is derived from the water bodies + cliff.
-## The footprint stays compact (~45 m^2) because the document's total water
-## render-cell budget (WATER_RENDER_CELL_LIMIT) is already mostly spent on
-## the 110 m river and the two ponds.
-const RESERVOIR_CENTER := Vector2(81.5, 104.5)
+const RESERVOIR_CENTER := Generator.SOURCE_CENTER
 const RESERVOIR_RADIUS := 3.75
-const RESERVOIR_LEVEL := 10.0
+const RESERVOIR_LEVEL := Generator.SOURCE_LEVEL
 
 static func region() -> Dictionary:
 	var points: Array = []
@@ -46,6 +30,8 @@ static func region() -> Dictionary:
 	while z <= LENGTH + 0.000001:
 		points.append([Generator.river_center_x(z), z])
 		z += POINT_STEP
+	if float(points[-1][1]) < LENGTH:
+		points.append([Generator.river_center_x(LENGTH), LENGTH])
 	return {"type": "stream", "level": LEVEL, "width": WIDTH, "points": points, "flow": FLOW}
 
 ## The mountain reservoir region (lake). The polygon is organic like the
@@ -58,6 +44,10 @@ static func reservoir_region() -> Dictionary:
 		var radius: float = RESERVOIR_RADIUS + 0.3 * sin(2.0 * theta + 1.5) + 0.2 * sin(3.0 * theta + 1.0)
 		var point := (RESERVOIR_CENTER + Vector2(cos(theta), sin(theta)) * radius).snapped(Vector2(Grid.UNIT, Grid.UNIT))
 		points.append([point.x, point.y])
+	# The spill lip sits exactly on the generated cliff; the rest of the
+	# organic shoreline stays on the mountain shelf.
+	for point: Array in points:
+		point[1] = maxf(float(point[1]), Generator.SOURCE_LIP_Z)
 	return {"type": "lake", "level": RESERVOIR_LEVEL, "points": points}
 
 

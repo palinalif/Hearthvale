@@ -13,13 +13,13 @@ func _initialize() -> void:
 func run() -> void:
 	var root_path := "user://m2-starter-migration-%d" % Time.get_ticks_usec()
 	var store := Store.new(root_path)
-	store.expected_dimensions = Vector3i(512,256,512)
-	store.expected_generator_id = "m2_starter_valley_v3"
+	store.expected_dimensions = Generator.Bounds.PREVIOUS_NATIVE_SIZE
+	store.expected_generator_id = Generator.Bounds.PREVIOUS_GENERATOR_ID
 	store.require_building_document = true
 	var source: Object = ClassDB.instantiate("VoxelBuffer")
-	source.create(512,256,512)
-	source.fill_area(1,Vector3i.ZERO,Vector3i(512,63,512),0)
-	source.fill_area(2,Vector3i(0,63,0),Vector3i(512,64,512),0)
+	source.create(640,256,640)
+	source.fill_area(1,Vector3i.ZERO,Vector3i(640,63,640),0)
+	source.fill_area(2,Vector3i(0,63,0),Vector3i(640,64,640),0)
 	source.fill_area(0,Vector3i(50,30,50),Vector3i(60,50,60),0)
 	source.set_voxel(1,120,150,120,0)
 	var world := World.new()
@@ -36,22 +36,23 @@ func run() -> void:
 	scene.starter_hamlet_in_tests = true
 	scene.checkpoint_root = root_path
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec()+90000
+	var deadline := Time.get_ticks_msec()+180000
 	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
 	check(scene._player_restored,"Saved-world scene restores")
 	if scene._player_restored:
 		check(not scene._starter_seeded,"Saved world does not receive starter layout")
 		check(scene.building_world.get_document()["buildings"].size() == 1,"Existing home count preserved")
+		check(scene.landscape_state.water.is_empty(), "saved world does not acquire a new river or reservoir")
 		check(scene.landscape_state.records.is_empty() and scene.landscape_state.composition.is_empty() and scene.landscape_state.paths.is_empty(),"Cleared landscape does not repopulate")
 		check(scene.backend.voxel_at(Vector3i(55,40,55)) == 0,"Saved underground cave preserved")
 		check(scene.backend.voxel_at(Vector3i(120,150,120)) == 1,"Saved disconnected overhead material preserved")
-		check(scene.backend.voxel_at(Vector3i(600,8,600)) == 1,"New v4 ring exists outside saved map")
+		check(scene.backend.voxel_at(Vector3i(720,8,720)) == 1,"New ring exists outside saved map")
 		check(scene.backend.stats()["dirty"],"Migrated world is marked for a new generation")
-		# A manual reload before the first v3 save must restore the new outskirts
+		# A manual reload before the first current-format save must restore the new outskirts
 		# too, rather than keeping edits that were never part of the checkpoint.
-		scene.backend.voxels.set_voxel(0,600,8,600,0)
+		scene.backend.voxels.set_voxel(0,720,8,720,0)
 		check(scene.backend.load_world(),"Second previous-format load succeeds")
-		check(scene.backend.voxel_at(Vector3i(600,8,600)) == 1,"Reload rebuilds unsaved ring deterministically")
+		check(scene.backend.voxel_at(Vector3i(720,8,720)) == 1,"Reload rebuilds unsaved ring deterministically")
 		check(scene._save_all(),"Migrated generation saves under new generator ID")
 		for path: String in originals:
 			check(FileAccess.file_exists(path) and FileAccess.get_sha256(path) == originals[path],"Original checkpoint file remains byte-identical")

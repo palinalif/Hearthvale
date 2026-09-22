@@ -78,7 +78,7 @@ func _check_ground_materials(expanded: Object) -> void:
 		check(int(expanded.get_voxel(1120, top - 1, 1120, 0)) in ring_ids, "Second ring voxel paints a ring material")
 		check(int(expanded.get_voxel(1120, top - 2, 1120, 0)) == 1, "Subsurface below the paint stays stone (1)")
 	check(_paint_digest(Generator.generate()) == _paint_digest(Generator.generate()), "Ground paint is deterministic across runs")
-	check(Generator.surface_material(20.0, 18.0, 8.0) == 2, "Hamlet highland stays grass (2)")
+	check(Generator.surface_material(40.0, 36.0, 8.0) == 2, "Hamlet highland stays grass (2)")
 	check(Generator.surface_material(Generator.river_center_x(40.0), 40.0, 4.375) == 4, "River bed is sand (4)")
 	check(Generator.surface_material(48.0, 55.0, 8.0) == 3, "Lane at the well is packed dirt (3)")
 	var library: Object = Generator.build_library()
@@ -159,7 +159,7 @@ func _check_layout(documents: Dictionary) -> void:
 	state.restore(documents["landscape"])
 	for cell: Vector2i in state.path_cells("packed_earth"):
 		var point := (Vector2(float(cell[0]),float(cell[1])) + Vector2.ONE * 0.5) * 0.125
-		check(point.distance_to(Vector2(23.5,27.5)) >= 0.75, "Lane routes around the well, not through it")
+		check(point.distance_to(Vector2(47.0,55.0)) >= 0.75, "Lane routes around the well, not through it")
 	for object: Dictionary in state.composition:
 		if object["kind"] != "garden": continue
 		var position := Vector2(float(object["position"][0]),float(object["position"][1]))

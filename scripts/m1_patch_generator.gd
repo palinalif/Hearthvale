@@ -1,25 +1,9 @@
 extends RefCounted
 class_name M1PatchGenerator
 
-## Starter valley world generator (M2 v5: 160 m world, doubled valley).
-##
-## v5 scales the entire v4 valley to twice the size (native 640 -> 1280 at
-## 0.125 m scale): every planar distance is doubled (zones, river centre
-## line, blend widths, undulation wavelengths) while the height profile is
-## kept exactly (8 m hamlet plateau, 5.65 m forest meadow, 4.375 m river
-## bed, ~13 m ring crest), and the v4 80 m world maps 1:1 into the 0-80 m
-## corner of the 160 m world. New land beyond the old 0-80 m region:
-##   * A closed mountain/forest ring: terrain rises from the v4 boundary
-##     edge to the same ~13 m undulating crest, closing the doubled valley
-##     (the presentation range mesh raises visible peaks above the native
-##     height cap).
-##   * A doubled village green pad on the highland west of the river.
-##   * A doubled forest meadow valley east of the river.
-##
-## The 0-80 m region is generated with the exact doubled v4 formulas, so a
-## migrated v4 save's terrain, water, bridges and landscape records (all
-## 2x-scaled by the v4->v5 migration in LandscapeState) stay aligned with the
-## regenerated ground.
+## Native 160 m starter valley. New worlds have a rounded basin with raised
+## foothills on all sides and a reservoir shelf feeding the northern waterfall.
+## Saved voxel buffers remain authoritative; this changes fresh generation only.
 const Bounds = preload("res://scripts/m2_world_bounds.gd")
 const PATCH_SIZE := Bounds.NATIVE_SIZE
 const VOXEL_SCALE := 0.125
@@ -42,6 +26,12 @@ const GroundMaterials = preload("res://scripts/terrain_ground_materials.gd")
 ##   falloff in terrain_height keeps it out of the river bed.
 const VILLAGE_GREEN := Rect2(28.0, 56.0, 32.0, 32.0)
 const FOREST_MEADOW := Rect2(76.0, 48.0, 16.0, 48.0)
+const VALLEY_CENTER := Vector2(80.0, 80.0)
+const FOOTHILL_RADIUS := 58.0
+const MOUNTAIN_RADIUS := 80.0
+const SOURCE_CENTER := Vector2(82.0, 143.5)
+const SOURCE_LEVEL := 23.0
+const SOURCE_LIP_Z := 140.0
 
 static func river_center_x(world_z: float) -> float:
 	# Doubled v4 centre line: 2 * f(z/2) == 2*f(z) at the doubled wavelength.
@@ -66,10 +56,20 @@ static func terrain_height(world_x: float, world_z: float) -> float:
 	# --- v5: closed valley ring beyond the old 128 m edge (river corridor
 	# keeps the north/south exits open). ---
 	height = lerpf(height, _ring_height(world_x, world_z), _ring_weight(world_x, world_z))
+	height = lerpf(height, 8.0, _meadow_weight(Rect2(26.0, 22.0, 36.0, 28.0), world_x, world_z, 4.0))
 	# v5: village green (flat highland extension for the starter hamlet).
 	height = lerpf(height, 8.0, _meadow_weight(VILLAGE_GREEN, world_x, world_z, 4.0))
 	# v5: forest meadow valley east of the river (never into the river bed).
 	height = lerpf(height, 5.65, _meadow_weight(FOREST_MEADOW, world_x, world_z, 4.0) * _river_corridor_falloff(world_x, world_z))
+	# A rocky spur joins the northern foothills to the reservoir. The southern
+	# lip is a voxel cliff; its plunge pool continues the existing river bed.
+	var source_distance := Vector2(world_x, world_z).distance_to(SOURCE_CENTER)
+	var spur := (1.0 - smoothstep(5.0, 15.0, absf(world_x - SOURCE_CENTER.x))) * smoothstep(130.0, SOURCE_LIP_Z, world_z)
+	height = lerpf(height, maxf(height, SOURCE_LEVEL + 1.5), spur)
+	if source_distance < 4.5 and world_z >= SOURCE_LIP_Z:
+		height = SOURCE_LEVEL - 0.75
+	if world_z < SOURCE_LIP_Z and absf(world_x - river_center_x(world_z)) <= river_half_width(world_z):
+		height = 4.375 + snappedf(sin(world_z * 0.145) * 0.125, VOXEL_SCALE)
 	return height
 
 static func _meadow_weight(rect: Rect2, world_x: float, world_z: float, blend: float) -> float:
@@ -78,14 +78,19 @@ static func _meadow_weight(rect: Rect2, world_x: float, world_z: float, blend: f
 	return 1.0 - smoothstep(0.0, blend, point.distance_to(nearest))
 
 static func _ring_height(world_x: float, world_z: float) -> float:
-	# v5: same v4 crest height, undulation wavelengths halved for the 2x span.
-	return 13.0 + sin(world_x * 0.0275 + world_z * 0.0235) * 1.25 + sin(world_x * 0.055 - world_z * 0.04 + 2.0) * 0.7
+	return 24.0 + sin(world_x * 0.065 + world_z * 0.047) * 2.0 + sin(world_x * 0.11 - world_z * 0.08 + 2.0)
+
+static func valley_radius(world_x: float, world_z: float) -> float:
+	var delta := Vector2(world_x, world_z) - VALLEY_CENTER
+	var angle := atan2(delta.y, delta.x)
+	return delta.length() + 2.0 * sin(angle * 3.0) + 1.5 * sin(angle * 5.0 + 0.7)
 
 static func _ring_weight(world_x: float, world_z: float) -> float:
-	var depth := maxf(world_x, world_z) - 128.0
-	if depth <= 0.0:
-		return 0.0
-	return smoothstep(0.0, 14.0, depth) * _river_corridor_falloff(world_x, world_z)
+	var weight := smoothstep(FOOTHILL_RADIUS, MOUNTAIN_RADIUS, valley_radius(world_x, world_z))
+	# Only the downstream end opens through the mountains. Upstream is the
+	# reservoir's solid backing, rather than a second river exit.
+	var outlet := lerpf(_river_corridor_falloff(world_x, world_z), 1.0, smoothstep(130.0, 146.0, world_z))
+	return weight * outlet
 
 static func _river_corridor_falloff(world_x: float, world_z: float) -> float:
 	return smoothstep(0.0, 6.0, absf(world_x - river_center_x(world_z)) - river_half_width(world_z))
@@ -130,8 +135,7 @@ static func surface_material(world_x: float, world_z: float, height: float) -> i
 		return GroundMaterials.DIRT
 	# New ring land (128-160 m): layered forest/mountain variation. The river
 	# corridor falloff keeps the two exits green and low.
-	var depth := maxf(world_x, world_z) - 128.0
-	if depth > 0.0:
+	if valley_radius(world_x, world_z) > FOOTHILL_RADIUS and height > 10.0:
 		var h := _hash01(world_x, world_z)
 		if height >= 12.0:
 			return GroundMaterials.ROCK_FACE if h < 0.45 else GroundMaterials.DENSE_GRASS

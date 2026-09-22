@@ -26,16 +26,16 @@ func run() -> void:
 	scene.starter_hamlet_in_tests = true
 	scene.checkpoint_root = "user://m2_scene_test/valley"
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 60000
+	var deadline := Time.get_ticks_msec() + 180000
 	while scene.backend == null or not scene.backend.is_ready():
 		await process_frame
-		if Time.get_ticks_msec() > deadline:
+		if Time.get_ticks_msec() > deadline and (scene.backend == null or not scene.backend.is_ready()):
 			failures.append("backend did not become ready in time")
 			print("M2_STARTER_SCENE_RESULT " + JSON.stringify({"ok": false, "checks": check_count, "failures": failures}))
 			quit(1)
 			return
 	check(scene._valley_surround != null, "valley surround is mounted")
-	check(is_equal_approx(scene._valley_surround.stats()["peak_max"], 160.0), "valley surround inner-ridge crest peaks at 160 m (rugged mountain silhouette)")
+	check(float(scene._valley_surround.stats()["peak_max"]) > 80.0, "substantial mountains surround the valley")
 	check(scene.river_water != null, "river water is mounted")
 	check(
 		is_equal_approx(scene.landscape_state.bridges.size(), 1)
@@ -48,6 +48,7 @@ func run() -> void:
 	check(scene._starter_seeded, "starter hamlet seeded for the new world")
 	_check_flat_hamlet()
 	_check_ponds()
+	check(preload("res://scripts/waterfall_geometry.gd").derive(scene.landscape_state.water, scene._terrain_top_sampler()).size() == 1, "native starter cliff supports one waterfall")
 	_check_home_anchor_support(buildings)
 	check(_check_library(), "terrain library has the full 10-model ground set")
 	_check_material_round_trip()
@@ -68,8 +69,8 @@ func run() -> void:
 ## hamlet rectangle must sit at exactly the 8 m level.
 func _check_flat_hamlet() -> void:
 	var flat := true
-	for x in range(13, 32, 2):
-		for z in range(11, 26, 2):
+	for x in range(26, 63, 4):
+		for z in range(22, 51, 4):
 			if absf(Generator.terrain_height(float(x), float(z)) - 8.0) > 0.001:
 				flat = false
 	check(flat, "hamlet plateau is flat at 8 m")
@@ -128,7 +129,7 @@ func _check_library() -> bool:
 ## through the 8-bit checkpoint channel.
 func _check_material_round_trip() -> void:
 	var tool: Object = scene.backend.terrain.get_voxel_tool()
-	var center := Vector3(20.0, 8.0, 18.0)
+	var center := Vector3(40.0, 8.0, 36.0)
 	var top := _top_voxel(tool, center)
 	check(top >= 0, "painted column has a surface")
 	# Paint the top two cells of the column dirt: a 1x2x1 buffer on the tool

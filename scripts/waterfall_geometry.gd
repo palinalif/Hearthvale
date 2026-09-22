@@ -13,6 +13,7 @@ const Geometry = preload("res://scripts/water_region_geometry.gd")
 const Grid = preload("res://scripts/visual_grid.gd")
 
 const MIN_HEAD := 0.5       # minimum fall height (metres) to count as a waterfall
+const MAX_LIP_DEPTH := 1.0  # includes the standard 0.75 m excavated lake bed
 const LIP_TOL := 0.5        # crown terrain may sit this close to / below the upper level
 const DROP_REACH := 2.0     # how far beyond the crown to sample the cliff base
 const DROP_TOL := 0.25      # base must drop to within this of the lower level
@@ -69,7 +70,7 @@ static func _best_crown(upper: Dictionary, lower: Dictionary, up_level: float, l
 		if not p.is_finite() or not dirty_rect.has_point(p):
 			continue
 		var top: float = sample.call(p)
-		if is_nan(top) or top > up_level + LIP_TOL:
+		if is_nan(top) or top > up_level + LIP_TOL or top < up_level - MAX_LIP_DEPTH:
 			continue
 		var out_dir := lower_centroid - p
 		if out_dir.length() < 0.000001:

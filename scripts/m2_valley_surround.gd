@@ -1,39 +1,7 @@
-## Valley surround: a layered distant MOUNTAIN RANGE around the M2 starter
-## valley, not a wall.
-##
-## The terrain only extends to 80 m (the 160 m world's half), so the world
-## boundary is built in three presentation layers plus a flat plain. All
-## radii/heights are the 80 m v4 design doubled for the 2x world:
-##
-##   * DistantPlain — a flat unshaded meadow annulus (72 → 520 m) just below
-##     the terrain-edge level, so the mountains sit on ground and fade into
-##     haze instead of floating in sky.
-##   * InnerRidge — the rugged near range at 240 m (was 80 m). Jagged
-##     value-noise crest 70–160 m (passes stay above the camera's max reach,
-##     peaks stay below the mid ridge's 190 m floor for depth; see
-##     tests/valley_ring_occlusion_test.gd). Carries the subtle rock detail:
-##     low-frequency radial wobble and vertex-colour mottling with darker
-##     scree patches. The large crest amplitude is what stops it reading as
-##     a uniform ring.
-##   * MidRidge — 340 m, peaks 190–240 m, deep-blue atmospheric layers.
-##   * FarRidge — 450 m, peaks 270–340 m, lighter deep-blue atmospheric
-##     layers (farther ridge stays lighter for atmospheric depth).
-##
-## Each ridge is a smooth-normal cylinder (per-vertex Gouraud normals, no
-## faceting) whose TOP ridgeline is jagged by multi-frequency value noise;
-## the sides stay clean smooth slopes. Each ridge uses a different noise
-## seed/profile so the silhouettes never align — the parallax between layers
-## is what makes it read as a mountain range rather than concentric rings.
-##
-## River corridors: at the world edges where the river flows out, the inner
-## ridge drops to water level so the valley reads as a valley with a
-## flowing-out river, not a sealed box.
-##
-## Pure presentation: no collision, no picking, no input, excluded from
-## save/load and undo. The root is a plain MeshInstance3D (the inner ridge,
-## never a VoxelTerrain mesh) so it stays in scene-space and out of the
-## native 32 m height bound; the plain and the two far ridges are child
-## MeshInstance3D nodes with unshaded/basic materials.
+## Layered mountain scenery follows the rounded native foothills. The nearest
+## range overlaps the native boundary, concealing the square storage footprint.
+## Its northern spur backs the editable reservoir; only the downstream valley
+## has an outlet. Scenery remains derived, with no save or collision authority.
 
 class_name ValleySurround
 extends MeshInstance3D
@@ -43,41 +11,24 @@ const _Gen := preload("res://scripts/m1_patch_generator.gd")
 const WORLD_SIZE := 160.0
 const RING_CENTER := Vector2(WORLD_SIZE * 0.5, WORLD_SIZE * 0.5)
 
-## Ring radii (2x the v4 80 m design). The inner ridge sits ~3x beyond the
-## terrain edge so the boundary reads as a distant range; the two far
-## ridges sit behind it.
-const INNER_RADIUS := 240.0
+## Broad, irregular foothills rise into distinct overlapping silhouettes.
+const INNER_RADIUS := 78.0
 const RING_RADIUS := INNER_RADIUS
-const MID_RADIUS := 340.0
-const FAR_RADIUS := 450.0
-
-## Inner ridge profile: a rugged mountain range, not a uniform ring. The
-## jagged crest runs between a lowest pass (PEAK_PASS, kept above the
-## camera's max reach of ~63.5 m) and its highest peak (PEAK_MAX, kept
-## below the mid ridge's 190 m floor so the near range sits lower than the
-## distant one - natural atmospheric depth). The large amplitude is what
-## stops the wall reading as a cylinder / ring.
-## Crest of the near valley wall. Gentle first pass (35-70 m): a visible,
-## present ridgeline that frames the valley without reading as a giant
-## sky-blocking dome. Lower than the original 70-160 m, which the user found
-## huge.
-const PEAK_PASS := 35.0
-const PEAK_MAX := 70.0
+const MID_RADIUS := 156.0
+const FAR_RADIUS := 250.0
+const PEAK_PASS := 42.0
+const PEAK_MAX := 158.0
 const _INNER_RIDGE_SEED := 7.7
-const _INNER_RIDGE_FREQS: Array = [3, 6, 11]
-const PEAK_BAND_RADIUS := 28.0
-const RIVER_WATER_LEVEL := 8.75
-const OUTER_MIN_HEIGHT := 40.0
-const EDGE_TERRAIN_LEVEL := 13.0
-const CORRIDOR_EXTRA_WIDTH := 6.0
-const _OUTER_SAMPLE_RADIUS := 60.0
-
-## Distant plain: flat meadow from just under the terrain edge out past the
-## far ridges, sitting 0.1 m below the terrain edge so terrain never floats
-## above it.
-const PLAIN_INNER_RADIUS := 72.0
-const PLAIN_OUTER_RADIUS := 520.0
-const PLAIN_LEVEL := 15.8
+const _INNER_RIDGE_FREQS: Array = [7, 13, 23]
+const PEAK_BAND_RADIUS := 38.0
+const RIVER_WATER_LEVEL := 5.0
+const OUTER_MIN_HEIGHT := 24.0
+const EDGE_TERRAIN_LEVEL := 22.0
+const _OUTER_SAMPLE_RADIUS := 76.0
+const PLAIN_INNER_RADIUS := 76.0
+const PLAIN_OUTER_RADIUS := 410.0
+# Below the river and native surface; never a green lid over the outlet.
+const PLAIN_LEVEL := -1.0
 
 const _SEGMENTS := 128
 const _MID_SEGMENTS := 192
@@ -108,14 +59,14 @@ func _build_all() -> void:
 	_plain.mesh = _build_plain()
 	_mid_ridge.mesh = _build_ridge(
 		MID_RADIUS, _MID_SEGMENTS, 36.0, 44.0,
-		55.0, 45.0, 30.0,
+		82.0, 62.0, 30.0,
 		Color("#4c5d70"), Color("#62748a"), Color("#778da0"),
 		2.3, [3, 7, 13],
 		0.0, 0.0
 	)
 	_far_ridge.mesh = _build_ridge(
 		FAR_RADIUS, _FAR_SEGMENTS, 48.0, 56.0,
-		85.0, 55.0, 40.0,
+		114.0, 76.0, 40.0,
 		Color("#606e7f"), Color("#768598"), Color("#90a2b2"),
 		5.9, [5, 9, 17],
 		0.0, 0.0
@@ -156,12 +107,7 @@ func affected_by(bounds: AABB) -> bool:
 		or c.z + r.z > WORLD_SIZE - margin
 	)
 
-## Height of the inner ridge's jagged crest at this bearing. Value-noise
-## with several pronounced peaks and deep passes (70-160 m): the passes
-## stay above the camera's max reach (~63.5 m, see
-## tests/valley_ring_occlusion_test.gd) and the peaks stay below the mid
-## ridge (190 m) for natural depth. The large amplitude variation is what
-## stops the wall reading as a uniform cylinder / ring.
+## Irregular skyline height at a bearing.
 func peak_height(xz: Vector2) -> float:
 	var u := fposmod(_bearing(xz), TAU) / TAU
 	var n := _ridge_noise(u, _INNER_RIDGE_SEED, _INNER_RIDGE_FREQS)
@@ -180,23 +126,19 @@ func ridge_elevation(xz: Vector2) -> float:
 ## from it, so the whole wall follows the irregular ridgeline. Returns
 ## water level in river corridors.
 func ring_height(radius: float, xz: Vector2) -> float:
-	if _in_river_corridor(xz):
-		return RIVER_WATER_LEVEL
 	var crest := peak_height(xz)
-	if radius <= PEAK_BAND_RADIUS:
-		var t := radius / PEAK_BAND_RADIUS
-		return lerpf(EDGE_TERRAIN_LEVEL, crest, smoothstep(0.0, 1.0, t))
-	var t := clampf(
-		(radius - PEAK_BAND_RADIUS) / (_OUTER_SAMPLE_RADIUS - PEAK_BAND_RADIUS),
-		0.0,
-		1.0
-	)
-	return lerpf(crest, OUTER_MIN_HEIGHT, t)
+	var edge := _Gen.terrain_height(clampf(xz.x, 0.0, WORLD_SIZE - 0.125), clampf(xz.y, 0.0, WORLD_SIZE - 0.125)) - 0.25
+	var height := _layer_height(radius, PEAK_BAND_RADIUS, _OUTER_SAMPLE_RADIUS - PEAK_BAND_RADIUS, edge, crest, OUTER_MIN_HEIGHT)
+	return lerpf(RIVER_WATER_LEVEL - 0.25, height, _outlet_weight(xz))
+
+func _outlet_weight(xz: Vector2) -> float:
+	var exit_dir := Vector2(_Gen.river_center_x(0.0), 0.0) - RING_CENTER
+	var direction := xz - RING_CENTER
+	var angle := absf(wrapf(direction.angle() - exit_dir.angle(), -PI, PI))
+	return smoothstep(0.045, 0.15, angle)
 
 func _in_river_corridor(xz: Vector2) -> bool:
-	var river_x: float = _Gen.river_center_x(xz.y)
-	var river_w: float = _Gen.river_half_width(xz.y)
-	return absf(xz.x - river_x) < river_w + CORRIDOR_EXTRA_WIDTH
+	return _outlet_weight(xz) < 0.01
 
 func _bearing(xz: Vector2) -> float:
 	return atan2(xz.y - RING_CENTER.y, xz.x - RING_CENTER.x)
@@ -208,10 +150,17 @@ func _bearing(xz: Vector2) -> float:
 ## the silhouette reads as a jagged ridgeline with several pronounced
 ## peaks and deep passes.
 func _ridge_noise(u: float, seed: float, freqs: Array) -> float:
-	var v := _value_noise(u, int(freqs[0]), seed) * 0.5 \
-		+ _value_noise(u, int(freqs[1]), seed) * 0.3 \
-		+ _value_noise(u, int(freqs[2]), seed) * 0.2
+	var v := _crest_noise(u, int(freqs[0]), seed) * 0.5 \
+		+ _crest_noise(u, int(freqs[1]), seed) * 0.3 \
+		+ _crest_noise(u, int(freqs[2]), seed) * 0.2
 	return pow(clampf(v, 0.0, 1.0), 1.6)
+
+# Linear crest interpolation preserves angular summits instead of rounding
+# every peak into a smooth, evenly scalloped caldera rim.
+func _crest_noise(u: float, freq: int, seed: float) -> float:
+	var scaled := fposmod(u, 1.0) * float(freq)
+	var i := floori(scaled)
+	return lerpf(_hash(float(i % freq), seed), _hash(float((i + 1) % freq), seed), scaled - float(i))
 
 func _value_noise(u: float, freq: int, seed: float) -> float:
 	var scaled := fmod(u, 1.0) * float(freq)
@@ -225,12 +174,7 @@ func _hash(i: float, seed: float) -> float:
 	var r := fmod(sin(i * 127.1 + seed * 311.7) * 43758.5453, 1.0)
 	return r if r >= 0.0 else r + 1.0
 
-## Inner ridge: the original profile (112–140 m jagged peaks, river
-## corridors, outer slope to 40 m) at the pushed-out 240 m radius, plus the
-## rock detail
-## layer: a low-frequency ±0.5 m radial wobble (normals are recomputed from
-## the displaced positions so the surface stays smooth) and vertex-colour
-## mottling — grey-green rock tones with a few darker scree patches.
+## The near range follows the native edge, then rises to a broken crest.
 func _build_inner_ridge() -> Mesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -263,15 +207,13 @@ func _build_inner_ridge() -> Mesh:
 			var z := RING_CENTER.y + (RING_RADIUS + ro) * sin(ang)
 			var p := Vector2(x, z)
 			var h: float = ring_height(ro, p)
-			if ro == PEAK_BAND_RADIUS:
-				# Jagged ridgeline on the top row only; the outer slope
-				# descends from it.
-				h = peak_height(p)
 			# Low-frequency radial wobble: ±1 m (2x) so the wall silhouette
 			# stops reading as a perfect circle from any vantage.
-			var wobble := 2.0 * (_value_noise(ang / TAU, 3, _JITTER_SEED) * 0.6
-				+ _value_noise(ang / TAU, 7, _JITTER_SEED) * 0.4) - 1.0
-			ring.append(Vector3(x + wobble * cos(ang), h, z + wobble * sin(ang)))
+			var wobble := 12.0 * (_value_noise(ang / TAU, 3, _JITTER_SEED) * 0.6
+				+ _value_noise(ang / TAU, 7, _JITTER_SEED) * 0.4) - 6.0
+			var displaced := Vector2(x + wobble * cos(ang), z + wobble * sin(ang))
+			h = ring_height(ro, displaced)
+			ring.append(Vector3(displaced.x, h, displaced.y))
 		rings.append(ring)
 
 	var normals := _smooth_normals(rings, RING_CENTER)
@@ -280,8 +222,8 @@ func _build_inner_ridge() -> Mesh:
 		for i in _SEGMENTS:
 			var ni := (i + 1) % _SEGMENTS
 			var quad: Array = [
-				[ri, i], [ri, ni], [ri + 1, i],
-				[ri, ni], [ri + 1, ni], [ri + 1, i],
+				[ri, i], [ri + 1, i], [ri, ni],
+				[ri, ni], [ri + 1, i], [ri + 1, ni],
 			]
 			for pair in quad:
 				var p: Vector3 = rings[pair[0]][pair[1]]
@@ -336,6 +278,7 @@ func _build_ridge(
 			var z := RING_CENTER.y + (radius + ro) * sin(ang)
 			var h := _layer_height(ro, band, outer_extend, PLAIN_LEVEL,
 				peak_floor + peak_amp * _ridge_noise(ang / TAU, seed, freqs), outer_min)
+			h = lerpf(RIVER_WATER_LEVEL - 0.25, h, _outlet_weight(Vector2(x, z)))
 			ring.append(Vector3(x, h, z))
 		rings.append(ring)
 
@@ -345,8 +288,8 @@ func _build_ridge(
 		for i in segments:
 			var ni := (i + 1) % segments
 			var quad: Array = [
-				[ri, i], [ri, ni], [ri + 1, i],
-				[ri, ni], [ri + 1, ni], [ri + 1, i],
+				[ri, i], [ri + 1, i], [ri, ni],
+				[ri, ni], [ri + 1, i], [ri + 1, ni],
 			]
 			for pair in quad:
 				var p: Vector3 = rings[pair[0]][pair[1]]
@@ -420,8 +363,8 @@ func _build_plain() -> Mesh:
 		for i in _SEGMENTS:
 			var ni := (i + 1) % _SEGMENTS
 			var quad: Array = [
-				[ri, i], [ri, ni], [ri + 1, i],
-				[ri, ni], [ri + 1, ni], [ri + 1, i],
+				[ri, i], [ri + 1, i], [ri, ni],
+				[ri, ni], [ri + 1, i], [ri + 1, ni],
 			]
 			for pair in quad:
 				var p: Vector3 = rings[pair[0]][pair[1]]
@@ -445,7 +388,7 @@ func _build_plain() -> Mesh:
 ## continuous curved surface. The ring is a closed loop, so neighbours wrap
 ## around. Works for displaced (wobbled) positions too — the normal is
 ## always computed from the final vertex positions.
-func _smooth_normals(rings: Array, center: Vector2) -> Array:
+func _smooth_normals(rings: Array, _center: Vector2) -> Array:
 	var normals: Array = []
 	for ri in rings.size():
 		var segments := (rings[ri] as Array).size()
@@ -464,9 +407,9 @@ func _smooth_normals(rings: Array, center: Vector2) -> Array:
 				tangent_r = (above - below).normalized()
 			var tangent_c: Vector3 = ((rings[ri][ni] as Vector3) - p).normalized()
 			var n: Vector3 = tangent_c.cross(tangent_r).normalized()
-			# Outward = away from the ring centre in the horizontal plane.
-			var outward := Vector3(p.x - center.x, 0.0, p.z - center.y).normalized()
-			if n.dot(outward) < 0.0:
+			# Both sides face the sky. Flipping toward radial-outward makes
+			# the valley-facing slopes point down and shade incorrectly.
+			if n.y < 0.0:
 				n = -n
 			row.append(n)
 		normals.append(row)

@@ -120,7 +120,7 @@ func _apply_cozy_valley_lighting() -> void:
 		# The valley surround is a layered range out to ~260 m (ridges at
 		# 120/170/225 m). The camera's default 100 m far plane would clip all
 		# of it, so extend it well past the far ridge.
-		camera.far = 400.0
+		camera.far = 700.0
 		var attributes := CameraAttributesPractical.new()
 		attributes.dof_blur_far_enabled = true
 		attributes.dof_blur_far_distance = 55.0
@@ -142,7 +142,8 @@ func _ensure_directional_fill(fill_name: String, rotation: Vector3, color: Color
 	fill.light_specular = 0.25
 
 func _on_backend_ready(ready: bool) -> void:
-	if not ready or not backend: return
+	super._on_backend_ready(ready)
+	if not ready or not backend or _restoring or not _player_restored: return
 	# A world with no saved checkpoint gets the full hamlet; a loaded save keeps
 	# exactly what it has. Gate on the loaded document, not on _player_restored:
 	# a fresh world already contains the player shell (building-1), and both
@@ -160,9 +161,12 @@ func _on_backend_ready(ready: bool) -> void:
 	# The starter river is a water region (not a bespoke mesh) so it shares the
 	# presentation path, materials and editability with player-authored water.
 	# Runs for both fresh (seeded) and existing (restored) worlds; idempotent.
-	_ensure_premade_river()
-	_ensure_premade_ponds()
-	_ensure_premade_reservoir()
+	# Checkpoint terrain and water are player authority. Loading a world must
+	# not relocate its river or excavate the newly positioned reservoir.
+	if saved.is_empty():
+		_ensure_premade_river()
+		_ensure_premade_ponds()
+		_ensure_premade_reservoir()
 
 func _seed_starter_hamlet() -> bool:
 	if _starter_seeded or not backend.loaded_building_document.is_empty(): return false
@@ -186,11 +190,11 @@ func _seed_starter_hamlet() -> bool:
 	_restoring = false
 	_building_dirty = true
 	if not test_mode:
-		cursor = Vector3(24.0,8.0,27.0)
+		cursor = Vector3(48.0,8.0,54.0)
 		terrain_cursor = cursor
 		camera_yaw = -1.9
 		camera_pitch = 0.74
-		camera_distance = 32.0
+		camera_distance = 52.0
 	_set_status("Welcome to Hearthvale - a little village to make your own")
 	_update_presentation()
 	_update_camera()
@@ -222,14 +226,8 @@ func _ensure_premade_pond(pond: Dictionary) -> bool:
 	return _carve_pond(pond)
 
 func _ensure_premade_reservoir() -> void:
-	# The mountain reservoir is the river's source: a lake region above the
-	# 8.75 m plain floor at the foot of the inner ridge, its south edge
-	# adjacent to the river head. The ~5 m cliff between the reservoir
-	# (10.0) and the river (5.0) is where WaterfallGeometry derives the
-	# waterfall; nothing waterfall-specific is stored. Runs for both fresh
-	# (seeded) and existing (restored) worlds; idempotent. The reservoir's
-	# own floor is already below the lake bed, so _carve_pond is a no-op
-	# carve here (it still clears records and syncs the water visual).
+	# New-world water sits on the generated northern shelf. Its spill lip
+	# drops into the river, so the shared water renderer derives the fall.
 	var reservoir: Dictionary = PremadeRiver.reservoir_region()
 	for existing: Dictionary in landscape_state.water:
 		if PremadeRiver.matches_reservoir(existing, reservoir):

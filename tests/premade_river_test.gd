@@ -64,7 +64,7 @@ func _run() -> void:
 	# --- the mountain reservoir at the river's head ---------------------------
 	var reservoir: Dictionary = PremadeRiver.reservoir_region()
 	check(str(reservoir.get("type", "")) == "lake", "reservoir is a lake")
-	check(absf(float(reservoir["level"]) - 10.0) < 0.0001, "reservoir level is 10.0")
+	check(float(reservoir["level"]) > 20.0, "reservoir sits high on the mountain")
 	var rpoints: Array = reservoir["points"]
 	check(rpoints.size() >= 3, "reservoir has a closed polygon")
 	for point: Array in rpoints:
@@ -78,6 +78,9 @@ func _run() -> void:
 	check(reservoir_id > 0, "add_water accepts the reservoir alongside the river")
 	check(state.validate(state.document()), "document validates with the reservoir")
 
+	for pond: Dictionary in preload("res://scripts/premade_ponds.gd").regions():
+		check(state.add_water("lake", pond["level"], pond["points"]) > 0, "starter ponds also fit the water budget")
+	check(state.validate(state.document()), "all starter water fits the document budget")
 	# --- the waterfall derives from the reservoir + river + generated cliff ---
 	var sample := func(p: Vector2) -> float: return Generator.terrain_height(p.x, p.y)
 	var falls: Array = WaterfallGeometry.derive(state.water, sample)
@@ -86,10 +89,12 @@ func _run() -> void:
 		var fall: Dictionary = falls[0]
 		check(int(fall["upper_id"]) == reservoir_id, "waterfall upper body is the reservoir")
 		check(int(fall["lower_id"]) == id, "waterfall lower body is the river")
-		check(absf(float(fall["head"]) - 5.0) < 0.0001, "waterfall head is 5 m")
+		check(float(fall["head"]) >= 15.0, "waterfall has a substantial mountain drop")
 		var flow_dir := Vector2(float(fall["flow"][0]), float(fall["flow"][1]))
 		check(flow_dir.y < -0.5, "waterfall flows downhill toward the plain (flow z < 0)")
 		# The crown sits on the reservoir's edge (the mountain rim), not in the river.
 		var crown := Vector2(float(fall["crown"][0]), float(fall["crown"][1]))
+		check(sample.call(crown) >= PremadeRiver.RESERVOIR_LEVEL - 1.0, "crown is supported by the rocky shelf")
+		check(sample.call(crown + flow_dir * 2.0) < PremadeRiver.LEVEL, "cascade lands in the carved river bed")
 		check(crown.distance_to(PremadeRiver.RESERVOIR_CENTER) <= PremadeRiver.RESERVOIR_RADIUS + 1.5,
 			"waterfall crown is at the reservoir edge")

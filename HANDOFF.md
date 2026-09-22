@@ -1,3 +1,13 @@
+# 2026-09-22 � v77 circular mountain valley
+
+Implemented from main `81297b1` on `fix/circular-mountain-valley`: rounded native basin, surrounding mountain range and an 18 m reservoir waterfall feeding the river. Fresh starter homes/paths now match the doubled map. Existing checkpoint terrain/water remain authoritative; the missing parent startup callback was restored.
+
+Native starter/save/migration, mountain geometry, river, waterfall, sculpt and water-edit checks passed. Nine production Mobile captures passed, including full-world meshing and an actual border edit; overview and waterfall visually inspected. Verified signed ARM64 v77 APK (`org.hearthvale.game.test.m2night`), one exact pinned voxel library. No Thor installation or performance/controller test; visual approval remains with the player. New generated geography requires a new world.
+
+Details and limitations: [circular mountain valley report](reports/circular-mountain-valley.md). Captures: `reports/screenshots/circular-mountain-valley/`. APK SHA-256: `a4eb55c312f247a1532f17671e5db6b68dd5f75b2dfc680bb0aef20c3a91fc99`.
+
+---
+
 # Hearthvale — v67 post-stroke-backlog fix on the Thor (2026-09-21)
 ## 2026-09-21 (round 13) — v67: per-frame native-paste box reset shipped; backlog death-spiral eliminated, small residual single-frame spike remains
 

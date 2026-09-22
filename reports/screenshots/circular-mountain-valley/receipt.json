@@ -1,0 +1,19 @@
+{
+	"captures": [
+		"res://reports/screenshots/circular-mountain-valley/opening-ui.png",
+		"res://reports/screenshots/circular-mountain-valley/normal.png",
+		"res://reports/screenshots/circular-mountain-valley/commons-close.png",
+		"res://reports/screenshots/circular-mountain-valley/woodcutters-close.png",
+		"res://reports/screenshots/circular-mountain-valley/reverse.png",
+		"res://reports/screenshots/circular-mountain-valley/basin-overview.png",
+		"res://reports/screenshots/circular-mountain-valley/waterfall.png",
+		"res://reports/screenshots/circular-mountain-valley/edge-before.png",
+		"res://reports/screenshots/circular-mountain-valley/edge-edited.png"
+	],
+	"failures": 0,
+	"messages": [],
+	"ok": true,
+	"production_start": true,
+	"renderer": "mobile",
+	"size": "1280x720"
+}

@@ -39,7 +39,7 @@ jobs:
         shell: pwsh
         run: |
           $editor = Get-ChildItem '.tools/water' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          foreach ($test in @('water_region_test','water_carve_plan_test','water_visual_test','water_excavation_test','waterfall_test','waterfall_visual_test','water_lake_outline_test')) {
+          foreach ($test in @('premade_river_test','valley_ring_occlusion_test','water_region_test','water_carve_plan_test','water_visual_test','water_excavation_test','waterfall_test','waterfall_visual_test','water_lake_outline_test')) {
             $log = & $editor --headless --path . --script "tests/$test.gd" 2>&1 | Out-String
             $exitCode = $LASTEXITCODE
             $log | Tee-Object -FilePath ".tools/water/$test.log"

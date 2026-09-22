@@ -637,6 +637,8 @@ func _build_cascade(fall: Dictionary) -> MeshInstance3D:
 	if flow.length() < 0.0001:
 		flow = Vector2(1.0, 0.0)
 	flow = flow.normalized()
+	# Lift the curtain off the voxel face to avoid coplanar flicker.
+	crown += flow * 0.04
 	var perp := Vector2(-flow.y, flow.x)
 	var half := width * 0.5
 	var mesh := ArrayMesh.new()
@@ -648,7 +650,7 @@ func _build_cascade(fall: Dictionary) -> MeshInstance3D:
 	var cc := PackedColorArray([Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE])
 	var ci := PackedInt32Array([0, 1, 2, 0, 2, 3])
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _surface_arrays(cv, cn, cc, ci))
-	mesh.surface_set_material(0, _fall_material(top - bottom))
+	mesh.surface_set_material(0, _fall_material(top - bottom, top))
 	# Surface 1: a flat foam splash just above the pool at the base.
 	var s := width * 0.7
 	var eps := 0.02
@@ -658,7 +660,7 @@ func _build_cascade(fall: Dictionary) -> MeshInstance3D:
 	var si := PackedInt32Array([0, 1, 2, 0, 2, 3])
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _surface_arrays(sv, sn, sc, si))
 	var splash_material := StandardMaterial3D.new()
-	splash_material.albedo = SPLASH_COLOR
+	splash_material.albedo_color = SPLASH_COLOR
 	splash_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	splash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	splash_material.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -681,11 +683,12 @@ func _surface_arrays(vertices: PackedVector3Array, normals: PackedVector3Array, 
 	arrays[Mesh.ARRAY_INDEX] = indices
 	return arrays
 
-func _fall_material(span: float) -> ShaderMaterial:
+func _fall_material(span: float, top: float) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = FALL_SHADER
 	material.set_shader_parameter("fall_color", FALL_COLOR)
 	material.set_shader_parameter("height", span)
+	material.set_shader_parameter("top_level", top)
 	return material
 
 ## A unit billboard quad carrying a soft, unshaded alpha material; the particle
@@ -694,7 +697,7 @@ func _particle_quad(color: Color) -> QuadMesh:
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.albedo = color
+	mat.albedo_color = color
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var quad := QuadMesh.new()

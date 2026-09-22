@@ -1,7 +1,7 @@
 extends SceneTree
 ## Actual main-scene cold start, native Mobile captures and a real border edit.
 ## Uses a unique checkpoint root; player saves and the live scene are untouched.
-const OUTPUT := "res://reports/screenshots/m2-starter-valley"
+const OUTPUT := "res://reports/screenshots/circular-mountain-valley"
 var failures: Array[String] = []
 var captures: Array[String] = []
 
@@ -48,6 +48,13 @@ func run() -> void:
 		return
 	check(scene._starter_seeded, "Production cold start seeds the hamlet")
 	check(scene.building_world.get_buildings().size() == 3, "Production cold start has three homes")
+	# Native startup initially meshes only a small focus box. A panorama must
+	# wait for the expanded viewer, otherwise captures contain floating water.
+	var mesh_deadline := Time.get_ticks_msec() + 300000
+	var whole_world := AABB(Vector3.ZERO, Vector3(scene.backend.patch_size))
+	while not scene.backend.terrain.is_area_meshed(whole_world) and Time.get_ticks_msec() < mesh_deadline:
+		await process_frame
+	check(scene.backend.terrain.is_area_meshed(whole_world), "Full native valley is meshed before capture")
 	await settle_frames(1500)
 	scene.set_process(false)
 	# The first two captures use the real initial camera without moving it.
@@ -63,20 +70,28 @@ func run() -> void:
 		var node = scene.get(name)
 		if node != null: node.visible = false
 	await capture("normal")
-	frame_scene(scene, Vector3(23.5, 9.25, 28.0), -1.9, 0.70, 15.0)
+	frame_scene(scene, Vector3(47.0, 9.25, 56.0), -1.9, 0.70, 15.0)
 	await capture("commons-close")
-	frame_scene(scene, Vector3(13.0, 8.75, 31.5), -2.6, 0.75, 9.0)
+	frame_scene(scene, Vector3(32.0, 8.75, 60.0), -2.6, 0.75, 9.0)
 	await capture("woodcutters-close")
-	frame_scene(scene, Vector3(27.0, 10.0, 28.0), 0.70, 0.78, 37.0)
+	frame_scene(scene, Vector3(54.0, 10.0, 56.0), 0.70, 0.78, 37.0)
 	await capture("reverse")
-	frame_scene(scene, Vector3(61.0, 10.0, 44.0), -0.85, 0.74, 22.0)
+	# Wide scene view and close source view exercise the actual Mobile renderer.
+	scene.camera.attributes = null
+	scene.camera.position = Vector3(175, 165, -65)
+	scene.camera.look_at(Vector3(80, 8, 80))
+	await capture("basin-overview")
+	scene.camera.position = Vector3(98, 36, 111)
+	scene.camera.look_at(Vector3(82, 16, 141))
+	await capture("waterfall")
+	frame_scene(scene, Vector3(155.0, 25.0, 80.0), -0.85, 0.74, 22.0)
 	await capture("edge-before")
-	var point := Vector3(63.75, 10.0, 44.0)
+	var point := Vector3(158.0, 25.0, 80.0)
 	var sample: Dictionary = scene.backend.sample_surface_plane(point + Vector3.UP * 4.0, Vector3.UP, 8.0)
 	check(bool(sample.get("valid", false)), "Border terrain can be targeted")
 	if bool(sample.get("valid", false)):
 		point.y = (sample["point"] as Vector3).y
-		var old_surround: Mesh = scene._valley_surround._land.mesh
+		var old_surround: Mesh = scene._valley_surround.mesh
 		check(scene.backend.begin_stroke("dig", point, {"radius":1.5, "strength":2.0, "falloff":0.6}), "Border dig begins")
 		for tick in 12: scene.backend.update_stroke(point, 1.0 / 30.0)
 		check(scene.backend.end_stroke(), "Border dig commits through native terrain")
@@ -85,8 +100,8 @@ func run() -> void:
 		# coalesced surround refresh once after the completed stroke.
 		scene._process(1.0 / 60.0)
 		check(not scene._surround_refresh_pending, "Border scenery refresh is consumed after the stroke")
-		check(scene._valley_surround._land.mesh != old_surround, "Border scenery is rebuilt from the edited native boundary")
-		frame_scene(scene, Vector3(61.0, 10.0, 44.0), -0.85, 0.74, 22.0)
+		check(scene._valley_surround.mesh != old_surround, "Border scenery is rebuilt from the edited native boundary")
+		frame_scene(scene, Vector3(155.0, 25.0, 80.0), -0.85, 0.74, 22.0)
 		for name in ["brush_preview", "cursor_reticle", "reference_plane", "terrain_hit_marker", "terrain_edit_preview"]:
 			var node = scene.get(name)
 			if node != null: node.visible = false

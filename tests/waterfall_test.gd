@@ -56,6 +56,8 @@ func _initialize() -> void:
 	# flat ground (no drop) -> not a waterfall
 	check(Waterfall.derive([_upper(), _lower()], _flat_sampler(4.0)).is_empty(), "flat ground is not a waterfall")
 
+	check(Waterfall.derive([_upper(), _lower()], _flat_sampler(1.0)).is_empty(), "water suspended over low terrain is not a supported waterfall")
+
 	# equal levels (head < 0.5) -> not a waterfall
 	check(Waterfall.derive([_upper(), _lower(4.0)], cliff).is_empty(), "equal levels are not a waterfall")
 

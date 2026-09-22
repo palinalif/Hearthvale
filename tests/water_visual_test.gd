@@ -139,6 +139,12 @@ func _verify_localized_edit_then_commit() -> void:
 	mock.bumps[Vector2i(20, 20)] = 8  # raise one column to 2.0 m, above the 1.5 m level
 	mock.bump()
 	visual.refresh_surface_from_bounds(AABB(Vector3(-10.0, 0.0, -10.0), Vector3(40.0, 10.0, 40.0)))
+	# Local updates intentionally spill across frames when the 6 ms budget is
+	# exhausted. Assert the completed result, not the speed of this machine.
+	for frame in 240:
+		if visual._pending_cells.is_empty() and visual._dirty_regions.is_empty(): break
+		visual._process(1.0 / 60.0)
+	check(visual._pending_cells.is_empty() and visual._dirty_regions.is_empty(), "localized water work completes within a bounded number of frames")
 	check(visual.surface_quad_count() == before - 1, "localized edit dries one cell (before=%d after=%d)" % [before, visual.surface_quad_count()])
 	visual.set_regions_incremental([_whole_lake()])  # the commit sync after the signal
 	var perf: Dictionary = visual.water_perf
