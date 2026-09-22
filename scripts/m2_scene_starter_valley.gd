@@ -107,9 +107,11 @@ func _ensure_directional_fill(fill_name: String, rotation: Vector3, color: Color
 	fill.light_specular = 0.25
 
 func _on_backend_ready(ready: bool) -> void:
-	var already_restored := _player_restored
-	super._on_backend_ready(ready)
-	if not ready or already_restored or not _player_restored or not backend: return
+	if not ready or not backend: return
+	# A world with no saved checkpoint gets the full hamlet; a loaded save keeps
+	# exactly what it has. Gate on the loaded document, not on _player_restored:
+	# a fresh world already contains the player shell (building-1), and both
+	# fresh and restored worlds report _player_restored=true here.
 	var saved: Dictionary = backend.loaded_building_document
 	var error := str(backend.stats().get("error", ""))
 	var seed_allowed := starter_hamlet_enabled and (not test_mode or starter_hamlet_in_tests)

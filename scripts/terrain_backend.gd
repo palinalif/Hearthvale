@@ -1474,12 +1474,13 @@ static func _apply_beveled_blocky_models(mesher: Object) -> void:
 	var models: Array = library.get_models()
 	if models.size() < 3:
 		return
-	var stone_model: Object = _make_beveled_block_model(models[1], "stone")
-	var grass_model: Object = _make_beveled_block_model(models[2], "grass")
-	if stone_model == null or grass_model == null:
-		return
-	models[1] = stone_model
-	models[2] = grass_model
+	# Bevel every solid model (ids 1-9: stone, grass family, dirt, sand,
+	# gravel, moss, rock face); index 0 stays the empty model.
+	for id in range(1, models.size()):
+		var replacement: Object = _make_beveled_block_model(models[id], "%d" % id)
+		if replacement == null:
+			return
+		models[id] = replacement
 	library.set_models(models)
 	library.bake()
 

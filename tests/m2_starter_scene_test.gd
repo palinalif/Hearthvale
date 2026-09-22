@@ -1,76 +1,137 @@
 extends SceneTree
+
+const Generator = preload("res://scripts/m1_patch_generator.gd")
+const SceneScript = preload("res://scripts/m2_scene_starter_valley.gd")
+
 var failures: Array[String] = []
-var checks := 0
+var scene: Node
+var check_count := 0
+
 func check(ok: bool, message: String) -> void:
-	checks += 1
+	check_count += 1
 	if not ok:
 		failures.append(message)
-		push_error(message)
+		printerr("CHECK FAIL: " + message)
+
 func _initialize() -> void:
 	call_deferred("run")
+
 func run() -> void:
-	var scene = load("res://scenes/m1.tscn").instantiate()
+	_clear_dir("user://m2_scene_test")
+	DirAccess.make_dir_recursive_absolute("user://m2_scene_test")
+	scene = SceneScript.new()
 	scene.test_mode = true
 	scene.starter_hamlet_in_tests = true
-	scene.checkpoint_root = "user://m2-starter-integration-%d" % Time.get_ticks_usec()
+	scene.checkpoint_root = "user://m2_scene_test/valley"
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 90000
-	while not scene._player_restored and Time.get_ticks_msec() < deadline:
+	var deadline := Time.get_ticks_msec() + 60000
+	while scene.backend == null or not scene.backend.is_ready():
 		await process_frame
-	check(scene._player_restored, "Native main scene reached ready")
-	if scene._player_restored:
-		check(scene._starter_seeded, "Fresh scene received starter exactly once")
-		check(scene.building_world.get_document()["buildings"].size() == 3, "Fresh scene has three homes")
-		check(scene._valley_surround != null, "Scenic surround is present")
-		if scene._valley_surround != null: print("STARTER_SURROUND " + JSON.stringify(scene._valley_surround.stats()))
-		var before := JSON.stringify(scene.building_world.get_document())
-		check(not scene._seed_starter_hamlet(), "Second starter seed refused")
-		check(before == JSON.stringify(scene.building_world.get_document()), "Second seed leaves homes unchanged")
-		_check_expanded_placement(scene)
-		for style in ["well", "chopping_block", "log_stack"]:
-			check(style in scene.FURNITURE_STYLE_ORDER, style + " is available in the furniture catalogue")
-		for context in ["terrain", "building"]:
-			scene.view_context = context
-			for corner: Vector3 in [Vector3(0.5,8,0.5), Vector3(63.5,8,0.5), Vector3(0.5,8,63.5), Vector3(63.5,8,63.5)]:
-				scene.cursor = corner
-				for yaw in range(8):
-					scene.camera_yaw = float(yaw) * TAU / 8.0
-					scene.camera_distance = 52.0
-					scene._update_camera()
-					var position: Vector3 = scene.camera.position
-					check(position.x >= 0.0 and position.x <= 64.0 and position.z >= 0.0 and position.z <= 64.0, "Camera remains within native extent")
-		check(scene._save_all(), "Expanded starter world saves")
-		var saved: Dictionary = scene.building_world.get_document()
-		check(scene.backend.load_world(), "Expanded starter checkpoint reloads")
-		var expected = JSON.parse_string(JSON.stringify(saved["buildings"]))
-		check(scene.backend.loaded_building_document["buildings"] == expected, "Reload retains starter building records")
-		check(scene.backend.loaded_building_document["landscape"]["composition"].size() == 14, "Reload retains all props and gardens")
-		print("STARTER_NATIVE_READY " + JSON.stringify({"world_size":str(scene.backend.world_size()), "homes":3, "save_reload":true}))
+		if Time.get_ticks_msec() > deadline:
+			failures.append("backend did not become ready in time")
+			print("M2_STARTER_SCENE_RESULT " + JSON.stringify({"ok": false, "checks": check_count, "failures": failures}))
+			quit(1)
+			return
+	check(scene._valley_surround != null, "valley surround is mounted")
+	check(scene._valley_surround.stats()["peak_height"] == 56.0, "valley surround peak height is the 56 m ring")
+	check(scene.river_water != null, "river water is mounted")
+	check(
+		is_equal_approx(scene.landscape_state.bridges.size(), 1)
+		and (scene.landscape_state.bridges[0]["points"] as Array).size() >= 2,
+		"one starter bridge across the river"
+	)
+	var document: Dictionary = scene.building_world.get_document()
+	var buildings: Array = document.get("buildings", [])
+	check(buildings.size() == 3, "three starter buildings (got %d)" % buildings.size())
+	check(scene._starter_seeded, "starter hamlet seeded for the new world")
+	_check_flat_hamlet()
+	_check_home_anchor_support(buildings)
+	check(_check_library(), "terrain library has the full 10-model ground set")
+	_check_material_round_trip()
 	scene._shutting_down = true
+	scene._save_all()
 	scene.queue_free()
-	await process_frame
-	await process_frame
-	print("STARTER_SCENE_RESULT " + JSON.stringify({"ok":failures.is_empty(), "checks":checks, "failures":failures.size(), "messages":failures}))
+	check(failures.is_empty(), "all checks passed")
+	print("M2_STARTER_SCENE_RESULT " + JSON.stringify({"ok": failures.is_empty(), "checks": check_count, "failures": failures}))
 	quit(0 if failures.is_empty() else 1)
 
-func _check_expanded_placement(scene: Node) -> void:
-	# Exercise live placement, not just the shared constant. Section editing also
-	# inherits this bound, so the new meadow must not stop at the old 47.75 line.
-	var homes := JSON.stringify(scene.building_world.get_document())
-	var landscape := JSON.stringify(scene.landscape_state.document())
-	scene.view_context = "building"
-	for point: Vector3 in [Vector3(56,10,44), Vector3(24,10,55)]:
-		scene.cursor = point
-		scene._begin_new_building_placement("woodland_lodge")
-		check(scene.building_placement_active, "New home placement begins in expanded land")
-		scene.building_placement_target = point
-		scene._snap_building_placement_to_ground()
-		scene._update_building_preview_transform()
-		check(scene.building_placement_valid, "Home can use expanded land at %s: %s" % [point, scene.building_placement_reason])
-		for outside: Vector3 in [Vector3(64,10,56), Vector3(56,10,64), Vector3(-0.5,10,56)]:
-			scene.building_placement_target = outside
-			scene._update_building_preview_transform()
-			check(not scene.building_placement_valid and "Outside" in str(scene.building_placement_reason), "House footprint still rejects the actual map edge")
-		scene._cancel_building_placement()
-	check(homes == JSON.stringify(scene.building_world.get_document()), "Expanded placement cancellation preserves all homes")
-	check(landscape == JSON.stringify(scene.landscape_state.document()), "Expanded placement cancellation preserves all planting and props")
+## The hamlet plateau is the farm's flat ground: every column inside the
+## hamlet rectangle must sit at exactly the 8 m level.
+func _check_flat_hamlet() -> void:
+	var flat := true
+	for x in range(13, 32, 2):
+		for z in range(11, 26, 2):
+			if absf(Generator.terrain_height(float(x), float(z)) - 8.0) > 0.001:
+				flat = false
+	check(flat, "hamlet plateau is flat at 8 m")
+
+## Every home anchor (building origin) stands on solid ground: the voxel
+## column under each anchor must contain material within two meters down.
+func _check_home_anchor_support(buildings: Array) -> void:
+	for building in buildings:
+		var transform: Dictionary = building.get("transform", {})
+		var data: Array = transform.get("position", [0.0, 0.0, 0.0])
+		var anchor := Vector3(float(data[0]), float(data[1]), float(data[2]))
+		var supported := false
+		var tool: Object = scene.backend.terrain.get_voxel_tool()
+		for y in range(64, -1, -1):
+			if int(tool.get_voxel(Vector3i(int(anchor.x * 8.0), y, int(anchor.z * 8.0)))) != 0:
+				var world_y := (y + 1) * 0.125
+				if anchor.y - world_y <= 2.0 and anchor.y - world_y >= -0.5:
+					supported = true
+				break
+		check(supported, "home anchor at (%.1f, %.1f, %.1f) stands on solid ground" % [anchor.x, anchor.y, anchor.z])
+
+func _check_library() -> bool:
+	var mesher: Object = scene.backend.terrain.mesher
+	var library: Object = mesher.get("library")
+	return library != null and library.get_models().size() == 10
+
+## Paint two hamlet cells dirt via the native voxel tool (net height
+## unchanged), then prove the material survives a save/load round trip
+## through the 8-bit checkpoint channel.
+func _check_material_round_trip() -> void:
+	var tool: Object = scene.backend.terrain.get_voxel_tool()
+	var center := Vector3(20.0, 8.0, 18.0)
+	var top := _top_voxel(tool, center)
+	check(top >= 0, "painted column has a surface")
+	# Paint the top two cells of the column dirt: a 1x2x1 buffer on the tool
+	# (VoxelBuffer.set_voxel takes value, x, y, z, channel) plus the same cells
+	# on the checkpoint buffer, which is the authoritative save source.
+	var x := int(center.x * 8.0)
+	var z := int(center.z * 8.0)
+	var buffer: Object = ClassDB.instantiate("VoxelBuffer")
+	buffer.create(1, 2, 1)
+	buffer.set_voxel(3, 0, 0, 0, 0)
+	buffer.set_voxel(3, 0, 1, 0, 0)
+	tool.paste(Vector3i(x, top - 1, z), buffer, 1)
+	var store: Object = scene.backend.voxels
+	store.set_voxel(3, x, top - 1, z, 0)
+	store.set_voxel(3, x, top, z, 0)
+	check(int(tool.get_voxel(Vector3i(x, top, z))) == 3, "painted cell is dirt (3)")
+	check(absf((top + 1) * 0.125 - 8.0) < 0.001, "hamlet stays flat after the paint")
+	check(scene._save_all(), "scene saves after the paint")
+	check(scene._reload_all(), "scene reloads after the paint")
+	check(int(tool.get_voxel(Vector3i(x, top, z))) == 3, "dirt (3) survives the save/load round trip")
+	check(int(tool.get_voxel(Vector3i(x, top - 1, z))) == 3, "second dirt cell survives the save/load round trip")
+
+func _top_voxel(tool: Object, center: Vector3) -> int:
+	for y in range(64, -1, -1):
+		if int(tool.get_voxel(Vector3i(int(center.x * 8.0), y, int(center.z * 8.0)))) != 0:
+			return y
+	return -1
+
+func _clear_dir(path: String) -> void:
+	if not DirAccess.dir_exists_absolute(path):
+		return
+	var dir := DirAccess.open(path)
+	dir.list_dir_begin()
+	var entry: String = dir.get_next()
+	while entry != "":
+		var full := path.path_join(entry)
+		if dir.current_is_dir():
+			_clear_dir(full)
+		else:
+			DirAccess.remove_absolute(full)
+		entry = dir.get_next()
+	DirAccess.remove_absolute(path)

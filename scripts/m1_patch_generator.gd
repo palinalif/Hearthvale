@@ -29,8 +29,7 @@ const LEGACY_V2_PATCH_SIZE := Vector3i(384, 256, 384)
 const LEGACY_V2_GENERATOR_ID := "m1_cottage_pad_v2"
 const CHANNEL_TYPE := 0
 const GENERATOR_ID := "m2_starter_valley_v4"
-const GRASS_SHADER := preload("res://scripts/terrain_grass.gdshader")
-const GrassTone = preload("res://scripts/grass_tone.gd")
+const GroundMaterials = preload("res://scripts/terrain_ground_materials.gd")
 
 ## Meadow pads (new-world generation only; migrated saves keep their saved
 ## terrain and records, so pads never affect restores).
@@ -100,6 +99,45 @@ static func _original_height(world_x: float, world_z: float) -> float:
 		return lerpf(5.125, height, bank_blend)
 	return height
 
+## Deterministic ground painting (stage 3 art pass). Pure function of column
+## position (no RNG), so generate() and expand_previous() agree and repeated
+## runs produce identical channels. Only the top two surface voxels of each
+## column are ever written, so the subsurface stays stone (1) and the old
+## 0-64 m region keeps its saved materials on migration.
+static func surface_material(world_x: float, world_z: float, height: float) -> int:
+	var center := river_center_x(world_z)
+	var half := river_half_width(world_z)
+	var distance := absf(world_x - center)
+	# River bed: sand on the channel floor, gravel on the upper banks.
+	if distance <= half:
+		return GroundMaterials.SAND if height <= 4.5 else GroundMaterials.GRAVEL
+	if distance <= half + 2.5:
+		return GroundMaterials.GRAVEL
+	# Hamlet highland stays the exact GrassTone grass, with a dirt lane from
+	# the well to the bridge landing.
+	if world_x >= 13.0 and world_x <= 31.0 and world_z >= 11.0 and world_z <= 25.0:
+		return GroundMaterials.GRASS
+	if world_z >= 26.5 and world_z <= 28.5 and world_x >= 23.5 and distance > half + 0.5:
+		return GroundMaterials.DIRT
+	# New ring land (64-80 m): layered forest/mountain variation. The river
+	# corridor falloff keeps the two exits green and low.
+	var depth := maxf(world_x, world_z) - 64.0
+	if depth > 0.0:
+		var h := _hash01(world_x, world_z)
+		if height >= 12.0:
+			return GroundMaterials.ROCK_FACE if h < 0.45 else GroundMaterials.DENSE_GRASS
+		if height >= 10.5:
+			return GroundMaterials.MOSS if h < 0.35 else GroundMaterials.DENSE_GRASS
+		return GroundMaterials.DENSE_GRASS if h < 0.8 else GroundMaterials.GRASS
+	# Everything else (meadow pads, lowland, old region): original grass.
+	return GroundMaterials.GRASS
+
+static func _hash01(world_x: float, world_z: float) -> float:
+	var h := int(world_x * 1000.0) * 374761393 + int(world_z * 1000.0) * 668265263
+	h = (h ^ (h >> 13)) * 1274126177
+	h = h ^ (h >> 16)
+	return fmod(absf(float(h)), 1000000.0) / 1000000.0
+
 static func generate() -> Object:
 	var voxels: Object = ClassDB.instantiate("VoxelBuffer")
 	voxels.create(PATCH_SIZE.x, PATCH_SIZE.y, PATCH_SIZE.z)
@@ -108,7 +146,10 @@ static func generate() -> Object:
 			var height := terrain_height(float(x) * VOXEL_SCALE, float(z) * VOXEL_SCALE)
 			var surface := clampi(floori(height / VOXEL_SCALE), 1, PATCH_SIZE.y)
 			voxels.fill_area(1, Vector3i(x, 0, z), Vector3i(x + 1, surface - 1, z + 1), CHANNEL_TYPE)
-			voxels.set_voxel(2, x, surface - 1, z, CHANNEL_TYPE)
+			var material := surface_material(float(x) * VOXEL_SCALE, float(z) * VOXEL_SCALE, height)
+			voxels.set_voxel(material, x, surface - 1, z, CHANNEL_TYPE)
+			if surface >= 2:
+				voxels.set_voxel(material, x, surface - 2, z, CHANNEL_TYPE)
 	# The inherited tunnel remains volumetric.
 	voxels.fill_area(0, Vector3i(256, 40, 152), Vector3i(312, 64, 208), CHANNEL_TYPE)
 	return voxels
@@ -136,24 +177,9 @@ static func expand_legacy_v2(source: Object, destination: Object = null) -> Obje
 ## come from GrassTone (the same model the tuft renderer and the determinism
 ## tests use), so the GPU field and the CPU model have one source of truth.
 static func grass_material() -> ShaderMaterial:
-	var material := ShaderMaterial.new()
-	material.shader = GRASS_SHADER
-	for parameter: String in GrassTone.shader_uniforms():
-		material.set_shader_parameter(parameter, GrassTone.shader_uniforms()[parameter])
-	return material
+	return GroundMaterials.grass_material(0)
 
+## The full stage-3 material library (10 models, ids 0-9); the caller applies
+## the beveled geometry (see TerrainBackend._apply_beveled_blocky_models).
 static func build_library() -> Object:
-	var library: Object = ClassDB.instantiate("VoxelBlockyLibrary")
-	var empty: Object = ClassDB.instantiate("VoxelBlockyModelEmpty")
-	var stone: Object = ClassDB.instantiate("VoxelBlockyModelCube")
-	var stone_material := StandardMaterial3D.new()
-	stone_material.albedo_color = Color("#ac9677")
-	stone_material.vertex_color_use_as_albedo = true
-	stone.set_material_override(0, stone_material)
-	var grass: Object = ClassDB.instantiate("VoxelBlockyModelCube")
-	grass.set_material_override(0, grass_material())
-	library.add_model(empty)
-	library.add_model(stone)
-	library.add_model(grass)
-	library.bake()
-	return library
+	return GroundMaterials.build_library()

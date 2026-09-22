@@ -42,6 +42,16 @@ func _ready() -> void:
 func rebuild(_backend) -> void:
 	_build_mesh()
 
+## Presentation ring stats (used by tests and capture reports).
+func stats() -> Dictionary:
+	var vertices := 0
+	if mesh != null:
+		for s in mesh.get_surface_count():
+			var arrays: Array = mesh.surface_get_arrays(s)
+			if not arrays.is_empty() and arrays[0] is PackedVector3Array:
+				vertices += arrays[0].size()
+	return {"peak_height": PEAK_HEIGHT, "segments": int(_SEGMENTS), "vertices": vertices, "water_level": RIVER_WATER_LEVEL}
+
 ## True if an edit in [bounds] is close enough to the ring to warrant
 ## a rebuild (the ring itself is static, but the terrain edge may shift
 ## under a sculpt near the border).
