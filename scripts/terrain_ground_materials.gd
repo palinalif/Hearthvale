@@ -35,8 +35,10 @@ const GRASS_SHADER := preload("res://scripts/terrain_grass.gdshader")
 const GrassTone = preload("res://scripts/grass_tone.gd")
 
 ## Sunny-olive anchor for dry grass; dark-forest anchor for dense grass.
-const DRY_TINT := Color("#a89a5f")
-const DENSE_TINT := Color("#3f5a38")
+## Tint anchors stay in the GrassTone green family (base meadow #95af6d,
+## deep shade #7d965e): variants read as denser/drier grass, not olive mud.
+const DRY_TINT := Color("#9aa561")
+const DENSE_TINT := Color("#64784c")
 
 static func name(id: int) -> String:
 	return NAMES.get(id, "air")
@@ -78,8 +80,7 @@ static func material_for(id: int) -> Material:
 		9: return grass_material(2)
 	return standard(Color.WHITE)
 
-## Builds the 10-model VoxelBlocky library (index 0 = empty). Callers apply
-## the beveled geometry afterwards (TerrainBackend).
+## Builds the 10-model VoxelBlocky library (index 0 = empty, plain cubes).
 static func build_library() -> Object:
 	var library: Object = ClassDB.instantiate("VoxelBlockyLibrary")
 	var empty: Object = ClassDB.instantiate("VoxelBlockyModelEmpty")

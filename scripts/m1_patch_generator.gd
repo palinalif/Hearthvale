@@ -179,7 +179,6 @@ static func expand_legacy_v2(source: Object, destination: Object = null) -> Obje
 static func grass_material() -> ShaderMaterial:
 	return GroundMaterials.grass_material(0)
 
-## The full stage-3 material library (10 models, ids 0-9); the caller applies
-## the beveled geometry (see TerrainBackend._apply_beveled_blocky_models).
+## The full stage-3 material library (10 models, ids 0-9).
 static func build_library() -> Object:
 	return GroundMaterials.build_library()
