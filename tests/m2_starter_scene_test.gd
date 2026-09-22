@@ -56,7 +56,7 @@ func run() -> void:
 	for region: Dictionary in regions:
 		for pond: Dictionary in PremadePonds.regions():
 			if PremadePonds.matches(region, pond): ponds_after += 1
-	check(regions.size() == 3 and ponds_after == 2, "starter water (river + two ponds) survives the save/load round trip")
+	check(regions.size() == 4 and ponds_after == 2, "starter water (river + reservoir + two ponds) survives the save/load round trip")
 	scene._shutting_down = true
 	scene._save_all()
 	scene.queue_free()
@@ -78,16 +78,20 @@ func _check_flat_hamlet() -> void:
 ## column under each anchor must contain material within two meters down.
 ## The two starter ponds are water regions on the village green: the region
 ## records exist, each basin floor sits at the 0.75 m lake bed, and the
-## ground around the shore stays above the water level (7.5 < 8.0).
+## ground around the shore stays above the water level (7.5 < 8.0). The
+## mountain reservoir at the river's head is a fourth region: it exists and
+## sits at its 10.0 m level, above the 5.0 m river (the 5 m waterfall head).
 func _check_ponds() -> void:
 	var regions: Array = scene.landscape_state.water
 	var river := false
+	var reservoir := false
 	var ponds := 0
 	for region: Dictionary in regions:
 		if PremadeRiver.is_starter_river(region): river = true
+		if PremadeRiver.matches_reservoir(region, PremadeRiver.reservoir_region()): reservoir = true
 		for pond: Dictionary in PremadePonds.regions():
 			if PremadePonds.matches(region, pond): ponds += 1
-	check(regions.size() == 3 and river and ponds == 2, "water holds the starter river and both ponds (got %d regions)" % regions.size())
+	check(regions.size() == 4 and river and reservoir and ponds == 2, "water holds the starter river, the mountain reservoir, and both ponds (got %d regions)" % regions.size())
 	var tool: Object = scene.backend.terrain.get_voxel_tool()
 	for pond: Dictionary in PremadePonds.regions():
 		var center := Vector2.ZERO

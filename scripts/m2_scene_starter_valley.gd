@@ -162,6 +162,7 @@ func _on_backend_ready(ready: bool) -> void:
 	# Runs for both fresh (seeded) and existing (restored) worlds; idempotent.
 	_ensure_premade_river()
 	_ensure_premade_ponds()
+	_ensure_premade_reservoir()
 
 func _seed_starter_hamlet() -> bool:
 	if _starter_seeded or not backend.loaded_building_document.is_empty(): return false
@@ -219,6 +220,25 @@ func _ensure_premade_pond(pond: Dictionary) -> bool:
 	if PremadePonds.already_carved(_terrain_top_sampler(), pond): return true
 	if landscape_state.add_water("lake", pond["level"], pond["points"]) < 1: return false
 	return _carve_pond(pond)
+
+func _ensure_premade_reservoir() -> void:
+	# The mountain reservoir is the river's source: a lake region above the
+	# 8.75 m plain floor at the foot of the inner ridge, its south edge
+	# adjacent to the river head. The ~5 m cliff between the reservoir
+	# (10.0) and the river (5.0) is where WaterfallGeometry derives the
+	# waterfall; nothing waterfall-specific is stored. Runs for both fresh
+	# (seeded) and existing (restored) worlds; idempotent. The reservoir's
+	# own floor is already below the lake bed, so _carve_pond is a no-op
+	# carve here (it still clears records and syncs the water visual).
+	var reservoir: Dictionary = PremadeRiver.reservoir_region()
+	for existing: Dictionary in landscape_state.water:
+		if PremadeRiver.matches_reservoir(existing, reservoir):
+			_carve_pond(reservoir)
+			return
+	if landscape_state.add_water("lake", reservoir["level"], reservoir["points"]) < 1:
+		push_error("Premade reservoir could not be added; leaving the world as-is")
+		return
+	_carve_pond(reservoir)
 
 func _carve_pond(pond: Dictionary) -> bool:
 	var cells: Array = WaterRegion.footprint_cells(pond, WaterState.EDITABLE_WORLD_SIZE)
