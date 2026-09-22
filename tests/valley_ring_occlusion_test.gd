@@ -4,9 +4,10 @@
 # reachable camera pose in the starter valley. Two contracts:
 #   1. Max camera reach: the starter scene caps orbit pitch at 1.15 rad and
 #      the building camera distance at 52 m, so the highest camera position
-#      is target_y + sin(1.15) * 52 ≈ 49.1 m. Ring peaks (50-56 m) must sit
-#      above that from the player's vantage region.
-#   2. River exits: the ring must stay open (water level 4.375 m) where the
+#      is target_y + sin(1.15) * 52 ≈ 63.5 m above the 16 m target below.
+#      Ring peaks (112–140 m) must sit above that from the
+#      player's vantage region.
+#   2. River exits: the ring must stay open (water level 8.75 m) where the
 #      river leaves the map, so the world still reads as a valley with a
 #      river flowing out, not a sealed box.
 #
@@ -18,8 +19,8 @@ extends SceneTree
 const SCRIPT_NAME := "valley_ring_occlusion_test"
 const VALLEY_MAX_PITCH := 1.15
 const MAX_DISTANCE := 52.0
-const TARGET_Y := 8.0
-const RIVER_LEVEL := 4.375
+const TARGET_Y := 16.0
+const RIVER_LEVEL := 8.75
 const Ring = preload("res://scripts/m2_valley_surround.gd")
 const Gen = preload("res://scripts/m1_patch_generator.gd")
 
@@ -45,8 +46,8 @@ func _run() -> int:
 	for i in 720:
 		var ang := float(i) / 720.0 * 6.28318530718
 		var xz := Vector2(
-			40.0 + 40.0 * cos(ang),
-			40.0 + 40.0 * sin(ang)
+			80.0 + 80.0 * cos(ang),
+			80.0 + 80.0 * sin(ang)
 		)
 		var peak := ring.peak_height(xz)
 		worst = maxf(worst, reach - peak)
@@ -63,12 +64,12 @@ func _run() -> int:
 	for i in 36:
 		var ang := float(i) / 36.0 * 6.28318530718
 		var xz := Vector2(
-			40.0 + 45.0 * cos(ang),
-			40.0 + 45.0 * sin(ang)
+			80.0 + 90.0 * cos(ang),
+			80.0 + 90.0 * sin(ang)
 		)
-		var edge_h := ring.ring_height(0.125, xz)
-		var wall_h := ring.ring_height(5.0, xz)
-		var peak_h := ring.ring_height(14.0, xz)
+		var edge_h := ring.ring_height(0.25, xz)
+		var wall_h := ring.ring_height(10.0, xz)
+		var peak_h := ring.ring_height(28.0, xz)
 		if wall_h < edge_h - 0.01 or peak_h < wall_h - 0.01:
 			wall_fail += 1
 	if wall_fail > 0:
@@ -79,10 +80,10 @@ func _run() -> int:
 
 	# 3. River exits stay open at the corridor, both directions.
 	var corridor_fail := 0
-	for z in [0.0, 79.9]:
+	for z in [0.0, 159.9]:
 		var cx: float = Gen.river_center_x(z)
 		# At the north/south edges the corridor must drop to water level.
-		var h: float = ring.ring_height(30.0, Vector2(cx, z))
+		var h: float = ring.ring_height(60.0, Vector2(cx, z))
 		if absf(h - RIVER_LEVEL) > 1.0:
 			corridor_fail += 1
 			print("FAIL: river exit at z=%.1f not at water level (got %.2f)" % [z, h])
@@ -94,19 +95,19 @@ func _run() -> int:
 	for i in 12:
 		var ang := float(i) / 12.0 * 6.28318530718
 		var xz := Vector2(
-			40.0 + 45.0 * cos(ang),
-			40.0 + 45.0 * sin(ang)
+			80.0 + 90.0 * cos(ang),
+			80.0 + 90.0 * sin(ang)
 		)
 		if absf(xz.x - Gen.river_center_x(xz.y)) < Gen.river_half_width(xz.y) + 3.0:
 			continue # skip corridor samples
-		var h: float = ring.ring_height(30.0, xz)
-		if h < 20.0:
+		var h: float = ring.ring_height(60.0, xz)
+		if h < 40.0:
 			sealed_fail += 1
 	if sealed_fail > 0:
 		f += 1
-		print("FAIL: %d/12 off-corridor ring samples below 20 m" % sealed_fail)
+		print("FAIL: %d/12 off-corridor ring samples below 40 m" % sealed_fail)
 	else:
-		print("OK: off-corridor ring stays high (>= 20 m) at all samples")
+		print("OK: off-corridor ring stays high (>= 40 m) at all samples")
 
 	print("%s: %d failures" % [SCRIPT_NAME, f])
 	return 1 if f > 0 else 0

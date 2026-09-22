@@ -16,8 +16,8 @@ const LEVEL := 7.5
 ## extending a pond with the tool gets the same profile we author here.
 const BED_DEPTH := 0.75
 
-const _POND_MAIN_CENTER := Vector2(27.0, 41.0)
-const _POND_SMALL_CENTER := Vector2(18.0, 38.0)
+const _POND_MAIN_CENTER := Vector2(54.0, 82.0)
+const _POND_SMALL_CENTER := Vector2(36.0, 76.0)
 
 ## Water regions to make sure exist in the starter valley: [id, type, level,
 ## points]. Outlines are hand-authored organic blobs (16 vertices each) with

@@ -1,19 +1,20 @@
 ## Valley surround: a layered distant MOUNTAIN RANGE around the M2 starter
 ## valley, not a wall.
 ##
-## The terrain only extends to 40 m, so the world boundary is built in three
-## presentation layers plus a flat plain:
+## The terrain only extends to 80 m (the 160 m world's half), so the world
+## boundary is built in three presentation layers plus a flat plain. All
+## radii/heights are the 80 m v4 design doubled for the 2x world:
 ##
-##   * DistantPlain — a flat unshaded meadow annulus (36 → 260 m) just below
+##   * DistantPlain — a flat unshaded meadow annulus (72 → 520 m) just below
 ##     the terrain-edge level, so the mountains sit on ground and fade into
 ##     haze instead of floating in sky.
-##   * InnerRidge — the original jagged ridge, pushed out to 120 m (was 40 m).
-##     Peak band 56–70 m (floor 56 must stay above the camera's max reach of
-##     ~49.1 m, see tests/valley_ring_occlusion_test.gd). Carries the subtle
+##   * InnerRidge — the original jagged ridge, pushed out to 240 m (was 80 m).
+##     Peak band 112–140 m (floor 112 must stay above the camera's max reach,
+##     see tests/valley_ring_occlusion_test.gd). Carries the subtle
 ##     rock detail: low-frequency radial wobble and vertex-colour mottling
 ##     with darker scree patches.
-##   * MidRidge — 170 m, peaks 95–120 m, deep-blue atmospheric layers.
-##   * FarRidge — 225 m, peaks 135–170 m, lighter deep-blue atmospheric
+##   * MidRidge — 340 m, peaks 190–240 m, deep-blue atmospheric layers.
+##   * FarRidge — 450 m, peaks 270–340 m, lighter deep-blue atmospheric
 ##     layers (farther ridge stays lighter for atmospheric depth).
 ##
 ## Each ridge is a smooth-normal cylinder (per-vertex Gouraud normals, no
@@ -37,32 +38,33 @@ extends MeshInstance3D
 
 const _Gen := preload("res://scripts/m1_patch_generator.gd")
 
-const WORLD_SIZE := 80.0
+const WORLD_SIZE := 160.0
 const RING_CENTER := Vector2(WORLD_SIZE * 0.5, WORLD_SIZE * 0.5)
 
-## Ring radii. The inner ridge sits ~3x beyond the terrain edge so the
-## boundary reads as a distant range; the two far ridges sit behind it.
-const INNER_RADIUS := 120.0
+## Ring radii (2x the v4 80 m design). The inner ridge sits ~3x beyond the
+## terrain edge so the boundary reads as a distant range; the two far
+## ridges sit behind it.
+const INNER_RADIUS := 240.0
 const RING_RADIUS := INNER_RADIUS
-const MID_RADIUS := 170.0
-const FAR_RADIUS := 225.0
+const MID_RADIUS := 340.0
+const FAR_RADIUS := 450.0
 
-## Inner ridge profile (unchanged from the wall-era design: the 56 m peak
-## floor is a hard contract against the ~49.1 m max camera reach).
-const PEAK_HEIGHT := 56.0
-const PEAK_BAND_RADIUS := 14.0
-const RIVER_WATER_LEVEL := 4.375
-const OUTER_MIN_HEIGHT := 20.0
-const EDGE_TERRAIN_LEVEL := 8.0
-const CORRIDOR_EXTRA_WIDTH := 3.0
-const _OUTER_SAMPLE_RADIUS := 30.0
+## Inner ridge profile (the 112 m peak floor is a hard contract against
+## the camera's maximum reach; unchanged by the 2x expansion).
+const PEAK_HEIGHT := 112.0
+const PEAK_BAND_RADIUS := 28.0
+const RIVER_WATER_LEVEL := 8.75
+const OUTER_MIN_HEIGHT := 40.0
+const EDGE_TERRAIN_LEVEL := 13.0
+const CORRIDOR_EXTRA_WIDTH := 6.0
+const _OUTER_SAMPLE_RADIUS := 60.0
 
 ## Distant plain: flat meadow from just under the terrain edge out past the
 ## far ridges, sitting 0.1 m below the terrain edge so terrain never floats
 ## above it.
-const PLAIN_INNER_RADIUS := 36.0
-const PLAIN_OUTER_RADIUS := 260.0
-const PLAIN_LEVEL := 7.9
+const PLAIN_INNER_RADIUS := 72.0
+const PLAIN_OUTER_RADIUS := 520.0
+const PLAIN_LEVEL := 15.8
 
 const _SEGMENTS := 128
 const _MID_SEGMENTS := 192
@@ -92,15 +94,15 @@ func _build_all() -> void:
 	mesh = _build_inner_ridge()
 	_plain.mesh = _build_plain()
 	_mid_ridge.mesh = _build_ridge(
-		MID_RADIUS, _MID_SEGMENTS, 18.0, 22.0,
-		95.0, 25.0, 30.0,
+		MID_RADIUS, _MID_SEGMENTS, 36.0, 44.0,
+		190.0, 50.0, 60.0,
 		Color("#4c5d70"), Color("#62748a"), Color("#778da0"),
 		2.3, [3, 7, 13],
 		0.0, 0.0
 	)
 	_far_ridge.mesh = _build_ridge(
-		FAR_RADIUS, _FAR_SEGMENTS, 24.0, 28.0,
-		135.0, 35.0, 35.0,
+		FAR_RADIUS, _FAR_SEGMENTS, 48.0, 56.0,
+		270.0, 70.0, 70.0,
 		Color("#606e7f"), Color("#768598"), Color("#90a2b2"),
 		5.9, [5, 9, 17],
 		0.0, 0.0
@@ -141,8 +143,8 @@ func affected_by(bounds: AABB) -> bool:
 	)
 
 ## Maximum height of the inner ridge at this bearing.
-## Always >= PEAK_HEIGHT (56 m), which clears the camera's maximum reach
-## (target_y + sin(max_pitch) * max_dist ≈ 49.1 m, see
+## Always >= PEAK_HEIGHT (112 m), which clears the camera's maximum reach
+## (2x world: target_y + sin(max_pitch) * max_dist ≈ 98.2 m, see
 ## tests/valley_ring_occlusion_test.gd). The ridge profile is a sum of
 ## slow/medium/fast sinusoids, folded positive and sharpened, so the
 ## silhouette reads as a jagged mountain ridge (several pronounced peaks,
@@ -151,7 +153,7 @@ func peak_height(xz: Vector2) -> float:
 	var ang := _bearing(xz)
 	var raw := sin(ang * 2.0 + 0.7) * 0.45 + sin(ang * 5.0 + 2.1) * 0.35 + sin(ang * 9.0 + 4.4) * 0.2
 	var sharpened := pow(maxf(raw, 0.0), 1.6)
-	return PEAK_HEIGHT + 14.0 * sharpened
+	return PEAK_HEIGHT + 28.0 * sharpened
 
 ## Normalised ridge height at a bearing (0 at the floor, 1 at the tallest
 ## peak). Used to drive the vertex-colour gradient and per-peak tint.
@@ -209,8 +211,9 @@ func _hash(i: float, seed: float) -> float:
 	var r := fmod(sin(i * 127.1 + seed * 311.7) * 43758.5453, 1.0)
 	return r if r >= 0.0 else r + 1.0
 
-## Inner ridge: the original profile (56–70 m jagged peaks, river corridors,
-## outer slope to 20 m) at the pushed-out 120 m radius, plus the rock detail
+## Inner ridge: the original profile (112–140 m jagged peaks, river
+## corridors, outer slope to 40 m) at the pushed-out 240 m radius, plus the
+## rock detail
 ## layer: a low-frequency ±0.5 m radial wobble (normals are recomputed from
 ## the displaced positions so the surface stays smooth) and vertex-colour
 ## mottling — grey-green rock tones with a few darker scree patches.
@@ -250,10 +253,10 @@ func _build_inner_ridge() -> Mesh:
 				# Jagged ridgeline on the top row only; the outer slope
 				# descends from it.
 				h = peak_height(p)
-			# Low-frequency radial wobble: ±0.5 m so the wall silhouette
+			# Low-frequency radial wobble: ±1 m (2x) so the wall silhouette
 			# stops reading as a perfect circle from any vantage.
-			var wobble := (_value_noise(ang / TAU, 3, _JITTER_SEED) * 0.6
-				+ _value_noise(ang / TAU, 7, _JITTER_SEED) * 0.4) - 0.5
+			var wobble := 2.0 * (_value_noise(ang / TAU, 3, _JITTER_SEED) * 0.6
+				+ _value_noise(ang / TAU, 7, _JITTER_SEED) * 0.4) - 1.0
 			ring.append(Vector3(x + wobble * cos(ang), h, z + wobble * sin(ang)))
 		rings.append(ring)
 
@@ -269,7 +272,7 @@ func _build_inner_ridge() -> Mesh:
 			for pair in quad:
 				var p: Vector3 = rings[pair[0]][pair[1]]
 				var elev := ridge_elevation(Vector2(p.x, p.z))
-				var t := clampf((p.y - EDGE_TERRAIN_LEVEL) / (PEAK_HEIGHT + 14.0 - EDGE_TERRAIN_LEVEL), 0.0, 1.0)
+				var t := clampf((p.y - EDGE_TERRAIN_LEVEL) / (PEAK_HEIGHT + 28.0 - EDGE_TERRAIN_LEVEL), 0.0, 1.0)
 				var c: Color
 				if t < 0.5:
 					c = _BASE_COLOUR.lerp(_MID_COLOUR, t * 2.0)

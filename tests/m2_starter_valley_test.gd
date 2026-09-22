@@ -16,10 +16,10 @@ func check(ok: bool, message: String) -> void:
 		failures.append(message)
 		push_error(message)
 func _initialize() -> void:
-	check(Generator.PATCH_SIZE == Vector3i(640,256,640), "Expanded native dimensions")
+	check(Generator.PATCH_SIZE == Vector3i(1280,256,1280), "Expanded native dimensions")
 	check(is_equal_approx(Generator.VOXEL_SCALE,0.125), "Native cell scale preserved")
-	check(is_equal_approx(Landscape.EDITABLE_WORLD_SIZE,80.0), "Landscape reaches new edge")
-	check(is_equal_approx(Region.DEFAULT_WORLD_SIZE,80.0), "Paths reach new edge")
+	check(is_equal_approx(Landscape.EDITABLE_WORLD_SIZE,160.0), "Landscape reaches new edge")
+	check(is_equal_approx(Region.DEFAULT_WORLD_SIZE,160.0), "Paths reach new edge")
 	var world := World.new()
 	var before := JSON.stringify(world.get_document())
 	var documents := Starter.documents(world)
@@ -48,16 +48,16 @@ func _initialize() -> void:
 	visual.free()
 	if ClassDB.class_exists("VoxelBuffer"):
 		var old: Object = ClassDB.instantiate("VoxelBuffer")
-		old.create(512,256,512)
+		old.create(640,256,640)
 		old.set_voxel(1,10,10,10,0)
-		old.set_voxel(2,511,63,511,0)
+		old.set_voxel(2,639,63,639,0)
 		var expanded: Object = Generator.expand_previous(old)
 		check(expanded != null, "Native region migration succeeds")
 		if expanded != null:
 			check(expanded.get_voxel(10,10,10,0) == 1, "Saved solid retained")
-			check(expanded.get_voxel(511,63,511,0) == 2, "Last old column retained")
+			check(expanded.get_voxel(639,63,639,0) == 2, "Last old column retained")
 			check(expanded.get_voxel(20,20,20,0) == 0, "Saved excavation remains air")
-			check(expanded.get_voxel(560,10,560,0) == 1, "New meadow generated outside old volume")
+			check(expanded.get_voxel(960,10,960,0) == 1, "New meadow generated outside old volume")
 			_check_ground_materials(expanded)
 			_check_ponds()
 			print("STARTER_MIGRATION Native old solids, air and boundary preserved")
@@ -69,18 +69,18 @@ func _check_ground_materials(expanded: Object) -> void:
 	var ring_ids := [6, 7, 9]
 	var top := -1
 	for y in range(255, -1, -1):
-		if int(expanded.get_voxel(560, y, 560, 0)) != 0:
+		if int(expanded.get_voxel(1120, y, 1120, 0)) != 0:
 			top = y
 			break
 	check(top > 0, "New ring column has a surface")
 	if top > 0:
-		check(int(expanded.get_voxel(560, top, 560, 0)) in ring_ids, "New ring land paints a ring material (got %d)" % int(expanded.get_voxel(560, top, 560, 0)))
-		check(int(expanded.get_voxel(560, top - 1, 560, 0)) in ring_ids, "Second ring voxel paints a ring material")
-		check(int(expanded.get_voxel(560, top - 2, 560, 0)) == 1, "Subsurface below the paint stays stone (1)")
+		check(int(expanded.get_voxel(1120, top, 1120, 0)) in ring_ids, "New ring land paints a ring material (got %d)" % int(expanded.get_voxel(1120, top, 1120, 0)))
+		check(int(expanded.get_voxel(1120, top - 1, 1120, 0)) in ring_ids, "Second ring voxel paints a ring material")
+		check(int(expanded.get_voxel(1120, top - 2, 1120, 0)) == 1, "Subsurface below the paint stays stone (1)")
 	check(_paint_digest(Generator.generate()) == _paint_digest(Generator.generate()), "Ground paint is deterministic across runs")
 	check(Generator.surface_material(20.0, 18.0, 8.0) == 2, "Hamlet highland stays grass (2)")
 	check(Generator.surface_material(Generator.river_center_x(40.0), 40.0, 4.375) == 4, "River bed is sand (4)")
-	check(Generator.surface_material(24.0, 27.5, 8.0) == 3, "Lane at the well is packed dirt (3)")
+	check(Generator.surface_material(48.0, 55.0, 8.0) == 3, "Lane at the well is packed dirt (3)")
 	var library: Object = Generator.build_library()
 	check(library.get_models().size() == 10, "Generator library carries the full ground set (10 models)")
 
@@ -139,8 +139,8 @@ func _pond_sampler(carved: Dictionary) -> Callable:
 
 func _paint_digest(voxels: Object) -> String:
 	var digest := 0
-	for x in range(0, 640, 24):
-		for z in range(0, 640, 24):
+	for x in range(0, 1280, 48):
+		for z in range(0, 1280, 48):
 			var top := -1
 			for y in range(255, -1, -1):
 				if int(voxels.get_voxel(x, y, z, 0)) != 0:
