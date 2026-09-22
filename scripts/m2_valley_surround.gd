@@ -6,6 +6,13 @@
 ## chosen to clear the camera's maximum reach (target_y + sin(max_pitch)
 ## * max_dist, see m2_camera_boundary.gd).
 ##
+## Presentation goal (2026-09-22): read as a distant mountain RIDGE, not a
+## uniform ominous cylinder — an irregular jagged ridge line (peaks rise
+## above the 56 m floor, dips never go below it), smooth per-vertex
+## normals (no flat-column stripes), and a height-based vertex-colour
+## gradient (dark rock at the base fading to hazy blue-grey at the peaks,
+## with slight per-peak brightness variation so peaks read individually).
+##
 ## River corridors: at the world edges where the river flows out, the ring
 ## drops to water level so the valley reads as a valley with a flowing-out
 ## river, not a sealed box.
@@ -70,10 +77,23 @@ func affected_by(bounds: AABB) -> bool:
 
 ## Maximum height of the ring wall at this world position.
 ## Always >= PEAK_HEIGHT so the skybox is hidden from every camera pose.
+## The ridge profile is a sum of slow/medium/fast sinusoids, folded
+## positive and sharpened, so the silhouette reads as a jagged mountain
+## ridge (several pronounced peaks, deep passes) instead of a uniform
+## cylinder. Amplitude is capped so peaks stay within a plausible range
+## for the world's scale (56 m floor .. ~70 m peaks).
 func peak_height(xz: Vector2) -> float:
 	var ang := _bearing(xz)
-	var variation := maxf(0.0, sin(ang * 3.0) * 0.5 + sin(ang * 7.0 + 1.0) * 0.3)
-	return PEAK_HEIGHT + variation
+	var raw := sin(ang * 2.0 + 0.7) * 0.45 + sin(ang * 5.0 + 2.1) * 0.35 + sin(ang * 9.0 + 4.4) * 0.2
+	var sharpened := pow(maxf(raw, 0.0), 1.6)
+	return PEAK_HEIGHT + 14.0 * sharpened
+
+## Normalised ridge height at a bearing (0 at the floor, 1 at the tallest
+## peak). Used to drive the vertex-colour gradient and per-peak tint.
+func ridge_elevation(xz: Vector2) -> float:
+	var ang := _bearing(xz)
+	var raw := sin(ang * 2.0 + 0.7) * 0.45 + sin(ang * 5.0 + 2.1) * 0.35 + sin(ang * 9.0 + 4.4) * 0.2
+	return pow(maxf(raw, 0.0), 1.6)
 
 ## Height of the ring wall at a radial offset beyond the world edge.
 ## [radius] is the distance beyond the edge: 0 = at the edge,
@@ -105,7 +125,10 @@ func _build_mesh() -> void:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_color(Color(0.55, 0.58, 0.62, 1.0))
 
-	# Simple unshaded material so vertex color shows through.
+	# Lit standard material with the mountain gradient carried in vertex
+	# colour: dark mossy rock at the base, muted rock grey through the
+	# middle, hazy blue-grey at the peaks. Smooth per-vertex normals let
+	# the sun shade the ridges continuously (no flat-column stripes).
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
 	mat.albedo_color = Color(1, 1, 1)
@@ -113,13 +136,17 @@ func _build_mesh() -> void:
 	mat.rim_tint = 0.3
 	st.set_material(mat)
 
+	const _BASE_COLOUR := Color(0.30, 0.33, 0.31)
+	const _MID_COLOUR := Color(0.45, 0.47, 0.50)
+	const _PEAK_COLOUR := Color(0.63, 0.66, 0.71)
+
 	# Radial profile: edge to peak band to outer slope.
 	var radial_offsets: Array[float] = []
 	radial_offsets.append(0.0)
 	radial_offsets.append(0.125)
-	for i in 1:
+	for i in 4:
 		radial_offsets.append(i * (PEAK_BAND_RADIUS / 4.0))
-	for i in 1:
+	for i in 4:
 		radial_offsets.append(PEAK_BAND_RADIUS + i * (_OUTER_SAMPLE_RADIUS - PEAK_BAND_RADIUS) / 4.0)
 
 	# Build rings of vertices from inner to outer.
@@ -134,32 +161,72 @@ func _build_mesh() -> void:
 			ring.append(Vector3(x, h, z))
 		rings.append(ring)
 
-	# Connect consecutive rings with triangle strips.
-	# For each quad (inner[i], inner[ni], outer[ni], outer[i]) emit two triangles
-	# with face normals computed from the quad cross product.
+	# Per-vertex interpolated normals (Gouraud): cross of the
+	# circumferential tangent and the radial tangent at each vertex, so
+	# the wall shades as one continuous curved surface. The ring is a
+	# closed loop, so neighbours wrap around.
+	var normals: Array = []
+	for ri in rings.size():
+		var row: Array[Vector3] = []
+		for i in _SEGMENTS:
+			var ni := (i + 1) % _SEGMENTS
+			var p: Vector3 = rings[ri][i]
+			var ring_below: int = ri - 1 if ri > 0 else 0
+			var ring_above: int = ri + 1 if ri < rings.size() - 1 else rings.size() - 1
+			var tangent_r: Vector3
+			if ring_above == ring_below:
+				tangent_r = ((rings[ring_below][i] as Vector3) - p).normalized()
+			else:
+				var above: Vector3 = rings[ring_above][i]
+				var below: Vector3 = rings[ring_below][i]
+				tangent_r = (above - below).normalized()
+			var tangent_c: Vector3 = ((rings[ri][ni] as Vector3) - p).normalized()
+			var n: Vector3 = tangent_c.cross(tangent_r).normalized()
+			# Outward = away from the ring centre in the horizontal plane.
+			var outward := Vector3(p.x - RING_CENTER.x, 0.0, p.z - RING_CENTER.y).normalized()
+			if n.dot(outward) < 0.0:
+				n = -n
+			row.append(n)
+		normals.append(row)
+
+	# Connect consecutive rings with triangles, using the per-vertex
+	# normals and a height-based mountain colour gradient (with a slight
+	# per-peak brightness variation so individual peaks read distinctly).
 	for ri in range(rings.size() - 1):
 		var inner: Array[Vector3] = rings[ri]
 		var outer: Array[Vector3] = rings[ri + 1]
 		for i in _SEGMENTS:
 			var ni := (i + 1) % _SEGMENTS
-			var v0 := inner[i]
-			var v1 := inner[ni]
-			var v2 := outer[ni]
-			var v3 := outer[i]
-			# Face normal: cross of two edges of the quad
-			var n := (v1 - v0).cross(v2 - v0).normalized()
-			if n.y < 0.0:
-				n = -n  # ensure normals face outward (away from center)
-			var uv0 := Vector2(float(i), float(ri))
-			var uv1 := Vector2(float(ni), float(ri))
-			var uv2 := Vector2(float(ni), float(ri + 1))
-			var uv3 := Vector2(float(i), float(ri + 1))
-			st.set_normal(n); st.set_uv(uv0); st.add_vertex(v0)
-			st.set_normal(n); st.set_uv(uv1); st.add_vertex(v1)
-			st.set_normal(n); st.set_uv(uv2); st.add_vertex(v2)
-			st.set_normal(n); st.set_uv(uv1); st.add_vertex(v1)
-			st.set_normal(n); st.set_uv(uv2); st.add_vertex(v2)
-			st.set_normal(n); st.set_uv(uv3); st.add_vertex(v3)
+			# Two triangles per quad, vertices added in triangle-list order
+			# (v0, v1, v2, v1, v3, v2): SurfaceTool.index() in Godot 4.7
+			# takes no arguments and de-dupes the vertex array into an
+			# index array, so repeated vertices must be re-added.
+			var quad: Array = [
+				[ri, i], [ri, ni], [ri + 1, i],
+				[ri, ni], [ri + 1, ni], [ri + 1, i],
+			]
+			for pair in quad:
+				var row_idx: int = pair[0]
+				var col_idx: int = pair[1]
+				var p: Vector3 = rings[row_idx][col_idx]
+				var elev := ridge_elevation(Vector2(p.x, p.z))
+				# Normalise height across the wall's vertical extent.
+				var t := clampf((p.y - EDGE_TERRAIN_LEVEL) / (PEAK_HEIGHT + 14.0 - EDGE_TERRAIN_LEVEL), 0.0, 1.0)
+				var c: Color
+				if t < 0.5:
+					c = _BASE_COLOUR.lerp(_MID_COLOUR, t * 2.0)
+				else:
+					c = _MID_COLOUR.lerp(_PEAK_COLOUR, (t - 0.5) * 2.0)
+				# Slight per-peak tint: taller peaks get a touch lighter.
+				c = c.lerp(c.lightened(0.08), elev * 0.5)
+				st.set_normal(normals[row_idx][col_idx])
+				st.set_color(c)
+				st.set_uv(Vector2(float(col_idx), float(row_idx)))
+				st.add_vertex(p)
+
+	# Godot 4.7 SurfaceTool: index() takes no arguments; it de-dupes the
+	# triangle-list-ordered vertex array into an index array at commit.
+	st.index()
 
 	# SurfaceTool.commit() returns an ArrayMesh directly in Godot 4.
 	self.mesh = st.commit()
