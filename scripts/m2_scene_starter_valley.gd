@@ -23,9 +23,9 @@ func _ready() -> void:
 	_apply_cozy_valley_lighting()
 
 func _apply_cozy_valley_lighting() -> void:
-	# Clear-air miniature lighting: one warm shadowed key plus two extremely soft
-	# unshadowed fills. This pass keeps the glow but restores deeper grounding and
-	# stronger plane separation, especially on roofs viewed from above.
+	# Cozy valley lighting: a warm shadowed key plus two soft unshadowed fills,
+	# a golden-hour procedural sky for ambient/reflections/background, and warm
+	# distance haze. Stronger plane separation than the flat clear-air pass.
 	for node in find_children("*", "DirectionalLight3D", true, false):
 		var light := node as DirectionalLight3D
 		if light.name in ["CozySkyFill", "CozyWarmRim"]: continue
@@ -55,10 +55,26 @@ func _apply_cozy_valley_lighting() -> void:
 		var world_environment := node as WorldEnvironment
 		var environment := world_environment.environment
 		if environment == null: continue
-		environment.background_color = Color("#ddd9c9")
-		environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		environment.ambient_light_color = Color("#cbd4ca")
-		environment.ambient_light_energy = 0.24
+		# Restore the sky. The flat cream background from the "clear-air" pass made
+		# the near-mirror water (roughness 0.16) reflect a flat #ddd9c9 wall, which
+		# read as silver ponds on device, and the frame lost its sky entirely.
+		# The procedural sky uses the canonical M2 look: blue-grey zenith into a
+		# warm golden horizon. Sky-sourced ambient + reflections let water, grass
+		# and roofs pick up the same gradient the reference shots use.
+		var sky_material := ProceduralSkyMaterial.new()
+		sky_material.sky_top_color = Color("#d8e1e5")
+		sky_material.sky_horizon_color = Color("#f2d9a4")
+		sky_material.ground_bottom_color = Color("#c3b795")
+		sky_material.ground_horizon_color = Color("#e0d3b2")
+		sky_material.sky_energy_multiplier = 0.55
+		sky_material.ground_energy_multiplier = 0.35
+		var sky := Sky.new()
+		sky.sky_material = sky_material
+		environment.sky = sky
+		environment.background_mode = Environment.BG_SKY
+		environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+		environment.ambient_light_sky_contribution = 1.0
+		environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 
 		# Keep the creamy shoulder from the earlier passes, but stop compressing the
 		# whole frame into the same pale value range.
@@ -84,8 +100,14 @@ func _apply_cozy_valley_lighting() -> void:
 		environment.set("glow_levels/6", 0.0)
 		environment.set("glow_levels/7", 0.0)
 
-		# Keep the air clear and let the fill lights + glow provide softness.
-		environment.fog_enabled = false
+		# Warm distance haze: softens the far hills and separates the village from
+		# the backdrop, as in the reference frames. Same canonical M2 values.
+		environment.fog_enabled = true
+		environment.fog_light_color = Color("#ead7b3")
+		environment.fog_density = 0.0038
+		environment.fog_sky_affect = 0.8
+		environment.fog_depth_begin = 18.0
+		environment.fog_depth_end = 150.0
 
 	# Push the miniature-camera cue slightly further while keeping the playable
 	# village crisp and reserving most of the blur for distant hills.
