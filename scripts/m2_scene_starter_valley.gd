@@ -101,13 +101,15 @@ func _apply_cozy_valley_lighting() -> void:
 		environment.set("glow_levels/7", 0.0)
 
 		# Warm distance haze: softens the layered mountain range and separates
-		# the village from the backdrop, as in the reference frames. Same
-		# canonical M2 values. Extended to 320 m so the haze fades out across
-		# the full 120–260 m surround.
+		# the village from the backdrop, while the sky keeps its deep blue —
+		# the sky affect is reduced to 0.25 for exactly that reason (at 0.8
+		# the haze fogs the whole sky cream). Same canonical M2 values.
+		# Extended to 320 m so the haze fades out across the full 120–260 m
+		# surround.
 		environment.fog_enabled = true
 		environment.fog_light_color = Color("#ead7b3")
 		environment.fog_density = 0.0038
-		environment.fog_sky_affect = 0.8
+		environment.fog_sky_affect = 0.25
 		environment.fog_depth_begin = 18.0
 		environment.fog_depth_end = 320.0
 

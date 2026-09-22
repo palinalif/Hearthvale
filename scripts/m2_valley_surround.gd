@@ -12,8 +12,9 @@
 ##     ~49.1 m, see tests/valley_ring_occlusion_test.gd). Carries the subtle
 ##     rock detail: low-frequency radial wobble and vertex-colour mottling
 ##     with darker scree patches.
-##   * MidRidge — 170 m, peaks 95–120 m, paler blue-grey.
-##   * FarRidge — 225 m, peaks 135–170 m, very pale lavender-grey.
+##   * MidRidge — 170 m, peaks 95–120 m, deep-blue atmospheric layers.
+##   * FarRidge — 225 m, peaks 135–170 m, lighter deep-blue atmospheric
+##     layers (farther ridge stays lighter for atmospheric depth).
 ##
 ## Each ridge is a smooth-normal cylinder (per-vertex Gouraud normals, no
 ## faceting) whose TOP ridgeline is jagged by multi-frequency value noise;
@@ -93,14 +94,14 @@ func _build_all() -> void:
 	_mid_ridge.mesh = _build_ridge(
 		MID_RADIUS, _MID_SEGMENTS, 18.0, 22.0,
 		95.0, 25.0, 30.0,
-		Color(0.40, 0.43, 0.48), Color(0.55, 0.57, 0.62), Color(0.70, 0.71, 0.76),
+		Color("#4c5d70"), Color("#62748a"), Color("#778da0"),
 		2.3, [3, 7, 13],
 		0.0, 0.0
 	)
 	_far_ridge.mesh = _build_ridge(
 		FAR_RADIUS, _FAR_SEGMENTS, 24.0, 28.0,
 		135.0, 35.0, 35.0,
-		Color(0.52, 0.53, 0.59), Color(0.66, 0.66, 0.72), Color(0.80, 0.80, 0.86),
+		Color("#606e7f"), Color("#768598"), Color("#90a2b2"),
 		5.9, [5, 9, 17],
 		0.0, 0.0
 	)
@@ -228,9 +229,9 @@ func _build_inner_ridge() -> Mesh:
 	mat.rim_tint = 0.3
 	st.set_material(mat)
 
-	const _BASE_COLOUR := Color(0.30, 0.33, 0.31)
-	const _MID_COLOUR := Color(0.45, 0.47, 0.50)
-	const _PEAK_COLOUR := Color(0.63, 0.66, 0.71)
+	const _BASE_COLOUR := Color("#405262")
+	const _MID_COLOUR := Color("#4e5f70")
+	const _PEAK_COLOUR := Color("#5f7489")
 	const _ROCK_COLOUR := Color(0.48, 0.50, 0.46)
 	const _SCREE_COLOUR := Color(0.22, 0.24, 0.23)
 	const _JITTER_SEED := 9.4
