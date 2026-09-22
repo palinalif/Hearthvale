@@ -5,10 +5,9 @@ extends "res://scripts/m2_scene_starter_valley.gd"
 ## (stream) or closing the outline (lake) records the region and carves its bed/
 ## banks as ONE landscape undo transaction. Saved authority stores only the
 ## region record — never a preview. Menus block the tool; cancel restores state.
-const WaterState = preload("res://scripts/landscape_state.gd")
 const WaterGrid = preload("res://scripts/visual_grid.gd")
-const WaterRegion = preload("res://scripts/water_region_geometry.gd")
-const WaterExcavation = preload("res://scripts/water_terrain_excavation.gd")
+# WaterState / WaterRegion / WaterExcavation come from the parent
+# (m2_scene_starter_valley.gd) — re-declaring them here is a parse error.
 
 const STREAM_WIDTH := 1.5
 const LAKE_MIN_POINTS := 3
