@@ -18,12 +18,14 @@ class MockBackend:
 	var surface := 8
 	var bumps := {}
 	var _rev := 0
+	var calls := 0
 	func is_ready() -> bool: return true
 	func revision() -> int: return _rev
 	func bump() -> void: _rev += 1
 	func _col_surface(x: int, z: int) -> int:
 		return surface + int(bumps.get(Vector2i(x, z), 0))
 	func voxel_at(p: Vector3i) -> int:
+		calls += 1
 		if p.x < 0 or p.z < 0 or p.x >= patch_size.x or p.z >= patch_size.z: return 0
 		return 1 if p.y < _col_surface(p.x, p.z) else 0
 
@@ -120,11 +122,12 @@ func _verify_revision_bump_is_inert() -> void:
 	root.add_child(mock)
 	var visual := _make(mock, [_whole_lake()])
 	var quads_before: int = visual.surface_quad_count()
+	mock.calls = 0
 	mock.bump()  # committed stroke: revision changed, region records unchanged
 	visual.set_regions_incremental([_whole_lake()])
 	var perf: Dictionary = visual.water_perf
 	check(visual.surface_quad_count() == quads_before, "revision bump leaves the surface unchanged (quads=%d)" % quads_before)
-	check(int(perf.get("cells_resampled", -1)) == 0, "revision bump resamples no cells (resampled=%s)" % str(perf.get("cells_resampled")))
+	check(mock.calls == 0, "revision bump resamples no cells (resampled=%s)" % str(perf.get("cells_resampled")))
 	check(float(perf.get("mesh_ms", 1.0)) < 1.0, "revision bump rebuilds no meshes (mesh_ms=%s)" % str(perf.get("mesh_ms")))
 	visual.queue_free(); mock.queue_free()
 
@@ -139,11 +142,13 @@ func _verify_localized_edit_then_commit() -> void:
 	mock.bumps[Vector2i(20, 20)] = 8  # raise one column to 2.0 m, above the 1.5 m level
 	mock.bump()
 	visual.refresh_surface_from_bounds(AABB(Vector3(-10.0, 0.0, -10.0), Vector3(40.0, 10.0, 40.0)))
+	_drain(visual)
 	check(visual.surface_quad_count() == before - 1, "localized edit dries one cell (before=%d after=%d)" % [before, visual.surface_quad_count()])
+	mock.calls = 0
 	visual.set_regions_incremental([_whole_lake()])  # the commit sync after the signal
 	var perf: Dictionary = visual.water_perf
 	check(visual.surface_quad_count() == before - 1, "commit sync after localized edit keeps the dried cell")
-	check(int(perf.get("cells_resampled", -1)) == 0, "commit sync after localized edit resamples nothing (resampled=%s)" % str(perf.get("cells_resampled")))
+	check(mock.calls == 0, "commit sync after localized edit resamples nothing (resampled=%s)" % str(perf.get("cells_resampled")))
 	visual.queue_free(); mock.queue_free()
 
 ## The startup path now builds through the incremental entry point: a fresh
@@ -155,6 +160,7 @@ func _verify_first_build_incremental() -> void:
 	root.add_child(visual)
 	visual.attach_backend(mock)
 	visual.set_regions_incremental([_whole_lake()])
+	_drain(visual)
 	check(visual.surface_quad_count() >= 1500, "first incremental build covers the whole lake (quads=%d)" % visual.surface_quad_count())
 	visual.queue_free(); mock.queue_free()
 
@@ -170,3 +176,9 @@ func _initialize() -> void:
 	_verify_first_build_incremental()
 	print("water_visual_test checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures > 0 else 0)
+
+func _drain(visual: Node) -> void:
+	for frame in range(1000):
+		visual._process(1.0 / 60.0)
+		if visual._pending_cells.is_empty() and visual._dirty_regions.is_empty() and visual._pending_surface_bounds.is_empty(): return
+	check(false, "water work finishes within bounded frames")

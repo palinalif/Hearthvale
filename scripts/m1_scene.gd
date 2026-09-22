@@ -1436,13 +1436,8 @@ func _on_backend_changed() -> void:
 	_sync_meadow_exclusions()
 	if garden_visual and garden_visual.has_method("refresh_terrain"):
 		garden_visual.refresh_terrain()
-	# Localize the region-water surface to the edit bounds (like the river and
-	# waterfalls) so a local dig only re-samples the nearby cells; the full
-	# refresh_terrain() is the startup / unknown-bounds fallback.
-	if backend and backend.has_method("get_last_edit_bounds") and water_visual and water_visual.has_method("refresh_surface_from_bounds"):
-		water_visual.refresh_surface_from_bounds(backend.get_last_edit_bounds())
-	elif water_visual and water_visual.has_method("refresh_terrain"):
-		water_visual.refresh_terrain()
+	# water_visual owns its backend.changed subscription and queues the local
+	# surface refresh. Do not spend the water budget again in this handler.
 	if water_visual and water_visual.has_method("refresh_waterfalls_from_bounds") and backend and backend.has_method("get_last_edit_bounds"):
 		water_visual.refresh_waterfalls_from_bounds(backend.get_last_edit_bounds())
 	var garden_ms := float(Time.get_ticks_usec() - started) / 1000.0

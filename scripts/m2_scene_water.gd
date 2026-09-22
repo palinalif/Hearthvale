@@ -190,9 +190,8 @@ func _update_water_validity() -> void:
 	if building_world.get_revision() != _water_building_revision:
 		water_placement_reason = "Home layout changed; restart water"
 		return
-	if JSON.stringify(landscape_state.document()) != _water_before_serialized:
-		water_placement_reason = "Landscape changed; restart water"
-		return
+	# The full landscape snapshot is checked at commit. Serializing all saved
+	# water/paths/vegetation on every cursor frame made idle water mode expensive.
 	var point := _water_cursor_point()
 	if not point.is_finite(): return
 	if point.x < 0.0 or point.x >= WaterState.EDITABLE_WORLD_SIZE or point.y < 0.0 or point.y >= WaterState.EDITABLE_WORLD_SIZE:
@@ -237,7 +236,6 @@ func _sample_water_stream() -> bool:
 	# frame (the old behaviour) invalidated the preview fingerprint and forced
 	# the visual's full candidate rebuild every frame.
 	if point.distance_to(_water_last_sample) < 0.05:
-		_water_last_sample = point
 		return false
 	if water_stream_points.size() > 0:
 		_stroke_add_segment(water_stream_points[water_stream_points.size() - 1], point)
@@ -252,7 +250,7 @@ func _sample_water_stream() -> bool:
 func _stroke_add_segment(p1: Vector2, p2: Vector2) -> void:
 	if not p1.is_finite() or not p2.is_finite():
 		return
-	for cell: Vector2i in PathRegion.stroke_cells(p1, p2, _stroke_width, WaterState.EDITABLE_WORLD_SIZE):
+	for cell: Vector2i in PathRegion.stroke_cells(p1, p2, _stroke_width * 0.5, WaterState.EDITABLE_WORLD_SIZE, _stroke_cells):
 		if not _stroke_cells.has(cell):
 			_stroke_cells[cell] = true
 			_stroke_cell_list.append(cell)
@@ -339,19 +337,25 @@ func _sync_water_incremental(changes: Array) -> void:
 		invalidated.append(cell)
 	if water_visual.has_method("set_regions_incremental"):
 		water_visual.set_regions_incremental(landscape_state.water, invalidated)
+		if water_visual.has_method("set_waterfall_suppressions"):
+			water_visual.set_waterfall_suppressions(landscape_state.waterfall_suppressions)
 	else:
 		_sync_water_visual()
 
 func _commit_water(region: Dictionary) -> bool:
+	var commit_stage := Time.get_ticks_usec()
 	if JSON.stringify(landscape_state.document()) != _water_before_serialized or _terrain_revision() != _water_terrain_revision or building_world.get_revision() != _water_building_revision:
 		_cancel_water_placement("World changed; cancelled")
 		return false
 	_water_before = landscape_state.document()
+	_landscape_before = _water_before.duplicate(true)
 	var id := landscape_state.add_water(str(region.get("type", "")), float(region.get("level", 0.0)), region.get("points", []), float(region.get("width", 0.0)), region.get("flow", []))
 	if id < 1:
 		_cancel_water_placement("Water limit reached")
 		return false
 	var excavation: Dictionary = WaterExcavation.plan_bed(backend, region, WaterState.EDITABLE_WORLD_SIZE)
+	last_frame_costs["water_plan_bed"] = (Time.get_ticks_usec() - commit_stage) / 1000.0
+	commit_stage = Time.get_ticks_usec()
 	if not bool(excavation.get("ok", false)):
 		landscape_state.restore(_water_before)
 		_cancel_water_placement("Terrain excavation unavailable")
@@ -364,11 +368,15 @@ func _commit_water(region: Dictionary) -> bool:
 			_cancel_water_placement("Terrain changed; cancelled")
 			return false
 		terrain_changed = true
+	last_frame_costs["water_apply_bed"] = (Time.get_ticks_usec() - commit_stage) / 1000.0
+	commit_stage = Time.get_ticks_usec()
 	var cells: Array = []
 	for cell: Vector2i in WaterRegion.footprint_cells(region, WaterState.EDITABLE_WORLD_SIZE):
 		cells.append(cell)
 	landscape_state.clear_records_in_path_cells(cells)
 	if garden_visual: garden_visual.reset_records(landscape_state.records)
+	last_frame_costs["water_clear_plants"] = (Time.get_ticks_usec() - commit_stage) / 1000.0
+	commit_stage = Time.get_ticks_usec()
 	water_stream_points.clear()
 	water_lake_points.clear()
 	_stroke_cells.clear()
@@ -377,11 +385,14 @@ func _commit_water(region: Dictionary) -> bool:
 	_water_last_sample = Vector2(NAN, NAN)
 	_water_preview_signature = ""
 	_record_history("path" if terrain_changed else "landscape")
+	last_frame_costs["water_record_history"] = (Time.get_ticks_usec() - commit_stage) / 1000.0
+	commit_stage = Time.get_ticks_usec()
 	_landscape_before.clear()
 	# Incremental water sync: the commit carved only this region's bed, so reuse
 	# the cached surface + resample just the carved cells (the old full rebuild
 	# resampled every water column and froze the frame on mobile for big lakes).
 	_sync_water_incremental(changes)
+	last_frame_costs["water_sync"] = (Time.get_ticks_usec() - commit_stage) / 1000.0
 	_reset_water_baseline()
 	_set_status("%s committed • LB undo" % (str(region.get("type", "water")).capitalize()))
 	_update_water_validity()
@@ -441,8 +452,8 @@ func _restore_landscape(document: Dictionary) -> void:
 	_sync_water_visual()
 
 func _on_backend_changed() -> void:
-	# The base already localizes the region-water surface to the edit bounds
-	# (refresh_surface_from_bounds) and re-derives waterfalls; a water commit
+	# The visual queues region-water surface updates from the edit bounds;
+	# the base re-derives waterfalls, and a water commit
 	# additionally syncs the new region via _sync_water_incremental. A full
 	# set_regions here re-resampled every water column on every terrain edit —
 	# the source of the mobile freeze.
@@ -521,19 +532,20 @@ func _water_candidate_region() -> Dictionary:
 
 func _update_water_preview() -> void:
 	if not water_visual or not water_placement_active: return
-	var candidate := _water_candidate_region()
 	# Cheap preview fingerprint: the stream's rolling cell count grows only
 	# when a segment adds a new cell (distance-gated, O(segment)), and the
 	# lake's point count grows only on a vertex press. This replaces the old
 	# fingerprint, which re-rasterized the whole stroke (a full O(N^2) union)
 	# every frame just to compute the key — the cause of the mobile freeze.
 	var fingerprint := 0
-	if not candidate.is_empty():
-		if water_kind == "stream": fingerprint = _stroke_cell_list.size()
-		else: fingerprint = water_lake_points.size()
+	if water_kind == "stream": fingerprint = _stroke_cell_list.size()
+	else: fingerprint = hash(water_lake_points)
 	var signature := "%s|%d|%d" % [water_kind, fingerprint, _terrain_revision()]
 	if signature == _water_preview_signature: return
 	_water_preview_signature = signature
+	# In particular, do not calculate the lake level (a terrain scan over its
+	# entire footprint) until the outline or terrain actually changes.
+	var candidate := _water_candidate_region()
 	var regions: Array = landscape_state.water.duplicate(true)
 	if not candidate.is_empty(): regions.append(candidate)
 	water_visual.set_regions_incremental(regions)

@@ -53,7 +53,7 @@ func _initialize() -> void:
 	mock.bump()
 	mock.last_edit_bounds = AABB(Vector3(1.0, 0.0, 1.0), Vector3(0.125, 1.0, 0.125))
 	visual.refresh_surface_from_bounds(mock.last_edit_bounds)
-	visual._do_surface_rebuild()  # simulate the deferred end-of-frame flush
+	_drain(visual)  # simulate the deferred end-of-frame flush
 	var after_local: int = visual.surface_quad_count()
 	check(after_local == whole - 1, "localized edit dried one quad (before=%d after=%d)" % [whole, after_local])
 
@@ -61,7 +61,7 @@ func _initialize() -> void:
 	# so the surface count is unchanged.
 	mock.last_edit_bounds = AABB(Vector3(4.5, 0.0, 4.5), Vector3(0.125, 1.0, 0.125))
 	visual.refresh_surface_from_bounds(mock.last_edit_bounds)
-	visual._do_surface_rebuild()
+	_drain(visual)
 	check(visual.surface_quad_count() == after_local, "far edit leaves the surface unchanged (quads=%d)" % visual.surface_quad_count())
 
 	# Local restore: lower the column; the quad returns.
@@ -69,7 +69,7 @@ func _initialize() -> void:
 	mock.bump()
 	mock.last_edit_bounds = AABB(Vector3(1.0, 0.0, 1.0), Vector3(0.125, 1.0, 0.125))
 	visual.refresh_surface_from_bounds(mock.last_edit_bounds)
-	visual._do_surface_rebuild()
+	_drain(visual)
 	check(visual.surface_quad_count() == whole, "localized restore returns the quad (quads=%d)" % visual.surface_quad_count())
 
 	# --- Incremental rebuild (the cache-aware commit / preview path) ------------
@@ -88,6 +88,8 @@ func _initialize() -> void:
 	# With the carved cell invalidated it is resampled and dries.
 	mock.calls = 0
 	visual.set_regions_incremental([lake], [Vector2i(8, 8)])
+	check(mock.calls == 0, "invalidation queues work without blocking the commit")
+	_drain(visual)
 	check(mock.calls >= 1, "incremental invalidated resamples the cell (calls=%d)" % mock.calls)
 	check(visual.surface_quad_count() == warm - 1, "incremental invalidated dries the quad (quads=%d)" % visual.surface_quad_count())
 
@@ -95,3 +97,9 @@ func _initialize() -> void:
 	mock.queue_free()
 	print("water_surface_local_test checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures > 0 else 0)
+
+func _drain(visual: Node) -> void:
+	for frame in range(1000):
+		visual._process(1.0 / 60.0)
+		if visual._pending_cells.is_empty() and visual._dirty_regions.is_empty() and visual._pending_surface_bounds.is_empty(): return
+	check(false, "water work finishes within bounded frames")

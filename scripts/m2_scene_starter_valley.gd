@@ -134,6 +134,8 @@ func _ensure_directional_fill(fill_name: String, rotation: Vector3, color: Color
 
 func _on_backend_ready(ready: bool) -> void:
 	if not ready or not backend: return
+	super._on_backend_ready(ready)
+	if not _player_restored: return
 	# A world with no saved checkpoint gets the full hamlet; a loaded save keeps
 	# exactly what it has. Gate on the loaded document, not on _player_restored:
 	# a fresh world already contains the player shell (building-1), and both
