@@ -1,3 +1,15 @@
+# 2026-09-23 — environment rebuild: new debug keystore, v79 APK built & pushed
+
+Container rootfs was rebuilt (only shfs mounts `/workspace`, `/root/.pi`, `gh` config survived). The old 9/18 debug keystore (SHA-256 `D4:4A:59…:4F`) was **lost** — it lived in `/root`, never in git. Godot generated a **fresh** debug keystore for v79:
+
+- **New debug keystore: SHA-256 `3d88162b54a0e555af64ff09106a45e0bc05e5af575c3258b4a44abcae7f07cf`**
+- Persisted at `.tools/keystores/debug.keystore` (force-committed, `ac8698a`) — rebuild-proof. Restore to `/root/.local/share/godot/keystores/debug.keystore` after any future rootfs rebuild (or just point `export/android/debug_keystore` there — it's in the repo).
+- Consequence: the Thor's installed `m2night` app was signed with the old key → **uninstall + fresh install** required once the device is re-paired (saves lost; user-approved).
+
+Also wiped and restored: JDK (`openjdk-17-jdk-headless`, symlink `/usr/lib/jvm/zulu-17`), Android SDK at `/root/Android/Sdk` (platform-tools adb 1.0.41, build-tools;34.0.0, platforms;android-34, cmdline-tools), `local.properties`. **Gotcha:** Godot 4.7 headless export reads SDK/Java from **editor settings** (`/root/.config/godot/editor_settings-4.7.tres` → `export/android/java_sdk_path`, `export/android/android_sdk_path`), *not* `local.properties` — both were empty after the rebuild and export failed with "A valid Java SDK path is required in Editor Settings". ADB pairing keys (`/root/.android`) wiped → Thor must be re-paired; old keys backed up at `.tools/adb-keys/` (useless without host-side pairing, keep for reference). For future-proofing: bind-mount `/root/.android` from the Unraid host (see `docs/adb-container-setup.md`), and keep editor settings' `export/android/*` paths in mind on rebuilds.
+
+**v79 state:** `task/natural-waterfall` at `ac8698a` pushed (was `ed01965` local-only). `builds/hearthvale-m2night-v79-debug.apk` rebuilt from it — `--export-debug` (NOT `--export-release`; preset has no release keystore), org `org.hearthvale.game.test.m2night`, versionCode 79, exactly one ARM64 `libvoxel` (`libvoxel.android.editor.arm64.so`), signed with the new debug keystore. **Not yet installed on device** — pending: (1) Thor wireless-debug re-pair (port + 6-digit code), (2) `adb uninstall org.hearthvale.game.test.m2night`, (3) install v79, (4) verify version + libvoxel on device, (5) user visual acceptance of the waterfall art pass.
+
 # 2026-09-23 - startup and terrain-line fixes merged with v78
 
 Merged codex/startup-readiness (including codex/terrain-moire-fix) onto v78 main. The grass-noise lattice shares corner values across cells, addressing diagonal terrain bands. Startup skips throwaway M1 landscape and duplicate path work, batches meadow tufts, reuses painted path cells for planting clearance, and rasterizes streams without repeated sorting. Current v78 checkpoint and reservoir authority, 160 m valley, mountain scenery, version code 78, and capture positions were retained.
