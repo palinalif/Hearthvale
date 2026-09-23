@@ -1,3 +1,36 @@
+# Hearthvale — startup readiness work (2026-09-23)
+
+**Branch:** `codex/startup-readiness`, based on `codex/terrain-moire-fix`.
+The M2 backend-ready callback now completes inherited player restoration;
+previously `_player_restored` stayed false and the production capture waited for
+its full timeout despite terrain being ready. Fresh starter creation skips the
+throwaway M1 landscape, avoids a duplicate path visual rebuild, reuses painted
+path cells for planting clearance, and batches meadow tuft regeneration until
+the river and ponds are established. The river's exact 25,868-cell footprint is
+rasterized by collecting brush and segment cells before sorting once; its SHA256
+is unchanged (`425437cb663f553a5bcc6d7fa2b89f1d0088dae29079e1bbf67489087edb12ce`).
+
+**Desktop evidence:** Forward Mobile production cold start reached restored
+readiness in 9.2–11.4 s on this host, versus 90–98.5 s before the river
+rasterization fix. The standalone premade-river footprint fell from 49.9 s to
+1.7 s with identical output. Headless M2 starter readiness was 34.5 s, versus
+54.3–55.7 s baseline; renderer and machine load differ, so these are local
+measurements rather than Thor performance claims. The complete Forward Mobile
+capture passed with seven images, a native border edit, and zero failures.
+Tracked reference captures were restored after the run; the latest untracked
+normal image is `.tools/startup-normal-mobile.png`.
+
+**Tests:** Godot 4.7.2: water region 55 checks, painted path region 22,
+meadow tuft visual 13, M2 starter scene 26, starter valley, starter migration,
+and Forward Mobile starter render all passed. The older M1 landscape test
+failed twice at its fixed 30 s native-scene-ready deadline, once in parallel
+and once alone; no script error was reported. Its readiness timeout needs
+separate review before treating it as a regression.
+
+**Delivery limit:** Android preset remains v69. This host still has no Java
+SDK or Android build-tools/apksigner; no APK was built or verified. The Thor
+was not connected, so device startup and visual approval remain untested.
+
 # Hearthvale — terrain diagonal moiré fix branch (2026-09-22)
 
 **Branch:** `codex/terrain-moire-fix`, source commit `d102c54` (v69 Android preset).

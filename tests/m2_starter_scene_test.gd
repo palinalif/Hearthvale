@@ -25,6 +25,7 @@ func run() -> void:
 	scene.test_mode = true
 	scene.starter_hamlet_in_tests = true
 	scene.checkpoint_root = "user://m2_scene_test/valley"
+	var boot_started := Time.get_ticks_msec()
 	root.add_child(scene)
 	var deadline := Time.get_ticks_msec() + 60000
 	while scene.backend == null or not scene.backend.is_ready():
@@ -34,6 +35,8 @@ func run() -> void:
 			print("M2_STARTER_SCENE_RESULT " + JSON.stringify({"ok": false, "checks": check_count, "failures": failures}))
 			quit(1)
 			return
+	check(scene._player_restored, "startup restoration completed when terrain became ready")
+	print("M2_STARTER_READY elapsed_ms=%d" % (Time.get_ticks_msec() - boot_started))
 	check(scene._valley_surround != null, "valley surround is mounted")
 	check(scene._valley_surround.stats()["peak_height"] == 56.0, "valley surround peak height is the 56 m ring")
 	check(scene.river_water != null, "river water is mounted")

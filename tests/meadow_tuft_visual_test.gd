@@ -45,6 +45,7 @@ func _initialize() -> void:
 	_verify_build()
 	_verify_determinism()
 	_verify_exclusions()
+	_verify_suspended_refresh()
 	_verify_validation()
 	print("meadow_tuft_visual_test checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures > 0 else 0)
@@ -105,6 +106,22 @@ func _verify_exclusions() -> void:
 	check(restored == open, "clearing the exclusion restores the full scatter (%d)" % restored)
 	garden.queue_free(); (pair[1] as Node).queue_free()
 	print("MEADOW_EXCLUDE " + JSON.stringify({"open": open, "excluded": excluded, "restored": restored}))
+
+func _verify_suspended_refresh() -> void:
+	var pair := _make_garden()
+	var garden: Node = pair[0]
+	var mock: Node = pair[1]
+	var original: MeshInstance3D = garden.get("_tuft_node")
+	var open := _vertex_count(original)
+	garden.set_meadow_refresh_suspended(true)
+	mock.bump()
+	garden.set_meadow_exclusions([Rect2(24.0, 24.0, 16.0, 16.0)])
+	garden.refresh_terrain()
+	check(garden.get("_tuft_node") == original, "startup batch keeps the current tuft mesh until terrain and exclusions settle")
+	garden.set_meadow_refresh_suspended(false)
+	var settled := _vertex_count(garden.get("_tuft_node"))
+	check(settled < open, "ending the batch builds tufts from the final terrain and exclusions")
+	garden.queue_free(); mock.queue_free()
 
 func _verify_validation() -> void:
 	var pair := _make_garden()

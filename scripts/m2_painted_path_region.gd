@@ -16,6 +16,9 @@ static func cell_center(cell: Vector2i) -> Vector2:
 	return (Vector2(cell) + Vector2.ONE * 0.5) * Grid.UNIT
 
 static func brush_cells(center: Vector2, radius: float, world_size: float = DEFAULT_WORLD_SIZE) -> Array:
+	return _sorted(_brush_cells_unsorted(center, radius, world_size))
+
+static func _brush_cells_unsorted(center: Vector2, radius: float, world_size: float) -> Array:
 	var cell_limit := maxi(1, floori(world_size / Grid.UNIT))
 	var safe_radius := maxf(radius, Grid.UNIT * 0.5)
 	var lo := Vector2i(
@@ -37,18 +40,19 @@ static func brush_cells(center: Vector2, radius: float, world_size: float = DEFA
 			clampi(floori(center.x / Grid.UNIT), 0, cell_limit - 1),
 			clampi(floori(center.y / Grid.UNIT), 0, cell_limit - 1)
 		))
-	return _sorted(result)
+	return result
 
 static func stroke_cells(from: Vector2, to: Vector2, radius: float, world_size: float = DEFAULT_WORLD_SIZE) -> Array:
 	if not from.is_finite() or not to.is_finite(): return []
 	var distance := from.distance_to(to)
 	var spacing := Grid.UNIT * 0.5
 	var steps := maxi(1, ceili(distance / spacing))
-	var result: Array = []
+	var unique := {}
 	for step in range(steps + 1):
 		var amount := float(step) / float(steps)
-		result = union_cells(result, brush_cells(from.lerp(to, amount), radius, world_size), world_size)
-	return result
+		for cell: Vector2i in _brush_cells_unsorted(from.lerp(to, amount), radius, world_size):
+			unique[cell] = true
+	return _sorted(unique.keys())
 
 static func normalize_cells(values: Array, world_size: float = DEFAULT_WORLD_SIZE) -> Array:
 	var cell_limit := maxi(1, floori(world_size / Grid.UNIT))

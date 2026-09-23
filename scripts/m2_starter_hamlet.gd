@@ -58,7 +58,9 @@ static func documents(world: RefCounted) -> Dictionary:
 			var radius := sqrt(rng.randf()) * 2.0
 			_plant(landscape, "foliage", cluster + Vector2(cos(angle), sin(angle)) * radius, sample % 4)
 	for point: Vector2 in [Vector2(36, 15), Vector2(36, 35), Vector2(45, 23), Vector2(46, 39), Vector2(53, 46), Vector2(10, 45)]: _plant(landscape, "rock", point, 1)
-	for route: Array in routes: landscape.clear_records_along_path(route, 1.5)
+	# Reuse the painted cells and widen the root margin by the difference
+	# between the 1.0 m path and the 1.5 m planting clearance.
+	landscape.clear_records_in_path_cells(landscape.path_cells("packed_earth"), 4)
 	var building_document: Dictionary = candidate.get_document()
 	var landscape_document := landscape.document()
 	if not Landscape.validate(landscape_document): return {}

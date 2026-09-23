@@ -56,7 +56,10 @@ static func footprint_cells(region: Dictionary, world_size: float) -> Array:
 		else:
 			cells = []
 			for i in range(1, points.size()):
-				cells = PathRegion.union_cells(cells, PathRegion.stroke_cells(points[i - 1], points[i], stream_radius(region), world_size), world_size)
+				cells.append_array(PathRegion.stroke_cells(points[i - 1], points[i], stream_radius(region), world_size))
+			# Unioning after every segment repeatedly sorts the growing river.
+			# One normalization yields the same bounded, unique, sorted cells.
+			cells = PathRegion.normalize_cells(cells, world_size)
 	if _footprint_memo.size() >= _FOOTPRINT_MEMO_LIMIT:
 		_footprint_memo.clear()
 	_footprint_memo[key] = cells

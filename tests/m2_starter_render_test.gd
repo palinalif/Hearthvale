@@ -71,12 +71,12 @@ func run() -> void:
 	await capture("reverse")
 	frame_scene(scene, Vector3(61.0, 10.0, 44.0), -0.85, 0.74, 22.0)
 	await capture("edge-before")
-	var point := Vector3(63.75, 10.0, 44.0)
+	var point := Vector3(75.0, 10.0, 44.0)
 	var sample: Dictionary = scene.backend.sample_surface_plane(point + Vector3.UP * 4.0, Vector3.UP, 8.0)
 	check(bool(sample.get("valid", false)), "Border terrain can be targeted")
 	if bool(sample.get("valid", false)):
 		point.y = (sample["point"] as Vector3).y
-		var old_surround: Mesh = scene._valley_surround._land.mesh
+		var old_surround: Mesh = scene._valley_surround.mesh
 		check(scene.backend.begin_stroke("dig", point, {"radius":1.5, "strength":2.0, "falloff":0.6}), "Border dig begins")
 		for tick in 12: scene.backend.update_stroke(point, 1.0 / 30.0)
 		check(scene.backend.end_stroke(), "Border dig commits through native terrain")
@@ -85,7 +85,7 @@ func run() -> void:
 		# coalesced surround refresh once after the completed stroke.
 		scene._process(1.0 / 60.0)
 		check(not scene._surround_refresh_pending, "Border scenery refresh is consumed after the stroke")
-		check(scene._valley_surround._land.mesh != old_surround, "Border scenery is rebuilt from the edited native boundary")
+		check(scene._valley_surround.mesh != old_surround, "Border scenery is rebuilt from the edited native boundary")
 		frame_scene(scene, Vector3(61.0, 10.0, 44.0), -0.85, 0.74, 22.0)
 		for name in ["brush_preview", "cursor_reticle", "reference_plane", "terrain_hit_marker", "terrain_edit_preview"]:
 			var node = scene.get(name)

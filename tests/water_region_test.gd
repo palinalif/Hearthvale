@@ -4,6 +4,7 @@ extends SceneTree
 ## module, no scene, no RNG: pure logic only.
 const State = preload("res://scripts/landscape_state.gd")
 const Geometry = preload("res://scripts/water_region_geometry.gd")
+const PathRegion = preload("res://scripts/m2_painted_path_region.gd")
 
 var failures := 0
 var checks := 0
@@ -113,6 +114,12 @@ func _run() -> void:
 	var stream_cells := Geometry.footprint_cells(stream, 64.0)
 	check(stream_cells.size() > 0, "stream footprint non-empty")
 	check(stream_cells.size() > lake_cells.size(), "long stream covers more cells than small lake")
+	var bent := {"type": "stream", "level": 2.5, "width": 1.5, "flow": [1.0, 0.0], "points": [[10.0, 10.0], [13.0, 12.0], [16.0, 9.0], [19.0, 12.0]]}
+	var old_union: Array = []
+	var bent_points: PackedVector2Array = Geometry.points(bent)
+	for index in range(1, bent_points.size()):
+		old_union = PathRegion.union_cells(old_union, PathRegion.stroke_cells(bent_points[index - 1], bent_points[index], Geometry.stream_radius(bent), 64.0), 64.0)
+	check(_digest(Geometry.footprint_cells(bent, 64.0)) == _digest(old_union), "one-pass stream rasterization preserves the complete sorted footprint")
 
 	# --- determinism ----------------------------------------------------------
 	var lake_cells_b := Geometry.footprint_cells(lake, 64.0)
