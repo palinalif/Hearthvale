@@ -1,3 +1,10 @@
+# 2026-09-23 - startup and terrain-line fixes merged with v78
+
+Merged codex/startup-readiness (including codex/terrain-moire-fix) onto v78 main. The grass-noise lattice shares corner values across cells, addressing diagonal terrain bands. Startup skips throwaway M1 landscape and duplicate path work, batches meadow tufts, reuses painted path cells for planting clearance, and rasterizes streams without repeated sorting. Current v78 checkpoint and reservoir authority, 160 m valley, mountain scenery, version code 78, and capture positions were retained.
+
+Godot 4.7.2 merged-source checks: grass tone 27, water region 55, painted path 22, meadow tuft 13, M2 starter scene 27; all passed. Production Forward Mobile capture passed 11 views and a native border edit with zero failures. Desktop Mobile restored readiness was 26.2 s; headless was 137.5 s. The earlier 9-11 s result belongs to the smaller predecessor world and is not a v78 comparison. Thor startup and visual acceptance remain untested. This host has no Java SDK or Android build-tools, so the existing verified v78 APK predates this merge; no APK from the merged source was produced.
+
+---
 # 2026-09-22 - v78 detailed terrain-colored mountains
 
 Follow-up to v77: branching mountain ribs/gullies, ledges and crest crags. Every mountain layer uses the native grass palette, darkening with elevation. A cached 0.125-grid voxel shoulder continues the native foothills into the smooth mountain face. Derived scenery only; existing worlds gain these visuals without a reset. Native terrain, save/edit authority and water sources are unchanged.

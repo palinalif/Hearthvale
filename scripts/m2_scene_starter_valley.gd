@@ -141,9 +141,22 @@ func _ensure_directional_fill(fill_name: String, rotation: Vector3, color: Color
 	fill.shadow_enabled = false
 	fill.light_specular = 0.25
 
+func _restore_landscape(document: Dictionary) -> void:
+	# A fresh M2 world receives the starter hamlet below. The inherited M1
+	# fallback would first build an unrelated landscape, then discard it while
+	# seeding the hamlet. Loaded saves and tests without a starter still use it.
+	if document.is_empty() and starter_hamlet_enabled and (not test_mode or starter_hamlet_in_tests):
+		return
+	super._restore_landscape(document)
+
 func _on_backend_ready(ready: bool) -> void:
+	if not backend: return
+	var meadow := garden_visual as M1GardenVisual
+	if meadow: meadow.set_meadow_refresh_suspended(true)
 	super._on_backend_ready(ready)
-	if not ready or not backend or _restoring or not _player_restored: return
+	if not ready or _restoring or not _player_restored:
+		if meadow: meadow.set_meadow_refresh_suspended(false)
+		return
 	# A world with no saved checkpoint gets the full hamlet; a loaded save keeps
 	# exactly what it has. Gate on the loaded document, not on _player_restored:
 	# a fresh world already contains the player shell (building-1), and both
@@ -168,6 +181,7 @@ func _on_backend_ready(ready: bool) -> void:
 		_ensure_premade_ponds()
 		_ensure_premade_reservoir()
 		_ensure_premade_pool()
+	if meadow: meadow.set_meadow_refresh_suspended(false)
 
 func _seed_starter_hamlet() -> bool:
 	if _starter_seeded or not backend.loaded_building_document.is_empty(): return false

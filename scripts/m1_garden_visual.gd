@@ -48,6 +48,7 @@ var _tuft_extra_rects: Array = []
 ## changes so a single placement re-plans one region instead of the world.
 var _tuft_plan: Array = []
 var _tuft_last_revision := -1
+var _meadow_refresh_suspended := false
 var _tuft_last_exclusions: Array = []
 ## Per-fine-cell column-top cache; invalidated only on terrain revision.
 var _tuft_heights: Dictionary = {}
@@ -75,6 +76,13 @@ func refresh_terrain() -> void:
 	# auto-scattered meadow tufts do, re-derived deterministically on each
 	# terrain revision (see _rebuild_meadow_tufts).
 	_rebuild_meadow_tufts()
+
+## Batch startup changes to authoritative terrain and exclusions. The derived
+## tuft mesh is built once from the final state when the batch ends.
+func set_meadow_refresh_suspended(suspended: bool) -> void:
+	if _meadow_refresh_suspended == suspended: return
+	_meadow_refresh_suspended = suspended
+	if not suspended: _rebuild_meadow_tufts()
 
 func set_meadow_exclusions(rects: Array) -> void:
 	_tuft_extra_rects = rects
@@ -139,6 +147,7 @@ func reset_records(records: Array) -> void:
 	apply_records(records)
 
 func _rebuild_meadow_tufts() -> void:
+	if _meadow_refresh_suspended: return
 	if _tuft_backend == null or not _tuft_backend.has_method("voxel_at"):
 		return
 	if _tuft_backend.has_method("is_ready") and not _tuft_backend.is_ready():
