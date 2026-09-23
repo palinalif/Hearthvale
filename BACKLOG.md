@@ -106,7 +106,7 @@ Allow players to paint roads and paths from a broad texture palette. Road surfac
 
 Allow the player to choose a home design, preview it, rotate it freely, and place a new independent building at a valid location instead of creating new buildings only by copying the default cottage. Existing homes can also be moved and rotated without losing their identities or edits. Placement is controller-first, cancellable, undoable, and compatible with terrain, foundations, saves, and stable building identities. Detailed UI, UX, safety, and acceptance requirements are authoritative in `tasks/M2-hamlet-building.md`.
 
-**Status note (2026-09-16):** M2 is active and the placement/rotation foundation is implemented and CI/APK verified at `c9f83ec` (`tasks/M2-01-placement-rotation-foundation.md`); physical Thor feel remains player review. The broader hamlet-building scope (home recipes, catalogue art) continues under `tasks/M2-hamlet-building.md`.
+**Status note:** Placement/rotation foundations are implemented. The broader hamlet scope remains in `tasks/M2-hamlet-building.md`; physical Thor feel and player review are separate acceptance checks.
 
 **Known dependencies:** Multiple home recipes, placement validation and previews, terrain/foundation response rules, controller targeting, collision policy, and save/undo compatibility.
 

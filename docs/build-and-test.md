@@ -1,6 +1,8 @@
 # Build and test Hearthvale
 
-Run PowerShell from the repository root (`Hearthvale`). The pinned runtime is project-local; do not use the existing Godot 4.2.2 Mono installation.
+For local Linux tests, from any directory run `tools/run-test tests/name_test.gd` (absolute path to wrapper if outside the project). It invokes Godot 4.7.2 with `--headless --script`, a bounded timeout and failfast output handling. Set `TEST_TIMEOUT_SECONDS` when needed. Omitting `--script` runs the default gameplay scene instead of the test. Rendering/capture checks must run with a real display and the Mobile renderer. Check `AGENTS.md` and `HANDOFF.md` for current delivery requirements.
+
+The PowerShell commands below document the Windows iteration and legacy M0/M1 fixtures. Run PowerShell from the repository root (`Hearthvale`); do not use an older Godot installation.
 
 ## Consolidated iteration command
 
@@ -40,7 +42,7 @@ The game uses Mobile by default. The explicit desktop launch flags avoid the poo
 & $godot --path . --rendering-method gl_compatibility --disable-vsync --max-fps 60
 ```
 
-M1 is the current implementation milestone. Its controller route is in `M1-controller-and-review.md`; its evidence and remaining device checks are in `../reports/M1-editable-cottage.md`. The retained M0 scene can be launched explicitly with `--scene res://scenes/m0.tscn`. The internal application name remains unchanged to preserve the existing desktop user-data directory. M1 uses a separate checkpoint root and never overwrites M0 player checkpoints.
+M2 is the active milestone; M1's historical controller route is in `M1-controller-and-review.md` and its initial build evidence is in `../reports/M1-editable-cottage.md`. The retained M0 scene can be launched explicitly with `--scene res://scenes/m0.tscn`. The internal application name remains unchanged to preserve the existing desktop user-data directory. M1 uses a separate checkpoint root and never overwrites M0 player checkpoints.
 
 ## Native probe and tests
 

@@ -1,34 +1,14 @@
-# Hearthvale — editable cottage milestone
+# Hearthvale
 
-**Working title. Design draft 0.1, 6 September 2026.**
-
-This repository began as a planning package for a personal cozy voxel town-builder on AYN Thor Max. It now contains the Godot project, the retained M0 platform scene, and an M1 build ready for physical playtest. M0 remains subject to its evidence gate and player review; desktop tests and exported APKs do not establish physical Thor results.
-
-M1 artifacts, exact verification results, screenshots and remaining checks are recorded in [the M1 handoff](reports/M1-editable-cottage.md).
+Hearthvale is a controller-first cozy voxel town-builder for AYN Thor Max, built in Godot 4.7.2 with the pinned Zylann Voxel GDExtension. Native volumetric terrain, editable buildings, and authored voxel presentation assets are core requirements. M1 is complete; M2 hamlet building is active.
 
 ## Start here
 
-Read `AGENTS.md`, then the active `tasks/M2-hamlet-building.md` ticket and relevant sections of `docs/design.md`. M1's editable cottage, continuous terrain and riverbank baseline is complete and must remain intact while M2 adds the residential hamlet vocabulary and controller-first placement/rotation. Build instructions are in `docs/build-and-test.md`; accepted M1 controls and physical evidence remain in `docs/M1-controller-and-review.md`, `docs/M1-thor-playtest.md`, and the current handoff.
+- `AGENTS.md` — project contracts, workflow, testing and delivery rules.
+- `HANDOFF.md` — current build status, verification and remaining work.
+- `tasks/M2-hamlet-building.md` — active product scope; `tasks/starter-valley-art-pass-plan.md` tracks the landscape/art pass.
+- `docs/design.md` and `docs/references/` — design and visual references.
+- `BACKLOG.md` — future ideas, not authorized work.
+- `docs/build-and-test.md` — build and testing commands. On Linux, run a headless SceneTree test with `tools/run-test tests/name_test.gd`; never omit `--script` in a direct Godot test invocation.
 
-The pinned bundle is official Godot 4.7.2 with matching export templates and Voxel Tools GDExtension v1.7x. Exact origins, commits, and hashes are in `dependencies.lock.json`. The Godot AI 3.2.5 MCP sandbox is development-only under `dev/mcp`.
-
-## Contents
-
-- `docs/design.md`: complete design, hardware specifications, engineering targets, dependency research, and numbered sources.
-- `docs/design.pdf`: original illustrated planning draft; current milestone corrections and art direction are authoritative in `docs/design.md`.
-- `docs/references/`: the three supplied inspiration images, with attribution and usage notes.
-- `BACKLOG.md`: uncommitted future ideas and explicit product boundaries; entries do not authorize implementation.
-- `AGENTS.md`: project boundaries and development workflow.
-- `tasks/M0-platform-spike.md`: first implementation ticket and evidence requirements.
-- `tasks/M1-editable-cottage.md`: authorized current ticket; functioning building editing and its full regression are mandatory.
-- `tasks/M1-terrain-sculpting.md`: authorized parallel M1 workstream; continuous volumetric strokes and controller safety are mandatory.
-
-## Creative brief
-
-A small, fully sculptable valley with caves and overhangs. Stretchable procedural buildings whose individual details remain editable. Humans and animals using cafés, inns, playgrounds, and other places. Detailed voxel forms and attractive lighting. Several non-modern architectural styles. Single-screen, controller-only play, including on a TV.
-
-The draft proposes unlimited resources, no failure or economy, exterior-focused buildings, offline play, and editable scenic water instead of general fluid physics. Those are proposed scope defaults, not additional requirements already explicitly approved by the player.
-
-## Evidence status
-
-The original design contains proposals, not benchmark results. Milestone reports contain the actual evidence. The player reported successful manual Thor testing of the original M0 build; detailed device checks, the revised controls playtest, and the MCP persistence issue remain separate open items. M1 implementation is authorized, but this does not waive those checks or establish M1 device acceptance.
+Dependency versions and origins are locked in `dependencies.lock.json`. Historical milestone evidence is retained only where it remains linked from the active documentation; Git history contains prior reports and plans. Desktop results are not Thor or player visual approval.

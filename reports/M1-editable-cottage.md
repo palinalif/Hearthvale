@@ -1,6 +1,6 @@
 # M1 — editable cottage and continuous sculpting handoff
 
-Date: 6 September 2026. This is the first M1 build record; subsequent physical feedback and fixes are tracked in [the controls follow-up](M1-controls-followup.md). **Ready for physical playtest; M1 is not complete.** Both authorized tickets are implemented for review. Required Thor controller/visual/performance evidence is not run on this build. No M2 or catalogue expansion has started.
+Date: 6 September 2026. This is the first M1 build record, not the current project status. Both authorized tickets were implemented for review; Thor controller/visual/performance evidence was not run on this build. See `../HANDOFF.md` for subsequent work and current status.
 
 ## Delivered behavior
 

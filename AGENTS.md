@@ -32,6 +32,8 @@ Reason concisely and action-first. Do not repeatedly restate the task, known fin
 
 For commands that may keep running after a known fatal error (notably Godot/export/ADB composite jobs), use `tools/failfast --timeout <seconds> -- <command>` so fatal output returns control immediately. Use explicit longer timeouts for legitimate long builds; do not rely on the fallback timeout alone.
 
+For headless SceneTree tests, call `tools/run-test tests/name_test.gd` (from any directory; default 600 s bound, override with `TEST_TIMEOUT_SECONDS`). It supplies the required `--script` and failfast handling. **Do not** use `godot --headless --path . res://tests/name_test.gd`: without `--script`, Godot runs the default gameplay scene indefinitely instead of the test. Rendering/capture tests need their own non-headless invocation.
+
 ## Architecture and Godot code quality
 
 - Prefer composition and existing seams over extending the already-deep gameplay scene inheritance chain. Do not add another subclass merely to introduce one feature.

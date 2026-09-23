@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Run one headless SceneTree test, never the project's default gameplay scene.
+set -euo pipefail
+
+usage() {
+    echo "Usage: tools/run-test tests/name.gd [-- test arguments...]" >&2
+    echo "       TEST_TIMEOUT_SECONDS=600 tools/run-test res://tests/name.gd" >&2
+}
+
+if (( $# < 1 )); then
+    usage
+    exit 2
+fi
+
+test_path=${1#res://}
+shift
+if [[ ! "$test_path" =~ ^tests/[A-Za-z0-9_-]+\.gd$ ]]; then
+    echo "run-test: expected a tests/name.gd script, got: $test_path" >&2
+    usage
+    exit 2
+fi
+
+project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+if [[ ! -f "$project_dir/$test_path" ]]; then
+    echo "run-test: no such test: $test_path" >&2
+    exit 2
+fi
+
+if (( $# > 0 )); then
+    if [[ "$1" != "--" ]]; then
+        usage
+        exit 2
+    fi
+    shift
+fi
+
+timeout_seconds=${TEST_TIMEOUT_SECONDS:-600}
+if [[ ! "$timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
+    echo "run-test: TEST_TIMEOUT_SECONDS must be a positive integer" >&2
+    exit 2
+fi
+
+cd -- "$project_dir"
+if (( $# > 0 )); then
+    exec tools/failfast --timeout "$timeout_seconds" -- "${GODOT_BIN:-godot}" --headless --path . --script "res://$test_path" -- "$@"
+else
+    exec tools/failfast --timeout "$timeout_seconds" -- "${GODOT_BIN:-godot}" --headless --path . --script "res://$test_path"
+fi

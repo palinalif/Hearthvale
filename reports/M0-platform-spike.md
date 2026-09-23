@@ -53,7 +53,7 @@ Raw checks are retained locally in `reports/logs`; reproducible commands and fin
 
 ## Implemented scope and review
 
-The source is described in `docs/m0-implementation.md`. The 48 × 32 × 48 patch is native volumetric voxel data with a through-tunnel, an intact roof, and a separate water basin. The scene includes a bounded orbit camera, movable 3D cursor, visible sphere preview, explicit add/remove transactions, cancel, undo/redo, controller-focused save/reload/quit, sunlight, water shader, and a debug overlay. No later-milestone gameplay was added.
+The 48 × 32 × 48 patch is native volumetric voxel data with a through-tunnel, an intact roof, and a separate water basin. The scene includes a bounded orbit camera, movable 3D cursor, visible sphere preview, explicit add/remove transactions, cancel, undo/redo, controller-focused save/reload/quit, sunlight, water shader, and a debug overlay. No later-milestone gameplay was added.
 
 Checkpoint schema 2 uses native 16-bit channel bytes. Schema 1 remains readable, with full-value migration comparisons. Tests cover corrupt newest generations, missing data, unpublished staged files, malformed metadata, invalid write roots, bounded sizes, generation ordering, and retention of two valid generations. Separate process fixture writes and reads compare data hashes; fresh native backend instances verify loaded terrain values and revision. These are desktop process/data checks, not Android power-loss tests.
 
