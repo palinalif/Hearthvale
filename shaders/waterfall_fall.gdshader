@@ -59,13 +59,14 @@ void fragment() {
 	// --- crest foam (water breaking over the lip) --------------------------
 	float crest_mask = 1.0 - smoothstep(0.0, 0.14, band);
 	float crest_churn = fbm2(vec2(wp.x * 22.0 + wp.z * 11.0, wp.y * 2.0 - TIME * 2.6));
-	float foam = crest_mask * smoothstep(0.42, 0.78, crest_churn);
-	foam += crest_mask * smoothstep(0.10, 0.0, band) * 0.55; // bright lip line
+	float foam = crest_mask * smoothstep(0.38, 0.72, crest_churn);
+	foam += crest_mask * smoothstep(0.10, 0.0, band) * 0.6; // bright lip line
 
 	// --- impact splash (churning at the plunge) -----------------------------
 	float splash_mask = smoothstep(0.72, 0.97, band);
 	float splash_churn = fbm2(vec2(wp.x * 26.0 + wp.z * 13.0, (wp.y + TIME * fall_speed * 6.5) * 2.2));
 	float splash = splash_mask * smoothstep(0.38, 0.82, splash_churn);
+	foam += splash_mask * smoothstep(1.0, 0.93, band) * 0.5; // bright impact line
 
 	float white = clamp(foam * 0.95 + splash * 0.85 + smoothstep(0.72, 0.9, h) * 0.3, 0.0, 0.95);
 
@@ -93,14 +94,14 @@ void fragment() {
 	// --- varied alpha --------------------------------------------------------
 	// Opaque where churning, more transparent between strands; the bottom
 	// reads as a bright splash instead of the old flat fade.
-	float alpha = fall_color.a * (0.45 + 0.55 * h) + white * 0.45 + splash * 0.2;
+	float alpha = fall_color.a * (0.5 + 0.5 * h) + white * 0.45 + splash * 0.2;
 	alpha = clamp(alpha, 0.0, 0.98);
 
 	// The scene does not flag this material transparent, so punch hard
 	// holes wherever the water is thin: the sheet breaks into discrete
 	// cascading strands over the pool instead of an opaque white wall.
 	// Crest and splash stay solid — their alpha exceeds the scissor.
-	if (alpha < 0.42) {
+	if (alpha < 0.40) {
 		discard;
 	}
 

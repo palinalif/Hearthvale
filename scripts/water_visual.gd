@@ -20,14 +20,21 @@ class_name M1WaterVisual
 const Geometry = preload("res://scripts/water_region_geometry.gd")
 const Waterfall = preload("res://scripts/waterfall_geometry.gd")
 const Grid = preload("res://scripts/visual_grid.gd")
+const PremadeRiver = preload("res://scripts/premade_river.gd")
 const WATER_SHADER = preload("res://shaders/water_surface.gdshader")
+const POOL_WATER_SHADER = preload("res://shaders/pool_water.gdshader")
 const FALL_SHADER = preload("res://shaders/waterfall_fall.gdshader")
 
 const WATER_CELL := Grid.UNIT
 const WATER_COLOR := Color(0.20, 0.52, 0.55, 0.85)
 const WATER_DEEP_COLOR := Color(0.07, 0.26, 0.36, 0.82)
+# The plunge pool's basin floor sits only ~0.75 m below the surface, so the
+# 0.82 alpha of the normal sheet lets the voxel floor show through as a
+# scattered dotted grid. A near-opaque sheet keeps the pool reading clean.
+const POOL_COLOR := Color(0.14, 0.42, 0.50, 0.97)
+const POOL_DEEP_COLOR := Color(0.06, 0.24, 0.34, 0.97)
 const DEPTH_SCALE := 4.0
-const FALL_COLOR := Color(0.62, 0.80, 0.88, 0.70)
+const FALL_COLOR := Color(0.62, 0.80, 0.88, 0.78)
 const SPLASH_COLOR := Color(0.86, 0.96, 1.0, 0.55)
 
 # Bounded per-frame work: a first-time rebuild of a large region (or a big
@@ -274,7 +281,7 @@ func _build_pass() -> void:
 			if not is_nan(surface_y) and surface_y >= level - 0.000001:
 				continue
 			var depth := 0.0 if is_nan(surface_y) else clampf((level - surface_y) / DEPTH_SCALE, 0.0, 1.0)
-			var color := WATER_COLOR.lerp(WATER_DEEP_COLOR, depth)
+			var color := _depth_color(region, depth)
 			base = _append_water_quad(verts, norms, cols, idx, base, cx, cz, level, color)
 		state["index"] = end
 		budget -= (end - start)
@@ -359,7 +366,7 @@ func _prepare_build(id: int, region: Dictionary, cells: Array) -> void:
 		"cols": PackedColorArray(),
 		"idx": PackedInt32Array(),
 		"index": 0,
-		"material": _region_material(Geometry.flow_direction(region)),
+		"material": _region_material(Geometry.flow_direction(region), region),
 	}
 
 func _mark_rebuild(id: int) -> void:
@@ -527,6 +534,14 @@ func _rebuild() -> void:
 	water_perf = {"resample_ms": 0.0, "mesh_ms": 0.0, "total_ms": 0.0, "cells_resampled": resampled, "regions": _regions.size(), "quads": surface_quad_count(), "full_rebuild": true}
 	water_rebuilds += 1
 
+## The per-vertex shade for a submerged cell: the standard translucent water
+## ramp, or the near-opaque pool ramp (its alpha must stay high so the basin
+## floor can't show through as a dotted grid).
+func _depth_color(region: Dictionary, depth: float) -> Color:
+	if _is_plunge_pool(region):
+		return POOL_COLOR.lerp(POOL_DEEP_COLOR, depth)
+	return WATER_COLOR.lerp(WATER_DEEP_COLOR, depth)
+
 ## Synchronous full build of one region from the warm cache.
 func _build_region_full(id: int) -> void:
 	var state: Dictionary = _build_state.get(id, {})
@@ -547,7 +562,7 @@ func _build_region_full(id: int) -> void:
 		if not is_nan(surface_y) and surface_y >= level - 0.000001:
 			continue
 		var depth := 0.0 if is_nan(surface_y) else clampf((level - surface_y) / DEPTH_SCALE, 0.0, 1.0)
-		var color := WATER_COLOR.lerp(WATER_DEEP_COLOR, depth)
+		var color := _depth_color(region, depth)
 		base = _append_water_quad(verts, norms, cols, idx, base, cx, cz, level, color)
 	state["verts"] = verts
 	state["norms"] = norms
@@ -785,8 +800,21 @@ func _regions_signature() -> String:
 		payload.append([int(region.get("id", 0)), str(region.get("type", "")), float(region.get("level", 0.0)), int((region.get("points", []) as Array).size())])
 	return var_to_bytes(payload).hex_encode().sha256_text()
 
-func _region_material(flow: Vector2) -> ShaderMaterial:
+## The premade plunge pool is the one body whose bed is too close to the
+## surface for the translucent sheet: it gets the near-opaque pool material
+## instead. Matched against the generated basin's exact level + points, so it
+## stays in sync with PremadeRiver without persisting extra region flags.
+func _is_plunge_pool(region: Dictionary) -> bool:
+	return PremadeRiver.matches_pool(region, PremadeRiver.plunge_pool_region())
+
+func _region_material(flow: Vector2, region: Dictionary) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
+	if _is_plunge_pool(region):
+		material.shader = POOL_WATER_SHADER
+		material.set_shader_parameter("pool_color", POOL_COLOR)
+		material.set_shader_parameter("flow_dir", Vector2(1.0, 0.0))
+		material.set_shader_parameter("flow_speed", 0.25)  # calm: no streaks in a pool
+		return material
 	material.shader = WATER_SHADER
 	material.set_shader_parameter("water_color", WATER_COLOR)
 	material.set_shader_parameter("flow_dir", flow)

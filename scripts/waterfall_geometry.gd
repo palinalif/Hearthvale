@@ -13,6 +13,11 @@ const Geometry = preload("res://scripts/water_region_geometry.gd")
 const Grid = preload("res://scripts/visual_grid.gd")
 
 const MIN_HEAD := 0.5       # minimum fall height (metres) to count as a waterfall
+# A stream's lip needs a bigger head than a lake's: the ~2 m step where the
+# starter river plunges into the pool is the tail of the cliff cascade that
+# feeds that pool, not its own fall, so a stream's small step reads as a
+# riffle (rock) rather than a second sheet. Lakes keep MIN_HEAD.
+const MIN_STREAM_HEAD := 2.5
 const MAX_LIP_DEPTH := 1.0  # includes the standard 0.75 m excavated lake bed
 const LIP_TOL := 0.5        # crown terrain may sit this close to / below the upper level
 const DROP_REACH := 2.0     # how far beyond the crown to sample the cliff base
@@ -54,7 +59,8 @@ static func derive(regions: Array, sample: Callable, dirty_rect: Rect2 = FULL_RE
 				continue
 			var lo_level := Geometry.surface_level(lower)
 			var head := up_level - lo_level
-			if head < MIN_HEAD:
+			var min_head := MIN_STREAM_HEAD if str(upper.get("type", "")) == "stream" else MIN_HEAD
+			if head < min_head:
 				continue
 			var fall := _best_crown(upper, lower, up_level, lo_level, sample, dirty_rect)
 			if fall.is_empty():

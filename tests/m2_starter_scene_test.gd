@@ -53,7 +53,7 @@ func run() -> void:
 	for fall: Dictionary in falls:
 		if int(fall.get("upper_id", -1)) == 120 and absf(float(fall.get("head", 0.0)) - 20.0) < 1.0:
 			cliff_fall = true
-	check(falls.size() == 2 and cliff_fall, "native starter cliff drops the reservoir into the plunge pool (plus the 2 m river step)")
+	check(falls.size() == 1 and cliff_fall, "native starter cliff drops the reservoir into the plunge pool (the 2 m river step is a riffle, not its own fall)")
 	_check_home_anchor_support(buildings)
 	check(_check_library(), "terrain library has the full 10-model ground set")
 	_check_material_round_trip()
