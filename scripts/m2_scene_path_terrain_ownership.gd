@@ -205,7 +205,9 @@ func _restore_landscape(document: Dictionary) -> void:
 	if landscape_document is Dictionary:
 		_path_terrain_ownership = _normalize_path_ownership((landscape_document as Dictionary).get("path_terrain", []))
 	_path_terrain_before = _path_terrain_ownership.duplicate(true)
-	_refresh_path_visual(true)
+	# The parent restore already rebuilt paths from the restored records. Only
+	# rebuild here if their document or terrain revision changed in the meantime.
+	_refresh_path_visual()
 
 func path_terrain_ownership_count() -> int:
 	return _path_terrain_ownership.size()

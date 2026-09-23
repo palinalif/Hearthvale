@@ -6,6 +6,7 @@ extends SceneTree
 
 const Tone = preload("res://scripts/grass_tone.gd")
 const Generator = preload("res://scripts/m1_patch_generator.gd")
+const GroundMaterials = preload("res://scripts/terrain_ground_materials.gd")
 const Bounds = preload("res://scripts/m2_world_bounds.gd")
 const SHADER_PATH := "res://scripts/terrain_grass.gdshader"
 const LATTICE_STEP := 0.25
@@ -170,5 +171,5 @@ func _verify_shader_wiring() -> void:
 		if not matches:
 			mismatched.append(name)
 	check(mismatched.is_empty(), "grass material receives the exact published palette and scales: " + str(mismatched))
-	check(str(material.shader.resource_path) == SHADER_PATH and Generator.GRASS_SHADER == material.shader, "library and test resolve the same shader resource")
+	check(str(material.shader.resource_path) == SHADER_PATH and GroundMaterials.GRASS_SHADER == material.shader, "library and test resolve the same shader resource")
 	print("GRASS_TONE_WIRING " + JSON.stringify({"uniforms": Tone.shader_uniform_names().size(), "mismatched": mismatched, "shader": SHADER_PATH}))
