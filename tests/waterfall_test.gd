@@ -68,6 +68,9 @@ func _run() -> void:
 		check(float(fall["crown_width"]) > 3.0, "crown width spans the reservoir bowl")
 		check(float(fall["impact_width"]) > 3.0, "impact width spans the river bed")
 		check(float(fall["impact_width"]) > float(fall["crown_width"]), "cascade flares from lip to river")
+		# The render aims the sheet's impact at the lower body's centroid so a
+		# fall into a pool lands in the pool's centre, not a fixed run past lip.
+		check((fall["lower_centroid"] as Array).size() == 2, "fall carries its lower centroid")
 
 		# Determinism: a second derive must produce the identical digest.
 		var again: Array = Waterfall.derive(state.water, sample)

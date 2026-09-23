@@ -71,6 +71,7 @@ static func derive(regions: Array, sample: Callable, dirty_rect: Rect2 = FULL_RE
 			var impact := crown + flow * cascade_run(float(fall["head"]))
 			fall["crown_width"] = _submerged_span(sample, crown, perp, up_level, LIP_TOL, upper)
 			fall["impact_width"] = _submerged_span(sample, impact, perp, lo_level, DROP_TOL, lower)
+			fall["lower_centroid"] = [_centroid(lower).x, _centroid(lower).y]
 			falls.append(fall)
 	falls = _dedupe_same_lip(falls)
 	falls.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["upper_id"]) < int(b["upper_id"]))

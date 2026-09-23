@@ -24,6 +24,7 @@ const PremadeRiver = preload("res://scripts/premade_river.gd")
 const WATER_SHADER = preload("res://shaders/water_surface.gdshader")
 const POOL_WATER_SHADER = preload("res://shaders/pool_water.gdshader")
 const FALL_SHADER = preload("res://shaders/waterfall_fall.gdshader")
+const SPLASH_SHADER = preload("res://shaders/waterfall_splash.gdshader")
 
 const WATER_CELL := Grid.UNIT
 const WATER_COLOR := Color(0.20, 0.52, 0.55, 0.85)
@@ -34,7 +35,7 @@ const WATER_DEEP_COLOR := Color(0.07, 0.26, 0.36, 0.82)
 const POOL_COLOR := Color(0.14, 0.42, 0.50, 0.97)
 const POOL_DEEP_COLOR := Color(0.06, 0.24, 0.34, 0.97)
 const DEPTH_SCALE := 4.0
-const FALL_COLOR := Color(0.62, 0.80, 0.88, 0.78)
+const FALL_COLOR := Color(0.62, 0.80, 0.88, 0.88)
 const SPLASH_COLOR := Color(0.86, 0.96, 1.0, 0.55)
 
 # Bounded per-frame work: a first-time rebuild of a large region (or a big
@@ -658,8 +659,24 @@ func _build_cascade(fall: Dictionary) -> MeshInstance3D:
 	# (matching the ~4 m run of the generated cliff face).
 	var crown_width := maxf(Waterfall.CASCADE_WIDTH, float(fall.get("crown_width", Waterfall.CASCADE_WIDTH)))
 	var impact_width := maxf(crown_width, float(fall.get("impact_width", crown_width)))
-	var run := Waterfall.cascade_run(top - bottom)
+	var head := top - bottom
+	var run := Waterfall.cascade_run(head)
 	var impact := crown + flow * run
+	# A fall into a lake lands in the lake's centre: the fixed run past the lip
+	# overshoots the plunge pool (the sheet was ending on dry ground south of
+	# the pool). The run is recomputed from the true lip-to-centre distance.
+	if fall.has("lower_centroid") and (fall["lower_centroid"] as Array).size() == 2:
+		var lc := Vector2(float((fall["lower_centroid"] as Array)[0]), float((fall["lower_centroid"] as Array)[1]))
+		if (lc - crown).length() > 0.25:
+			impact = lc
+			run = (lc - crown).length()
+	# Head scales the sheet's presence: a 20 m cliff is a dense curtain; a 2 m
+	# river step is a faint shimmer across the channel, not a flat wall. Tall
+	# falls also widen past a narrow lip scan so the curtain reads big.
+	var sheet_strength := 1.0 if head >= 4.0 else clampf(0.25 + head * 0.1, 0.25, 1.0)
+	if head >= 10.0:
+		crown_width = maxf(crown_width, 8.0)
+		impact_width = maxf(crown_width, impact_width)
 	# Lift the curtain off the voxel face to avoid coplanar flicker.
 	crown += flow * 0.04
 	var perp := Vector2(-flow.y, flow.x)
@@ -679,21 +696,36 @@ func _build_cascade(fall: Dictionary) -> MeshInstance3D:
 	var cc := PackedColorArray([Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE])
 	var ci := PackedInt32Array([0, 1, 2, 0, 2, 3])
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _surface_arrays(cv, cn, cc, ci))
-	mesh.surface_set_material(0, _fall_material(top - bottom, top))
-	# Surface 1: a flat foam splash just above the pool where the curtain lands.
-	var s := impact_width * 0.6
-	var eps := 0.02
-	var sv := PackedVector3Array([Vector3(impact.x - s, bottom + eps, impact.y - s), Vector3(impact.x + s, bottom + eps, impact.y - s), Vector3(impact.x + s, bottom + eps, impact.y + s), Vector3(impact.x - s, bottom + eps, impact.y + s)])
-	var sn := PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP])
-	var sc := PackedColorArray([SPLASH_COLOR, SPLASH_COLOR, SPLASH_COLOR, SPLASH_COLOR])
-	var si := PackedInt32Array([0, 1, 2, 0, 2, 3])
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _surface_arrays(sv, sn, sc, si))
-	var splash_material := StandardMaterial3D.new()
-	splash_material.albedo_color = SPLASH_COLOR
-	splash_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	splash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	splash_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mesh.surface_set_material(1, splash_material)
+	mesh.surface_set_material(0, _fall_material(head, top, sheet_strength))
+	# Surface 1: a soft elliptical foam bed where the curtain lands (a hard
+	# flat square read as a painted decal). Shallow steps skip it — a faint
+	# shimmer doesn't churn.
+	if head >= 4.0:
+		var s_x := maxf(impact_width * 0.5, 3.0)
+		var s_z := maxf(run * 0.5, 1.75)
+		var sv := PackedVector3Array([Vector3(impact.x, bottom + 0.02, impact.y)])
+		for i in 16:
+			var aa := TAU * float(i) / 16.0
+			sv.append(Vector3(impact.x + cos(aa) * s_x, bottom + 0.02, impact.y + sin(aa) * s_z))
+		var sn := PackedVector3Array()
+		sn.resize(17)
+		for i in 17:
+			sn[i] = Vector3.UP
+		var sc := PackedColorArray()
+		sc.resize(17)
+		for i in 17:
+			sc[i] = Color.WHITE
+		var si := PackedInt32Array()
+		for i in 15:
+			si.append_array([0, i + 1, i + 2])
+		si.append_array([0, 16, 15])
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _surface_arrays(sv, sn, sc, si))
+		var smat := ShaderMaterial.new()
+		smat.shader = SPLASH_SHADER
+		smat.set_shader_parameter("center", Vector2(impact.x, impact.y))
+		smat.set_shader_parameter("radius", Vector2(s_x, s_z))
+		smat.set_shader_parameter("strength", 0.5 * sheet_strength)
+		mesh.surface_set_material(1, smat)
 	var node := MeshInstance3D.new()
 	node.name = "Waterfall_%d-%d" % [int(fall["upper_id"]), int(fall["lower_id"])]
 	node.mesh = mesh
@@ -712,12 +744,13 @@ func _surface_arrays(vertices: PackedVector3Array, normals: PackedVector3Array, 
 	arrays[Mesh.ARRAY_INDEX] = indices
 	return arrays
 
-func _fall_material(span: float, top: float) -> ShaderMaterial:
+func _fall_material(span: float, top: float, strength: float) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = FALL_SHADER
 	material.set_shader_parameter("fall_color", FALL_COLOR)
 	material.set_shader_parameter("height", span)
 	material.set_shader_parameter("top_level", top)
+	material.set_shader_parameter("sheet_strength", strength)
 	return material
 
 ## A unit billboard quad carrying a soft, unshaded alpha material; the particle

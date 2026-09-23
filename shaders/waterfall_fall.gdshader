@@ -5,6 +5,9 @@ uniform vec4 fall_color : source_color = vec4(0.62, 0.80, 0.88, 0.70);
 uniform float fall_speed = 3.0;
 uniform float height = 3.0;
 uniform float top_level = 4.0;
+// Presence of the sheet, scaled by head: a 20 m cliff reads as a dense
+// curtain; a 2 m river step should be a faint shimmer, not a wall.
+uniform float sheet_strength = 1.0;
 
 varying vec3 wp;
 
@@ -94,14 +97,15 @@ void fragment() {
 	// --- varied alpha --------------------------------------------------------
 	// Opaque where churning, more transparent between strands; the bottom
 	// reads as a bright splash instead of the old flat fade.
-	float alpha = fall_color.a * (0.5 + 0.5 * h) + white * 0.45 + splash * 0.2;
+	float alpha = (fall_color.a * (0.5 + 0.5 * h) + white * 0.45 + splash * 0.2) * sheet_strength;
 	alpha = clamp(alpha, 0.0, 0.98);
 
 	// The scene does not flag this material transparent, so punch hard
 	// holes wherever the water is thin: the sheet breaks into discrete
 	// cascading strands over the pool instead of an opaque white wall.
 	// Crest and splash stay solid — their alpha exceeds the scissor.
-	if (alpha < 0.40) {
+	// Shallow steps lower the scissor too, so they dissolve to ripples.
+	if (alpha < 0.16 + 0.24 * sheet_strength) {
 		discard;
 	}
 
