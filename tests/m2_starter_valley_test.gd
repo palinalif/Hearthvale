@@ -80,7 +80,7 @@ func _check_ground_materials(expanded: Object) -> void:
 	check(_paint_digest(Generator.generate()) == _paint_digest(Generator.generate()), "Ground paint is deterministic across runs")
 	check(Generator.surface_material(40.0, 36.0, 8.0) == 2, "Hamlet highland stays grass (2)")
 	check(Generator.surface_material(Generator.river_center_x(40.0), 40.0, 4.375) == 4, "River bed is sand (4)")
-	check(Generator.surface_material(48.0, 55.0, 8.0) == 3, "Lane at the well is packed dirt (3)")
+	check(Generator.surface_material(48.0, 55.0, 8.0) == 2, "Old wide dirt lane is meadow; authored path supplies the route")
 	var library: Object = Generator.build_library()
 	check(library.get_models().size() == 10, "Generator library carries the full ground set (10 models)")
 

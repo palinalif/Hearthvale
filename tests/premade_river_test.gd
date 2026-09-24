@@ -32,7 +32,7 @@ func _run() -> void:
 	# --- well-formed region --------------------------------------------------
 	check(str(region.get("type", "")) == "stream", "premade river is a stream")
 	check(absf(float(region["level"]) - 5.0) < 0.0001, "premade river level is 5.0")
-	check(float(region["width"]) > 0.0 and float(region["width"]) <= State.WATER_MAX_WIDTH, "width within bounds")
+	check(float(region["width"]) == 6.0 and float(region["width"]) <= State.WATER_MAX_WIDTH, "water covers the carved river within width limit")
 	var points: Array = region["points"]
 	check(points.size() >= 2, "has at least two points")
 	check(points.size() <= State.WATER_MAX_POINTS, "point count within the water limit")
@@ -55,6 +55,26 @@ func _run() -> void:
 	check(PremadeRiver.matches(stored, region), "stored region matches the derived river")
 	var again: Dictionary = PremadeRiver.region()
 	check(PremadeRiver.matches(stored, again), "re-derivation is deterministic and recognised")
+	var old_points: Array = []
+	for point: Array in points:
+		var z := float(point[1])
+		old_points.append([Generator.previous_river_center_x(z), z])
+	var old_region := region.duplicate(true)
+	old_region["points"] = old_points
+	old_region["width"] = PremadeRiver.PREVIOUS_WIDTH
+	check(PremadeRiver.matches(old_region, region), "legacy narrow starter stream is recognised without matching player streams")
+	check(absf(Generator.river_center_x(60.0) - Generator.previous_river_center_x(60.0)) > 0.5,
+		"downstream channel gains an observable bend")
+	check(Generator.river_center_x(PremadeRiver.LENGTH) == Generator.previous_river_center_x(PremadeRiver.LENGTH),
+		"source lip remains anchored at its previous center")
+	for z_sample in [20.0, 40.0, 65.0, 90.0, 120.0]:
+		var center_x := Generator.river_center_x(z_sample)
+		check(Generator.terrain_height(center_x, z_sample) < PremadeRiver.LEVEL,
+			"bending stream stays over a submerged channel at z=%s" % z_sample)
+		check(Generator.river_half_width(z_sample) < PremadeRiver.WIDTH * 0.5,
+			"channel stays within the water footprint at z=%s" % z_sample)
+		check(Generator.terrain_height(center_x + Generator.river_half_width(z_sample) - 0.125, z_sample) < PremadeRiver.LEVEL,
+			"water reaches the shallow outer bed at z=%s" % z_sample)
 
 	# --- idempotency guard: a distinct player stream is NOT the premade river
 	var other: Dictionary = {"type": "stream", "level": 8.0, "width": 1.0, "flow": [1.0, 0.0],
@@ -73,6 +93,8 @@ func _run() -> void:
 	# The reservoir is at the head of the river, not at the plain edge.
 	check(float(rpoints[0][1]) > 90.0, "reservoir sits in the mountains (z > 90)")
 	check(PremadeRiver.matches_reservoir(reservoir, PremadeRiver.reservoir_region()), "reservoir re-derivation is recognised")
+	check(PremadeRiver.matches_reservoir(PremadeRiver._reservoir_region_at_radius(PremadeRiver.PREVIOUS_RESERVOIR_RADIUS), reservoir), "previous saved reservoir stays recognised without duplication")
+	check(float(rpoints[0][0]) - Generator.SOURCE_CENTER.x >= PremadeRiver.RESERVOIR_RADIUS, "reservoir polygon keeps the established radius")
 	# The reservoir must fit the document's water budget alongside the river.
 	var reservoir_id: int = state.add_water("lake", reservoir["level"], reservoir["points"])
 	check(reservoir_id > 0, "add_water accepts the reservoir alongside the river")

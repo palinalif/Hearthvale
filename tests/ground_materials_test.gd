@@ -61,15 +61,37 @@ func run() -> void:
 	check(a1 == a2, "generate() paints the ground identically on every run")
 	check(a1 != "", "paint digest is non-trivial")
 
-	# Spot rules: hamlet stays grass; river bed sand; banks gravel; ring layers.
+	# Spot rules: hamlet stays grass; river bed sand; dry banks green; ring layers.
 	check(Generator.surface_material(20.0, 18.0, 8.0) == GroundMaterials.GRASS, "hamlet highland stays grass")
 	var center := Generator.river_center_x(40.0)
-	check(Generator.surface_material(center, 40.0, 4.375) == GroundMaterials.SAND, "river bed is sand")
-	check(Generator.surface_material(center + 3.5, 40.0, 6.0) == GroundMaterials.GRAVEL, "upper bank is gravel")
-	check(Generator.surface_material(24.0, 27.5, 8.0) == GroundMaterials.DIRT, "lane at the well is packed dirt")
+	check(Generator.surface_material(center, 40.0, 4.375) == GroundMaterials.SAND, "submerged river bed is sand")
+	var half := Generator.river_half_width(40.0)
+	check(Generator.surface_material(center + half + 0.125, 40.0, 5.5) == GroundMaterials.GRAVEL,
+		"waterline retains a thin gravel seam")
+	check(Generator.surface_material(center + half + 0.75, 40.0, 5.5) in [GroundMaterials.GRASS, GroundMaterials.MOSS],
+		"dry inner bank is green rather than pale gravel")
+	check(Generator.surface_material(center + half + 3.0, 40.0, 5.8) != GroundMaterials.GRAVEL,
+		"outer bank is green rather than a continuous gravel strip")
+	check(Generator.terrain_height(center, 40.0) < 5.0,
+		"generated river bed remains below the stream surface")
+	check(Generator.terrain_height(center + half + 0.5, 40.0) > 5.0,
+		"dry shelf rises above the stream surface")
+	for z in [40.0, 90.0, 110.0, 120.0, 125.0]:
+		var bank_center := Generator.river_center_x(z)
+		var bank_half := Generator.river_half_width(z)
+		for side: float in [-1.0, 1.0]:
+			var bank_x: float = bank_center + side * (bank_half + 0.75)
+			var bank_height := Generator.terrain_height(bank_x, z)
+			check(bank_height > 5.0, "dry bank is above water at z=%s side=%s" % [z, side])
+			check(Generator.surface_material(bank_x, z, bank_height) in [GroundMaterials.GRASS, GroundMaterials.MOSS],
+				"dry bank is green at z=%s side=%s" % [z, side])
+	# The old 4 m terrain-painted lane ran unbounded across both banks.
+	# New worlds use the authored narrow packed-earth paths instead.
+	check(Generator.surface_material(48.0, 55.0, 8.0) == GroundMaterials.GRASS, "former west-bank dirt lane is meadow")
+	check(Generator.surface_material(110.0, 55.0, 8.0) == GroundMaterials.GRASS, "former east-bank dirt lane is meadow")
 	var ring_materials := {}
-	for x in range(65, 79, 2):
-		for z in range(65, 79, 2):
+	for x in range(138, 154, 2):
+		for z in range(85, 101, 2):
 			var h := Generator.terrain_height(float(x), float(z))
 			var m := Generator.surface_material(float(x), float(z), h)
 			ring_materials[m] = int(ring_materials.get(m, 0)) + 1
@@ -92,6 +114,17 @@ func run() -> void:
 	check(int(voxels.get_voxel(col_x, top, col_z, 0)) == expected, "top voxel matches the paint rule")
 	check(int(voxels.get_voxel(col_x, top - 1, col_z, 0)) == expected, "second voxel matches the paint rule")
 	check(int(voxels.get_voxel(col_x, top - 2, col_z, 0)) == 1, "subsurface below the paint stays stone")
+	# The tall waterfall cut exposes cells far below the top-two paint layer;
+	# these use the ring's muted rock rather than the warm generic stone.
+	var cliff_x := 82.0
+	var cliff_z := 139.0
+	check(Generator.waterfall_cut_material(cliff_x, cliff_z, Generator.terrain_height(cliff_x, cliff_z)) == GroundMaterials.ROCK_FACE, "waterfall cliff cut uses ring rock")
+	check(int(voxels.get_voxel(int(cliff_x / 0.125), 64, int(cliff_z / 0.125), 0)) == GroundMaterials.ROCK_FACE, "exposed cliff subsurface uses ring rock")
+	var inlet_x := 90.0
+	var inlet_z := 147.0
+	check(Generator.waterfall_cut_material(inlet_x, inlet_z, Generator.terrain_height(inlet_x, inlet_z)) == GroundMaterials.MOSS, "inlet bank cut uses mountain moss")
+	check(Generator.surface_material(inlet_x, inlet_z, Generator.terrain_height(inlet_x, inlet_z)) == GroundMaterials.MOSS, "dry inlet bank blends with mountain greens")
+	check(Generator.waterfall_cut_material(50.0, 139.0, Generator.terrain_height(50.0, 139.0)) == GroundMaterials.STONE, "uncut mountain retains stone subsurface")
 
 	print("GROUND_MATERIALS_RESULT " + JSON.stringify({"ok": failures.is_empty(), "checks": checks, "failures": failures.size(), "messages": failures}))
 	quit(0 if failures.is_empty() else 1)
