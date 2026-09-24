@@ -54,7 +54,28 @@ func run() -> void:
 	var whole_world := AABB(Vector3.ZERO, Vector3(scene.backend.patch_size))
 	while not scene.backend.terrain.is_area_meshed(whole_world) and Time.get_ticks_msec() < mesh_deadline:
 		await process_frame
-	check(scene.backend.terrain.is_area_meshed(whole_world), "Full native valley is meshed before capture")
+	if not scene.backend.terrain.is_area_meshed(whole_world):
+		check(false, "Full native valley did not mesh before capture")
+		scene._shutting_down = true
+		scene.queue_free()
+		await process_frame
+		quit(1)
+		return
+	# Native chunk meshing and the budgeted water-surface builder are separate.
+	# Fail closed rather than capture an unfinished reservoir, pool, or river.
+	var water_deadline := Time.get_ticks_msec() + 240000
+	while (scene.water_visual._rebuild_scheduled or not scene.water_visual._pending_cells.is_empty() or not scene.water_visual._dirty_regions.is_empty()) and Time.get_ticks_msec() < water_deadline:
+		# Software Mobile may render at ~1 fps. Drain multiple ordinary
+		# budgeted passes between frames without changing gameplay budgets.
+		scene.water_visual._drain(8)
+		await process_frame
+	if scene.water_visual._rebuild_scheduled or not scene.water_visual._pending_cells.is_empty() or not scene.water_visual._dirty_regions.is_empty():
+		check(false, "Water surfaces did not finish building before capture")
+		scene._shutting_down = true
+		scene.queue_free()
+		await process_frame
+		quit(1)
+		return
 	await settle_frames(1500)
 	scene.set_process(false)
 	# The first two captures use the real initial camera without moving it.

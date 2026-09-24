@@ -41,7 +41,9 @@ const WATER_MAX_LEVEL := 32.0
 const WATER_MIN_WIDTH := 0.25
 const WATER_MAX_WIDTH := 8.0
 # 24000 covered river + ponds; the v7 premade plunge pool adds ~3150 cells.
-const WATER_RENDER_CELL_LIMIT := 28000
+# The 6 m starter river and its reservoir/ponds need room under the same
+# bounded document limit; actual rendered cells still clip against terrain.
+const WATER_RENDER_CELL_LIMIT := 40000
 const WATERFALL_SUPPRESSION_LIMIT := 64
 const EDITABLE_WORLD_SIZE := preload("res://scripts/m2_world_bounds.gd").SIZE
 const Grid = preload("res://scripts/visual_grid.gd")

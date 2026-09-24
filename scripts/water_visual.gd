@@ -29,14 +29,15 @@ const SPLASH_SHADER = preload("res://shaders/waterfall_splash.gdshader")
 const WATER_CELL := Grid.UNIT
 const WATER_COLOR := Color(0.20, 0.52, 0.55, 0.85)
 const WATER_DEEP_COLOR := Color(0.07, 0.26, 0.36, 0.82)
-# The plunge pool's basin floor sits only ~0.75 m below the surface, so the
-# 0.82 alpha of the normal sheet lets the voxel floor show through as a
-# scattered dotted grid. A near-opaque sheet keeps the pool reading clean.
-const POOL_COLOR := Color(0.14, 0.42, 0.50, 0.97)
-const POOL_DEEP_COLOR := Color(0.06, 0.24, 0.34, 0.97)
+# The plunge pool and mountain reservoir have shallow voxel beds. Their
+# material renders in the opaque pass so native terrain cannot sort in front
+# of the water on Mobile.
+const POOL_COLOR := Color(0.14, 0.42, 0.50, 1.0)
+const POOL_DEEP_COLOR := Color(0.06, 0.24, 0.34, 1.0)
 const DEPTH_SCALE := 4.0
 const FALL_COLOR := Color(0.62, 0.80, 0.88, 0.88)
 const SPLASH_COLOR := Color(0.86, 0.96, 1.0, 0.55)
+const STARTER_FALL_WIDTH_RATIO := 0.88
 
 # Bounded per-frame work: a first-time rebuild of a large region (or a big
 # carve commit invalidating its footprint) drains over many frames instead of
@@ -535,11 +536,10 @@ func _rebuild() -> void:
 	water_perf = {"resample_ms": 0.0, "mesh_ms": 0.0, "total_ms": 0.0, "cells_resampled": resampled, "regions": _regions.size(), "quads": surface_quad_count(), "full_rebuild": true}
 	water_rebuilds += 1
 
-## The per-vertex shade for a submerged cell: the standard translucent water
-## ramp, or the near-opaque pool ramp (its alpha must stay high so the basin
-## floor can't show through as a dotted grid).
+## The per-vertex shade for a submerged cell: translucent stream water or
+## opaque still water above the shallow pool/reservoir beds.
 func _depth_color(region: Dictionary, depth: float) -> Color:
-	if _is_plunge_pool(region):
+	if _is_still_water(region):
 		return POOL_COLOR.lerp(POOL_DEEP_COLOR, depth)
 	return WATER_COLOR.lerp(WATER_DEEP_COLOR, depth)
 
@@ -671,10 +671,16 @@ func _build_cascade(fall: Dictionary) -> MeshInstance3D:
 			impact = lc
 			run = (lc - crown).length()
 	# Head scales the sheet's presence: a 20 m cliff is a dense curtain; a 2 m
-	# river step is a faint shimmer across the channel, not a flat wall. Tall
-	# falls also widen past a narrow lip scan so the curtain reads big.
+	# river step is a faint shimmer across the channel, not a flat wall.
 	var sheet_strength := 1.0 if head >= 4.0 else clampf(0.25 + head * 0.1, 0.25, 1.0)
-	if head >= 10.0:
+	var starter_river_width := _starter_fall_river_width(fall)
+	if starter_river_width > 0.0:
+		# The reservoir lip and pool are wider than the river they feed. Keep
+		# the visible curtain and its foam/particles inside that corridor.
+		var visible_width := starter_river_width * STARTER_FALL_WIDTH_RATIO
+		crown_width = minf(crown_width, visible_width)
+		impact_width = minf(impact_width, visible_width)
+	elif head >= 10.0:
 		crown_width = maxf(crown_width, 8.0)
 		impact_width = maxf(crown_width, impact_width)
 	# Lift the curtain off the voxel face to avoid coplanar flicker.
@@ -701,7 +707,8 @@ func _build_cascade(fall: Dictionary) -> MeshInstance3D:
 	# flat square read as a painted decal). Shallow steps skip it — a faint
 	# shimmer doesn't churn.
 	if head >= 4.0:
-		var s_x := maxf(impact_width * 0.5, 3.0)
+		var foam_min_radius := 3.0 * STARTER_FALL_WIDTH_RATIO if starter_river_width > 0.0 else 3.0
+		var s_x := maxf(impact_width * 0.5, foam_min_radius)
 		var s_z := maxf(run * 0.5, 1.75)
 		var sv := PackedVector3Array([Vector3(impact.x, bottom + 0.02, impact.y)])
 		for i in 16:
@@ -734,6 +741,21 @@ func _build_cascade(fall: Dictionary) -> MeshInstance3D:
 	node.add_child(_make_spray(impact, bottom, impact_width))
 	node.add_child(_make_mist(impact, bottom, impact_width))
 	return node
+
+## Only the authored reservoir-to-pool fall is constrained by the starter
+## river. Other falls keep their terrain-derived width and tall-fall minimum.
+func _starter_fall_river_width(fall: Dictionary) -> float:
+	var upper_is_reservoir := false
+	var lower_is_pool := false
+	var river_width := 0.0
+	for region: Dictionary in _regions:
+		if int(region.get("id", -1)) == int(fall["upper_id"]):
+			upper_is_reservoir = PremadeRiver.matches_reservoir(region, PremadeRiver.reservoir_region())
+		if int(region.get("id", -1)) == int(fall["lower_id"]):
+			lower_is_pool = PremadeRiver.matches_pool(region, PremadeRiver.plunge_pool_region())
+		if PremadeRiver.matches(region, PremadeRiver.region()):
+			river_width = float(region.get("width", 0.0))
+	return river_width if upper_is_reservoir and lower_is_pool else 0.0
 
 func _surface_arrays(vertices: PackedVector3Array, normals: PackedVector3Array, colors: PackedColorArray, indices: PackedInt32Array) -> Array:
 	var arrays: Array = []
@@ -833,20 +855,18 @@ func _regions_signature() -> String:
 		payload.append([int(region.get("id", 0)), str(region.get("type", "")), float(region.get("level", 0.0)), int((region.get("points", []) as Array).size())])
 	return var_to_bytes(payload).hex_encode().sha256_text()
 
-## The premade plunge pool is the one body whose bed is too close to the
-## surface for the translucent sheet: it gets the near-opaque pool material
-## instead. Matched against the generated basin's exact level + points, so it
-## stays in sync with PremadeRiver without persisting extra region flags.
-func _is_plunge_pool(region: Dictionary) -> bool:
-	return PremadeRiver.matches_pool(region, PremadeRiver.plunge_pool_region())
+## Match only the authored shallow still-water bodies, including legacy saved
+## reservoir outlines. Player lakes retain their existing translucent material.
+func _is_still_water(region: Dictionary) -> bool:
+	return PremadeRiver.matches_pool(region, PremadeRiver.plunge_pool_region()) or PremadeRiver.matches_reservoir(region, PremadeRiver.reservoir_region())
 
 func _region_material(flow: Vector2, region: Dictionary) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
-	if _is_plunge_pool(region):
+	if _is_still_water(region):
 		material.shader = POOL_WATER_SHADER
 		material.set_shader_parameter("pool_color", POOL_COLOR)
 		material.set_shader_parameter("flow_dir", Vector2(1.0, 0.0))
-		material.set_shader_parameter("flow_speed", 0.25)  # calm: no streaks in a pool
+		material.set_shader_parameter("flow_speed", 0.25)
 		return material
 	material.shader = WATER_SHADER
 	material.set_shader_parameter("water_color", WATER_COLOR)
