@@ -51,8 +51,8 @@ func _initialize() -> void:
 			_check(is_equal_approx(float(visual_viewer.get("view_distance_vertical_ratio")), 0.75), "visual voxel viewer limits cold-start vertical demand")
 		if data_viewers.size() == 1:
 			var data_viewer := data_viewers[0] as Node3D
-			_check(data_viewer.position.is_equal_approx(Vector3(40.0, 16.0, 40.0)), "data-only voxel viewer stays at valley center")
-			_check(is_equal_approx(float(data_viewer.get("view_distance")), 64.0), "data-only voxel viewer keeps the full valley resident")
+			_check(data_viewer.position.is_equal_approx(backend.world_size() * 0.5), "data-only voxel viewer stays at valley center")
+			_check(float(data_viewer.get("view_distance")) >= floorf(backend.world_size().length() * 0.5), "data-only voxel viewer keeps the full valley resident")
 			_check(not bool(data_viewer.get("requires_collisions")), "data-only voxel viewer does not request collision meshes")
 	var deadline := Time.get_ticks_msec() + 60000
 	while not backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame
@@ -60,14 +60,14 @@ func _initialize() -> void:
 	if not backend.is_ready():
 		_finish()
 		return
-	_check(backend.world_size().is_equal_approx(Vector3(80, 32, 80)), "Valley expansion uses 80x32x80 world bounds")
-	_check(backend.patch_size == Vector3i(640, 256, 640) and backend.patch_size == Generator.PATCH_SIZE, "Expanded map uses 640x256x640 index grid")
+	_check(backend.world_size().is_equal_approx(Vector3(160, 32, 160)), "Valley uses 160x32x160 world bounds")
+	_check(backend.patch_size == Vector3i(1280, 256, 1280) and backend.patch_size == Generator.PATCH_SIZE, "Valley uses 1280x256x1280 index grid")
 	_check(is_equal_approx(backend.voxel_scale, 0.125), "M1 uses eighth-unit editable voxels")
 	_check(backend.terrain.bounds.size == Vector3(Generator.PATCH_SIZE), "native bounds use index dimensions")
 	_check(backend.terrain.scale.is_equal_approx(Vector3.ONE * Generator.VOXEL_SCALE), "native terrain scales geometry uniformly")
 	_check(backend.voxel_at(Generator.PATCH_SIZE - Vector3i.ONE) >= 0 and backend.voxel_at(Generator.PATCH_SIZE) == 0, "index bounds are clamped")
 
-	var plane: Dictionary = backend.sample_surface_plane(Vector3(20.0, 8.0, 18.0), Vector3.UP, 3.0)
+	var plane: Dictionary = backend.sample_surface_plane(Vector3(48.0, 8.0, 54.0), Vector3.UP, 3.0)
 	_check(bool(plane.get("valid", false)), "world-space surface sample is valid")
 	if bool(plane.get("valid", false)):
 		_check(absf((plane["point"] as Vector3).y - 8.0) <= 1.0, "surface sample returns world height")
