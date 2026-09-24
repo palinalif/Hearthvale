@@ -2,6 +2,7 @@ extends "res://scripts/m2_scene_style_preview_stability.gd"
 ## Starter content is a one-time new-world bootstrap, never a save migration.
 ## Old worlds gain space and scenery without acquiring unwanted houses/props.
 const StarterHamlet = preload("res://scripts/m2_starter_hamlet.gd")
+const PlayableBoundary = preload("res://scripts/m2_playable_boundary.gd")
 const ValleySurround = preload("res://scripts/m2_valley_surround.gd")
 const PremadePonds = preload("res://scripts/premade_ponds.gd")
 const WaterState = preload("res://scripts/landscape_state.gd")
@@ -298,6 +299,28 @@ func _on_backend_changed() -> void:
 	# Do not rebuild scenery on each tick of a held brush. Coalesce to the end
 	# of a stroke; border undo/redo and checkpoint loads refresh once as well.
 	_surround_refresh_pending = true
+
+func _read_camera_and_cursor(delta: float) -> void:
+	super._read_camera_and_cursor(delta)
+	# Limit terrain focus, not camera orbit or a selected home's edit focus.
+	# Project onto the rim so the stick can slide along the mountains.
+	if view_context == "terrain":
+		cursor = PlayableBoundary.clamp_position(cursor)
+		terrain_cursor = cursor
+
+func _end_stroke() -> void:
+	super._end_stroke()
+	# The base recentres on its sampled stroke target, which can lie beyond the
+	# controller focus rim. Do not allow a one-frame excursion at stroke end.
+	if view_context == "terrain":
+		cursor = PlayableBoundary.clamp_position(cursor)
+		terrain_cursor = cursor
+
+func _clamp_building_placement() -> void:
+	super._clamp_building_placement()
+	# Placement must be bounded before the parent samples ground and updates
+	# validity/ghost, rather than only correcting the cursor afterwards.
+	building_placement_target = PlayableBoundary.clamp_position(building_placement_target)
 
 func _process(delta: float) -> void:
 	super._process(delta)
