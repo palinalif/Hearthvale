@@ -25,11 +25,11 @@ func _run() -> void:
 	# terrain ownership, which is covered by the plaza/placement integration tests.
 	scene.path_style_id = "cobblestone"
 	scene._begin_path_placement()
-	_aim(Vector2(34.0, 34.0))
+	_aim(Vector2(59.0, 59.0))
 	_check(scene.path_placement_valid, "history fixture is paintable")
 	var before := JSON.stringify(scene.landscape_state.document())
 	await _button_down(JOY_BUTTON_A)
-	_aim(Vector2(36.0, 34.0))
+	_aim(Vector2(61.0, 59.0))
 	scene._sample_path_stroke()
 	await _button_up(JOY_BUTTON_A)
 	var painted := JSON.stringify(scene.landscape_state.document())
@@ -46,7 +46,7 @@ func _run() -> void:
 	# Erase is its own history transaction and must be redoable too.
 	await _press(JOY_BUTTON_X)
 	_check(scene.path_erase_mode, "X enters erase mode for history verification")
-	_aim(Vector2(35.0, 34.0))
+	_aim(Vector2(60.0, 59.0))
 	await _button_down(JOY_BUTTON_A)
 	await _button_up(JOY_BUTTON_A)
 	var erased := JSON.stringify(scene.landscape_state.document())

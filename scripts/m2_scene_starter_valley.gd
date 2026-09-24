@@ -306,7 +306,39 @@ func _read_camera_and_cursor(delta: float) -> void:
 	# Project onto the rim so the stick can slide along the mountains.
 	if view_context == "terrain":
 		cursor = PlayableBoundary.clamp_position(cursor)
+		if stroke_active and not PlayableBoundary.is_circle_footprint_inside(cursor + stroke_aim_offset, brush_radius):
+			# The parent advances the native brush after this callback. Keep the
+			# held brush's complete disk inside the valley before that happens.
+			var aim: Vector3 = cursor + stroke_aim_offset
+			var radial := Vector2(aim.x - PlayableBoundary.CENTER.x, aim.z - PlayableBoundary.CENTER.z).limit_length(maxf(0.0, PlayableBoundary.RADIUS - brush_radius))
+			var safe_center := Vector3(PlayableBoundary.CENTER.x + radial.x, aim.y, PlayableBoundary.CENTER.z + radial.y)
+			var safe_cursor: Vector3 = safe_center - stroke_aim_offset
+			if PlayableBoundary.is_inside(safe_cursor):
+				cursor = safe_cursor
+			else:
+				_end_stroke()
 		terrain_cursor = cursor
+
+func _begin_stroke() -> void:
+	if view_context == "terrain" and _terrain_target_valid and not PlayableBoundary.is_circle_footprint_inside(_terrain_target_point, brush_radius):
+		_set_status("Brush extends beyond playable valley")
+		return
+	super._begin_stroke()
+
+func _paint_plant_sample() -> void:
+	var center: Vector3 = _terrain_target_point if _terrain_target_valid else cursor
+	if not PlayableBoundary.is_circle_footprint_inside(center, brush_radius):
+		_set_status("Brush extends beyond playable valley")
+		return
+	super._paint_plant_sample()
+
+func _update_path_validity() -> void:
+	super._update_path_validity()
+	if not path_placement_active or not path_placement_valid: return
+	var point: Vector2 = _path_cursor_point()
+	if not PlayableBoundary.is_circle_footprint_inside(Vector3(point.x, 0.0, point.y), path_width * 0.5):
+		path_placement_valid = false
+		path_placement_reason = "Brush extends beyond playable valley"
 
 func _end_stroke() -> void:
 	super._end_stroke()
@@ -321,6 +353,30 @@ func _clamp_building_placement() -> void:
 	# Placement must be bounded before the parent samples ground and updates
 	# validity/ghost, rather than only correcting the cursor afterwards.
 	building_placement_target = PlayableBoundary.clamp_position(building_placement_target)
+
+func _update_building_placement_validity() -> void:
+	super._update_building_placement_validity()
+	if not building_placement_active or not building_placement_valid: return
+	var source: Dictionary = building_world.preview_home_design(building_placement_design_id, building_placement_transform, building_placement_wall_material_id, building_placement_roof_material_id) if building_placement_operation == "new" else building_world.get_building(building_placement_source_id)
+	if source.is_empty(): return
+	var footprint: Dictionary = _building_footprint(building_placement_transform, source.get("dimensions", Vector3.ZERO))
+	if footprint.is_empty(): return
+	var center: Vector2 = footprint["center"]
+	var axes: Array = footprint["axes"]
+	var half: Vector2 = footprint["half"]
+	var horizontal: Vector2 = axes[0] * half.x
+	var depth: Vector2 = axes[1] * half.y
+	var corners: Array[Vector3] = []
+	for offset: Vector2 in [horizontal + depth, horizontal - depth, -horizontal + depth, -horizontal - depth]:
+		corners.append(Vector3(center.x + offset.x, building_placement_target.y, center.y + offset.y))
+	var sections: Array[Dictionary] = HouseMassing.sections_for(source)
+	if sections.size() > 1:
+		var bounds: Rect2 = HouseMassing.union_bounds(sections)
+		for local: Vector2 in [bounds.position, Vector2(bounds.end.x, bounds.position.y), bounds.end, Vector2(bounds.position.x, bounds.end.y)]:
+			corners.append(building_placement_transform * Vector3(local.x, 0.0, local.y))
+	if not PlayableBoundary.is_polygon_footprint_inside(corners):
+		building_placement_valid = false
+		building_placement_reason = "Home extends beyond playable valley"
 
 func _process(delta: float) -> void:
 	super._process(delta)

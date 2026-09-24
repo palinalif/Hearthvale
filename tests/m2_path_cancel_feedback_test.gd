@@ -26,10 +26,10 @@ func _initialize() -> void:
 	scene.path_width = 0.75
 	scene._begin_path_placement()
 	_check(scene.path_placement_active and not scene.path_painting, "path tool opens idle with no live stroke")
-	_aim(Vector2(34.0, 34.0))
+	_aim(Vector2(59.0, 59.0))
 	await _button_down(JOY_BUTTON_A)
 	_check(scene.path_painting and not scene.path_cells.is_empty(), "holding A starts a live painted-cell stroke")
-	_aim(Vector2(35.0, 34.0))
+	_aim(Vector2(60.0, 59.0))
 	_check(scene._sample_path_stroke() and scene.path_cells.size() > 1, "moving while held extends the live stroke")
 	_check(JSON.stringify(scene.landscape_state.document()) == before and scene._history_tags.size() == history_before, "live stroke remains preview-only")
 

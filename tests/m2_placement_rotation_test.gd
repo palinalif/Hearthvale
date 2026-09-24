@@ -23,6 +23,9 @@ func _initialize() -> void:
 	scene._set_view_context("building")
 
 	var source_id: String = scene.selected_building_id
+	# The legacy fixture home sits outside the M2 playable disk. Move this
+	# test-only home into the valley before exercising placement/rotation.
+	check(scene.building_world.move_building(source_id, Vector3(80, 8, 80), scene.building_world.get_revision()), "test home moved into playable valley")
 	var source: Dictionary = scene.building_world.get_building(source_id)
 	var before: String = scene.building_world.serialize_document()
 	scene._begin_building_placement()

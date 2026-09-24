@@ -22,6 +22,8 @@ func _initialize() -> void:
 	await process_frame
 	await _press(JOY_BUTTON_BACK)
 	check(scene.view_context == "building", "building context selected")
+	# This legacy fixture's starter home lies outside the M2 playable rim.
+	check(scene.building_world.move_building(scene.selected_building_id, Vector3(80, 8, 80), scene.building_world.get_revision()), "home fixture moved inside playable valley")
 	var before: Dictionary = scene.building_world.get_document()
 	var source: Dictionary = scene.building_world.get_building(scene.selected_building_id)
 	var source_transform: Transform3D = source["transform"]

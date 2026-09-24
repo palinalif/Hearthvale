@@ -20,8 +20,8 @@ func _initialize() -> void:
 		return
 	scene.set_process(false)
 	var fixture_z := -1.0
-	for z in [27.0, 29.0, 31.0, 33.0]:
-		if scene.landscape_state.add("foliage", Vector3(40.0, 8.0, z), 2):
+	for z in [47.0, 49.0, 51.0, 53.0]:
+		if scene.landscape_state.add("foliage", Vector3(60.0, 8.0, z), 2):
 			fixture_z = z
 			break
 	_check(fixture_z > 0.0, "paint route has a planting fixture to clear")
@@ -67,7 +67,7 @@ func _initialize() -> void:
 	await _press(JOY_BUTTON_DPAD_LEFT)
 	_check(is_equal_approx(scene.path_width, initial_width), "D-pad left restores painted-path brush width")
 
-	_aim(Vector2(36.0, fixture_z))
+	_aim(Vector2(56.0, fixture_z))
 	await _button_down(JOY_BUTTON_A)
 	_check(scene.path_painting and scene.path_cells.size() > 0, "holding A starts a painted-cell stroke")
 	var width_during_stroke: float = scene.path_width
@@ -76,7 +76,7 @@ func _initialize() -> void:
 	var preview_before := JSON.stringify(scene.landscape_state.document())
 	scene._update_path_preview()
 	_check(JSON.stringify(scene.landscape_state.document()) == preview_before and scene.path_visual.stats().preview_cells > 0, "live painted preview has geometry without mutating authority")
-	_aim(Vector2(44.0, fixture_z))
+	_aim(Vector2(64.0, fixture_z))
 	_check(scene._sample_path_stroke() and scene.path_cells.size() > 20, "moving while A is held continuously extends the stroke")
 	var expected_cut: Dictionary = Excavation.plan_packed_earth_transition(scene.backend, scene.landscape_state.path_cells("packed_earth"), scene.path_cells)
 	var cut_ready: bool = bool(expected_cut.get("ok", false)) and int(expected_cut.get("changed_count", 0)) > 0 and not (expected_cut.get("removals", []) as Array).is_empty()
@@ -97,16 +97,16 @@ func _initialize() -> void:
 	_check(scene.path_terrain_ownership_count() > 0, "packed-earth excavation records exact terrain ownership")
 	var after: Dictionary = scene.landscape_state.document()
 	_check(after.paths[0].has("cells") and not after.paths[0].has("points") and not after.paths[0].has("width"), "committed path stores only painted-cell authority")
-	_check(scene.landscape_state.records.size() < before.records.size() and not _has_record_at(scene.landscape_state.records, 40.0, fixture_z), "stroke commit clears intersecting planting atomically")
+	_check(scene.landscape_state.records.size() < before.records.size() and not _has_record_at(scene.landscape_state.records, 60.0, fixture_z), "stroke commit clears intersecting planting atomically")
 
 	await _press(JOY_BUTTON_LEFT_SHOULDER)
 	_check(scene.landscape_state.document() == before, "LB undo while painting tool is open restores path and planting together")
 	_check(scene.backend.voxel_at(cut_position) == cut_material, "LB undo restores the terrain removed by the same path transaction")
 	_check(scene.path_terrain_ownership_count() == 0, "LB undo restores the matching path-terrain ownership state")
 	_check(scene.path_placement_active, "undo keeps the path paint tool active")
-	_aim(Vector2(36.0, fixture_z))
+	_aim(Vector2(56.0, fixture_z))
 	await _button_down(JOY_BUTTON_A)
-	_aim(Vector2(44.0, fixture_z))
+	_aim(Vector2(64.0, fixture_z))
 	scene._sample_path_stroke()
 	await _button_up(JOY_BUTTON_A)
 	after = scene.landscape_state.document()
@@ -163,9 +163,9 @@ func _initialize() -> void:
 	scene._begin_path_placement()
 	var cancel_before := JSON.stringify(scene.landscape_state.document())
 	var history_after_reload: int = scene._history_tags.size()
-	_aim(Vector2(30.0, 35.0))
+	_aim(Vector2(60.0, 55.0))
 	await _button_down(JOY_BUTTON_A)
-	_aim(Vector2(32.0, 35.0))
+	_aim(Vector2(62.0, 55.0))
 	scene._sample_path_stroke()
 	await _press(JOY_BUTTON_B)
 	_check(scene.path_placement_active and not scene.path_painting and scene.path_cells.is_empty(), "B cancels only the live uncommitted stroke")
@@ -175,6 +175,9 @@ func _initialize() -> void:
 	await _press(JOY_BUTTON_B)
 	_check(not scene.path_placement_active and JSON.stringify(scene.landscape_state.document()) == cancel_before, "B while idle closes path painting without document drift")
 
+	# The legacy test home starts beyond the M2 playable rim; bring only the
+	# test fixture inside so interior collision, not the rim, is exercised.
+	_check(scene.building_world.move_building(scene.selected_building_id, Vector3(80, 8, 80), scene.building_world.get_revision()), "test home moved inside playable valley")
 	var home: Dictionary = scene.building_world.get_building(scene.selected_building_id)
 	var home_center: Vector3 = (home["transform"] as Transform3D).origin
 	scene._begin_path_placement()
@@ -187,7 +190,7 @@ func _initialize() -> void:
 	scene._cancel_path_placement()
 
 	scene._begin_path_placement()
-	_aim(Vector2(31.0, 37.0))
+	_aim(Vector2(61.0, 57.0))
 	await _button_down(JOY_BUTTON_A)
 	var focus_before := JSON.stringify(scene.landscape_state.document())
 	scene._notification(NOTIFICATION_APPLICATION_FOCUS_OUT)

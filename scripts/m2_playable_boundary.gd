@@ -57,6 +57,32 @@ static func clamp_position(point: Vector3) -> Vector3:
 	return Vector3(edge.x, point.y, edge.z)
 
 
+## True when a circular edit footprint of `radius` metres centred on
+## `center` lies entirely inside the playable disk, with EPSILON edge
+## tolerance. The footprint is the disk of points whose xz distance from
+## `center` is <= `radius`, so it fits only when the centre is finite, the
+## radius is finite and nonnegative, and the centre's radial distance plus
+## the radius does not exceed RADIUS + EPSILON.
+static func is_circle_footprint_inside(center: Vector3, radius: float) -> bool:
+	if not center.is_finite() or is_nan(radius) or is_inf(radius) or radius < 0.0:
+		return false
+	return _radial_distance(center) + radius <= RADIUS + EPSILON
+
+
+## True when a polygon/rectangle edit footprint (its corners, in any order) lies
+## entirely inside the playable disk, with EPSILON edge tolerance. The playable
+## disk is convex, so if every corner is at or inside the rim the whole
+## convex hull (the footprint) is too. Requires at least 3 corners, all
+## finite, each within RADIUS + EPSILON.
+static func is_polygon_footprint_inside(corners: Array[Vector3]) -> bool:
+	if corners.size() < 3:
+		return false
+	for corner in corners:
+		if not corner.is_finite() or _radial_distance(corner) > RADIUS + EPSILON:
+			return false
+	return true
+
+
 ## Radial (xz-plane) distance from the valley centre.
 static func _radial_distance(point: Vector3) -> float:
 	return Vector2(point.x - CENTER.x, point.z - CENTER.z).length()
