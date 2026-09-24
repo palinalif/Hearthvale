@@ -1,3 +1,9 @@
+# 2026-09-23 — v80 starter valley playable focus boundary
+
+Added a 52 m rounded controller-focus boundary centred on (80, 80), ~3.5 m before the waterfall cliff foot and ~6 m inside the mountain foothills. Terrain cursor movement, building placement target/preview and post-sculpt cursor recentering are constrained; camera orbit and existing building-edit focus remain usable. The boundary applies to the starter-valley scene, with focused geometry and real held-stick/placement integration tests registered in water CI. Existing saves are not modified. Delegated audit identified a separate limitation: wide sculpt/path/planting brushes and house footprints can still extend past a clamped centre; tracked as follow-up, not claimed as fixed.
+
+Godot 4.7.2 tests passed: boundary geometry 124, boundary integration 10, sculpt 188; starter-valley and camera/waterfall regressions also passed earlier in this session. Exported `builds/hearthvale-m2night-v80-debug.apk` (SHA-256 `ec22f5699ed61c711e88d5c4f7abc58cb1118d33d667dd39703bd02cb9d5e481`), package `org.hearthvale.game.test.m2night`, versionCode 80, signed with the v79 debug identity (`3d88162b…`), exactly one ARM64 voxel library matching the installed pinned extension binary (SHA-256 `641f87ad…`). Thor install/controller behavior and user visual acceptance **not tested**; do not uninstall the app or discard saves. `local.properties` is untracked host configuration.
+
 # 2026-09-23 — environment rebuild: new debug keystore, v79 APK built & pushed
 
 Container rootfs was rebuilt (only shfs mounts `/workspace`, `/root/.pi`, `gh` config survived). The old 9/18 debug keystore (SHA-256 `D4:4A:59…:4F`) was **lost** — it lived in `/root`, never in git. Godot generated a **fresh** debug keystore for v79:
@@ -27,7 +33,7 @@ Details: [detailed mountains report](reports/detailed-mountains.md). Images: `re
 
 ---
 
-# 2026-09-22 � v77 circular mountain valley
+# 2026-09-22 � v77 circular mountain valley
 
 Implemented from main `81297b1` on `fix/circular-mountain-valley`: rounded native basin, surrounding mountain range and an 18 m reservoir waterfall feeding the river. Fresh starter homes/paths now match the doubled map. Existing checkpoint terrain/water remain authoritative; the missing parent startup callback was restored.
 
