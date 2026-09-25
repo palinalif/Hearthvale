@@ -16,9 +16,6 @@ static func cell_center(cell: Vector2i) -> Vector2:
 	return (Vector2(cell) + Vector2.ONE * 0.5) * Grid.UNIT
 
 static func brush_cells(center: Vector2, radius: float, world_size: float = DEFAULT_WORLD_SIZE) -> Array:
-	return _sorted(_brush_cells_unsorted(center, radius, world_size))
-
-static func _brush_cells_unsorted(center: Vector2, radius: float, world_size: float) -> Array:
 	var cell_limit := maxi(1, floori(world_size / Grid.UNIT))
 	var safe_radius := maxf(radius, Grid.UNIT * 0.5)
 	var lo := Vector2i(
@@ -40,18 +37,38 @@ static func _brush_cells_unsorted(center: Vector2, radius: float, world_size: fl
 			clampi(floori(center.x / Grid.UNIT), 0, cell_limit - 1),
 			clampi(floori(center.y / Grid.UNIT), 0, cell_limit - 1)
 		))
-	return result
+	return _sorted(result)
 
-static func stroke_cells(from: Vector2, to: Vector2, radius: float, world_size: float = DEFAULT_WORLD_SIZE) -> Array:
+## Exact union of the existing evenly spaced brush stamps. For each candidate
+## cell, only the nearest stamp can cover it; no repeated union/sort is needed.
+## The optional exclusion set lets a growing water stroke visit only new cells.
+static func stroke_cells(from: Vector2, to: Vector2, radius: float, world_size: float = DEFAULT_WORLD_SIZE, excluded: Dictionary = {}) -> Array:
 	if not from.is_finite() or not to.is_finite(): return []
-	var distance := from.distance_to(to)
-	var spacing := Grid.UNIT * 0.5
-	var steps := maxi(1, ceili(distance / spacing))
+	var delta := to - from
+	var length_squared := delta.length_squared()
+	var steps := maxi(1, ceili(delta.length() / (Grid.UNIT * 0.5)))
+	var safe_radius := maxf(radius, Grid.UNIT * 0.5)
+	var radius_squared := (safe_radius + 0.000001) * (safe_radius + 0.000001)
+	var limit := maxi(1, floori(world_size / Grid.UNIT))
+	var lo := Vector2i(maxi(0, floori((minf(from.x, to.x) - safe_radius) / Grid.UNIT)), maxi(0, floori((minf(from.y, to.y) - safe_radius) / Grid.UNIT)))
+	var hi := Vector2i(mini(limit - 1, floori((maxf(from.x, to.x) + safe_radius) / Grid.UNIT)), mini(limit - 1, floori((maxf(from.y, to.y) + safe_radius) / Grid.UNIT)))
 	var unique := {}
-	for step in range(steps + 1):
-		var amount := float(step) / float(steps)
-		for cell: Vector2i in _brush_cells_unsorted(from.lerp(to, amount), radius, world_size):
-			unique[cell] = true
+	for z in range(lo.y, hi.y + 1):
+		for x in range(lo.x, hi.x + 1):
+			var cell := Vector2i(x, z)
+			if excluded.has(cell): continue
+			var center := cell_center(cell)
+			var t := clampf((center - from).dot(delta) / length_squared, 0.0, 1.0) if length_squared > 0.0 else 0.0
+			var nearest := from.lerp(to, float(roundi(t * steps)) / float(steps))
+			if center.distance_squared_to(nearest) <= radius_squared: unique[cell] = true
+	# Preserve brush_cells' tiny-brush fallback at grid corners, where no cell
+	# center lies in the disk. Larger disks always cover their nearest center.
+	if safe_radius < Grid.UNIT * sqrt(0.5):
+		for step in range(steps + 1):
+			var point := from.lerp(to, float(step) / float(steps))
+			if point.x < 0.0 or point.y < 0.0 or point.x >= world_size or point.y >= world_size: continue
+			var cell := Vector2i(clampi(floori(point.x / Grid.UNIT), 0, limit - 1), clampi(floori(point.y / Grid.UNIT), 0, limit - 1))
+			if not excluded.has(cell) and cell_center(cell).distance_squared_to(point) > radius_squared: unique[cell] = true
 	return _sorted(unique.keys())
 
 static func normalize_cells(values: Array, world_size: float = DEFAULT_WORLD_SIZE) -> Array:

@@ -59,16 +59,19 @@ const HINT_BAND_ROWS := 24
 var _backend: Node
 # region id -> MeshInstance3D. Nodes are reused across incremental updates.
 var _region_nodes: Dictionary = {}
+var _uploaded_quads: Dictionary = {}
+var _surface_quads := 0
 var _regions: Array = []
 var _last_key := ""
 var _suppressions: Array = []
 var _waterfalls: Array = []
+var _waterfall_regions_key := ""
 var _fall_nodes: Array = []
 # Per-cell terrain cache (NAN = empty/deep column, matching the resampler).
 # Only footprint cells are held, never a whole-patch table.
 var _cell_cache: Dictionary = {}
 var _regions_key := ""
-var _rebuild_scheduled := false
+var _pending_surface_bounds: Array[AABB] = []
 # region id -> region dict (for keying + level/flow).
 var _region_by_id: Dictionary = {}
 # region id -> strong key of the mesh geometry; an equal key means unchanged.
@@ -124,15 +127,21 @@ func set_regions_incremental(regions: Array, invalidate_cells: Array = []) -> vo
 	if _backend.has_method("is_ready") and not _backend.is_ready():
 		return
 	_regions = regions
-	_regions_key = _regions_signature()
+	var regions_key := _regions_signature()
 	for cell in invalidate_cells:
 		_invalidate_cell(cell)
-	_sync_regions()
-	_drain(2)
+	if regions_key != _regions_key:
+		_regions_key = regions_key
+		_sync_regions()
+	# Only _process spends the frame budget. Multiple setters may run in
+	# one input/commit frame; each used to drain 10-20ms more of water work.
 
 func refresh_terrain() -> void:
 	# Full resample (startup / unknown bounds). Local terrain edits use
 	# refresh_surface_from_bounds() to only resample near the edit.
+	if _backend == null: return
+	if _backend.has_method("is_ready") and not _backend.is_ready(): return
+	for cell: Vector2i in _cell_regions: _queue_resample(cell)
 	_rebuild()
 
 ## Resample only the cells near the given terrain-edit bounds and rebuild the
@@ -140,80 +149,45 @@ func refresh_terrain() -> void:
 ## that touch no water cell — or leave every watered column unchanged — do
 ## nothing (a no-op for far digging).
 func refresh_surface_from_bounds(bounds: AABB) -> void:
-	if _backend == null:
-		return
+	if _backend == null: return
 	if bounds.size == Vector3.ZERO:
-		_rebuild()
+		for cell: Vector2i in _cell_regions: _queue_resample(cell)
 		return
-	var rkey := _regions_signature()
-	if rkey != _regions_key:
-		# The region set changed through the incremental path since the last
-		# sync (e.g. a commit replacing the stroke candidate): reconcile the
-		# region state instead of a full rebuild, then localize the edit.
-		_regions_key = rkey
-		_sync_regions()
-	var rect := Rect2(bounds.position.x, bounds.position.z, bounds.size.x, bounds.size.z)
-	rect = rect.grow(3.0)
-	_localize_resample(rect)
-	_drain(1)
-	if _rebuild_scheduled:
-		return
-	_rebuild_scheduled = true
-	call_deferred("_do_surface_rebuild")
-
-func _do_surface_rebuild() -> void:
-	_rebuild_scheduled = false
-	_drain(1)
+	if not _pending_surface_bounds.has(bounds): _pending_surface_bounds.append(bounds)
 
 func _on_terrain_changed() -> void:
-	# Localize via the last edit bounds (matches the river + waterfalls); the
-	# scene also calls refresh_surface_from_bounds and the debounce coalesces.
+	# This node owns the backend subscription; input callbacks only queue work.
 	if _backend != null and _backend.has_method("get_last_edit_bounds"):
 		refresh_surface_from_bounds(_backend.get_last_edit_bounds())
 	else:
-		_rebuild()
+		refresh_surface_from_bounds(AABB())
 
 ## Resample every cached cell inside rect (the edit area). A changed value
 ## marks every region spanning that cell for a full (budgeted) rebuild; an
 ## unchanged value is left alone, so a distant edit is a no-op.
 func _localize_resample(rect: Rect2) -> void:
-	var cells: Array = []
-	for cell: Vector2i in _cell_cache.keys():
-		if rect.has_point(Vector2(float(cell.x) * WATER_CELL, float(cell.y) * WATER_CELL)):
-			cells.append(cell)
-	var t_end := Time.get_ticks_msec() + int(RESAMPLE_TIME_BUDGET_MS)
-	var i := 0
-	while i < cells.size():
-		var cell: Vector2i = cells[i]
-		i += 1
-		var previous: Variant = _cell_cache.get(cell, null)
-		var top := _terrain_top(float(cell.x) * WATER_CELL + WATER_CELL * 0.5, float(cell.y) * WATER_CELL + WATER_CELL * 0.5, previous)
-		_cell_cache[cell] = top
-		if _terrain_value_changed(previous, top):
-			var owners: Array = _cell_regions.get(cell, [])
-			for rid: int in owners:
-				_mark_rebuild(rid)
-		if Time.get_ticks_msec() >= t_end:
-			# Time budget spent mid-rect: hand the remainder to the drain so
-			# _process finishes it over frames instead of stalling this one
-			# (a 20k-cell river rect was several seconds of freeze on Thor).
-			while i < cells.size():
-				_queue_resample(cells[i])
-				i += 1
-			break
+	var lo := Vector2i(floori(rect.position.x / WATER_CELL), floori(rect.position.y / WATER_CELL))
+	var hi := Vector2i(ceili(rect.end.x / WATER_CELL), ceili(rect.end.y / WATER_CELL))
+	# Probe the smaller of the edit rect and the watered footprint.
+	if (hi.x - lo.x) * (hi.y - lo.y) < _cell_regions.size():
+		for z in range(lo.y, hi.y):
+			for x in range(lo.x, hi.x):
+				var cell := Vector2i(x, z)
+				if _cell_regions.has(cell): _queue_resample(cell)
+	else:
+		for cell: Vector2i in _cell_regions:
+			if rect.has_point((Vector2(cell) + Vector2.ONE * 0.5) * WATER_CELL): _queue_resample(cell)
 
 func _process(_delta: float) -> void:
-	if _pending_cells.is_empty() and _dirty_regions.is_empty():
-		return
-	if _backend == null or not _backend.has_method("voxel_at"):
-		return
-	if _backend.has_method("is_ready") and not _backend.is_ready():
-		return
+	if _pending_cells.is_empty() and _dirty_regions.is_empty() and _pending_surface_bounds.is_empty(): return
+	if _backend == null or not _backend.has_method("voxel_at"): return
+	if _backend.has_method("is_ready") and not _backend.is_ready(): return
+	for bounds: AABB in _pending_surface_bounds:
+		_localize_resample(Rect2(bounds.position.x, bounds.position.z, bounds.size.x, bounds.size.z).grow(WATER_CELL))
+	_pending_surface_bounds.clear()
 	_drain(1)
 
-## One budgeted pass: resample up to RESAMPLE_BUDGET queued cells, then build
-## up to BUILD_BUDGET cells of mesh across the dirty regions. Repeats while
-## work remains, so a large rebuild spreads over frames instead of stalling.
+## Only one drain per rendered frame, regardless of how many setters ran.
 func _drain(max_passes: int) -> void:
 	var rs_ms := 0.0
 	var mesh_ms := 0.0
@@ -237,6 +211,7 @@ func _resample_pass() -> int:
 	while not _pending_cells.is_empty() and count < RESAMPLE_BUDGET and Time.get_ticks_msec() < t_end:
 		var cell: Vector2i = _pending_cells.pop_back()
 		_pending_set.erase(cell)
+		if not _cell_regions.has(cell): continue
 		var previous: Variant = _cell_cache.get(cell, null)
 		var hint: Variant = _resample_hint.get(cell, previous)
 		var top := _terrain_top(float(cell.x) * WATER_CELL + WATER_CELL * 0.5, float(cell.y) * WATER_CELL + WATER_CELL * 0.5, hint)
@@ -254,6 +229,9 @@ func _resample_pass() -> int:
 ## count is uploaded to its reused node; the work arrays stay resident so a
 ## growing candidate appends to them instead of reallocating.
 func _build_pass() -> void:
+	# Finish resampling before building: a changed height invalidates the
+	# prefix.
+	if not _pending_cells.is_empty(): return
 	var t_end := Time.get_ticks_msec() + int(BUILD_TIME_BUDGET_MS)
 	var budget := BUILD_BUDGET
 	for rid: int in _dirty_regions.keys():
@@ -272,8 +250,11 @@ func _build_pass() -> void:
 		var norms: PackedVector3Array = state["norms"]
 		var cols: PackedColorArray = state["cols"]
 		var idx: PackedInt32Array = state["idx"]
-		var base := verts.size() / 4
+		var base := verts.size()
+		var next := start
 		for i in range(start, end):
+			if Time.get_ticks_msec() >= t_end: break
+			next = i + 1
 			var cell: Vector2i = cells[i]
 			var cx := float(cell.x) * WATER_CELL
 			var cz := float(cell.y) * WATER_CELL
@@ -285,9 +266,9 @@ func _build_pass() -> void:
 			var depth := 0.0 if is_nan(surface_y) else clampf((level - surface_y) / DEPTH_SCALE, 0.0, 1.0)
 			var color := _depth_color(region, depth)
 			base = _append_water_quad(verts, norms, cols, idx, base, cx, cz, level, color)
-		state["index"] = end
-		budget -= (end - start)
-		if end < cells.size():
+		state["index"] = next
+		budget -= (next - start)
+		if next < cells.size():
 			continue
 		_upload_region(rid)
 		_dirty_regions.erase(rid)
@@ -303,8 +284,6 @@ func _terrain_value_changed(previous: Variant, top: Variant) -> bool:
 		return false
 	return not is_equal_approx(previous, top)
 
-## Sync the authoritative region list against the render state: drop gone
-## regions, prepare (or grow) changed ones, queue their cells.
 ## Sync the authoritative region list against the render state: drop gone
 ## regions, prepare (or grow) changed ones, queue their cells. A pure growth
 ## (the old footprint is a subset of the new) appends to the region's
@@ -323,9 +302,9 @@ func _sync_regions() -> void:
 		var old_cells: Array = []
 		if not state.is_empty():
 			old_cells = state["cells"]
-		if old_key == key and not state.is_empty() and old_cells.size() == cells.size():
+		if old_key == key and not bool(region.get("reset", false)) and not state.is_empty() and old_cells.size() == cells.size():
 			continue
-		if old_key != key and not old_region.is_empty() and not bool(region.get("reset", false)) and old_region.has("cells") and region.has("cells") and _same_water_identity(old_region, region) and cells.size() >= old_cells.size():
+		if old_key != key and not old_region.is_empty() and _same_water_identity(old_region, region) and _is_growing_cells(old_region, region, cells.size()):
 			# A growing stroke (the scene's hint is append-only): only the new
 			# suffix is appended to the persistent mesh arrays; the built
 			# prefix stays valid (no realloc, no re-rasterize, no re-upload of
@@ -360,6 +339,20 @@ func _sync_regions() -> void:
 
 static func _same_water_identity(a: Dictionary, b: Dictionary) -> bool:
 	return str(a.get("type", "")) == str(b.get("type", "")) and float(a.get("level", 0.0)) == float(b.get("level", 0.0))
+
+## A growth only holds if both entries carry a hint and the old hint's points
+## are an exact prefix of the new hint's (the scene appends cells in order),
+## which is O(1) per candidate instead of O(n).
+static func _is_growing_cells(old_region: Dictionary, region: Dictionary, new_count: int) -> bool:
+	if new_count < int((old_region.get("cells", []) as Array).size()):
+		return false
+	var old_points: Array = old_region.get("points", [])
+	var new_points: Array = region.get("points", [])
+	var prefix := mini(old_points.size(), new_points.size())
+	for i in prefix:
+		if old_points[i] != new_points[i]:
+			return false
+	return prefix == old_points.size()
 func _prepare_build(id: int, region: Dictionary, cells: Array) -> void:
 	_build_state[id] = {
 		"cells": cells.duplicate(),
@@ -441,6 +434,8 @@ func _drop_region(id: int) -> void:
 	_unmap_cells(id, state.get("cells", []))
 	for cell: Vector2i in state.get("cells", []):
 		_resample_hint.erase(cell)
+	_surface_quads -= int(_uploaded_quads.get(id, 0))
+	_uploaded_quads.erase(id)
 	_region_keys.erase(id)
 	_region_by_id.erase(id)
 	_build_state.erase(id)
@@ -461,6 +456,9 @@ func _upload_region(id: int) -> void:
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _surface_arrays(verts, state["norms"], state["cols"], state["idx"]))
 	mesh.surface_set_material(0, state["material"])
 	node.mesh = mesh
+	var quads := verts.size() / 4
+	_surface_quads += quads - int(_uploaded_quads.get(id, 0))
+	_uploaded_quads[id] = quads
 
 func _region_node(id: int) -> MeshInstance3D:
 	var node: MeshInstance3D = _region_nodes.get(id, null)
@@ -485,9 +483,7 @@ func _footprint_of(region: Dictionary) -> Array:
 ## hint size (the hint is append-only, so equal size == equal set) instead of
 ## the point list, which grows every frame without adding water.
 static func _region_key(region: Dictionary, cells: Array) -> String:
-	if region.has("cells"):
-		return "c|%s|%.4f|%d" % [str(region.get("type", "")), float(region.get("level", 0.0)), cells.size()]
-	return "%s|%.4f|%.4f|%.3f,%.3f|%d" % [str(region.get("type", "")), float(region.get("level", 0.0)), float(region.get("width", 0.0)), Geometry.flow_direction(region).x, Geometry.flow_direction(region).y, (region.get("points", []) as Array).size()]
+	return str(hash(region))
 
 ## Full resample + synchronous build (startup / undo-redo / restore path).
 ## Callers assert the surface is complete on return. The resample stays fast
@@ -505,6 +501,7 @@ func _rebuild() -> void:
 		return
 	_last_key = key
 	_regions_key = _regions_signature()
+	_pending_surface_bounds.clear()
 	_pending_cells = []
 	_pending_set = {}
 	_dirty_regions = {}
@@ -577,11 +574,16 @@ func _clear() -> void:
 		if is_instance_valid(node):
 			(node as Node).queue_free()
 	_region_nodes = {}
+	_uploaded_quads.clear()
+	_surface_quads = 0
 
 ## --- Derived waterfalls (presentation only; the only stored state is the
 ## suppressions the player chose, kept in LandscapeState) -----------------------
 func set_waterfall_suppressions(keys: Array) -> void:
-	_suppressions = keys
+	var regions_key := _regions_signature()
+	if keys == _suppressions and regions_key == _waterfall_regions_key: return
+	_suppressions = keys.duplicate()
+	_waterfall_regions_key = regions_key
 	_refresh_waterfalls(Waterfall.FULL_RECT)
 
 ## Re-derive waterfalls only inside dirty_rect and rebuild their cascade meshes.
@@ -608,6 +610,7 @@ func _refresh_waterfalls(dirty_rect: Rect2) -> void:
 		return
 	if _backend.has_method("is_ready") and not _backend.is_ready():
 		return
+	var previous := _waterfalls.duplicate(true)
 	var kept: Array = []
 	for fall in _waterfalls:
 		if not dirty_rect.has_point(_fall_crown(fall)):
@@ -623,7 +626,8 @@ func _refresh_waterfalls(dirty_rect: Rect2) -> void:
 			continue
 		_waterfalls.append(fall)
 	_waterfalls.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return str(a["key"]) < str(b["key"]))
-	_rebuild_falls()
+	if previous != _waterfalls:
+		_rebuild_falls()
 
 func _waterfall_sample() -> Callable:
 	return func(p: Vector2) -> float: return _terrain_top(p.x, p.y)
@@ -850,10 +854,7 @@ func _world_x() -> float:
 	return float(patch.x) * scale
 
 func _regions_signature() -> String:
-	var payload: Array = []
-	for region: Dictionary in _regions:
-		payload.append([int(region.get("id", 0)), str(region.get("type", "")), float(region.get("level", 0.0)), int((region.get("points", []) as Array).size())])
-	return var_to_bytes(payload).hex_encode().sha256_text()
+	return str(hash(_regions))
 
 ## Match only the authored shallow still-water bodies, including legacy saved
 ## reservoir outlines. Player lakes retain their existing translucent material.
@@ -917,23 +918,13 @@ func _append_water_quad(vertices: PackedVector3Array, normals: PackedVector3Arra
 	return base + 4
 
 func _key() -> String:
-	var revision := 0
-	if _backend.has_method("revision"):
-		revision = int(_backend.call("revision"))
-	var payload: Array = []
-	for region: Dictionary in _regions:
-		payload.append([int(region.get("id", 0)), str(region.get("type", "")), float(region.get("level", 0.0)), int((region.get("points", []) as Array).size())])
-	return "%d|%s" % [revision, var_to_bytes(payload).hex_encode().sha256_text()]
+	var revision := int(_backend.call("revision")) if _backend.has_method("revision") else 0
+	return "%d|%s" % [revision, _regions_signature()]
 
-## Deterministic quad count of the current surface (test hook).
 func surface_quad_count() -> int:
-	var total := 0
-	for node: Variant in _region_nodes.values():
-		var mesh: ArrayMesh = (node as MeshInstance3D).mesh
-		if mesh != null and mesh.get_surface_count() > 0:
-			var arrays: Array = mesh.surface_get_arrays(0)
-			total += (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 4
-	return total
+	# Mesh readback synchronizes the rendering server/GPU on Mobile. Keep this
+	# telemetry on the CPU, including while a replacement mesh is still building.
+	return _surface_quads
 
 ## Deterministic fall count (test hook).
 func waterfall_count() -> int:

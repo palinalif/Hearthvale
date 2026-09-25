@@ -44,6 +44,16 @@ func _initialize() -> void:
 	var wide_sweep := Region.stroke_cells(sweep_from, sweep_to, Grid.UNIT * 2.0)
 	_check(wide_sweep.size() > sweep.size(), "stroke radius controls painted width while preserving continuity")
 
+	for endpoints: Array in [[Vector2(1, 1), Vector2(4, 2.5)], [Vector2(-0.2, 0.1), Vector2(0.6, 1.8)], [Vector2(7.8, 7.9), Vector2(8.2, 8.3)], [Vector2(2, 2), Vector2(2, 2)]]:
+		for radius: float in [0.0, 0.0625, 0.08, 0.25, 1.5]:
+			var reference := _stamp_union(endpoints[0], endpoints[1], radius, 8.0)
+			var raster := Region.stroke_cells(endpoints[0], endpoints[1], radius, 8.0)
+			_check(raster == reference, "optimized raster preserves stamp union at radius %.4f" % radius)
+			var excluded := {}
+			for i in range(0, reference.size(), 2): excluded[reference[i]] = true
+			var remaining := Region.stroke_cells(endpoints[0], endpoints[1], radius, 8.0, excluded)
+			_check(Region.union_cells(excluded.keys(), remaining, 8.0) == reference, "incremental raster preserves the complete footprint")
+
 	var three := _block(20, 20, 3, 3)
 	var three_field := Region.distance_field(three)
 	_check(int(three_field[Vector2i(21, 21)]) == 1, "three-cell trail has one-voxel-deep centre ring")
@@ -94,3 +104,11 @@ func _check(condition: bool, label: String) -> void:
 	if not condition:
 		failures += 1
 		print("FAIL: " + label)
+
+func _stamp_union(from: Vector2, to: Vector2, radius: float, world: float) -> Array:
+	var cells := {}
+	var steps := maxi(1, ceili(from.distance_to(to) / (Grid.UNIT * 0.5)))
+	for step in range(steps + 1):
+		for cell: Vector2i in Region.brush_cells(from.lerp(to, float(step) / float(steps)), radius, world):
+			cells[cell] = true
+	return Region.normalize_cells(cells.keys(), world)

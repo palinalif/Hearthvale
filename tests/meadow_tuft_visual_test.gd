@@ -18,10 +18,16 @@ class MockBackend:
 	var patch_size := Vector3i(512, 256, 512)
 	var surface := 8
 	var _rev := 0
+	var reads := 0
+	var edit_bounds := AABB()
+	var removed: Dictionary = {}
 	func is_ready() -> bool: return true
 	func revision() -> int: return _rev
 	func bump() -> void: _rev += 1
+	func get_last_edit_bounds() -> AABB: return edit_bounds
 	func voxel_at(p: Vector3i) -> int:
+		reads += 1
+		if removed.has(Vector2i(p.x, p.z)): return 0
 		if p.x < 0 or p.z < 0 or p.x >= patch_size.x or p.z >= patch_size.z: return 0
 		if p.y == surface: return 2
 		if p.y < surface: return 1
@@ -47,8 +53,43 @@ func _initialize() -> void:
 	_verify_exclusions()
 	_verify_suspended_refresh()
 	_verify_validation()
+	_verify_local_terrain_refresh()
 	print("meadow_tuft_visual_test checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures > 0 else 0)
+
+func _verify_local_terrain_refresh() -> void:
+	var pair := _make_garden()
+	var garden: Node = pair[0]
+	var mock: Node = pair[1]
+	var full_reads: int = mock.reads
+	var original: PackedVector3Array = garden._tuft_node.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var tuft: Dictionary = garden._tuft_plan[0]
+	var point: Vector2 = (Vector2(tuft["cell"]) + Vector2.ONE * 0.5) * Garden.MEADOW_UNIT
+	var cell := Vector2i(floori(point.x / mock.voxel_scale), floori(point.y / mock.voxel_scale))
+	mock.removed[cell] = true
+	mock.edit_bounds = AABB(Vector3(cell.x * mock.voxel_scale, 0, cell.y * mock.voxel_scale), Vector3(mock.voxel_scale, 32, mock.voxel_scale))
+	mock.bump()
+	mock.reads = 0
+	garden.refresh_terrain()
+	var local_reads: int = mock.reads
+	var edited: PackedVector3Array = garden._tuft_node.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	check(edited.size() < original.size(), "local excavation removes tufts over its missing ground")
+	check(local_reads > 0 and local_reads < full_reads / 10, "local terrain edit reads only affected tuft columns")
+	var fresh: Node = Garden.new()
+	root.add_child(fresh)
+	fresh.attach_backend(mock)
+	check(edited == fresh._tuft_node.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX], "local refresh matches a full fresh mesh exactly")
+	mock.removed.clear()
+	mock.bump()
+	garden.refresh_terrain()
+	check(original == garden._tuft_node.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX], "undo restores the exact tuft geometry")
+	mock.removed[cell] = true
+	mock.edit_bounds = AABB()
+	mock.bump()
+	garden.refresh_terrain()
+	check(edited == garden._tuft_node.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX], "unknown edit bounds safely refresh all columns")
+	print("MEADOW_LOCAL " + JSON.stringify({"full_reads": full_reads, "local_reads": local_reads}))
+	garden.queue_free(); fresh.queue_free(); mock.queue_free()
 
 func _make_garden() -> Array:
 	var garden: Node = Garden.new()
@@ -107,22 +148,6 @@ func _verify_exclusions() -> void:
 	garden.queue_free(); (pair[1] as Node).queue_free()
 	print("MEADOW_EXCLUDE " + JSON.stringify({"open": open, "excluded": excluded, "restored": restored}))
 
-func _verify_suspended_refresh() -> void:
-	var pair := _make_garden()
-	var garden: Node = pair[0]
-	var mock: Node = pair[1]
-	var original: MeshInstance3D = garden.get("_tuft_node")
-	var open := _vertex_count(original)
-	garden.set_meadow_refresh_suspended(true)
-	mock.bump()
-	garden.set_meadow_exclusions([Rect2(24.0, 24.0, 16.0, 16.0)])
-	garden.refresh_terrain()
-	check(garden.get("_tuft_node") == original, "startup batch keeps the current tuft mesh until terrain and exclusions settle")
-	garden.set_meadow_refresh_suspended(false)
-	var settled := _vertex_count(garden.get("_tuft_node"))
-	check(settled < open, "ending the batch builds tufts from the final terrain and exclusions")
-	garden.queue_free(); mock.queue_free()
-
 func _verify_validation() -> void:
 	var pair := _make_garden()
 	var garden: Node = pair[0]
@@ -149,6 +174,22 @@ func _verify_validation() -> void:
 	check(stone_verts == 0, "a stone (non-grass) surface scatters no tufts (verts=%d)" % stone_verts)
 	garden.queue_free(); mock.queue_free(); stone.queue_free()
 	print("MEADOW_VALIDATE " + JSON.stringify({"surface_world": surface_world, "sits_on_grass": sits_on_grass, "stone_verts": stone_verts}))
+
+func _verify_suspended_refresh() -> void:
+	var pair := _make_garden()
+	var garden: Node = pair[0]
+	var mock: Node = pair[1]
+	var original: MeshInstance3D = garden.get("_tuft_node")
+	var open := _vertex_count(original)
+	garden.set_meadow_refresh_suspended(true)
+	mock.bump()
+	garden.set_meadow_exclusions([Rect2(24.0, 24.0, 16.0, 16.0)])
+	garden.refresh_terrain()
+	check(garden.get("_tuft_node") == original, "startup batch keeps the current tuft mesh until terrain and exclusions settle")
+	garden.set_meadow_refresh_suspended(false)
+	var settled := _vertex_count(garden.get("_tuft_node"))
+	check(settled < open, "ending the batch builds tufts from the final terrain and exclusions")
+	garden.queue_free(); mock.queue_free()
 
 class StoneBackend:
 	extends Node
