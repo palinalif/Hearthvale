@@ -36,6 +36,9 @@ func run() -> void:
 			quit(1)
 			return
 	check(scene._player_restored, "startup restoration completed when terrain became ready")
+	var sun := scene.get_node_or_null("WorldSun") as DirectionalLight3D
+	check(sun != null and sun.shadow_enabled and is_equal_approx(sun.directional_shadow_max_distance, 64.0),
+		"starter valley keeps sun shadows enabled at the approved 64 m range")
 	print("M2_STARTER_READY elapsed_ms=%d" % (Time.get_ticks_msec() - boot_started))
 	check(scene._valley_surround != null, "valley surround is mounted")
 	check(float(scene._valley_surround.stats()["peak_max"]) > 80.0, "substantial mountains surround the valley")

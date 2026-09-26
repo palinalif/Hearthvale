@@ -881,7 +881,7 @@ func _apply_world_lighting() -> void:
 	sun.light_color = Color("#ffd9a0")
 	sun.light_energy = 1.72
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 150.0
+	sun.directional_shadow_max_distance = 64.0
 	sun.shadow_bias = 0.028
 	sun.shadow_normal_bias = 0.02
 	add_child(sun)

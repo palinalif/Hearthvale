@@ -5,7 +5,7 @@ extends SceneTree
 ##   timeout 400 xvfb-run -a godot --max-fps 60 --renderer mobile --path . \
 ##       --script tools/waterfall_shot.gd -- --cam x,y,z --look x,y,z --out <png>
 ## Optional --shadow-pair <prefix> captures matching 150 m / 64 m sun-shadow
-## comparisons in a single boot, restoring the 150 m setting before exit.
+## comparisons in a single boot, restoring the production setting before exit.
 ##
 ## Boots the real M2SceneStarterValley into a temp save (so the reservoir/river
 ## seed), aims a free camera, and saves a PNG.
@@ -275,16 +275,18 @@ func _run() -> void:
 			if sun == null:
 				_fail("sun_missing")
 				return
+			var original_distance := sun.directional_shadow_max_distance
 			DirAccess.make_dir_recursive_absolute(prefix.get_base_dir())
 			for distance in [150, 64]:
 				sun.directional_shadow_max_distance = float(distance)
 				var image := await _capture()
 				var filename := "%s-%dm.png" % [prefix, distance]
 				if image.save_png(filename) != OK:
+					sun.directional_shadow_max_distance = original_distance
 					_fail("png_write_failed %s" % filename)
 					return
 				print("SHOT_OK %s" % filename)
-			sun.directional_shadow_max_distance = 150.0
+			sun.directional_shadow_max_distance = original_distance
 			quit(0)
 			return
 	var img := await _capture()
