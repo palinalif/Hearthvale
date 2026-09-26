@@ -4,6 +4,8 @@ extends SceneTree
 ##
 ##   timeout 400 xvfb-run -a godot --max-fps 60 --renderer mobile --path . \
 ##       --script tools/waterfall_shot.gd -- --cam x,y,z --look x,y,z --out <png>
+## Optional --shadow-pair <prefix> captures matching 150 m / 64 m sun-shadow
+## comparisons in a single boot, restoring the 150 m setting before exit.
 ##
 ## Boots the real M2SceneStarterValley into a temp save (so the reservoir/river
 ## seed), aims a free camera, and saves a PNG.
@@ -266,6 +268,25 @@ func _run() -> void:
 	cam.current = true
 	root.add_child(cam)
 	print("SHOT_CAM pos=%s look=%s" % [cam_pos, target])
+	for i in OS.get_cmdline_user_args().size():
+		if OS.get_cmdline_user_args()[i] == "--shadow-pair" and i + 1 < OS.get_cmdline_user_args().size():
+			var prefix: String = OS.get_cmdline_user_args()[i + 1]
+			var sun := scene.get_node_or_null("WorldSun") as DirectionalLight3D
+			if sun == null:
+				_fail("sun_missing")
+				return
+			DirAccess.make_dir_recursive_absolute(prefix.get_base_dir())
+			for distance in [150, 64]:
+				sun.directional_shadow_max_distance = float(distance)
+				var image := await _capture()
+				var filename := "%s-%dm.png" % [prefix, distance]
+				if image.save_png(filename) != OK:
+					_fail("png_write_failed %s" % filename)
+					return
+				print("SHOT_OK %s" % filename)
+			sun.directional_shadow_max_distance = 150.0
+			quit(0)
+			return
 	var img := await _capture()
 	var out := "reports/screenshots/waterfall/shot.png"
 	for i in OS.get_cmdline_user_args().size():
