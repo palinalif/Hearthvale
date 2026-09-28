@@ -6,6 +6,7 @@ extends RefCounted
 ## pre-existing void/cave. The same region + terrain always yields the same plan.
 const Grid = preload("res://scripts/visual_grid.gd")
 const Plan = preload("res://scripts/water_carve_plan.gd")
+const Geometry = preload("res://scripts/water_region_geometry.gd")
 
 static func plan_bed(backend: Object, region: Dictionary, world_size: float) -> Dictionary:
 	if backend == null or not backend.has_method("voxel_at"):
@@ -28,7 +29,17 @@ static func plan_bed(backend: Object, region: Dictionary, world_size: float) -> 
 		changes.append_array(_carve_column(backend, cell, _target_top_y(bed_level, scale), patch.y, tops.get(cell, -1)))
 	for bank: Vector2i in plan["banks"]:
 		changes.append_array(_carve_column(backend, bank, _target_top_y(level, scale), patch.y, tops.get(bank, -1)))
-	return {"ok": true, "changes": changes, "changed_count": changes.size()}
+	# A region that reaches the outermost world cell can have its bed/bank
+	# targets sit at or below terrain that is already at the excavation floor
+	# (the map edge after the player digs the mountain ring down). That yields
+	# zero voxel changes: water with no dug bed carrying it. The commit path
+	# uses this flag to reject such placements.
+	var touches_edge := false
+	for cell: Vector2i in Geometry.footprint_cells(region, world_size):
+		if cell.x <= 0 or cell.y <= 0 or cell.x >= patch.x - 1 or cell.y >= patch.z - 1:
+			touches_edge = true
+			break
+	return {"ok": true, "changes": changes, "changed_count": changes.size(), "touches_edge": touches_edge}
 
 static func _carve_column(backend: Object, cell: Vector2i, target_top: int, height: int, known_top: int = -2) -> Array:
 	var result: Array = []

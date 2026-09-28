@@ -66,6 +66,7 @@ Invoke-GodotBounded 'water-tool-responsiveness' @('--headless','--path','.','--s
 Invoke-GodotBounded 'water-history' @('--headless','--path','.','--script','res://tests/water_history_test.gd','--max-fps','60')
 Invoke-GodotBounded 'terrain-edit-cells' @('--headless','--path','.','--script','res://tests/terrain_edit_cells_test.gd','--max-fps','60')
 Invoke-GodotBounded 'water-excavation' @('--headless','--path','.','--script','res://tests/water_excavation_test.gd','--max-fps','60')
+Invoke-GodotBounded 'water-edge-commit' @('--headless','--path','.','--script','res://tests/water_edge_commit_test.gd','--max-fps','60')
 Invoke-GodotBounded 'waterfall' @('--headless','--path','.','--script','res://tests/waterfall_test.gd','--max-fps','60')
 Invoke-GodotBounded 'waterfall-visual' @('--headless','--path','.','--script','res://tests/waterfall_visual_test.gd','--max-fps','60')
 Invoke-GodotBounded 'water-lake-outline' @('--headless','--path','.','--script','res://tests/water_lake_outline_test.gd','--max-fps','60')

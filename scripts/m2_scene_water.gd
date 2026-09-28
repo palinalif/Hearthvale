@@ -360,6 +360,16 @@ func _commit_water(region: Dictionary) -> bool:
 		landscape_state.restore(_water_before)
 		_cancel_water_placement("Terrain excavation unavailable")
 		return false
+	if int(excavation.get("changed_count", 0)) <= 0 and bool(excavation.get("touches_edge", false)):
+		# The region reaches the outermost world cell and the bed and banks
+		# are already at or below their target depth, so this transaction
+		# would record a floating water sheet without digging the bed that
+		# carries it - what happens at the map edge once terrain is dug to
+		# the excavation floor. Reject the zero-change commit instead of
+		# recording water with no dig.
+		landscape_state.restore(_water_before)
+		_cancel_water_placement("Nothing to dig here; the water was not placed.")
+		return false
 	var changes: Array = excavation.get("changes", [])
 	var terrain_changed := false
 	if changes.size() > 0:
