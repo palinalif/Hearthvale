@@ -30,6 +30,17 @@ func _run() -> void:
 	scene.set_process(false)
 	scene._set_view_context("building", "test")
 	var building_id: String = scene.selected_building_id
+	# Exercise the player-facing creation path, not just moving saved windows.
+	for kind in ["window", "door", "flower_box", "shutter"]:
+		scene._begin_new_attachment(kind)
+		check(scene.detail_move_active and scene.placement_kind == kind, "new %s enters placement" % kind)
+		check(scene.placement_ghost.visible and scene.placement_ghost.get_child_count() > 0, "new %s has a visible ghost" % kind)
+		var ghost: Node3D = scene.placement_ghost
+		var camera: Camera3D = scene.camera
+		var screen: Vector2 = camera.unproject_position(ghost.global_position)
+		var rect: Rect2 = scene.get_viewport().get_visible_rect()
+		check(not camera.is_position_behind(ghost.global_position) and rect.has_point(screen), "new %s starts inside camera view" % kind)
+		scene._cancel_detail_move()
 	var ids: Array[String] = []
 	for x in [-4.0, 4.0]:
 		var id: String = scene.building_world.add_detail(building_id, "window", "wall-front", Vector3(x, 3.5, -7.02), "window_wood")
@@ -135,6 +146,8 @@ func _check_ghost_geometry() -> void:
 			check(nodes_ready, "ghost creates footprint and body preview meshes")
 			if not nodes_ready: continue
 			check((top.mesh as BoxMesh).size.x == half.x * 2 and top.position.y == half.y, "ghost spans full reserved width/height")
+			var outline_material := top.material_override as StandardMaterial3D
+			check(outline_material != null and outline_material.no_depth_test, "footprint remains visible over house facade and trim")
 			check((right.mesh as BoxMesh).size.y == half.y * 2 and right.position.x == half.x, "ghost includes frame and trim clearance")
 			check((body.mesh as BoxMesh).size.x == size.x and (body.mesh as BoxMesh).size.y == size.y, "body preview uses actual resized window or door dimensions")
 			check(ghost.position.is_equal_approx(house * position), "ghost anchors to correct floor under rotated miniature transform")

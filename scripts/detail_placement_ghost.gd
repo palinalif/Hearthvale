@@ -57,6 +57,11 @@ func _add_box(center: Vector3, size: Vector3, color: Color, node_name: String = 
 	var material := StandardMaterial3D.new()
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# The reserved footprint must remain legible even when wall trim or a
+	# neighbouring roof occludes the transparent preview body.
+	if node_name.begins_with("Footprint"):
+		material.no_depth_test = true
+		material.render_priority = 2
 	material.albedo_color = color
 	material.emission_enabled = true
 	material.emission = Color(color.r, color.g, color.b, 1.0) * 0.22
