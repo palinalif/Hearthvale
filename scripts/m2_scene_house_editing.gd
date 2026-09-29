@@ -28,9 +28,18 @@ var _section_original: Dictionary = {}
 var _section_candidate: Dictionary = {}
 var _section_result: Dictionary = {}
 var _section_reason := ""
+# The visible edge handle under the pointer. The nearest projected handle is
+# always the one a held A will drag, so aiming is pure pointer movement.
 var _section_edge := 0
-var _section_amount := 0.0
-var _section_step := 0.0
+# The candidate the current A-drag started from. The drag re-derives the
+# candidate from this anchor every frame, so releasing A always leaves a
+# read-only proposed size for review (A applies, B restores the original).
+var _section_drag_anchor: Dictionary = {}
+var _section_dragging := false
+var _section_reviewing := false
+# The edge index frozen at drag start: aiming the pointer only chooses the
+# handle before a drag; mid-drag the original handle stays in control.
+var _section_drag_edge := 0
 var _addition_raw := Vector3.ZERO
 var _addition_was_active := false
 var _direct_attachment_surface := ""
@@ -91,11 +100,18 @@ func _part_idle() -> bool:
 	return _house_ux_ready and _idle_building() and not portion_placement_active and not _resize_selecting and not _section_edit_active and not _blocked_until_accept_release
 
 func _process(delta: float) -> void:
-	if _house_ux_ready and tools_open and not menu_open and (_part_menu_open or _section_edit_active or _roof_design_picker_open or _surface_material_picker_open):
-		_read_part_orbit(delta)
-		if _section_edit_active:
-			var amount := -Input.get_axis("m1_move_up", "m1_move_down")
-			if absf(amount) > 0.05: _change_section_size(amount * delta * (1.5 if precision_mode else 4.0))
+	if _house_ux_ready and tools_open and (_part_menu_open or _section_edit_active or _roof_design_picker_open or _surface_material_picker_open):
+		if menu_open:
+			# A menu opened over an active drag: release it into a read-only
+			# proposal instead of letting the next A press apply it.
+			if _section_edit_active and _section_dragging:
+				_section_end_drag()
+		else:
+			_read_part_orbit(delta)
+			if _section_edit_active:
+				_section_move_pointer(delta)
+				_section_update_pointer()
+				_section_update_drag()
 		if not _part_building.is_empty() and (selected_building_id != _part_building or building_world.get_revision() != _part_revision):
 			_cancel_current_edit("House changed; edit cancelled")
 	super._process(delta)
@@ -114,13 +130,15 @@ func _input(event: InputEvent) -> void:
 		super._input(event)
 		return
 	if _section_edit_active and not menu_open:
+		# Menus block all section input: _process releases any held drag into a
+		# read-only proposal, and only a fresh A press outside the menu commits.
 		if event.is_action_pressed("m1_cancel") or event.is_action_pressed("m1_tools"): _cancel_section_edit()
 		elif event.is_action_pressed("m1_pause"): _cancel_section_edit(); super._input(event)
-		elif event.is_action_pressed("m1_accept"): _commit_section_edit()
-		elif event.is_action_pressed("m1_cycle_left"): _select_section_edge(-1)
-		elif event.is_action_pressed("m1_cycle_right"): _select_section_edge(1)
-		elif event.is_action_pressed("m1_height_up"): _change_section_size(1.0)
-		elif event.is_action_pressed("m1_height_down"): _change_section_size(-1.0)
+		elif event.is_action_pressed("m1_accept"):
+			# A after a released drag applies the read-only proposal; any other
+			# A press starts (or resumes) a drag on the aimed edge handle.
+			if _section_reviewing: _commit_section_edit()
+			else: _section_begin_drag()
 		elif event.is_action_pressed("m1_precision"): precision_mode = not precision_mode
 		get_viewport().set_input_as_handled()
 		return
@@ -317,28 +335,105 @@ func _begin_section_edit(id: String) -> void:
 	_section_original = item
 	_section_candidate = item.duplicate(true)
 	_section_edge = 0
-	_section_amount = 0
-	_section_step = 0
+	_section_drag_anchor = {}
+	_section_dragging = false
+	_section_reviewing = false
+	# Start the pointer on the section centre so every edge handle is at the
+	# same aim distance and the first A press always has a clean handle. The
+	# centring runs after the preview update: switching view context resets
+	# the pointer, so doing it first would be silently overwritten.
 	_section_edit_active = true
 	tools_open = true
 	_building_actions_open = false
 	_update_section_preview()
+	# One transform per centre: chained `as` casts and arithmetic need explicit
+	# parentheses or GDScript groups them the wrong way.
+	var centre := (view["transform"] as Transform3D) * ((_section_original["offset"] as Vector3) + Vector3(0.0, (_section_original["size"] as Vector3).y * 0.5, 0.0))
+	if camera and not camera.is_position_behind(centre):
+		edit_pointer = camera.unproject_position(centre)
+		_clamp_edit_pointer()
 
-func _select_section_edge(direction: int) -> void:
-	_section_edge = posmod(_section_edge + direction, SectionMath.EDGES.size())
-	_section_original = _section_candidate.duplicate(true)
-	_section_amount = 0
-	_section_step = 0
-	_refresh_part_feedback()
+func _section_move_pointer(delta: float) -> void:
+	var move := Vector2(Input.get_axis("m1_move_left", "m1_move_right"), Input.get_axis("m1_move_up", "m1_move_down"))
+	if move.length() <= 0.05: return
+	edit_pointer += move.normalized() * pow(minf(move.length(), 1.0), 1.35) * delta * POINTER_SPEED * (0.35 if precision_mode else 1.0)
+	_clamp_edit_pointer()
 
-func _change_section_size(amount: float) -> void:
+
+func _section_handle_point(offset: Vector3, size: Vector3, edge: String) -> Vector3:
+	# The section `offset` is its centre in x/z (see `Massing.section_rect`),
+	# so each face sits at offset[axis] +/- size[axis] / 2. Handles sit at the
+	# middle height of the dragged face, matching the face that `drag_amount`
+	# uses as the drag zero point.
+	var p := offset
+	p.y = offset.y + size.y * 0.5
+	if edge == "left": p.x = offset.x - size.x * 0.5
+	elif edge == "right": p.x = offset.x + size.x * 0.5
+	elif edge == "front": p.z = offset.z - size.z * 0.5
+	else: p.z = offset.z + size.z * 0.5
+	return p
+
+
+func _section_update_pointer() -> void:
+	# Aim/review mode: the closest projected handle owns the pointer; while a
+	# drag is in flight the frozen edge stays untouched.
 	if not _section_edit_active: return
-	_section_amount += amount
-	var step := snappedf(_section_amount, 1.0)
-	if step == _section_step: return
-	_section_step = step
-	_section_candidate = SectionMath.resize_edge(_section_original, SectionMath.EDGES[_section_edge], step)
+	if _section_dragging: return
+	var view: Dictionary = building_world.get_building(_part_building)
+	if view.is_empty() or not camera: return
+	var transform_value: Transform3D = view["transform"]
+	if camera.is_position_behind(transform_value * _section_aabb(_section_candidate).get_center()): return
+	var size: Vector3 = _section_candidate["size"]
+	var offset: Vector3 = _section_candidate["offset"]
+	var best := 0
+	var best_distance := INF
+	for index in SectionMath.EDGES.size():
+		var world := transform_value * _section_handle_point(offset, size, SectionMath.EDGES[index])
+		if camera.is_position_behind(world): continue
+		var distance := camera.unproject_position(world).distance_squared_to(edit_pointer)
+		if distance < best_distance:
+			best_distance = distance
+			best = index
+	_section_edge = best
+
+
+func _section_begin_drag() -> void:
+	if _section_dragging: return
+	_section_dragging = true
+	_section_reviewing = false
+	_section_drag_edge = _section_edge
+	_section_drag_anchor = _section_candidate.duplicate(true)
+	_set_status("Drag %s edge · release A to review" % SectionMath.EDGES[_section_edge].capitalize())
+
+
+func _section_update_drag() -> void:
+	if not _section_dragging: return
+	if not Input.is_action_pressed("m1_accept") or menu_open:
+		_section_end_drag()
+		return
+	var amount := _section_pointer_amount(_section_drag_anchor)
+	if not is_finite(amount): return
+	var next := SectionMath.resize_edge(_section_drag_anchor, SectionMath.EDGES[_section_drag_edge], amount)
+	if not next.is_empty() and next != _section_candidate:
+		_section_candidate = next
+		_update_section_preview()
+
+
+func _section_pointer_amount(item: Dictionary) -> float:
+	if not camera: return INF
+	var view: Dictionary = building_world.get_building(_part_building)
+	if view.is_empty(): return INF
+	return SectionMath.drag_amount(view, item, SectionMath.EDGES[_section_drag_edge], camera.project_ray_origin(edit_pointer), camera.project_ray_normal(edit_pointer))
+
+
+func _section_end_drag() -> void:
+	if not _section_dragging: return
+	_section_dragging = false
+	# Releasing A never commits; it leaves a read-only proposed size for
+	# review. A applies it, B restores the original.
+	_section_reviewing = _section_candidate != _section_original
 	_update_section_preview()
+	_set_status("Proposed size · A apply, B cancel")
 
 func _update_section_preview() -> void:
 	_section_result = building_world.preview_section_resize(_part_building, _section_edit_id, _section_candidate, _part_revision)
@@ -362,6 +457,9 @@ func _commit_section_edit() -> bool:
 
 func _cancel_section_edit() -> void:
 	_section_edit_active = false
+	_section_dragging = false
+	_section_reviewing = false
+	_section_drag_anchor = {}
 	_section_result = {}
 	_section_reason = ""
 	tools_open = false
@@ -440,7 +538,7 @@ func _refresh_controller_hud() -> void:
 	if _part_menu_open or _section_edit_active or _roof_design_picker_open:
 		for control in [tools_panel, _building_panel, _tool_card, _world_prompt, _hover_prompt, _resize_hint]:
 			if control: control.hide()
-		if _section_edit_active: _set_prompts([["LEFT/RIGHT", "Edge"], ["UP/DOWN", "Resize"], ["A", "Apply"], ["B", "Cancel"], ["RS", "Orbit"]])
+		if _section_edit_active: _set_prompts([["LS", "Aim / Drag"], ["RS", "Orbit"], ["A", "Drag / Apply"], ["B", "Cancel"]])
 		else: _set_prompts([["LEFT/RIGHT", "Choose"], ["A", "Apply" if _roof_design_picker_open else "Choose"], ["B", "Back"], ["RS", "Orbit"]])
 
 func _refresh_part_feedback() -> void:
@@ -492,11 +590,12 @@ func _refresh_part_feedback() -> void:
 
 func _draw_selected_section() -> void:
 	var view: Dictionary = building_world.get_building(_part_building)
+	if view.is_empty(): return
 	var transform_value: Transform3D = view["transform"]
 	var item := _section_candidate
 	var size: Vector3 = item["size"]
 	var offset: Vector3 = item["offset"]
-	var bounds := AABB(Vector3(offset.x - size.x * 0.5, HouseMassing.section_bottom(item), offset.z - size.z * 0.5), size)
+	var bounds := _section_aabb(item)
 	var lines: Array = []
 	for i in 8:
 		for axis in 3:
@@ -507,18 +606,39 @@ func _draw_selected_section() -> void:
 			if not camera.is_position_behind(a) and not camera.is_position_behind(b): lines.append([camera.unproject_position(a), camera.unproject_position(b)])
 	var points: Array = []
 	for edge in SectionMath.EDGES:
-		var p := bounds.get_center()
-		if edge == "left": p.x = bounds.position.x
-		elif edge == "right": p.x = bounds.end.x
-		elif edge == "front": p.z = bounds.position.z
-		else: p.z = bounds.end.z
-		var world := transform_value * p
+		var world := transform_value * _section_handle_point(offset, size, edge)
 		if not camera.is_position_behind(world): points.append({"edge": edge, "position": camera.unproject_position(world)})
-	_part_lines.update_lines(lines, points, SectionMath.EDGES[_section_edge], _section_reason.is_empty())
+	# While the proposal differs, the original outline stays visible as a
+	# dashed ghost so the player always sees what the change is relative to.
+	var ghost: Array = []
+	if _section_candidate != _section_original:
+		var original_bounds := _section_aabb(_section_original)
+		for i in 8:
+			for axis in 3:
+				var j := i ^ (1 << axis)
+				if j <= i: continue
+				var a := transform_value * original_bounds.get_endpoint(i)
+				var b := transform_value * original_bounds.get_endpoint(j)
+				if not camera.is_position_behind(a) and not camera.is_position_behind(b): ghost.append([camera.unproject_position(a), camera.unproject_position(b)])
+	_part_lines.update_view(lines, points, SectionMath.EDGES[_section_edge], _section_reason.is_empty(), ghost, edit_pointer)
 	_part_lines.show()
-	_part_hint.text = "Floor %d · %s · %.1f × %.1f" % [HouseMassing.section_level(item) + 1, SectionMath.EDGES[_section_edge].capitalize(), size.x, size.z] if _section_reason.is_empty() else _section_reason
+	var hint := "Floor %d · %s edge · %.2f × %.2f" % [HouseMassing.section_level(item) + 1, SectionMath.EDGES[_section_edge], size.x, size.z]
+	if not _section_reason.is_empty(): hint = _section_reason
+	elif _section_dragging: hint += " · drag with LS"
+	elif _section_reviewing: hint += " · A apply / B cancel"
+	else: hint += " · hold A to drag"
+	_part_hint.text = hint
 	_part_hint.position = Vector2(24, _prompt_bar.position.y - 38)
 	_part_hint.show()
+
+
+func _section_aabb(item: Dictionary) -> AABB:
+	# x/z are centre-based like section_rect; y starts at the level base.
+	var size: Vector3 = item["size"]
+	var offset: Vector3 = item["offset"]
+	return AABB(
+		Vector3(offset.x - size.x * 0.5, HouseMassing.section_bottom(item), offset.z - size.z * 0.5),
+		size)
 
 func _set_roof_scope_highlight(enabled: bool) -> void:
 	if not _roof_scope_highlight:

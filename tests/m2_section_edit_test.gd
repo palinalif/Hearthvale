@@ -78,6 +78,24 @@ func _initialize() -> void:
 		check(old_wing.is_equal_approx(new_wing), "main edge edit does not translate the other section")
 	check(world.serialize_document() == before, "main resize preview remains read-only")
 	check(not world.commit_section_resize("building-1","core",original,world.get_revision()), "confirm without resize creates no history")
+	# Pointer drag amount: the aim ray hits the camera-facing plane through
+	# the dragged face. `offset` is the section centre in x/z, so for this
+	# 4x3x4 section the faces sit at x = -2/+2 and z = -2/+2 (independent
+	# expectation from `Massing.section_rect`, not from the drag formula).
+	var identity_view := {"transform": Transform3D.IDENTITY}
+	var flat := {"offset": Vector3(0, 0, 0), "size": Vector3(4, 3, 4)}
+	var cam := Vector3(-3.9, 2.6, -8.2)
+	var left_face := Vector3(-2, 1.5, 0)
+	check(absf(Edit.drag_amount(identity_view, flat, "left", cam, (left_face - cam).normalized())) < 0.01, "pointer exactly on the left face reports no change")
+	check(absf(Edit.drag_amount(identity_view, flat, "left", cam, (Vector3(-4, 1.5, 0) - cam).normalized()) - 2.0) < 0.05, "pointer 2 units past the left face grows by 2")
+	var centre_amount := Edit.drag_amount(identity_view, flat, "left", cam, (Vector3(0, 1.5, 0) - cam).normalized())
+	check(centre_amount < -1.6 and centre_amount > -2.1, "pointer at the centre proposes a shrink towards the left face")
+	var past_right := Edit.drag_amount(identity_view, flat, "left", cam, (Vector3(2, 1.5, 0) - cam).normalized())
+	check(past_right < -3.0 and past_right > -3.8, "pointer past the right face proposes close to the full size shrink")
+	check(absf(Edit.drag_amount(identity_view, flat, "front", cam, (Vector3(0, 1.5, -2) - cam).normalized())) < 0.01, "pointer exactly on the front face reports no change")
+	check(absf(Edit.drag_amount(identity_view, flat, "right", cam, (Vector3(2, 1.5, 0) - cam).normalized())) < 0.01, "pointer exactly on the right face reports no change")
+	check(is_inf(Edit.drag_amount(identity_view, flat, "left", cam, Vector3(8.2, 0, -1.9).normalized())), "ray parallel to the face-facing plane leaves the last candidate")
+	check(is_inf(Edit.drag_amount(identity_view, flat, "left", cam, (cam - left_face).normalized())), "ray pointing away from the face leaves the last candidate")
 	print("m2_section_edit_test checks=%d failures=%d" % [checks,failures])
 	quit(1 if failures else 0)
 func _serial(sections: Array[Dictionary]) -> Array:

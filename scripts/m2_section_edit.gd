@@ -5,6 +5,52 @@ extends RefCounted
 const Massing = preload("res://scripts/m2_house_massing.gd")
 const EDGES := ["left", "right", "front", "back"]
 
+# The local axis the named edge moves along, and the sign of that edge
+# relative to the section centre. left/front are the -axis edges, and a
+# resize always moves the named edge while the opposite edge stays fixed.
+static func edge_axis(edge: String) -> int:
+	return 0 if edge == "left" or edge == "right" else 2
+
+
+static func edge_sign(edge: String) -> float:
+	return -1.0 if edge == "left" or edge == "front" else 1.0
+
+
+# The pointer-driven amount for a named edge, in resize_edge units (a hit at
+# the centre is a half-size amount; hits past the face grow the section).
+# The camera ray is swept across a plane that faces the camera and passes
+# through the edge's own face: the hit's section coordinate is where the
+# face should land, so the opposite edge stays fixed. Passing the plane
+# through the face (not the centre) keeps the mapping accurate when the
+# camera views the section obliquely: on a centre plane the hit mixes the
+# dragged axis with the other horizontal one, so a pointer at the handle
+# reads far from the face. INF means the ray does not cross the plane
+# (parallel or behind the camera), so callers keep the last candidate.
+static func drag_amount(view: Dictionary, item: Dictionary, edge: String, origin: Vector3, direction: Vector3) -> float:
+	var transform_value = view.get("transform", Transform3D.IDENTITY)
+	var transform: Transform3D = transform_value if transform_value is Transform3D else Transform3D.IDENTITY
+	var size: Vector3 = item["size"]
+	var offset: Vector3 = item["offset"]
+	var axis := edge_axis(edge)
+	var sign := edge_sign(edge)
+	# The section `offset` is its centre in x/z (see `Massing.section_rect`),
+	# so the dragged face sits at offset[axis] +/- size[axis] / 2.
+	var face := offset[axis] + sign * size[axis] * 0.5
+	var face_point := offset
+	face_point[axis] = face
+	face_point.y = offset.y + size.y * 0.5
+	var plane_point := transform * face_point
+	var normal := (plane_point - origin).normalized()
+	var denom := direction.dot(normal)
+	if absf(denom) < 0.00001:
+		return INF
+	var t := (plane_point - origin).dot(normal) / denom
+	if t <= 0.0:
+		return INF
+	var local := transform.affine_inverse() * (origin + direction * t)
+	return sign * (local[axis] - face)
+
+
 static func section(view: Dictionary, id: String) -> Dictionary:
 	for item in Massing.sections_for(view):
 		if str(item["id"]) == id: return item.duplicate(true)

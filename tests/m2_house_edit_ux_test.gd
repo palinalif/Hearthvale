@@ -11,11 +11,23 @@ func check(ok: bool, label: String) -> void:
 	if not ok: failures += 1; push_error("FAIL: " + label)
 func _initialize() -> void: _run.call_deferred()
 func _press(action: String) -> void:
+	Input.action_press(action)
 	var event := InputEventAction.new()
 	event.action = action; event.pressed = true
 	scene._input(event)
+func _release(action: String) -> void:
+	Input.action_release(action)
+	var event := InputEventAction.new()
+	event.action = action; event.pressed = false
+	scene._input(event)
 func _settle() -> void:
 	for i in 3: await process_frame
+func _document_equal_ignoring_revision(a: String, b: String) -> bool:
+	var da: Dictionary = JSON.parse_string(a)
+	var db: Dictionary = JSON.parse_string(b)
+	da.erase("revision")
+	db.erase("revision")
+	return da == db
 func _run() -> void:
 	var rendering := "--require-rendering" in OS.get_cmdline_user_args()
 	if rendering: check(DisplayServer.get_name() != "headless" and RenderingServer.get_current_rendering_method() == "mobile", "real Mobile renderer required")
@@ -61,24 +73,74 @@ func _run() -> void:
 	for section in scene.HouseMassing.sections_for(view):
 		if int(section["level"]) == 1: upper_id = str(section["id"]); break
 	check(not upper_id.is_empty(), "upper section has a stable identity")
+	# Drag the section edge with the pointer: A starts a drag on the nearest
+	# handle, releasing A leaves a read-only proposal, a fresh A applies it.
+	var section_view: Dictionary = scene.building_world.get_building(id)
+	var section_transform: Transform3D = section_view["transform"]
+	var original: Dictionary = Edit.section(section_view, upper_id)
+	var original_right := Vector3(original["offset"]).x + Vector3(original["size"]).x * 0.5
 	before = scene.building_world.serialize_document()
-	scene._begin_section_edit(upper_id)
-	var original: Dictionary = Edit.section(view,upper_id)
-	scene._change_section_size(1)
-	await _settle()
-	check(scene._section_edit_active and scene._section_reason.is_empty(), "already placed upper section can expand with visible edge controls")
-	check(scene._part_lines.visible and scene._part_lines.handles.size() == 4, "all four edge handles are visible")
-	check(scene.building_world.serialize_document() == before, "resize preview has no saved side effects")
-	if rendering: await _capture("upper-floor-resize")
-	_press("m1_cancel")
-	check(not scene._section_edit_active and scene.building_world.serialize_document() == before, "controller cancel restores exact section and history")
-	scene._begin_section_edit(upper_id); scene._change_section_size(1)
 	var revision: int = scene.building_world.get_revision()
+	scene.camera_distance = 9.0
+	scene.camera_pitch = 0.7
+	scene._update_camera()
+	scene._begin_section_edit(upper_id)
+	var center_screen: Vector2 = scene.camera.unproject_position(section_transform * (Vector3(original["offset"]) + Vector3(0.0, Vector3(original["size"]).y * 0.5, 0.0)))
+	check(scene.edit_pointer.distance_to(center_screen) < 1.0, "section editing starts with the pointer centred on the section")
+	await _settle()
+	check(scene._section_edit_active and scene._section_reason.is_empty(), "already placed upper section opens read-only section editing")
+	check(scene._part_lines.visible and scene._part_lines.points.size() == 4, "all four edge handles are visible")
+	check(scene.building_world.serialize_document() == before, "section editing has no saved side effects")
+	var left_handle: Vector2 = scene.camera.unproject_position(section_transform * scene._section_handle_point(Vector3(original["offset"]), Vector3(original["size"]), "left"))
+	scene.edit_pointer = left_handle + Vector2(-18, 0)
+	scene._section_update_pointer()
+	check(scene._section_edge == Edit.EDGES.find("left"), "pointer near the left handle aims the left edge")
 	_press("m1_accept")
-	check(scene.building_world.get_revision() == revision + 1, "controller confirmation is one section edit")
+	check(scene._section_dragging, "A press starts a drag on the aimed edge")
+	scene.edit_pointer = left_handle + Vector2(-190, 0)
+	scene._section_update_drag()
+	check(scene._section_candidate != original and scene._section_reason.is_empty(), "drag grows the left edge as a read-only proposal")
+	check(absf(Vector3(scene._section_candidate["offset"]).x + Vector3(scene._section_candidate["size"]).x * 0.5 - original_right) < 0.001, "left drag keeps the right edge fixed")
+	check(scene.building_world.serialize_document() == before, "drag proposal never writes the house")
+	if rendering: await _capture("upper-floor-drag-resize")
+	_release("m1_accept")
+	scene._section_update_drag()
+	check(not scene._section_dragging and scene._section_reviewing, "release A leaves a reviewable proposal and never commits")
+	_press("m1_cancel")
+	check(not scene._section_edit_active and scene.building_world.serialize_document() == before and scene.building_world.get_revision() == revision, "B during review restores exact section and history")
+	scene._begin_section_edit(upper_id)
+	scene.edit_pointer = left_handle + Vector2(-18, 0)
+	scene._section_update_pointer()
+	_press("m1_accept")
+	scene.edit_pointer = left_handle + Vector2(-190, 0)
+	scene._section_update_drag()
+	scene.menu_open = true
+	scene._section_update_drag()
+	check(not scene._section_dragging and scene._section_reviewing, "menu over a held drag ends the drag into a proposal")
+	check(scene.building_world.get_revision() == revision, "menu over a held drag never commits")
+	scene.menu_open = false
+	_press("m1_accept")
+	check(scene.building_world.get_revision() == revision + 1, "A after release is one section edit")
 	check(Edit.section(scene.building_world.get_building(id), upper_id)["size"] != original["size"], "existing upper section changes, not a new appended section")
 	check(scene.building_world.undo(), "section undo")
-	check(Edit.section(scene.building_world.get_building(id),upper_id) == original, "undo restores full original section")
+	check(Edit.section(scene.building_world.get_building(id), upper_id) == original, "undo restores full original section")
+	var revision2: int = scene.building_world.get_revision()
+	scene._begin_section_edit(upper_id)
+	var bad := original.duplicate(true)
+	bad["size"] = Vector3(19, 3, 19)
+	scene._section_candidate = bad
+	check(not scene._commit_section_edit() and scene._section_edit_active, "invalid proposal blocks the confirm action")
+	check(not scene._section_reason.is_empty(), "invalid proposal shows its reason")
+	_press("m1_cancel"); _release("m1_cancel")
+	check(not scene._section_edit_active and _document_equal_ignoring_revision(scene.building_world.serialize_document(), before) and scene.building_world.get_revision() == revision2, "cancel after blocked confirm restores exact section")
+	scene._begin_section_edit(upper_id)
+	_press("m1_accept")
+	scene._section_update_drag()
+	_press("m1_pause")
+	check(not scene._section_edit_active and _document_equal_ignoring_revision(scene.building_world.serialize_document(), before) and scene.building_world.get_revision() == revision2, "pause cancels the edit without committing")
+	_release("m1_accept"); _release("m1_pause")
+	scene.menu_open = false
+	scene._part_menu_open = false
 	if rendering:
 		scene._update_presentation(); scene._update_camera()
 		await _settle()
