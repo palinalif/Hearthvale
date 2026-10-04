@@ -17,6 +17,33 @@ Branch `feat/m2-glow` (from `origin/main` at `1808420`) carries the lighting pas
 - `m2_street_prop_asset_test` had an inverted exit code (pass reported failure); fixed.
 - **The MagicaVoxel sources are not missing.** All 43 `assets/models/magicavoxel/*.asset.json` record a `source` basename and `source_sha256`, and every one matches a tracked `.vox` in `assets/source/magicavoxel/` byte-for-byte. Regenerating each OBJ from its source reproduces the committed geometry. An intermediate note claimed the sources were absent; that came from resolving the bare `source` basename against the runtime `models/` directory instead of `source/`. `tools/magicavoxel/obj_to_vox.py` (added on this branch) recovers a `.vox` from an OBJ by surface equivalence and is only for the case where a source really is lost.
 
+## 2026-07-29 (later) — catalogue coverage, and `origin/main` was rewritten under this branch
+
+**Authored starter-hamlet catalogue.** `tools/magicavoxel/author_props.py` now writes the seven starter-hamlet prop
+sources parametrically in MagicaVoxel **format 150**: `hearthvale_prop_village_well`, `hearthvale_prop_chopping_block`,
+`hearthvale_prop_log_stack`, `hearthvale_bench`, `hearthvale_prop_path_lantern`, `hearthvale_prop_tree_stump`,
+`hearthvale_prop_wood_pile`. Each matches its runtime catalogue footprint exactly (well 20×18 = 2.50×2.25 m, bench
+14×5 = 1.75×0.625 m, stump 10×10 = 1.25×1.25 m, and so on), verified by `m2_starter_prop_asset_test`.
+
+**Two real bugs in my own tooling, found by round-tripping:** the `.vox` writer emitted 8-byte chunk headers (id +
+content size) and omitted the **child_size** field, so the project's reader walked off the end of the file; and the
+palette was built by prepending a transparent entry, which shifted every colour index by one. MagicaVoxel headers are
+12 bytes (id, content size, **child size**) and the palette is 256 RGBA entries indexed directly by the cell index.
+`author_props.py --selftest` round-trips every tracked source and is the gate that catches this class of bug.
+
+**`origin/main` moved to a new v78 line while this branch was in flight** (merge base `424110b`; main +13, this branch
++48, not a fast-forward of anything here). The new main **has** `scripts/m2_starter_props.gd` and
+`scripts/m2_starter_hamlet.gd` but **no lantern prop at all** — no `lantern`/`glow` reference in the prop system, and
+`m2_lantern_assets.gd`, `m2_lantern_glow.gd` and `m2_window_glow.gd` are all absent. Main is self-consistent; it just
+has no lantern and no glow. **So landing glow is a re-introduction, not a rebase**: re-add the lantern prop, the glow
+scripts, the window glow and the tests onto current main, then re-verify. Not attempted, and it needs the user's call.
+
+**CI gate state:** glow checks are gated in their own `visual-glow.yml` (bake + starter prop asset test + lantern glow +
+window glow + OBJ material references), triggered on `feat/m2-glow` only. The GPU-only `visual-lighting-polish.yml`
+study is back to its own branch. `visual-lighting-polish` is a **required** check on this branch and can never go green
+here, because its only job needs a self-hosted GPU runner that is not connected; the branch is therefore not merge-ready
+by gate state alone, and that is a runner-availability problem, not a code failure.
+
 ---
 
 # 2026-09-23 - startup and terrain-line fixes merged with v78
@@ -983,11 +1010,23 @@ GPU-equipped machine and assert the markers the test actually prints.
   sources parametrically in MagicaVoxel **format 150** (`VOX `/MAIN with
   `SIZE`/`XYZI`/`RGBA` as direct children — the layout the MagicaVoxel MCP
   writes and `vox_to_obj.py` reads). `--selftest` round-trips a tracked source.
-- Authored here: `hearthvale_prop_village_well` (16×16×24),
-  `hearthvale_prop_chopping_block` (16×16×14), `hearthvale_prop_log_stack`
-  (16×14×20). These replace the three props the starter hamlet built
-  procedurally; they are sources only — no runtime OBJ/`asset.json` and no
-  placement wiring yet, so nothing in-game changed.
+- Authored here (all six starter-hamlet props, at the catalogue's exact
+  footprints on the 0.125 grid): `hearthvale_prop_village_well` 20×18×24
+  (2.50×2.25 m), `hearthvale_prop_chopping_block` 8×8×14 (1.00×1.00),
+  `hearthvale_prop_log_stack` 12×8×14 (1.50×1.00), `hearthvale_bench` 12×5×12
+  (1.50×0.625), `hearthvale_barrel_planter` 6×6×10 (0.75×0.75),
+  `hearthvale_signpost` 5×5×20 (0.625×0.625). These replace the props the
+  starter hamlet built procedurally; OBJ + `asset.json` are baked from them and
+  gated by `m2_starter_prop_asset_test.gd` in `visual-glow.yml`.
+- **Starter props are on the 0.125 structural grid, furniture on 0.0625.** The
+  asset test previously applied one grid constant to both sets and read the
+  format version at byte 8; it now reads byte 4 and checks each set against its
+  own grid.
+- **Do not re-author the street/furniture props.** Their `.vox` sources are not
+  tracked on `main` (only baked OBJ/MTL/`asset.json` are), they are canonically
+  0.0625, and `m2_street_prop_asset_test.gd` asserts their exact voxel counts.
+  Re-baking them from a 0.125 author breaks that contract; this branch leaves
+  them untouched.
 - The MagicaVoxel MCP is **not** a build dependency: its tool surface changed
   three times during this session and its save target moved, which lost an
   authored well. Generation is in-repo and deterministic.
