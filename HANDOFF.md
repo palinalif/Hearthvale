@@ -1,3 +1,23 @@
+# 2026-10-04 - glow lighting and authored props on `feat/m2-glow`
+
+Branch `feat/m2-glow` (from `origin/main` at `1808420`) carries the lighting pass and the authored-prop art pass. It is **not merged to main** and has **no verified APK**.
+
+**Lighting.** One warm lamp colour (`255,180,96`) is owned by `scripts/m2_lantern_glow.gd`; the authored lantern glass, the lamp-post head and cottage windows share it. Glow is authored-only: procedural lanterns, street lamps and chimneys are excluded, and the lantern flame is deliberately not emissive. Glass is inset into the iron frame (the flame is not inset). Night emissive is 2.4, with Mobile glow enabled and a mild glow bake.
+
+**Authored props.** Eleven MagicaVoxel props (bench, hay cart, lamp post, market cross, maypole, notice board, signpost, stone well, tree stump, wood pile, mailbox) plus the lantern are authored `.vox` sources with baked OBJ/MTL and asset records.
+
+**Fixed:** nine prop OBJs referenced `mtllib hearthvale_prop_<name>.mtl` while the library on disk is `hearthvale_<name>.mtl`. Godot reported `ERROR: Couldn't open MTL file ...` per file and the CI import step fails on any `ERROR:` line, so the whole import gate went red while the models still loaded. `tests/m2_obj_material_reference_test.gd` now gates this. Local import after the fix: exit 0, zero `ERROR:` lines.
+
+**Not run here:** Thor rendering, Thor performance, APK export (no Java SDK / Android build-tools on this host). CI runs are the source gate.
+
+**Known repository hazards found during this work:**
+- The shared `/workspace/Hearthvale` checkout is switched between branches by a concurrent agent. Uncommitted tracked-file edits there are lost on switch; untracked files survive. This work was rebuilt in the isolated worktree `/workspace/Hearthvale-glow` for that reason.
+- `scenes/m2_hamlet.tscn`, `scripts/cottage.gd` and `scripts/m2_hamlet_scene.gd` are **untracked** â€” the M2 gameplay scene exists only as loose files in the shared checkout, in no commit and no backup.
+- `m2_upper_storey_auto_windows_test` fails identically on `origin/main` (2 failures) and is unrelated to this work.
+- `m2_street_prop_asset_test` had an inverted exit code (pass reported failure); fixed.
+
+---
+
 # 2026-09-23 - startup and terrain-line fixes merged with v78
 
 Merged codex/startup-readiness (including codex/terrain-moire-fix) onto v78 main. The grass-noise lattice shares corner values across cells, addressing diagonal terrain bands. Startup skips throwaway M1 landscape and duplicate path work, batches meadow tufts, reuses painted path cells for planting clearance, and rasterizes streams without repeated sorting. Current v78 checkpoint and reservoir authority, 160 m valley, mountain scenery, version code 78, and capture positions were retained.
@@ -15,7 +35,7 @@ Details: [detailed mountains report](reports/detailed-mountains.md). Images: `re
 
 ---
 
-# 2026-09-22 — v77 circular mountain valley
+# 2026-09-22 ï¿½ v77 circular mountain valley
 
 Implemented from main `81297b1` on `fix/circular-mountain-valley`: rounded native basin, surrounding mountain range and an 18 m reservoir waterfall feeding the river. Fresh starter homes/paths now match the doubled map. Existing checkpoint terrain/water remain authoritative; the missing parent startup callback was restored.
 
