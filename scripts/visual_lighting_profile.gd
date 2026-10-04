@@ -17,6 +17,21 @@ class_name VisualLightingProfile
 @export var ground_bottom := Color("#505847")
 @export var ground_horizon := Color("#a8b6ac")
 
+# Bloom.  Godot 4.7 exposes glow as a fixed set of Environment properties; it
+# has no glow buses, so the look is tuned through these rather than per-bus.
+@export var glow_enabled := false
+@export_range(0.0, 8.0, 0.001) var glow_intensity := 0.8
+@export_range(0.0, 8.0, 0.001) var glow_strength := 1.0
+@export_range(0.0, 1.0, 0.001) var glow_bloom := 0.15
+@export_range(0.0, 1.0, 0.001) var glow_mix := 0.15
+@export_range(0.0, 16.0, 0.001) var glow_hdr_threshold := 1.5
+@export_range(0.0, 16.0, 0.001) var glow_hdr_scale := 1.0
+@export var glow_normalized := false
+# Godot GlowBlendMode: 0 = ADD, 1 = SCREEN, 2 = SOFTLIGHT.
+@export_range(0, 2, 1) var glow_blend_mode := 0
+# Level weights 1..7; index 0 is unused by Godot.
+@export var glow_levels: Array[float] = [0.0, 0.0, 0.8, 0.4, 0.1, 0.0, 0.0, 0.0]
+
 func apply_to(sun: DirectionalLight3D, world: WorldEnvironment) -> bool:
 	if not is_instance_valid(sun) or not is_instance_valid(world): return false
 	if not sun_rotation_degrees.is_finite(): return false
@@ -53,9 +68,23 @@ func apply_to(sun: DirectionalLight3D, world: WorldEnvironment) -> bool:
 		environment.ambient_light_sky_contribution = 0.0
 		environment.reflected_light_source = Environment.REFLECTION_SOURCE_BG
 	# Isolate light/fill first. Exposure, tonemapper, background and shadow
-	# quality are retained; fog/glow are deliberately absent from this study.
+	# quality are retained; fog stays off.
 	environment.fog_enabled = false
-	environment.glow_enabled = false
+	environment.glow_enabled = glow_enabled
+	if glow_enabled:
+		# Measured on the real Mobile pipeline: a wide, low-contrast bloom keeps
+		# lamp filaments readable instead of turning them into white blobs.
+		environment.glow_intensity = glow_intensity
+		environment.glow_strength = glow_strength
+		environment.glow_bloom = glow_bloom
+		environment.glow_mix = glow_mix
+		environment.glow_blend_mode = glow_blend_mode
+		environment.glow_normalized = glow_normalized
+		environment.glow_hdr_threshold = glow_hdr_threshold
+		environment.glow_hdr_scale = glow_hdr_scale
+		for level in range(1, 8):
+			if level < glow_levels.size():
+				environment.set("glow_levels/%d" % level, glow_levels[level])
 	world.environment = environment
 	return true
 

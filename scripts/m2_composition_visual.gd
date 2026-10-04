@@ -499,7 +499,7 @@ func _append_box(builder: Dictionary, center: Vector3, size: Vector3, basis: Bas
 	builder["surfaces"] = surfaces
 	builder["cells"] = int(builder["cells"]) + 1
 
-func _mesh_from_builder(builder: Dictionary, colours: Array, preview: bool = false) -> ArrayMesh:
+func _mesh_from_builder(builder: Dictionary, colours: Array, preview: bool = false, emissive: Dictionary = {}) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	var has_geometry := false
 	var surfaces: Array = builder["surfaces"]
@@ -519,6 +519,13 @@ func _mesh_from_builder(builder: Dictionary, colours: Array, preview: bool = fal
 			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			material.albedo_color.a = 0.56
 			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		elif emissive.has(index):
+			# A style may nominate one surface as a light source (lantern glass).
+			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			material.emission_enabled = true
+			material.emission = emissive[index]
+			material.emission_energy_multiplier = M2LanternGlow.LANTERN_EMBER_INTENSITY
+			material.emission_specular = M2LanternGlow.LANTERN_EMBER_GLOW_SPECULAR
 		mesh.surface_set_material(mesh.get_surface_count() - 1, material)
 		has_geometry = true
 	return mesh if has_geometry else null

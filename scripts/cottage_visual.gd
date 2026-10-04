@@ -17,6 +17,10 @@ const SHUTTER_COLOR := Color("#557a70")
 const STONE_COLOR := Color("#a48770")
 const QUOIN_COLOR := Color("#c09c78")
 const WINDOW_COLOR := Color("#344e50")
+# Lit interior.  The pane is dark glass, so a warm self-emission reads as a lit
+# room behind it; the lighting profile's bloom turns that into visible glow.
+const WINDOW_GLOW_COLOR := Color(1.0, 0.62, 0.28)
+const WINDOW_GLOW_ENERGY := 1.6
 const FLOWER_COLOR := Color("#d56d65")
 
 # --- Deterministic wall tone variation (presentation only) -------------------
@@ -498,8 +502,10 @@ func _build_style_accents(dimensions: Vector3, style_id: String) -> void:
 func _build_details(view: Dictionary, dimensions: Vector3) -> void:
 	var window_material := StandardMaterial3D.new()
 	window_material.albedo_color = WINDOW_COLOR
-	window_material.emission_enabled = false
-	window_material.emission = Color(0.55, 0.28, 0.08)
+	# Presentation only: no light node, record, save field, anchor or authority.
+	window_material.emission_enabled = true
+	window_material.emission = WINDOW_GLOW_COLOR
+	window_material.emission_energy_multiplier = WINDOW_GLOW_ENERGY
 	var surface_orientations := {}
 	for surface_value in view.get("surfaces", []):
 		var surface: Dictionary = surface_value

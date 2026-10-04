@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Run a headless SceneTree test.
+#
+# Godot only runs the requested script when it is passed with --script; without
+# it, Godot boots the default gameplay scene and never exits. This wrapper adds
+# that flag, a bounded timeout, and failfast handling so a parse error returns
+# control immediately instead of running to the timeout.
+#
+#   tools/run-test tests/name_test.gd [extra godot args...]
+#
+# Bound: TEST_TIMEOUT_SECONDS (default 600).
+set -euo pipefail
+
+TIMEOUT_SECONDS="${TEST_TIMEOUT_SECONDS:-600}"
+
+if [[ $# -lt 1 ]]; then
+  echo "usage: tools/run-test <res-path-or-relative-path> [extra godot args...]" >&2
+  exit 2
+fi
+
+target="$1"; shift
+
+# Accept tests/foo.gd, ./tests/foo.gd, res://tests/foo.gd and bare foo.gd.
+script_path="${target#./}"
+if [[ "$script_path" == res://* ]]; then
+  script_path="${script_path#res://}"
+elif [[ "$script_path" != */* ]]; then
+  script_path="tests/$script_path"
+fi
+[[ "$script_path" == *.gd ]] || script_path="$script_path.gd"
+
+if [[ ! -f "$script_path" ]]; then
+  echo "run-test: no such test: $script_path" >&2
+  exit 2
+fi
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+failfast=()
+if [[ -x "$repo_root/tools/failfast" ]]; then
+  failfast=("$repo_root/tools/failfast" --timeout "$TIMEOUT_SECONDS" --)
+fi
+
+exec "${failfast[@]}" godot --headless --path . --script "res://$script_path" "$@"
