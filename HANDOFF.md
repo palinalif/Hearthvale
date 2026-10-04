@@ -1492,3 +1492,33 @@ SDK/JDK, so it cannot export at all. The export steps are removed: the
 **Thor playtest APK** workflow on the Windows runner is the single place that
 builds the ARM64 debug APK and verifies package, signature, architecture and
 the single `libvoxel` library. The glow job now runs the test suite only.
+
+## 2026-07-30 — corrected procedural-asset inventory (scope must not come from the old manifest)
+
+The removed bake manifest listed 11 "furniture" entries (bed, wardrobe, shelf,
+table, chair, counter, signpost, fence, planter, rug, lantern). **Those are
+aspirational, not shipped**: no `.vox` sources exist for them and no builder
+function exists for any of them — `wardrobe`, `bed`, `counter`, `table` and
+`chair` appear nowhere in `scripts/`. Do not plan scope from that list.
+
+What is actually procedural and user-visible today:
+
+| Owner | Assets | `.vox` source exists? | Loaded at runtime? |
+| --- | --- | --- | --- |
+| `scripts/m2_starter_props.gd` | well, chopping_block, log_stack | yes (`hearthvale_prop_village_well/_chopping_block/_log_stack.vox`) | **no** — built from `_box` primitives via `m2_hamlet_visual.gd:187` |
+| `scripts/m2_scene_hamlet_details.gd` | garden + fence styles | `hearthvale_prop_fence.vox`, garden plots | partially |
+| `scripts/m2_hamlet_visual.gd` | bench, signpost, lamp post, maypole, notice board, pumpkin post, hay cart, well, market cross, stone bench, water pump, chopping block, log stack | yes (`hearthvale_furniture_*.vox`) | yes for the baked set; the rest keeps procedural presentation |
+| `scripts/vegetation_mesh.gd` | trees, bushes, grass, flowers | yes (`hearthvale_tree_*.vox`, `hearthvale_foliage_*.vox`) | yes via `m2_vegetation_foliage.gd` for baked foliage |
+| `scripts/m2_house_massing_visual.gd` | house massing | n/a — stretchable/procedural by design | n/a |
+
+Concrete remaining conversion: the **three starter props** (well / chopping
+block / log_stack) and the **fence/garden** styles. The lantern conversion is
+the working template — `scripts/m2_lantern_assets.gd` (typed loader:
+`has_style` → `mesh_for` → `material_for`), with the scene preferring the
+authored mesh and falling back to the procedural builder.
+
+**Pipeline gap:** `vox_to_asset.py` and `build_props.py` were written into the
+gitignored `.tools/magicavoxel/` staging area and deleted with it, so the
+`.vox` → `.asset_2d` conversion step must be rebuilt before any new prop can
+ship. The `.vox` sources, `author_props.py` and `author_furniture.py` are
+committed and unaffected.
