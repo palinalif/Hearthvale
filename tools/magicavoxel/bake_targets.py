@@ -34,6 +34,42 @@ EMISSIVE = {
 }
 
 
+# Authored sources that no runtime script consumes yet.  They stay in
+# assets/source/magicavoxel as reviewable voxel art, but they are deliberately
+# NOT baked: every baked .res ships in the APK, so baking art the game never
+# loads buys 2 MB of device storage for pixels nobody sees.  Wiring one up
+# means moving its name out of this set and giving the runtime a path to it.
+UNWIRED = {
+    # Tier A furniture.  The hamlet still builds these procedurally; only the
+    # lantern has a runtime consumer (and a mesh contract test).
+    "hearthvale_furniture_bench",
+    "hearthvale_furniture_signpost",
+    "hearthvale_furniture_lamp_post",
+    "hearthvale_furniture_maypole",
+    "hearthvale_furniture_notice_board",
+    "hearthvale_furniture_pumpkin_post",
+    "hearthvale_furniture_hay_cart",
+    "hearthvale_furniture_well",
+    "hearthvale_furniture_market_cross",
+    "hearthvale_furniture_stone_bench",
+    "hearthvale_furniture_water_pump",
+    "hearthvale_furniture_chopping_block",
+    "hearthvale_furniture_log_stack",
+    # Tier C aliases of the same Tier A shapes.  The composition layer places
+    # the village well, chopping block and log stack under their prop_ names,
+    # so these bare duplicates have no consumer.
+    "hearthvale_bench",
+    "hearthvale_stone_bench",
+    "hearthvale_signpost",
+    "hearthvale_lamp_post",
+    "hearthvale_maypole",
+    "hearthvale_notice_board",
+    "hearthvale_water_pump",
+    "hearthvale_hay_cart",
+    "hearthvale_market_cross",
+}
+
+
 def targets() -> list[tuple[str, str, tuple[int, ...], float]]:
     out: list[tuple[str, str, tuple[int, ...], float]] = []
     for mesh in author_furniture.FURNITURE:
@@ -54,6 +90,8 @@ if __name__ == "__main__":
     # "name=grid[:emissive:energy]" -- emissive roles ride along with the grid
     # so the bake has one place to enumerate every authored asset.
     for name, grid in targets():
+        if name in UNWIRED:
+            continue
         indices, energy = EMISSIVE.get(name, ((), 0.0))
         if indices:
             print("%s=%s:%s:%s" % (name, grid, ",".join(str(i) for i in indices), energy), end=" ")

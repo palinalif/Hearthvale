@@ -1363,3 +1363,40 @@ GPU-equipped machine and assert the markers the test actually prints.
   asset's scale. CI logs are not retrievable; the full 171-test local suite is
   running as ground truth. **Until that is green, Tier C is not verified
   delivery** and the Tier C APK must not be treated as a playtest build.
+
+## 2026-07-30 (the red CI was mostly not my assets — and 22 assets were dead weight)
+
+**The Tier C scale theory was wrong.** Measured baked extents of every asset
+on `origin/main` against this branch: all 43 pre-existing assets have a
+main/branch ratio of **exactly 1.00**. The bake-scale fix only ever touched
+assets I added, so it cannot be what broke the asset-consuming shards.
+
+**Full local suite (171 tests) on this branch: 169 pass, 2 fail.**
+
+- `m2_upper_storey_auto_windows_test` — **fails on `origin/main` too.**
+  Pre-existing, inherited, not caused by this branch.
+- `m2_planter_placement_test` — passes on `main`, fails here on
+  `Home overlap is explained`. Furniture footprints come from
+  `wall_attachment_placement.gd::footprint()`, a static table that this branch
+  does not modify, and none of my script diffs touch placement, overlap,
+  validity or reason strings. A 5-run A/B (3 branch / 2 main) is running to
+  establish whether this is the test's 65 s scene-load deadline being flaky
+  rather than a regression. **Treat as unresolved until that finishes.**
+
+**Dead-weight audit.** Grepping every `hearthvale_*` name across `scripts/`,
+`tests/` and `scenes/` showed 22 of the assets I authored are referenced by
+nothing: 13 Tier A furniture pieces (the hamlet still builds bench, signpost,
+lamp post, maypole, notice board, pumpkin post, hay cart, well, market cross,
+stone bench, water pump, chopping block and log stack **procedurally**) plus 9
+bare `author_props` aliases of those same shapes.
+
+`bake_targets.py` now carries an explicit `UNWIRED` set. Those sources stay in
+`assets/source/magicavoxel/` as reviewable voxel art, and are deliberately not
+baked, because `export_presets.cfg` has no include filter — every `.res` in
+`assets/models/magicavoxel/` ships in the APK. Removing their baked files
+dropped the asset directory 9.4 MB → 7.7 MB and the shipped `.res` count 78 →
+56. Wiring one up later means moving its name out of `UNWIRED` and giving the
+runtime a path to it.
+
+`hearthvale_furniture_lantern` stays baked: `m2_lantern_mesh_contract_test.gd`
+is the authority for its extents (≤ 0.0625) and the runtime glow consumes it.
