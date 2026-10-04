@@ -54,14 +54,17 @@ jobs:
         run: |
           set -euo pipefail
           TAG=$(jq -r '.engine.tag' dependencies.lock.json)
-          LINUX="Godot_v${TAG}_linux.x86_64"
+          # The release ships the Linux editor as a zip, not a bare binary.
+          ZIP="Godot_v${TAG}_linux.x86_64.zip"
+          BIN="Godot_v${TAG}_linux.x86_64"
           curl -sSfL -o godot_linux.zip \
-            "https://github.com/godotengine/godot-builds/releases/download/${TAG}/${LINUX}"
+            "https://github.com/godotengine/godot-builds/releases/download/${TAG}/${ZIP}"
           mkdir -p "$HOME/.local/share"
-          mv godot_linux.zip "$HOME/.local/share/$LINUX"
-          chmod +x "$HOME/.local/share/$LINUX"
-          echo "godot_bin=$HOME/.local/share/$LINUX" >> "$GITHUB_ENV"
-          "$HOME/.local/share/$LINUX" --version
+          unzip -q -o godot_linux.zip -d "$HOME/.local/share"
+          test -f "$HOME/.local/share/$BIN"
+          chmod +x "$HOME/.local/share/$BIN"
+          echo "godot_bin=$HOME/.local/share/$BIN" >> "$GITHUB_ENV"
+          "$HOME/.local/share/$BIN" --version
 
       - name: Import the project
         run: |

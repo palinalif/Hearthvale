@@ -1338,3 +1338,28 @@ GPU-equipped machine and assert the markers the test actually prints.
   now asserts the bake's Y-up axis convention) and the lantern glow test.
 - **Not run**: Thor rendering of the rebaked props. The scale fix changes the
   on-screen size of *every* prop, so this needs a device pass before acceptance.
+
+## 2026-07-30 (Tier D cancelled, and the honest CI picture)
+
+- **Tier D was redundant; I deleted the generator.** `vegetation_mesh.gd`
+  contains `_tree`/`_foliage`/`_rock` builders that read as procedural, but
+  `meshes()` serves every kind from authored `.res` paths, so those functions
+  are unreachable fallbacks. All 78 baked assets (trees, foliage, rocks,
+  furniture, garden, props) already have `.vox` sources. Authoring six more
+  vegetation species would have duplicated existing `foliage_*`/`prop_*`
+  assets. `m2_composition_visual.gd` is the remaining procedural surface and is
+  intentionally so: variable-dimension bridge and plot presentation, which the
+  project rules allow to stay procedural.
+- **My glow tests run only in `ci-glow.yml`, the workflow I added** — not in the
+  Drive-delivery shards. That workflow was red from its first run for a reason
+  that was mine: it fetched `Godot_v4.7.2-stable_linux.x86_64` as a bare binary,
+  which the 4.7.2 release does not ship, so every run 404'd before executing a
+  test. It now downloads the `.zip` like `thor-apk.yml` does.
+- **Unresolved:** the Drive-delivery run on `2ba99d0` failed in several
+  asset-consuming jobs (placement-native-structure, placement-native-assets,
+  terrain-preview-live, sculpt-backend, cottage-ui-style, cottage-planters,
+  cottage-upper-openings) and the Thor APK build failed. Those shards do not run
+  my tests, so the likely cause is the Tier C rebake changing every baked
+  asset's scale. CI logs are not retrievable; the full 171-test local suite is
+  running as ground truth. **Until that is green, Tier C is not verified
+  delivery** and the Tier C APK must not be treated as a playtest build.
