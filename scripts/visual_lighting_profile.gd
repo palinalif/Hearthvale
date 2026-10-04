@@ -1,5 +1,7 @@
-extends Resource
 class_name VisualLightingProfile
+extends Resource
+
+const WindowGlow = preload("res://scripts/m2_window_glow.gd")
 
 ## Opt-in look-development data; application never changes camera framing,
 ## shared source environments, meshes, or saved building/terrain records.
@@ -16,6 +18,28 @@ class_name VisualLightingProfile
 @export var sky_horizon := Color("#c4d1d5")
 @export var ground_bottom := Color("#505847")
 @export var ground_horizon := Color("#a8b6ac")
+## Emissive scale for placed lantern glass under this profile. Matches the
+## M2LanternGlow daylight baseline so the shipped look is unchanged.
+@export_range(0.0, 4.0, 0.01) var lamp_emissive_scale := 0.55
+## Flame light energy for placed lanterns under this profile.
+@export_range(0.0, 4.0, 0.01) var lamp_light_energy := 0.45
+## Lit-window strength for this look, applied through WindowGlow. Defaults
+## to the constant daylight value, so existing profiles keep the shipped
+## interior glow; dusk/night looks raise it.
+@export_range(0.0, 4.0, 0.01) var window_emissive_scale := WindowGlow.DAYLIGHT_EMISSIVE_SCALE
+
+## Night look. The old night ambient (0.03,0.04,0.06) at energy 0.35 rendered
+## the world as flat grey, which made every lamp look unlit. Night is lifted to
+## a low warm dusk and given a warm ground albedo so shaded volumes keep shape
+## and lamplight reads as warm against it.
+const NIGHT_AMBIENT := Color(0.10, 0.12, 0.18)
+const NIGHT_AMBIENT_ENERGY := 0.45
+const NIGHT_GROUND_ALBEDO := Color(0.34, 0.24, 0.13)
+
+func night_factor() -> float:
+	# Derived from the profile's own sun strength, never hand-authored per scene:
+	# full sun (1.25) is day, no sun is night.
+	return clampf(1.0 - sun_energy / 1.25, 0.0, 1.0)
 
 func apply_to(sun: DirectionalLight3D, world: WorldEnvironment) -> bool:
 	if not is_instance_valid(sun) or not is_instance_valid(world): return false
@@ -29,14 +53,15 @@ func apply_to(sun: DirectionalLight3D, world: WorldEnvironment) -> bool:
 	sun.rotation_degrees = sun_rotation_degrees
 	sun.light_color = sun_colour
 	sun.light_energy = sun_energy
-	environment.ambient_light_color = ambient_colour
-	environment.ambient_light_energy = ambient_energy
+	var night := night_factor()
+	environment.ambient_light_color = ambient_colour.lerp(NIGHT_AMBIENT, night)
+	environment.ambient_light_energy = lerpf(ambient_energy, NIGHT_AMBIENT_ENERGY, night)
 	if use_sky_fill:
 		var sky_material := ProceduralSkyMaterial.new()
 		sky_material.sky_top_color = sky_top
 		sky_material.sky_horizon_color = sky_horizon
-		sky_material.ground_bottom_color = ground_bottom
-		sky_material.ground_horizon_color = ground_horizon
+		sky_material.ground_bottom_color = ground_bottom.lerp(NIGHT_GROUND_ALBEDO, night)
+		sky_material.ground_horizon_color = ground_horizon.lerp(NIGHT_GROUND_ALBEDO, night)
 		# Radiance and blend are separate controls. Retain a little constant
 		# fill so canopy interiors and shaded facades remain readable.
 		sky_material.sky_energy_multiplier = sky_energy

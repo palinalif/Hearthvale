@@ -58,6 +58,25 @@ func _initialize() -> void:
 	check(not invalid.apply_to(sun, world) and world.environment == before, "out-of-range sky blend is atomically rejected")
 	check(not baseline.apply_to(null, world), "missing light is rejected")
 	check(baseline.apply_to(sun, world) and world.environment.sky == null, "switching back removes the candidate sky")
+	# Night look. Ambient is derived from the profile's own sun strength, so no
+	# scene hand-authors it, and it must stay a dim warm dusk rather than the
+	# old flat grey that made every lamp look unlit.
+	var night_profile := Profile.new()
+	night_profile.profile_id = &"night_probe"
+	night_profile.sun_energy = 0.0
+	world.environment = source
+	check(night_profile.night_factor() == 1.0, "night factor saturates with no sun")
+	var day_profile := Profile.new()
+	check(day_profile.night_factor() == 0.0, "night factor is zero at full sun")
+	check(night_profile.apply_to(sun, world), "night profile applies")
+	check(world.environment.ambient_light_color.is_equal_approx(Profile.NIGHT_AMBIENT), "night uses the lifted dusk ambient")
+	check(is_equal_approx(world.environment.ambient_light_energy, Profile.NIGHT_AMBIENT_ENERGY), "night uses the lifted dusk energy")
+	var old_flat := Color(0.03, 0.04, 0.06)
+	check(world.environment.ambient_light_color.get_luminance() > old_flat.get_luminance() * 0.35, "night ambient is brighter than the retired flat grey")
+	check(world.environment.ambient_light_energy < 0.6, "night ambient stays dim enough for lamps to read")
+	world.environment = source
+	check(day_profile.apply_to(sun, world), "daylight profile applies")
+	check(world.environment.ambient_light_color.is_equal_approx(day_profile.ambient_colour) and is_equal_approx(world.environment.ambient_light_energy, day_profile.ambient_energy), "daylight ambient is untouched by the night lift")
 	sun.free()
 	world.free()
 	print("visual_lighting_profile_test checks=%d failures=%d" % [checks, failures])

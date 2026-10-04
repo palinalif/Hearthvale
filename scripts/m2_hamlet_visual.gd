@@ -8,6 +8,14 @@ class_name M2HamletVisual
 const StarterProps = preload("res://scripts/m2_starter_props.gd")
 const Planters = preload("res://scripts/m2_planter_assets.gd")
 const TableAssets = preload("res://scripts/m2_table_assets.gd")
+const LanternAssets = preload("res://scripts/m2_lantern_assets.gd")
+const LanternGlow = preload("res://scripts/m2_lantern_glow.gd")
+
+## Flame position inside a lantern, in the lantern's own rotated frame. Matches
+## the glass box in _append_lantern, so the glow sits in the lamp it lights.
+const LANTERN_FLAME_LOCAL := Vector3(0.20, 1.10, 0.0)
+## Index of the glowing glass colour in the lantern palette.
+const LANTERN_GLOW_COLOUR_INDEX := 2
 const FURNITURE_COLOURS := {
 	"well": StarterProps.COLOURS["well"],
 	"chopping_block": StarterProps.COLOURS["chopping_block"],
@@ -34,6 +42,7 @@ const FURNITURE_COLOURS := {
 }
 
 var _furniture_nodes: Array[MeshInstance3D] = []
+var _glow_layers: Array[Node] = []
 var _furniture_preview_node: MeshInstance3D
 var _furniture_count := 0
 var _furniture_geometry_cells := 0
@@ -43,6 +52,9 @@ func rebuild_furniture(composition_values: Array, terrain_backend: Node = null) 
 	for node in _furniture_nodes:
 		if is_instance_valid(node): node.queue_free()
 	_furniture_nodes.clear()
+	for layer in _glow_layers:
+		if is_instance_valid(layer): layer.queue_free()
+	_glow_layers.clear()
 	_furniture_count = 0
 	_furniture_geometry_cells = 0
 	for value in composition_values:
@@ -73,6 +85,40 @@ func rebuild_furniture(composition_values: Array, terrain_backend: Node = null) 
 		add_child(node)
 		_furniture_nodes.append(node)
 		_furniture_count += 1
+		if style_id == "lantern":
+			var glow := LanternGlow.attach(
+				node, _lantern_flame_local(node, record),
+				FURNITURE_COLOURS["lantern"][LANTERN_GLOW_COLOUR_INDEX]) as Node
+			if glow != null: _glow_layers.append(glow)
+
+## Retune every placed lantern glow for a lighting profile (dusk/night).
+## Passing null restores the constant daylight look the shipped world uses.
+func apply_lantern_glow_profile(profile: Resource) -> void:
+	for layer in _glow_layers:
+		var glow := layer as M2LanternGlow
+		if glow != null: glow.apply_profile(profile)
+
+
+## Remove the lantern glow layers and hand the glass materials back untouched.
+func detach_lantern_glow() -> void:
+	for layer in _glow_layers:
+		var glow := layer as M2LanternGlow
+		if glow != null: glow.detach()
+	_glow_layers.clear()
+
+
+## Flame position for a lantern record, expressed in its own node's space.
+## Procedural furniture is built in world coordinates under an identity
+## transform while authored furniture is placed by its own transform, so the
+## flame is computed in world space and then converted. This keeps the light in
+## the lamp for both presentations and for any yaw.
+func _lantern_flame_local(node: Node3D, record: Dictionary) -> Vector3:
+	var point := _point(record.get("position", []))
+	var yaw_degrees := float(posmod(int(record.get("yaw_quarters", 0)), 4)) * 90.0
+	if record.has("yaw_degrees"): yaw_degrees = fposmod(float(record.get("yaw_degrees", 0.0)), 360.0)
+	var center := Vector3(point.x, _surface_height(point), point.y)
+	var world := center + Basis(Vector3.UP, deg_to_rad(yaw_degrees)) * LANTERN_FLAME_LOCAL
+	return node.to_local(world)
 
 func show_furniture_preview(style_id: String, point: Vector2, size: Vector2, yaw_degrees: float, valid: bool, colour_id: String = "") -> void:
 	hide_furniture_preview()
@@ -110,6 +156,7 @@ func stats() -> Dictionary:
 func _authored_assets(style_id: String) -> GDScript:
 	if Planters.has_style(style_id): return Planters
 	if TableAssets.has_style(style_id): return TableAssets
+	if LanternAssets.has_style(style_id): return LanternAssets
 	return null
 
 func _planter_transform(record: Dictionary) -> Transform3D:

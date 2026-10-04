@@ -865,6 +865,15 @@ func _axis(action: String, axis: JoyAxis, value: float) -> void:
 func _key(action: String, key: Key) -> void:
 	var event := InputEventKey.new(); event.keycode = key; InputMap.action_add_event(action, event)
 
+## Retune every cottage's lit windows for a lighting profile (presentation
+## only). Passing null restores the constant daylight look the shipped world
+## uses. Studies use this so dusk/night looks never touch building records.
+func apply_window_glow_profile(profile: Resource) -> void:
+	for value in cottage_visuals.values():
+		if value.has_method("apply_window_glow_profile"): value.apply_window_glow_profile(profile)
+	if cottage_visual != null and cottage_visual.has_method("apply_window_glow_profile"):
+		cottage_visual.apply_window_glow_profile(profile)
+
 ## World lighting, as a single overridable seam. This is the canonical M2 live
 ## look; an environment that wants a different atmosphere overrides just this
 ## method instead of re-copying the whole world build (which previously dropped

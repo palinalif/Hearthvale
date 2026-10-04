@@ -95,7 +95,7 @@ def merge_faces(faces):
     return merged
 
 
-def convert(source: Path, output: Path, unit: float, greedy: bool = False) -> dict:
+def convert(source: Path, output: Path, unit: float, greedy: bool = False, emissive: tuple[int, ...] = (), emissive_energy: float = 1.5) -> dict:
     if unit not in SUPPORTED_UNITS:
         raise ValueError("Hearthvale assets require the 0.125 terrain/structure tier or 0.0625 prop/detail tier")
     size, voxels, palette = read_vox(source)
@@ -154,6 +154,14 @@ def convert(source: Path, output: Path, unit: float, greedy: bool = False) -> di
     if greedy:
         receipt["meshing"] = "greedy coplanar same-palette rectangles; exact exposed-cell coverage"
         receipt["emitted_quads"] = sum(len(group) for group in faces.values())
+    if emissive:
+        # Light-source palette groups. bake_mesh.gd reads this and gives those
+        # surfaces emission, so an authored prop glows from its own material.
+        unknown = sorted(set(emissive) - set(faces))
+        if unknown:
+            raise ValueError(f"emissive palette indices not present in asset: {unknown}")
+        receipt["emissive_palette_indices"] = sorted(set(emissive))
+        receipt["emissive_energy"] = emissive_energy
     output.with_suffix(".asset.json").write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
     return receipt
 
@@ -164,10 +172,13 @@ def main() -> None:
     parser.add_argument("output", type=Path)
     parser.add_argument("--unit", type=float, default=0.125)
     parser.add_argument("--greedy", action="store_true")
+    parser.add_argument("--emissive", default="", help="comma-separated palette indices that emit light")
+    parser.add_argument("--emissive-energy", type=float, default=1.5)
     args = parser.parse_args()
     if not 0 < args.unit <= 1:
         raise SystemExit("unit must be in (0, 1]")
-    print(json.dumps(convert(args.source.resolve(), args.output.resolve(), args.unit, args.greedy), sort_keys=True))
+    emissive = tuple(int(part) for part in args.emissive.split(",") if part.strip())
+    print(json.dumps(convert(args.source.resolve(), args.output.resolve(), args.unit, args.greedy, emissive, args.emissive_energy), sort_keys=True))
 
 
 if __name__ == "__main__":
