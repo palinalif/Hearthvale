@@ -1480,5 +1480,15 @@ the known silent failure. Local suite on the corrected bake: 0 failures.
 debug keystore, so it cannot update in place over the existing playtest install.
 The user chose a **clean install** — install the CI APK as its own package and
 leave existing installs and saves untouched. No new local keystore is to be
-generated, and the documented local signing identity stays untouched. The glow
-preset's package is `org.hearthvale.game.test.m2night`.
+generated, and the documented local signing identity stays untouched.
+
+**CI job split (2026-07-30):** the glow job had grown an Android export step
+that failed for two stacked reasons — it looked for a
+`libvoxel.godot.so.*.release.java` file the pinned release never ships (the
+addon's own `bin/` already resolves arm64, so the injection was unnecessary),
+and it named a preset `"Android (debug)"` that does not exist; the project
+declares `Android ARM64`. Underneath both, this Linux runner has no Android
+SDK/JDK, so it cannot export at all. The export steps are removed: the
+**Thor playtest APK** workflow on the Windows runner is the single place that
+builds the ARM64 debug APK and verifies package, signature, architecture and
+the single `libvoxel` library. The glow job now runs the test suite only.
