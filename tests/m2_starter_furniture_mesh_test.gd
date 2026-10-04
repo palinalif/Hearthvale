@@ -89,9 +89,9 @@ func _check_style(style_id: String, mesh_path: String) -> void:
 	if FileAccess.file_exists(receipt_path):
 		var json := JSON.new()
 		if json.parse(FileAccess.get_file_as_string(receipt_path)) == OK:
-			var dims: Array = (json.data as Dictionary).get("occupied_bounds", {}) as Dictionary
-			var lo: Array = dims.get("min", []) as Array
-			var hi: Array = dims.get("max", []) as Array
+			var bounds: Dictionary = (json.data as Dictionary).get("occupied_bounds", {}) as Dictionary
+			var lo: Array = bounds.get("min", []) as Array
+			var hi: Array = bounds.get("max", []) as Array
 			if lo.size() == 3 and hi.size() == 3:
 				var want := Vector3(
 					float(hi[0]) - float(lo[0]), float(hi[1]) - float(lo[1]), float(hi[2]) - float(lo[2])
