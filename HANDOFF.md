@@ -921,3 +921,23 @@ Device state when v51 lands: `192.168.1.15:38865`, package
 `org.hearthvale.game.test.m2night`, upgrading code 50 -> 51 in place (same
 debug keystore, saves preserved). Water-mode B-exit fix (efa5af2) is on main
 and in every build since v49.
+
+## 2026-07-29 05:20 — lighting + authored props recovered onto `feat/m2-glow`
+
+**Incident.** The shared `/workspace/Hearthvale` checkout is being switched between
+branches by a concurrent agent (reflog: `task/natural-waterfall` →
+`feat/m2-drag-section-resize` → `feat/m2-voxel-prop-concepts`). That deleted
+`feature/visual-lighting-polish` and discarded uncommitted tracked edits. The
+work is recovered as commit `74e991d` on **`feat/m2-glow`**, pushed, in an
+isolated worktree at `/workspace/Hearthvale-glow` so no one can switch it out.
+
+**Also found:** `scenes/m2_hamlet.tscn`, `scripts/cottage.gd` and
+`scripts/m2_hamlet_scene.gd` are **untracked** in the shared checkout — the M2
+gameplay scene is not in any commit. Needs the user's decision.
+
+**On `feat/m2-glow`:** authored `.vox` + asset records for lantern, bench, hay
+cart, lamp post, market cross, maypole, notice board, signpost, stone well, tree
+stump, wood pile, wood cart (43 asset records total); `m2_lantern_glow.gd`;
+`m2_window_glow.gd` wired into `cottage_visual.gd`/`m1_scene.gd`;
+`visual_lighting_profile.gd` emissive stops; glow tests that skip where a source
+lacks the authored-prop layer.

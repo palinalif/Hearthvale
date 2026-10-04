@@ -22,3 +22,6 @@ tests/tmp_*.gd.uid
 AGENTS.md.bak-*
 _valley_shot.gd
 _valley_shot.gd.uid
+local.properties
+tools/_calib/
+tests/_probe/

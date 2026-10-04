@@ -1,5 +1,29 @@
 extends SceneTree
 
+func _receipt(source_path: String) -> Dictionary:
+	# vox_to_obj.py writes "<asset>.asset.json" beside the OBJ it emits.
+	var path := source_path.get_base_dir().path_join(source_path.get_file().get_basename() + ".asset.json")
+	if not FileAccess.file_exists(path): return {}
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null: return {}
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	return parsed if parsed is Dictionary else {}
+
+
+func _emissive_settings(receipt: Dictionary) -> Dictionary:
+	return {
+		"indices": receipt.get("emissive_palette_indices", []),
+		"energy": float(receipt.get("emissive_energy", 1.5)),
+	}
+
+
+func _palette_index(receipt: Dictionary, surface: int) -> int:
+	# The converter emits one OBJ material group per used palette index in
+	# ascending order, so surface N maps to receipt.palette_indices[N].
+	var indices: Array = receipt.get("palette_indices", [])
+	return int(indices[surface]) if surface < indices.size() else -1
+
+
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() < 2 or args.size() > 3:
@@ -17,6 +41,11 @@ func _initialize() -> void:
 		quit(2)
 		return
 	var baked := ArrayMesh.new()
+	# The .asset.json receipt beside the source OBJ may nominate palette indices
+	# that are light sources (lantern glass, flame). Those surfaces bake with
+	# emission so an authored prop glows by itself, without a runtime shader hack.
+	var receipt := _receipt(args[0])
+	var emissive := _emissive_settings(receipt)
 	var snapped_vertices := 0
 	for surface in source.get_surface_count():
 		var arrays := source.surface_get_arrays(surface)
@@ -36,6 +65,11 @@ func _initialize() -> void:
 		var material := imported_material.duplicate() as StandardMaterial3D
 		material.metallic = 0.0
 		material.roughness = 1.0
+		var palette_index := _palette_index(receipt, surface)
+		if emissive["indices"].has(palette_index):
+			material.emission_enabled = true
+			material.emission = material.albedo_color
+			material.emission_energy_multiplier = emissive["energy"]
 		baked.surface_set_material(surface, material)
 	var error := ResourceSaver.save(baked, str(args[1]))
 	print(JSON.stringify({"ok": error == OK, "source": str(args[0]), "output": str(args[1]), "unit": unit, "surfaces": baked.get_surface_count(), "vertices": snapped_vertices, "error": error}))
