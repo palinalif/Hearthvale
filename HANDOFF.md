@@ -1438,3 +1438,20 @@ script references (verified by grep across `tests/` and `scripts/`). Baked outpu
 
 `m2_starter_furniture_mesh_test` (26 authored styles), `m2_starter_prop_asset_test`
 (64 checks) and `m2_lantern_mesh_contract_test` all pass on the corrected state.
+
+## 2026-10-04 (planter A/B: deterministic, not flaky — and CI never runs this test)
+
+Interleaved runs of `tests/m2_planter_placement_test.gd`, same engine, same voxel
+extension, both trees:
+
+| Tree | Runs | Result |
+| --- | --- | --- |
+| `feat/m2-glow` | 3 | `ok:false`, 1 failure each |
+| `origin/main` | 2 | `ok:false`, 1 failure each |
+
+Identical every time, so this is **not** flakiness — it is a deterministic
+pre-existing failure in `main`'s placement code, and the prop/lighting work does not
+change it. Note for whoever owns the test: `m2_planter_placement_test` is **not in any
+CI workflow's test list** (`ci-glow.yml` has zero planter entries; only
+`cottage-playtest.yml` mentions planters, as screenshot scenes), so a green CI has
+never covered this assertion.
