@@ -15,26 +15,37 @@ jobs:
     name: Glow lighting checks
     runs-on: ubuntu-24.04
     timeout-minutes: 25
-    env:
-      VOXEL_VERSION: v1.7.1
-      VOXEL_ARCHIVE: voxel-windows-template-release.zip
-      VOXEL_SHA256: 118e9b63d5bb2f6e45f0eff51d9023f6429cc05f877e2c45659354d692e60908
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install the arm64 voxel extension
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install the pinned voxel extension
+        # The extension is gitignored, so a checkout without it exports an APK
+        # that boots with no voxel terrain. Install it from the archive pinned
+        # in dependencies.lock.json and verify the pinned checksum, exactly as
+        # the M2 jobs do. The editor library is what headless import and export
+        # load; the arm64 library is what the APK needs.
         run: |
           set -euo pipefail
-          # The pinned release ships no linux archive; the working M2 job uses the
-          # locked archive's windows x86_64 library on the same runners, so do the same.
-          curl -sSfL -o /tmp/voxel.zip \
-            "https://github.com/Coding-Works/GodotVoxelExtension/releases/download/${VOXEL_VERSION}/${VOXEL_ARCHIVE}"
-          echo "${VOXEL_SHA256}  /tmp/voxel.zip" | sha256sum -c -
-          unzip -q /tmp/voxel.zip -d /tmp/voxel
-          find /tmp/voxel -name 'voxel.windows.x86_64.dll' -exec install -D -m755 {} addons/zylann.voxel/bin/voxel.windows.x86_64.dll \;
-          test -s addons/zylann.voxel/bin/voxel.windows.x86_64.dll
+          url=$(jq -r '.voxel.url' dependencies.lock.json)
+          sha=$(jq -r '.voxel.sha256' dependencies.lock.json)
+          echo "Fetching $url"
+          curl -fsSL -o /tmp/voxel.zip "$url"
+          echo "$sha  /tmp/voxel.zip" | sha256sum -c -
+          mkdir -p /tmp/voxel
+          unzip -q -o /tmp/voxel.zip -d /tmp/voxel
+          editor_so=$(find /tmp/voxel -name 'libvoxel.godot.so.*.editor.java' | head -1)
+          test -n "$editor_so"
+          mkdir -p addons/zylann.voxel/bin
+          install -m755 "$editor_so" addons/zylann.voxel/bin/libvoxel.godot.so
+          ls -l addons/zylann.voxel/bin
+
       - name: Install Godot
         run: |
           set -euo pipefail
@@ -43,30 +54,96 @@ jobs:
           unzip -q /tmp/godot.zip -d /tmp/godot
           chmod +x /tmp/godot/Godot_v4.7-stable_linux.x86_64
           echo "GODOT_BIN=/tmp/godot/Godot_v4.7-stable_linux.x86_64" >> "$GITHUB_ENV"
+
       - name: Import the project
         run: |
           set -euo pipefail
           "$GODOT_BIN" --headless --path . --import
+
       - name: Verify the authored voxel sources
         run: |
           set -euo pipefail
           python3 tools/magicavoxel/author_furniture.py
           python3 tools/magicavoxel/author_props.py
-      - name: Bake the authored meshes
-        run: |
-          set -euo pipefail
-          for src in assets/source/magicavoxel/hearthvale_furniture_*.vox assets/source/magicavoxel/hearthvale_prop_*.vox; do
-            base=$(basename "$src" .vox)
-            "$GODOT_BIN" --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- \
-              "res://$src" "res://assets/models/magicavoxel/${base}.res"
-          done
-      - name: Verify the baked mesh contract
-        run: |
-          set -euo pipefail
-          "$GODOT_BIN" --headless --path . --script res://tests/m2_starter_furniture_mesh_test.gd
+
       - name: Run the lighting test suites
+        # Godot's --script exits non-zero when the script calls quit(1), so each
+        # suite gates on its own exit code. The committed meshes are baked by
+        # tools/magicavoxel/bake_all.sh and verified by the coverage test below;
+        # rebaking them here would only prove the runner can write files that
+        # are already committed.
         run: |
           set -euo pipefail
-          for suite in tests/visual_lighting_profile_test.gd tests/m2_lantern_glow_test.gd tests/m2_lantern_mesh_contract_test.gd tests/m2_window_glow_test.gd; do
+          for suite in \
+            tests/magicavoxel_asset_test.gd \
+            tests/m2_lantern_mesh_test.gd \
+            tests/m2_lantern_mesh_contract_test.gd \
+            tests/m2_starter_furniture_mesh_test.gd \
+            tests/visual_lighting_profile_test.gd \
+            tests/m2_lantern_glow_test.gd \
+            tests/m2_window_glow_test.gd
+          do
+            echo "::group::${suite}"
             "$GODOT_BIN" --headless --path . --script "res://${suite}"
+            echo "::endgroup::"
           done
+
+      - name: Install the Android export templates
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/templates.tpz \
+            "https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_export_templates.tpz"
+          unzip -q /tmp/templates.tpz -d /tmp/templates
+          # The archive contains a single 'templates' directory.
+          test -d /tmp/templates/templates
+          mkdir -p "$HOME/.local/share/godot/export_templates/4.7.1"
+          cp -a /tmp/templates/templates/. "$HOME/.local/share/godot/export_templates/4.7.1/"
+          ls "$HOME/.local/share/godot/export_templates/4.7.1" | head -5
+
+      - name: Prepare the Android debug keystore
+        # Godot needs a keystore to sign the APK. Generate an ephemeral debug
+        # one on the runner, as the Windows APK jobs do.
+        run: |
+          set -euo pipefail
+          keystore="$HOME/.android/debug.keystore"
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$keystore" ]; then
+            keytool -genkeypair -v -keystore "$keystore" -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android \
+              -dname 'CN=Android Debug,O=Android,C=US' -noprompt
+          fi
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$keystore" >> "$GITHUB_ENV"
+
+      - name: Export debug Android APK
+        run: |
+          set -euo pipefail
+          # The Android export template finds the extension's arm64 library in
+          # the template directory. Without it the APK exports "successfully"
+          # and renders no terrain.
+          template_dir="$HOME/.local/share/godot/export_templates/4.7.1"
+          mkdir -p "$template_dir/android_arm64"
+          arm_so=$(find /tmp/voxel -path '*android_arm64*' -name 'libvoxel.godot.so.*.release.java' | head -1)
+          test -n "$arm_so"
+          install -m755 "$arm_so" "$template_dir/android_arm64/"
+          ls -l "$template_dir/android_arm64"
+          mkdir -p builds
+          "$GODOT_BIN" --headless --path . \
+            --export-debug "Android (debug)" \
+            "builds/hearthvale-m2-glow-debug.apk"
+          ls -l builds
+
+      - name: Verify the APK contains the voxel library
+        # A missing libvoxel is the known silent failure: the export succeeds,
+        # the app boots, and the voxel world never renders.
+        run: |
+          set -euo pipefail
+          unzip -l builds/hearthvale-m2-glow-debug.apk | grep -E "lib/arm64-v8a/libvoxel.*\.so"
+          unzip -l builds/hearthvale-m2-glow-debug.apk | grep -q "libvoxel"
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: hearthvale-m2-glow-debug-apk
+          path: builds/hearthvale-m2-glow-debug.apk
+          if-no-files-found: error
