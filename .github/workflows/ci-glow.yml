@@ -17,6 +17,7 @@ jobs:
     timeout-minutes: 25
     env:
       VOXEL_VERSION: v1.7.1
+      VOXEL_ARCHIVE: voxel-windows-template-release.zip
       VOXEL_SHA256: 118e9b63d5bb2f6e45f0eff51d9023f6429cc05f877e2c45659354d692e60908
     steps:
       - uses: actions/checkout@v4
@@ -26,12 +27,14 @@ jobs:
       - name: Install the arm64 voxel extension
         run: |
           set -euo pipefail
+          # The pinned release ships no linux archive; the working M2 job uses the
+          # locked archive's windows x86_64 library on the same runners, so do the same.
           curl -sSfL -o /tmp/voxel.zip \
-            "https://github.com/Coding-Works/GodotVoxelExtension/releases/download/${VOXEL_VERSION}/voxel-linux-template-release.zip"
+            "https://github.com/Coding-Works/GodotVoxelExtension/releases/download/${VOXEL_VERSION}/${VOXEL_ARCHIVE}"
           echo "${VOXEL_SHA256}  /tmp/voxel.zip" | sha256sum -c -
           unzip -q /tmp/voxel.zip -d /tmp/voxel
-          find /tmp/voxel -name 'voxel.linux.arm64.so' -exec install -D -m755 {} addons/zylann.voxel/bin/voxel.linux.arm64.so \;
-          test -s addons/zylann.voxel/bin/voxel.linux.arm64.so
+          find /tmp/voxel -name 'voxel.windows.x86_64.dll' -exec install -D -m755 {} addons/zylann.voxel/bin/voxel.windows.x86_64.dll \;
+          test -s addons/zylann.voxel/bin/voxel.windows.x86_64.dll
       - name: Install Godot
         run: |
           set -euo pipefail
