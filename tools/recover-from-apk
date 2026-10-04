@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Recover lost scenes/scripts from an installed APK (or any Godot APK/PCK).
+#
+# Why this exists: an uncommitted file deleted from a shared checkout has no git object and no
+# backup, so the only surviving copy of it is the compiled resource inside an installed build.
+#
+# What is recoverable, precisely:
+#   scenes  (.scn)  -> full source. Godot loads the binary scene and re-saves it as text .tscn.
+#   scripts (.gdc)  -> bytecode only. Godot 4 compiles GDScript to a binary token stream; this
+#                      tool extracts and inventories it, it does NOT produce readable source.
+#                      Recovering a script's source needs a decompiler (gdtoolkit's gddecompiler)
+#                      or reconstruction from its tests, callers and reports.
+#
+# Usage: tools/recover-from-apk <apk|pck> [output-dir]
+#        tools/recover-from-apk --device <serial> [output-dir]   (pulls the installed APK first)
+set -euo pipefail
+
+out="${2:-recovered}"
+serial=""
+src=""
+
+if [ "${1:-}" = "--device" ]; then
+  serial="${2:-}"
+  out="${3:-recovered}"
+  [ -n "$serial" ] || { echo "usage: tools/recover-from-apk --device <adb-serial> [out-dir]" >&2; exit 2; }
+  pkg="$(adb -s "$serial" shell pm list packages | sed 's/package://' | grep -i hearthvale | head -1)"
+  [ -n "$pkg" ] || { echo "no Hearthvale package found on $serial" >&2; exit 1; }
+  path="$(adb -s "$serial" shell pm path "$pkg" | sed 's/package://' | tr -d '\r')"
+  echo "pulling $pkg from $serial ($path)"
+  mkdir -p "$out"
+  adb -s "$serial" pull "$path" "$out/installed.apk"
+  src="$out/installed.apk"
+else
+  src="${1:?usage: tools/recover-from-apk <apk|pck> [out-dir]}"
+fi
+
+mkdir -p "$out/payload"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+case "$src" in
+  *.apk)
+    # Godot ships its packed data as assets/export-*.pck (or libgodot... + .pck) inside the APK.
+    unzip -o -q "$src" -d "$work/apk" 'assets/*' 'lib/*' || true
+    find "$work/apk" -name '*.pck' -o -name '*.pckx' | while read -r p; do
+      echo "found packed data: $p"
+      cp "$p" "$out/payload/"
+    done
+    ;;
+  *.pck|*.pckx) cp "$src" "$out/payload/" ;;
+  *) echo "expected an .apk or .pck input" >&2; exit 2 ;;
+esac
+
+pck="$(find "$out/payload" -name '*.pck' -o -name '*.pckx' | head -1)"
+if [ -z "$pck" ]; then
+  echo "no .pck found in $src — this APK was likely built without the Godot pack (check export)." >&2
+  exit 1
+fi
+
+echo "=== inventory ==="
+# Godot's own extractor: list the resources the pack contains.
+godot --headless --path . --write-resource-metadata "$pck" >/dev/null 2>&1 || true
+python3 - "$pck" <<'PY'
+import re, sys, pathlib
+raw = pathlib.Path(sys.argv[1]).read_bytes()
+names = set(re.findall(rb'res://[\x20-\x7e]{3,200}', raw))
+paths = sorted(n.decode() for n in names)
+scenes = [p for p in paths if p.endswith(('.scn', '.tscn'))]
+scripts = [p for p in paths if p.endswith(('.gdc', '.gd'))]
+print(f"resources referenced: {len(paths)}  scenes: {len(scenes)}  scripts: {len(scripts)}")
+for group, label in ((scenes, 'scene'), (scripts, 'script')):
+    for p in group[:40]:
+        print(f"  {label}: {p}")
+    if len(group) > 40:
+        print(f"  ... {len(group)-40} more {label} entries")
+PY
+
+cat <<'EOF'
+
+=== next step for scenes ===
+Load each binary scene in Godot and re-save it as text, e.g. a throwaway editor script that does:
+  var scene := load("res://scenes/cottage.scn")            # from the extracted pack
+  ResourceSaver.set_flags(ResourceSaver.SET_TEXT_MESH_KEEP_STRUCTURE)  # text serialization
+  ResourceSaver.save(scene, "res://recovered/cottage.tscn")
+Run it with: godot --headless --path <project-with-the-pack-mounted> --script <that script>
+
+=== next step for scripts ===
+.gdc is compiled bytecode. Install a GDScript decompiler (gdtoolkit's gddecompiler) to recover
+readable source, or reconstruct from the script's tests, its callers, and the project reports.
+EOF
