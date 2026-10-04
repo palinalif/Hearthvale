@@ -21,6 +21,7 @@ PLAN=/tmp/hearthvale-bake-plan.tsv
 # 1. Author the script-built sources.
 python3 tools/magicavoxel/author_props.py
 python3 tools/magicavoxel/author_furniture.py
+python3 tools/magicavoxel/author_tier_b.py assets/source/magicavoxel >/dev/null
 
 # 2. Vectorize every .vox into an OBJ, carrying the unit, emissive palettes and
 #    meshing mode recorded in that asset's own receipt.
