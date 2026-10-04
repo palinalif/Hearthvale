@@ -106,67 +106,7 @@ jobs:
             echo "::endgroup::"
           done
 
-      - name: Install the Android export templates
-        # Pinned to the lock, and installed under the version directory Godot
-        # looks for. The archive's inner directory name varies by release, so
-        # locate it by its version.txt rather than hardcoding a name.
-        run: |
-          set -euo pipefail
-          TAG=$(jq -r '.engine.tag' dependencies.lock.json)
-          SHA=$(jq -r '.engine.templates_sha512' dependencies.lock.json)
-          URL=$(jq -r '.engine.templates_url' dependencies.lock.json)
-          curl -sSfL -o /tmp/templates.tpz "$URL"
-          echo "$SHA  /tmp/templates.tpz" | sha512sum -c -
-          VER="${TAG%-stable}.stable"
-          unzip -q /tmp/templates.tpz -d /tmp/templates
-          SRC=$(dirname "$(find /tmp/templates -name version.txt | head -1)")
-          test -n "$SRC"
-          mkdir -p "$HOME/.local/share/godot/export_templates/$VER"
-          cp -a "$SRC"/. "$HOME/.local/share/godot/export_templates/$VER/"
-          ls "$HOME/.local/share/godot/export_templates/$VER" | head -5
-
-      - name: Prepare the Android debug keystore
-        # Godot needs a keystore to sign the APK. Generate an ephemeral debug
-        # one on the runner, as the Windows APK jobs do.
-        run: |
-          set -euo pipefail
-          keystore="$HOME/.android/debug.keystore"
-          mkdir -p "$HOME/.android"
-          if [ ! -f "$keystore" ]; then
-            keytool -genkeypair -v -keystore "$keystore" -alias androiddebugkey \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass android -keypass android \
-              -dname 'CN=Android Debug,O=Android,C=US' -noprompt
-          fi
-          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$keystore" >> "$GITHUB_ENV"
-
-      - name: Export debug Android APK
-        run: |
-          set -euo pipefail
-          # The extension's arm64 library is resolved by voxel.gdextension from
-          # addons/zylann.voxel/bin (android.release.arm64 -> the pinned
-          # template_release .so), which the install step verified above. The
-          # pinned release ships no .java wrapper, so there is nothing to inject
-          # into the export-template directory; the APK check below is the guard
-          # against the known silent failure (export succeeds, terrain absent).
-          test -f addons/zylann.voxel/bin/libvoxel.android.template_release.arm64.so
-          mkdir -p builds
-          "$godot_bin" --headless --path . \
-            --export-debug "Android ARM64" \
-            "builds/hearthvale-m2-glow-debug.apk"
-          ls -l builds
-
-      - name: Verify the APK contains the voxel library
-        # A missing libvoxel is the known silent failure: the export succeeds,
-        # the app boots, and the voxel world never renders.
-        run: |
-          set -euo pipefail
-          unzip -l builds/hearthvale-m2-glow-debug.apk | grep -E "lib/arm64-v8a/libvoxel.*\.so"
-          unzip -l builds/hearthvale-m2-glow-debug.apk | grep -q "libvoxel"
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: hearthvale-m2-glow-debug-apk
-          path: builds/hearthvale-m2-glow-debug.apk
-          if-no-files-found: error
+      # The ARM64 debug APK is built by the "Thor playtest APK" workflow on the
+      # Windows runner: that runner has the Android SDK/JDK this Linux runner
+      # lacks, and it already verifies package, signature, architecture and the
+      # single libvoxel library. This job runs the test suite only.
