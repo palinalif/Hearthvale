@@ -77,6 +77,10 @@ loading scene due to missing RendererEnvironment"), not from these changes.
 
 ## Next
 
+0. `tools/magicavoxel/bake_all.sh` is the bake pipeline; the older
+   `bake_props.gd` referenced in earlier notes below has been deleted because
+   the `.vox` importer's scene output broke it.
+
 1. Promote the 13 facelifted sources by regenerating them into
    `assets/source/magicavoxel/` (the MCP writes gitignored `.vox.gz`, so the
    promotion copy step is mandatory), rebake, and update the voxel-count
