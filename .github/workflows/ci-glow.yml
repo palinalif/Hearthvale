@@ -151,7 +151,7 @@ jobs:
           test -f addons/zylann.voxel/bin/libvoxel.android.template_release.arm64.so
           mkdir -p builds
           "$godot_bin" --headless --path . \
-            --export-debug "Android (debug)" \
+            --export-debug "Android ARM64" \
             "builds/hearthvale-m2-glow-debug.apk"
           ls -l builds
 
