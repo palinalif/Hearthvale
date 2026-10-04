@@ -31,7 +31,7 @@ jobs:
           Expand-Archive -LiteralPath (Join-Path $root 'voxel.zip') -DestinationPath (Get-Location) -Force
           $editor = Get-ChildItem $root -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           if (-not $editor) { throw 'Console editor missing' }
-          if (-not (Test-Path -LiteralPath 'addons/zylann.voxel/bin/libvoxel.msvc.windows.release.x86_64.dll')) { throw 'Windows voxel extension missing' }
+          if (-not (Test-Path -LiteralPath 'addons/zylann.voxel/bin/libvoxel.windows.editor.x86_64.dll')) { throw 'Windows voxel extension missing' }
           $editor | ForEach-Object { $_.FullName } | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Import project
         shell: pwsh
@@ -55,31 +55,20 @@ jobs:
           }
           & $env:GODOT_EDITOR --headless --path . --import
           if ($LASTEXITCODE) { throw 'Project import failed' }
-      # The .res is a generated artifact; the .vox/.obj are the sources. Bake
-      # the authored meshes here so the runtime assets the tests load exist.
-      - name: Bake the authored prop and furniture meshes
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $props = @('bench','hay_cart','lamp_post','market_cross','maypole','notice_board','signpost','stone_bench','water_pump')
-          foreach ($prop in $props) {
-            & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- "res://assets/source/magicavoxel/hearthvale_$prop.vox" "res://assets/models/magicavoxel/hearthvale_$prop.res" 0.125
-            if ($LASTEXITCODE) { throw "bake failed for prop $prop" }
-          }
-          $furniture = @('bench','hay_cart','lamp_post','market_cross','maypole','notice_board','signpost','stone_bench','water_pump')
-          foreach ($style in $furniture) {
-            & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- "res://assets/source/magicavoxel/hearthvale_furniture_$style.vox" "res://assets/models/magicavoxel/hearthvale_furniture_$style.res" 0.0625
-            if ($LASTEXITCODE) { throw "bake failed for furniture style $style" }
-          }
-      # Baked meshes are committed artifacts (like the .vox sources), so CI
-      # asserts the set is complete rather than regenerating it.
+      # The baked .res meshes are committed artifacts alongside their .vox
+      # sources, so CI asserts the library is complete rather than regenerating
+      # it: a missing mesh silently falls back to primitives at runtime.
       - name: Assert the authored mesh library is complete
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $meshes = @('bench','hay_cart','lamp_post','market_cross','maypole','notice_board','signpost','stone_bench','water_pump')
-          foreach ($mesh in $meshes) {
-            if (-not (Test-Path -LiteralPath "assets/models/magicavoxel/hearthvale_$mesh.res")) { throw "baked mesh missing: hearthvale_$mesh.res" }
+          $props = @('bench','hay_cart','lamp_post','market_cross','maypole','notice_board','signpost','stone_bench','water_pump')
+          $furniture = @('bench','hay_cart','lamp_post','lantern','market_cross','maypole','notice_board','pumpkin_post','signpost','stone_bench','water_pump','well')
+          foreach ($prop in $props) {
+            if (-not (Test-Path -LiteralPath "assets/models/magicavoxel/hearthvale_$prop.res")) { throw "baked mesh missing: hearthvale_$prop.res" }
+          }
+          foreach ($style in $furniture) {
+            if (-not (Test-Path -LiteralPath "assets/models/magicavoxel/hearthvale_furniture_$style.res")) { throw "baked mesh missing: hearthvale_furniture_$style.res" }
           }
       - name: Run glow tests
         shell: pwsh
