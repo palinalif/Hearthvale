@@ -1305,3 +1305,36 @@ GPU-equipped machine and assert the markers the test actually prints.
 - Ten `hearthvale_prop_*.vox` concept files from the prop-concept line are
   present in this worktree **untracked** and are deliberately left alone; that
   work belongs to `feat/m2-voxel-prop-concepts`, not to this branch.
+
+## 2026-07-29 (prop authoring round 2) — Tier C, a bake scale bug, emission ownership
+
+- **Tier C authored and in the catalogue**: `village_well`, `planter_herbs`,
+  `planter_flowers`, `fence_section`, `fence_gate` (108–180 cells). All
+  starter props are baked from `.vox` sources except Tier D (vegetation and
+  miniatures).
+- **Desktop visual review passed**: the contact sheet shows the well's
+  curb-and-post ring, planters with soil and rim, fence rails passing *between*
+  the posts, and a gate opening at 120°. Reviewable at
+  `.tools/magicavoxel/props/contact-sheet.png`.
+- **Fixed a latent bake bug affecting every prop.** The bake applied the 0.125
+  cell size to all sources, so the 16 pre-existing 0.25-cell sources — bench,
+  campfire, chopping block, log stack, barrel, crate, cart wheel, market stall,
+  signpost, lantern — baked at **half** their intended size. The bench was
+  1.25 × 0.75 × 0.5 m against a declared 2.0 × 1.0 × 0.9 m. The bake now scales
+  by source format (0.125 for editor sources, 0.25 for generated ones) and
+  records it in each receipt. Bench, well, chopping block and campfire now
+  match their declared footprints exactly.
+- **Emission belongs to the glow components, not the baked mesh.** Baking the
+  lantern's authored glow into its materials broke the M1 contract that
+  detaching a prop restores its authored materials exactly — the lantern glow
+  test caught it. Baked materials are tint-only; `M2LanternGlow` and
+  `M2WindowGlow` own all emission, and the bake receipt records *which*
+  surfaces glow so the components know where to attach. That is why the lantern
+  keeps glowing after a rebake with no hand-placed nodes.
+- **CI list**: this branch's CI lists have no `m2_starter_prop_asset` entry (an
+  earlier commit message claimed a file that does not exist here), so that test
+  is registered in `ci-full.yml`.
+- **Tests**: 7 registered suites green, including the prop asset test (which
+  now asserts the bake's Y-up axis convention) and the lantern glow test.
+- **Not run**: Thor rendering of the rebaked props. The scale fix changes the
+  on-screen size of *every* prop, so this needs a device pass before acceptance.
