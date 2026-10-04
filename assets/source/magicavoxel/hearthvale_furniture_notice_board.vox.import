@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://jwcnrc4ax3il"
+path="res://.godot/imported/hearthvale_furniture_notice_board.vox-6cd4fa69c9066e676119408cdf6998ce.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_furniture_notice_board.vox"
+dest_files=["res://.godot/imported/hearthvale_furniture_notice_board.vox-6cd4fa69c9066e676119408cdf6998ce.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://cp3olwqiuljgc"
+path="res://.godot/imported/hearthvale_furniture_stone_bench.vox-400a04d427f7dfd3e6d3069c8857ba19.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_furniture_stone_bench.vox"
+dest_files=["res://.godot/imported/hearthvale_furniture_stone_bench.vox-400a04d427f7dfd3e6d3069c8857ba19.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://bnh6k6hworin1"
+path="res://.godot/imported/hearthvale_furniture_water_pump.vox-f24057ee47c52ca6cb54a4c2d5a63f04.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_furniture_water_pump.vox"
+dest_files=["res://.godot/imported/hearthvale_furniture_water_pump.vox-f24057ee47c52ca6cb54a4c2d5a63f04.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

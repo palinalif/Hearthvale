@@ -277,6 +277,80 @@ def build_lantern() -> Prop:
     return p
 
 
+def build_market_cross() -> Prop:
+    """Market cross: stepped stone plinth, banded timber mast, shingled canopy."""
+    p = Prop(1.5, 1.5, 2.5)
+    # Stepped plinth.
+    p.block(-0.75, -0.75, 0.0, 0.75, 0.75, 0.125, STONE_DARK)
+    p.block(-0.625, -0.625, 0.125, 0.625, 0.625, 0.25, STONE_MID)
+    p.block(-0.5, -0.5, 0.25, 0.5, 0.5, 0.375, STONE_MID)
+    # Mast with iron bands.
+    p.block(-0.125, -0.125, 0.375, 0.125, 0.125, 2.0, WOOD_DARK)
+    for bz in (0.625, 1.25, 1.875):
+        p.block(-0.1875, -0.1875, bz, 0.1875, 0.1875, bz + 0.0625, IRON)
+    # Four corner posts.
+    for px in (-0.5625, 0.5):
+        for py in (-0.5625, 0.5):
+            p.block(px, py, 0.375, px + 0.125, py + 0.125, 1.875, WOOD_MID)
+            p.block(px, py, 1.875, px + 0.125, py + 0.125, 1.9375, IRON)
+    # Canopy tie beams.
+    p.block(-0.5625, -0.5625, 1.9375, 0.625, 0.625, 2.0, WOOD_DARK)
+    p.block(-0.5625, -0.125, 1.9375, 0.625, 0.1875, 2.0, WOOD_MID)
+    # Shingled canopy, layered outward then inward.
+    for step in range(9):
+        w = 0.75 - step * 0.0625
+        z = 2.0 + step * 0.0625
+        p.block(-w, -w, z, w, w, z + 0.0625, SHINGLE)
+    p.ball(0.0, 0.0, 2.5625, 0.125, COPPER)
+    # Hanging ring and candle stub under the canopy.
+    p.ring_at(0.0, 0.4375, 1.875, 0.125, IRON)
+    p.ball(0.0, 0.4375, 1.75, 0.09375, FLAME)
+    return p
+
+
+def build_stone_bench() -> Prop:
+    """Stone bench: two block feet under a chamfered timber seat."""
+    p = Prop(1.5, 0.5, 0.5)
+    # Stone feet with a recessed course.
+    for fx in (-0.625, 0.375):
+        p.block(fx, -0.1875, 0.0, fx + 0.25, 0.1875, 0.3125, STONE_DARK)
+        p.block(fx + 0.0625, -0.125, 0.3125, fx + 0.1875, 0.125, 0.375, STONE_MID)
+    # Timber seat, chamfered at the front edge.
+    p.block(-0.75, -0.25, 0.375, 0.75, 0.25, 0.4375, WOOD_MID)
+    p.block(-0.6875, -0.25, 0.4375, 0.6875, 0.1875, 0.5, WOOD_LIGHT)
+    # Iron brackets tying the seat to the feet.
+    for bx in (-0.5625, 0.4375):
+        p.block(bx, -0.0625, 0.3125, bx + 0.125, 0.0625, 0.4375, IRON)
+    # Plank seams so the seat does not read as one slab.
+    for sx in (-0.25, 0.25):
+        p.block(sx, -0.25, 0.375, sx + 0.03125, 0.25, 0.5, WOOD_DARK)
+    return p
+
+
+def build_water_pump() -> Prop:
+    """Water pump: stone curb, banded iron barrel, lever handle and spout."""
+    p = Prop(0.75, 0.75, 1.5)
+    # Stone curb and wet apron.
+    p.block(-0.375, -0.375, 0.0, 0.375, 0.375, 0.125, STONE_DARK)
+    p.ring_at(0.0, 0.0, 0.125, 0.3125, STONE_MID)
+    p.block(-0.25, -0.25, 0.125, 0.25, 0.25, 0.25, STONE_MID)
+    # Iron barrel with bands.
+    p.cyl_at(0.0, 0.0, 0.25, 1.25, 0.1875, IRON_LIGHT)
+    for bz in (0.375, 0.75, 1.125):
+        p.ring_at(0.0, 0.0, bz, 0.21875, IRON)
+    # Spout and drip block.
+    p.block(0.1875, -0.0625, 0.9375, 0.375, 0.0625, 1.0625, IRON)
+    p.block(0.3125, -0.0625, 0.6875, 0.375, 0.0625, 0.9375, IRON)
+    # Lever handle pivoting on a post.
+    p.block(-0.375, -0.09375, 0.25, -0.25, 0.09375, 1.25, WOOD_DARK)
+    p.block(-0.625, -0.0625, 1.25, -0.1875, 0.0625, 1.375, WOOD_MID)
+    p.ball(-0.625, 0.0, 1.3125, 0.09375, LEATHER)
+    p.ring_at(-0.3125, 0.0, 1.25, 0.09375, IRON)
+    # Rope loop on the barrel.
+    p.ring_at(0.0, 0.25, 1.0625, 0.125, ROPE)
+    return p
+
+
 FURNITURE: dict[str, dict] = {
     "bench": dict(build=build_bench, unit=UNIT, footprint=(1.25, 0.375, 0.8125)),
     "signpost": dict(build=build_signpost, unit=UNIT, footprint=(1.0, 0.125, 1.75)),
@@ -287,6 +361,9 @@ FURNITURE: dict[str, dict] = {
     "hay_cart": dict(build=build_hay_cart, unit=UNIT, footprint=(2.25, 1.0, 1.25)),
     "well": dict(build=build_well, unit=UNIT, footprint=(1.75, 1.75, 2.75)),
     "lantern": dict(build=build_lantern, unit=UNIT, footprint=(0.375, 0.375, 1.9375)),
+    "market_cross": dict(build=build_market_cross, unit=UNIT, footprint=(1.5, 1.5, 2.5)),
+    "stone_bench": dict(build=build_stone_bench, unit=UNIT, footprint=(1.5, 0.5, 0.5)),
+    "water_pump": dict(build=build_water_pump, unit=UNIT, footprint=(0.75, 0.75, 1.5)),
 }
 
 

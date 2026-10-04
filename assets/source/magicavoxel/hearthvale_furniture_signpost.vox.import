@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://daqn21y1vpo3m"
+path="res://.godot/imported/hearthvale_furniture_signpost.vox-57c2abe9c7ac1f9d0b79ca05837f85be.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_furniture_signpost.vox"
+dest_files=["res://.godot/imported/hearthvale_furniture_signpost.vox-57c2abe9c7ac1f9d0b79ca05837f85be.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://ndt8lwx14nct"
+path="res://.godot/imported/hearthvale_furniture_well.vox-791b63f2807db4317d3bbf85d7f8e191.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_furniture_well.vox"
+dest_files=["res://.godot/imported/hearthvale_furniture_well.vox-791b63f2807db4317d3bbf85d7f8e191.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

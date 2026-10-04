@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://cvng4fq3gvq6s"
+path="res://.godot/imported/hearthvale_furniture_pumpkin_post.vox-327c297649e569c22d99a95044a702ce.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_furniture_pumpkin_post.vox"
+dest_files=["res://.godot/imported/hearthvale_furniture_pumpkin_post.vox-327c297649e569c22d99a95044a702ce.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

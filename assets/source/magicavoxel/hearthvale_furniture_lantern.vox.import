@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://bliw8ynjti06r"
+path="res://.godot/imported/hearthvale_furniture_lantern.vox-d25b6183794a0c6fa493fa8c1a275d2d.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_furniture_lantern.vox"
+dest_files=["res://.godot/imported/hearthvale_furniture_lantern.vox-d25b6183794a0c6fa493fa8c1a275d2d.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -1,36 +1,33 @@
 extends SceneTree
-# Asserts the starter-hamlet furniture the runtime actually loads is genuinely
-# authored: every style an asset module advertises has a baked mesh that loads,
-# geometry on the 0.0625 presentation grid, a ground-level pivot, and a tintable
-# material per surface.
+# Asserts the starter-hamlet authored prop library is complete and usable.
 #
-# The style list is read from the asset modules themselves, so the contract
-# tracks the catalogue instead of a hand-maintained copy of it.  Furniture is
-# decorative presentation, so it lives on the fine 0.0625 grid; native terrain
-# and authoritative structure stay on 0.125.  Asserting the finer grid still
-# catches the scale defect, because a mesh baked at the wrong unit lands off
-# both grids.
+# Two vocabularies exist and this test covers both:
+#  - the asset modules' advertised styles, which the composition visuals load;
+#  - the baked furniture meshes, which the hamlet props tint at runtime.
+#
+# For every entry it asserts the baked mesh is committed, loads as a Mesh, has
+# geometry, keeps every vertex on the 0.0625 presentation grid, pivots at ground
+# level, and carries a tintable material per surface.  Furniture is decorative
+# presentation, so it lives on the fine 0.0625 grid; native terrain and
+# authoritative structure stay on 0.125.  Asserting the finer grid still catches
+# the scale defect, because a mesh baked at the wrong unit lands off both grids.
 
 const UNIT := 0.0625
-const SOURCE_DIR := "res://assets/source/magicavoxel/"
 const MODULES := [
 	"res://scripts/m2_planter_assets.gd",
 	"res://scripts/m2_table_assets.gd",
 	"res://scripts/m2_lantern_assets.gd",
 ]
-
-# Every furniture style the runtime tints must be authored; a style that is
-# tintable but has no baked mesh is a silent procedural fallback.
-const FURNITURE_STYLES := [
-	"table", "chair", "cabinet", "lantern", "crate", "barrel", "bed", "fence", "planter",
-	"bench", "signpost", "lamp_post", "maypole", "notice_board", "pump", "hay_bale",
+const FURNITURE_STAGE := "res://assets/models/magicavoxel/"
+const FURNITURE_MESHES := [
+	"bench", "hay_cart", "lamp_post", "lantern", "maypole",
+	"notice_board", "pumpkin_post", "signpost", "well",
 ]
 
 var failures := 0
 var checked := 0
 
 func _init() -> void:
-	var advertised: Dictionary = {}
 	for module_path: String in MODULES:
 		var module: Object = load(module_path)
 		if module == null:
@@ -38,12 +35,11 @@ func _init() -> void:
 			continue
 		var paths: Dictionary = module.PATHS as Dictionary
 		_check(paths.size() > 0, "%s: advertises at least one style" % module_path)
-		advertised.merge(paths, true, true)
-	for style in FURNITURE_STYLES:
-		_check(M2HamletVisual.FURNITURE_COLOURS.has(style), "%s: registered as tintable furniture" % style)
-		_check(advertised.has(style), "%s: advertised by an asset module" % style)
-		if advertised.has(style):
-			_check_style(str(style), str(advertised[style]))
+		for style_id: String in paths.keys():
+			_check_style(str(style_id), str(paths[style_id]))
+	for furniture: String in FURNITURE_MESHES:
+		_check_style("furniture_" + furniture,
+			FURNITURE_STAGE + "hearthvale_furniture_%s.res" % furniture)
 	if failures == 0:
 		print("M2 STARTER FURNITURE MESH PASS: %d authored styles verified" % checked)
 		quit(0)

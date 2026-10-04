@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://cvrsb56a1kx56"
+path="res://.godot/imported/hearthvale_furniture_market_cross.vox-7b1e9981c1ab33ecf49e7201477e54b5.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_furniture_market_cross.vox"
+dest_files=["res://.godot/imported/hearthvale_furniture_market_cross.vox-7b1e9981c1ab33ecf49e7201477e54b5.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true
