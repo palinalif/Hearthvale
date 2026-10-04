@@ -115,6 +115,93 @@ def build_bench() -> Prop:
     return p
 
 
+def _disc(p: Prop, cx: float, cz: float, radius: float, y: float, color: int) -> None:
+    """One cross-section slice of a horizontal cylinder running along y."""
+    steps = int(round(radius / 0.0625))
+    for dx in range(-steps, steps + 1):
+        for dz in range(-steps, steps + 1):
+            if dx * dx + dz * dz <= steps * steps:
+                p.at(cx + dx * 0.0625, y, cz + dz * 0.0625, color)
+
+
+def build_chopping_block() -> Prop:
+    """Barked stump with a pale ringed cut face and an axe buried in it."""
+    p = Prop(1.0, 1.0, 1.375)
+    r, height = 0.3125, 0.5
+    z = 0.0
+    while z < height - 1e-9:
+        for dx in range(-5, 6):
+            for dy in range(-5, 6):
+                dist = dx * dx + dy * dy
+                if dist > 25:
+                    continue
+                # Scalloped bark: every other course drops the outermost ring.
+                if dist == 25 and int(round(z / 0.0625)) % 2 == 0:
+                    continue
+                p.at(dx * 0.0625, dy * 0.0625, z, WOOD_DARK)
+        z += 0.0625
+    # Cut face: pale sapwood with darker growth rings and a bark rim.
+    for dx in range(-5, 6):
+        for dy in range(-5, 6):
+            dist = dx * dx + dy * dy
+            if dist > 25:
+                continue
+            ring = 1 if dist in (1, 9) else 0
+            colour = WOOD_LIGHT if ring == 0 else WOOD_MID
+            p.at(dx * 0.0625, dy * 0.0625, height, colour if dist < 25 else WOOD_DARK)
+    # Axe: stepped wooden haft, leather wrap at the head, iron wedge and blade.
+    for i in range(13):
+        p.at(0.0625 + i * 0.0625 * 0.5, 0.0, height + 0.0625 + i * 0.0625, WOOD_MID)
+        p.at(0.0625 + i * 0.0625 * 0.5, 0.0625, height + 0.0625 + i * 0.0625, WOOD_MID)
+    for i in (8, 9):
+        p.at(0.0625 + i * 0.0625 * 0.5, 0.0, height + 0.0625 + i * 0.0625, LEATHER)
+        p.at(0.0625 + i * 0.0625 * 0.5, 0.0625, height + 0.0625 + i * 0.0625, LEATHER)
+    head_z = height + 0.0625 + 12 * 0.0625
+    p.block(0.125, -0.0625, head_z - 0.125, 0.3125, 0.125, head_z + 0.0625, IRON)
+    # Wedded blade edge, tapering to a pale cutting line.
+    for i, width in enumerate((3, 2, 1)):
+        p.block(0.375, -width * 0.03125, head_z - 0.125 + i * 0.0625,
+                0.4375, width * 0.03125, head_z - 0.125 + i * 0.0625, IRON_LIGHT)
+    # A couple of fresh chips where the axe bit in.
+    p.block(-0.3125, 0.1875, 0.0, -0.25, 0.25, 0.0625, WOOD_LIGHT)
+    p.block(-0.375, -0.25, 0.0, -0.3125, -0.1875, 0.0625, WOOD_MID)
+    return p
+
+
+def build_log_stack() -> Prop:
+    """Three courses of split firewood with visible pale end grain."""
+    p = Prop(1.5, 1.0, 1.1875)
+    courses = ((-0.375, 0.0, 0.375), (-0.1875, 0.1875), (0.0,))
+    for layer, centres in enumerate(courses):
+        centre_z = 0.1875 + layer * 0.375
+        for cx in centres:
+            # Bark along the length, with a slight taper at the far end.
+            for y in range(-6, 7):
+                radius = 0.1875 if abs(y) < 6 else 0.125
+                steps = int(round(radius / 0.0625))
+                for dx in range(-steps, steps + 1):
+                    for dz in range(-steps, steps + 1):
+                        if dx * dx + dz * dz <= steps * steps:
+                            p.at(cx + dx * 0.0625, y * 0.0625, centre_z + dz * 0.0625, WOOD_DARK)
+            # End grain on both faces: pale disc with a darker core ring.
+            for y in (-0.375, 0.375):
+                for dx in range(-3, 4):
+                    for dz in range(-3, 4):
+                        dist = dx * dx + dz * dz
+                        if dist > 9:
+                            continue
+                        p.at(cx + dx * 0.0625, y, centre_z + dz * 0.0625,
+                             WOOD_MID if dist in (1, 5) else WOOD_LIGHT)
+    # One split half-log leaning against the stack, cut face out.
+    for y in range(-5, 6):
+        for dz in range(0, 3):
+            p.at(0.5625, y * 0.0625, 0.0625 + dz * 0.0625, WOOD_MID)
+    p.block(0.5, -0.3125, 0.0, 0.5, 0.3125, 0.1875, WOOD_LIGHT)
+    # Loose bark on the ground in front of the stack.
+    p.block(-0.5625, 0.4375, 0.0, -0.4375, 0.5, 0.0625, WOOD_DARK)
+    return p
+
+
 def build_signpost() -> Prop:
     p = Prop(1.0, 0.125, 1.75)
     p.block(-0.0625, -0.0625, 0.0, 0.0625, 0.0625, 1.75, WOOD_MID)
@@ -365,6 +452,8 @@ FURNITURE: dict[str, dict] = {
     "market_cross": dict(build=build_market_cross, unit=UNIT, footprint=(1.5, 1.5, 2.5)),
     "stone_bench": dict(build=build_stone_bench, unit=UNIT, footprint=(1.5, 0.5, 0.5)),
     "water_pump": dict(build=build_water_pump, unit=UNIT, footprint=(0.75, 0.75, 1.5)),
+    "chopping_block": dict(build=build_chopping_block, unit=UNIT, footprint=(1.0, 1.0, 1.375)),
+    "log_stack": dict(build=build_log_stack, unit=UNIT, footprint=(1.5, 1.0, 1.1875)),
 }
 
 
