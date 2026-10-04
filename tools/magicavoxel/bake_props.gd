@@ -22,13 +22,20 @@ func _init() -> void:
 	names.sort()
 	var baked := 0
 	var failures: Array[String] = []
-	for file in names:
-		var base := file.get_basename()
+	for file: String in names:
+		if not file.ends_with(".vox"):
+			continue
+		var base: String = file.trim_suffix(".vox")
 		if not base.begins_with("hearthvale_prop_") and base != "hearthvale_bench":
 			continue
-		var source := load("%s/%s.vox" % [SOURCE_DIR, base]) as Mesh
+		# The .vox importer hands back a VoxelModel, not a Mesh.
+		var model: Object = load("%s/%s.vox" % [SOURCE_DIR, base])
+		if model == null:
+			failures.append("%s: source did not load" % base)
+			continue
+		var source: Mesh = model.get_mesh() as Mesh
 		if source == null:
-			failures.append("%s: source did not load as a Mesh" % base)
+			failures.append("%s: source produced no mesh" % base)
 			continue
 		var result := _bake(source, "%s/%s.obj" % [MODEL_DIR, base])
 		if result != OK:
