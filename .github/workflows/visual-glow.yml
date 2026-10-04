@@ -34,6 +34,21 @@ jobs:
           $code = $LASTEXITCODE
           $log | Tee-Object -FilePath "$root/import.log"
           if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:') { throw 'Godot import failed' }
+      - name: Bake authored prop meshes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $editor = Get-ChildItem '.tools/glow' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          # Baked OBJ meshes are gitignored build artifacts, so the glow tests that
+          # assert on them must bake them from the tracked .vox sources first.
+          foreach ($vox in Get-ChildItem 'assets/source/magicavoxel' -Filter '*.vox' | Where-Object { $_.Name -like 'hearthvale_prop_*' -or $_.Name -like 'hearthvale_bench*' }) {
+            $obj = "res://assets/models/magicavoxel/$($vox.BaseName).obj"
+            $out = & $editor --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- "res://assets/source/magicavoxel/$($vox.Name)" $obj 0.125 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0 -or $out -notmatch '"ok":\s*true') {
+              $out | Tee-Object -FilePath '.tools/glow/bake.log'
+              throw "Bake failed for $($vox.Name)"
+            }
+          }
       - name: Verify lighting profile isolation
         shell: pwsh
         run: |
@@ -64,7 +79,7 @@ jobs:
         run: |
           $editor = Get-ChildItem '.tools/glow' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           $failed = @()
-          foreach ($test in @('magicavoxel_asset_test','m2_street_prop_asset_test','m2_obj_material_reference_test')) {
+          foreach ($test in @('magicavoxel_asset_test','m2_street_prop_asset_test','m2_obj_material_reference_test','m2_starter_prop_asset_test')) {
             $log = & $editor --headless --path . --script "tests/$test.gd" 2>&1 | Out-String
             $log | Tee-Object -FilePath ".tools/glow/$test.log"
             if ($LASTEXITCODE -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:') { $failed += $test }
