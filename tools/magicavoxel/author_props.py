@@ -60,6 +60,8 @@ PALETTE: list[tuple[int, int, int, int]] = [
     (214, 92, 74, 255),    # 22: HARVEST_BRICK
     (126, 132, 138, 255),  # 23: IRON_MID
     (236, 196, 128, 255),  # 24: WOOD_PALE
+    (255, 214, 140, 255),  # 25: LANTERN_GLASS
+    (255, 242, 196, 255),  # 26: LANTERN_FLAME
 ]
 
 WOOD_DARK, WOOD_MID, WOOD_LIGHT = 2, 3, 4
@@ -72,6 +74,7 @@ LOG_BARK, LOG_RING, LOG_CRACK = 16, 17, 18
 CANOPY_RED, CANOPY_CREAM = 19, 20
 HARVEST_GOLD, HARVEST_BRICK = 21, 22
 WOOD_PALE = 24
+LANTERN_GLASS, LANTERN_FLAME = 25, 26
 
 
 # --------------------------------------------------------------------------- builder
@@ -324,6 +327,27 @@ PROPS: dict[str, dict] = {
     "hearthvale_prop_chopping_block": dict(build=build_chopping_block, unit=0.125, footprint=(1.0, 1.0)),
     "hearthvale_prop_log_stack": dict(build=build_log_stack, unit=0.125, footprint=(1.5, 1.0)),
 }
+
+
+# Baked-mesh names for the furniture catalogue.  These match the names the
+# runtime asset helpers request from the authored mesh library, so a CI bake
+# derives the whole set from the sources instead of hand-listing it.
+MESH_NAMES = {
+    "bench": "bench",
+    "stone_bench": "stone_bench",
+    "signpost": "signpost",
+    "lamp_post": "lamp_post",
+    "maypole": "maypole",
+    "notice_board": "notice_board",
+    "water_pump": "water_pump",
+    "hay_cart": "hay_cart",
+    "market_cross": "market_cross",
+}
+
+
+def mesh_name(style: str) -> str:
+    """Return the baked-mesh name for a furniture style."""
+    return MESH_NAMES.get(style, style)
 
 
 def main(argv: list[str]) -> int:
