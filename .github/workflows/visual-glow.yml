@@ -39,14 +39,25 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $editor = Get-ChildItem '.tools/glow' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          # Baked OBJ meshes are gitignored build artifacts, so the glow tests that
-          # assert on them must bake them from the tracked .vox sources first.
+          # Baked meshes are gitignored build artifacts, so the glow tests that assert
+          # on them rebuild them from the tracked .vox sources. The pipeline is
+          # .vox -> vox_to_obj.py -> .obj -> (Godot import) -> bake_mesh.gd -> .res.
+          # bake_mesh.gd consumes the imported OBJ; feeding it a .vox yields a
+          # PackedScene and fails.
+          $baked = ''
           foreach ($vox in Get-ChildItem 'assets/source/magicavoxel' -Filter '*.vox' | Where-Object { $_.Name -like 'hearthvale_prop_*' -or $_.Name -like 'hearthvale_bench*' }) {
-            $obj = "res://assets/models/magicavoxel/$($vox.BaseName).obj"
-            $out = & $editor --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- "res://assets/source/magicavoxel/$($vox.Name)" $obj 0.125 2>&1 | Out-String
+            $base = "assets/models/magicavoxel/$($vox.BaseName)"
+            python tools/magicavoxel/vox_to_obj.py "assets/source/magicavoxel/$($vox.Name)" "$base.obj" --unit 0.125
+            if ($LASTEXITCODE -ne 0) { throw "vox_to_obj failed for $($vox.Name)" }
+            $baked += "$base.obj`n"
+          }
+          $import = & $editor --headless --path . --editor --import --quit 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) { $import | Tee-Object -FilePath '.tools/glow/bake-import.log'; throw 'Prop OBJ import failed' }
+          foreach ($obj in $baked.Trim().Split("`n")) {
+            $out = & $editor --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- "res://$obj" "res://$obj.res" 0.125 2>&1 | Out-String
             if ($LASTEXITCODE -ne 0 -or $out -notmatch '"ok":\s*true') {
               $out | Tee-Object -FilePath '.tools/glow/bake.log'
-              throw "Bake failed for $($vox.Name)"
+              throw "Bake failed for $obj"
             }
           }
       - name: Verify lighting profile isolation

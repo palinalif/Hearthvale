@@ -1,288 +1,366 @@
 #!/usr/bin/env python3
-"""Author Hearthvale standalone prop .vox sources parametrically.
+"""Author Hearthvale prop sources as MagicaVoxel .vox files.
 
-The MagicaVoxel MCP is a development convenience, not a build dependency: its
-tool surface and save location have changed several times, so the canonical
-sources for these props are generated here instead. Output is a plain
-MagicaVoxel 1.0.1 file, byte-compatible with the reader in vox_to_obj.py and
-with MagicaVoxel itself, so the normal pipeline (bake_mesh.gd -> OBJ ->
-ArrayMesh) consumes it unchanged.
+Hearthvale's canonical prop sources are MagicaVoxel files under
+``assets/source/magicavoxel``.  This script emits them in the binary MagicaVoxel
+format (magic ``VOX``, version 150, single ``MAIN`` model with ``SIZE``/``XYZI``/``RGBA``)
+so they are byte-compatible with the files MagicaVoxel itself writes and with the
+sources already tracked in the repository.
 
-Grid contract (assets/source/magicavoxel/README.md): 1 voxel cell = 0.125
-world unit for structural props. Dimensions are chosen on that grid.
+Every prop is authored parametrically so the source stays reviewable and
+reproducible: ``git diff`` on the .vox is opaque, the generator is not.
+
+Grid rules (see ``assets/source/magicavoxel/README.md``):
+
+* Terrain-adjacent structures and anything with a collision footprint stay on the
+  ``0.125`` structural grid.
+* Decorative presentation may use ``0.0625``; that is the furniture set's grid and
+  is declared per prop below.
+
+Footprints are authored to match the runtime catalogue in
+``scripts/m2_starter_props.gd`` exactly, so the baked mesh bounds, the placement
+footprint and the save record agree.
+
+Usage:
+    tools/magicavoxel/author_props.py                 # write all props
+    tools/magicavoxel/author_props.py --out DIR       # write elsewhere
+    tools/magicavoxel/author_props.py --only NAME     # one prop (repeatable)
+    tools/magicavoxel/author_props.py --selftest      # round-trip a tracked source
 """
-
 from __future__ import annotations
 
 import argparse
-import struct
+import pathlib
 import sys
-from pathlib import Path
 
-# MagicaVoxel format 150: "VOX " + version + a MAIN node whose MODEL children
-# carry SIZE, RGBA and an XYZI voxel list. This is the format the MagicaVoxel
-# MCP writes and the format vox_to_obj.py reads, so generated sources are
-# interchangeable with hand-authored ones.
-MAGIC = b"VOX "
-VERSION = 150
-CELL_UNITS = 0.125
+# --------------------------------------------------------------------------- palette
+# Warm, low-noise wood/stone/iron bands.  Values are 0-255 RGBA.
+PALETTE: list[tuple[int, int, int, int]] = [
+    (0, 0, 0, 0),          # 1: unused (index 0 is the empty cell)
+    (122, 84, 50, 255),    # 2: WOOD_DARK
+    (176, 126, 74, 255),   # 3: WOOD_MID
+    (214, 172, 116, 255),  # 4: WOOD_LIGHT
+    (92, 96, 100, 255),    # 5: IRON
+    (148, 152, 156, 255),  # 6: IRON_LIGHT
+    (116, 112, 106, 255),  # 7: STONE_DARK
+    (168, 164, 156, 255),  # 8: STONE_MID
+    (206, 202, 192, 255),  # 9: STONE_LIGHT
+    (56, 108, 148, 255),   # 10: WATER
+    (96, 152, 190, 255),   # 11: WATER_LIGHT
+    (104, 152, 78, 255),   # 12: GRASS
+    (140, 184, 104, 255),  # 13: GRASS_LIGHT
+    (232, 196, 96, 255),   # 14: STRAW
+    (196, 156, 66, 255),   # 15: STRAW_DARK
+    (150, 106, 62, 255),   # 16: LOG_BARK
+    (222, 190, 142, 255),  # 17: LOG_RING
+    (132, 88, 50, 255),    # 18: LOG_CRACK
+    (196, 62, 52, 255),    # 19: CANOPY_RED
+    (246, 238, 224, 255),  # 20: CANOPY_CREAM
+    (255, 214, 120, 255),  # 21: HARVEST_GOLD
+    (214, 92, 74, 255),    # 22: HARVEST_BRICK
+    (126, 132, 138, 255),  # 23: IRON_MID
+    (236, 196, 128, 255),  # 24: WOOD_PALE
+]
 
-
-def _node(chunk: bytes, content: bytes, children: bytes) -> bytes:
-    return chunk + struct.pack("<II", len(content), len(children)) + content + children
-
-
-def write_vox(path: Path, size: tuple[int, int, int], voxels: dict[tuple[int, int, int], int],
-              palette: list[tuple[int, int, int]]) -> None:
-    """Write a single-model MagicaVoxel format-150 file.
-
-    XYZI stores 1-based palette indices; index 0 is empty and is not written.
-    """
-    sx, sy, sz = size
-    for (x, y, z), idx in voxels.items():
-        if not (0 <= x < sx and 0 <= y < sy and 0 <= z < sz):
-            raise ValueError(f"voxel {(x, y, z)} outside model {size}")
-        if not 0 <= idx < 255:
-            raise ValueError(f"palette index {idx} out of range (1-255 are usable)")
-
-    size_node = _node(b"SIZE", struct.pack("<III", sx, sy, sz), b"")
-    rgba = b"".join(bytes((rgb[0], rgb[1], rgb[2], 255))
-                    for rgb in (list(palette) + [(0, 0, 0)] * 256)[:256])
-    rgba_node = _node(b"RGBA", rgba, b"")
-    ordered = sorted(voxels.items(), key=lambda kv: (kv[0][2], kv[0][1], kv[0][0]))
-    xyzi = struct.pack("<I", len(ordered)) + b"".join(
-        bytes((x, y, z, idx + 1)) for (x, y, z), idx in ordered)
-    xyzi_node = _node(b"XYZI", xyzi, b"")
-
-    model_children = size_node + xyzi_node + rgba_node
-    out = MAGIC + struct.pack("<I", VERSION) + _node(b"MAIN", b"", model_children)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(out)
-
-
-def read_vox(path: Path) -> tuple[tuple[int, int, int], dict[tuple[int, int, int], int], list]:
-    """Format-150 reader used by the round-trip self-test (mirrors vox_to_obj.py).
-
-    The MagicaVoxel MCP writes SIZE/XYZI/RGBA as direct MAIN children, so the
-    traversal is flat and generated files match hand-authored ones.
-    """
-    data = path.read_bytes()
-    if data[:4] != MAGIC:
-        raise ValueError(f"{path}: not a MagicaVoxel VOX file")
-    version = struct.unpack_from("<I", data, 4)[0]
-    if version != VERSION:
-        raise ValueError(f"{path}: unsupported VOX version {version}")
-    chunk, content_size, children_size = struct.unpack_from("<4sII", data, 8)
-    if chunk != b"MAIN":
-        raise ValueError("VOX MAIN chunk missing")
-    cursor = 20 + content_size
-    end = cursor + children_size
-    size = None
-    voxels: dict[tuple[int, int, int], int] = {}
-    palette = [(0, 0, 0, 0)] * 256
-    while cursor < end:
-        chunk, content_size, child_size = struct.unpack_from("<4sII", data, cursor)
-        content = cursor + 12
-        if chunk == b"SIZE":
-            size = struct.unpack_from("<III", data, content)
-        elif chunk == b"XYZI":
-            count = struct.unpack_from("<I", data, content)[0]
-            for i in range(count):
-                x, y, z, color = struct.unpack_from("<BBBB", data, content + 4 + i * 4)
-                if color:
-                    voxels[(x, y, z)] = color - 1
-        elif chunk == b"RGBA":
-            palette = [struct.unpack_from("<BBBB", data, content + i * 4) for i in range(256)]
-        cursor = content + content_size + child_size
-    if size is None or not voxels:
-        raise ValueError("VOX file has no usable model")
-    return size, voxels, palette
+WOOD_DARK, WOOD_MID, WOOD_LIGHT = 2, 3, 4
+IRON, IRON_LIGHT, IRON_MID = 5, 6, 23
+STONE_DARK, STONE_MID, STONE_LIGHT = 7, 8, 9
+WATER, WATER_LIGHT = 10, 11
+GRASS, GRASS_LIGHT = 12, 13
+STRAW, STRAW_DARK = 14, 15
+LOG_BARK, LOG_RING, LOG_CRACK = 16, 17, 18
+CANOPY_RED, CANOPY_CREAM = 19, 20
+HARVEST_GOLD, HARVEST_BRICK = 21, 22
+WOOD_PALE = 24
 
 
+# --------------------------------------------------------------------------- builder
 class Builder:
-    """Sparse voxel builder with a named palette."""
+    """Sparse voxel builder on a fixed size; emits MagicaVoxel format 150."""
 
-    def __init__(self, sx: int, sy: int, sz: int):
-        self.size = (sx, sy, sz)
-        self.voxels: dict[tuple[int, int, int], int] = {}
-        self.palette: list[tuple[int, int, int]] = []
-        self._colors: dict[tuple[int, int, int], int] = {}
+    def __init__(self, x: int, y: int, z: int) -> None:
+        self.size = (x, y, z)
+        self.cells: dict[tuple[int, int, int], int] = {}
 
-    def color(self, rgb: tuple[int, int, int]) -> int:
-        if rgb not in self._colors:
-            if len(self._colors) >= 256:
-                raise ValueError("palette full")
-            self._colors[rgb] = len(self.palette)
-            self.palette.append(rgb)
-        return self._colors[rgb]
+    # -- primitives ---------------------------------------------------------
+    def set(self, x: int, y: int, z: int, color: int) -> None:
+        if 0 <= x < self.size[0] and 0 <= y < self.size[1] and 0 <= z < self.size[2]:
+            self.cells[(x, y, z)] = color
 
-    def set(self, x: int, y: int, z: int, rgb: tuple[int, int, int]) -> None:
-        self.voxels[(x, y, z)] = self.color(rgb)
+    def get(self, x: int, y: int, z: int) -> int:
+        return self.cells.get((x, y, z), 0)
 
-    def box(self, x0: int, y0: int, z0: int, x1: int, y1: int, z1: int, rgb: tuple[int, int, int]) -> None:
-        idx = self.color(rgb)
-        for z in range(z0, z1 + 1):
+    def box(self, x0: int, y0: int, z0: int, x1: int, y1: int, z1: int, color: int) -> None:
+        for x in range(x0, x1 + 1):
             for y in range(y0, y1 + 1):
-                for x in range(x0, x1 + 1):
-                    self.voxels[(x, y, z)] = idx
+                for z in range(z0, z1 + 1):
+                    self.set(x, y, z, color)
 
-    def cylinder(self, cx: int, cy: int, z0: int, z1: int, radius: int, rgb: tuple[int, int, int],
-                 shell_only: bool = False) -> None:
-        idx = self.color(rgb)
-        r2 = radius * radius
-        for z in range(z0, z1 + 1):
-            for y in range(cy - radius, cy + radius + 1):
-                for x in range(cx - radius, cx + radius + 1):
-                    d = (x - cx) ** 2 + (y - cy) ** 2
-                    if d > r2:
-                        continue
-                    if shell_only and d < (radius - 1) ** 2:
-                        continue
-                    self.voxels[(x, y, z)] = idx
+    def shell(self, x0: int, y0: int, z0: int, x1: int, y1: int, z1: int, color: int) -> None:
+        """Box with its interior hollowed out."""
+        self.box(x0, y0, z0, x1, y1, z1, color)
+        for x in range(x0 + 1, x1):
+            for y in range(y0 + 1, y1):
+                for z in range(z0 + 1, z1):
+                    self.cells.pop((x, y, z), None)
 
-    def log(self, x0: int, x1: int, cy: int, cz: int, radius: int,
-            body: tuple[int, int, int], face: tuple[int, int, int], core: tuple[int, int, int]) -> None:
-        """A log lying along +X with a cut end face at x1."""
-        for z in range(cz - radius, cz + radius + 1):
-            for y in range(cy - radius, cy + radius + 1):
-                d = (y - cy) ** 2 + (z - cz) ** 2
-                if d > radius * radius:
+    def cyl(self, cx: int, cy: int, z0: int, z1: int, radius: int, color: int) -> None:
+        for x in range(self.size[0]):
+            for y in range(self.size[1]):
+                dx, dy = x - cx, y - cy
+                if dx * dx + dy * dy > radius * radius + radius:
                     continue
-                for x in range(x0, x1):
-                    self.set(x, y, z, body)
-                self.set(x1, y, z, face)
-                if d <= 1:
-                    self.set(x1, y, z, core)
+                for z in range(z0, z1 + 1):
+                    self.set(x, y, z, color)
 
-    def save(self, path: Path) -> None:
-        write_vox(path, self.size, self.voxels, self.palette)
+    def ring(self, cx: int, cy: int, z: int, radius: int, color: int) -> None:
+        for x in range(self.size[0]):
+            for y in range(self.size[1]):
+                d2 = (x - cx) ** 2 + (y - cy) ** 2
+                r2 = radius * radius
+                if r2 - radius <= d2 <= r2 + radius:
+                    self.set(x, y, z, color)
+
+    def log(self, x0: int, x1: int, y: int, z: int, radius: int,
+            bark: int, ring: int, crack: int) -> None:
+        """Horizontal log along X; both ends show growth rings."""
+        for x in range(x0, x1 + 1):
+            for dy in range(-radius, radius + 1):
+                for dz in range(-radius, radius + 1):
+                    d2 = dy * dy + dz * dz
+                    if d2 > radius * radius + radius:
+                        continue
+                    col = bark
+                    if d2 >= radius * radius - radius:
+                        col = ring
+                    if abs(dy) <= 1 and abs(dz) <= 1:
+                        col = crack
+                    self.set(x, y + dy, z + dz, col)
+
+    def slab(self, x0: int, y0: int, z0: int, x1: int, y1: int, color: int) -> None:
+        """One-cell-thick horizontal plate."""
+        self.box(x0, y0, z0, x1, y1, z0, color)
+
+    # -- output -------------------------------------------------------------
+    def vox(self) -> bytes:
+        x, y, z = self.size
+        out = bytearray(b"VOX " + (150).to_bytes(4, "little"))
+        out += b"MAIN" + b"\x00\x00\x00\x00"
+        out += b"SIZE" + b"\x0c\x00\x00\x00"
+        out += x.to_bytes(4, "little") + z.to_bytes(4, "little") + y.to_bytes(4, "little")
+        out += b"XYZI" + (len(self.cells) * 4).to_bytes(4, "little")
+        for (cx, cy, cz), color in sorted(self.cells.items()):
+            out += bytes((cx, cz, cy, color))
+        out += b"RGBA" + b"\x00\x04\x00\x00"
+        for rgba in PALETTE[1:]:
+            out += bytes(rgba)
+        return bytes(out)
+
+    def write(self, path: pathlib.Path) -> int:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(self.vox())
+        return len(self.cells)
 
 
-# Palette shared by the starter-hamlet props.
-STONE = (110, 110, 120)
-STONE_DK = (74, 74, 82)
-STONE_LT = (150, 150, 158)
-WOOD = (122, 82, 51)
-WOOD_DK = (92, 58, 34)
-WOOD_LT = (169, 116, 76)
-IRON = (58, 58, 68)
-SHINGLE = (104, 66, 44)
-MOSS = (90, 122, 66)
-STRAW = (217, 180, 90)
-ROPE = (190, 168, 120)
-
-
+# --------------------------------------------------------------------------- props
 def build_well() -> Builder:
-    """Village well: stone curb, two posts, shingled roof, rope, bucket."""
-    b = Builder(16, 16, 24)
-    # stone curb with a hollow shaft
-    b.box(3, 3, 0, 12, 12, 3, STONE)
-    b.box(5, 5, 0, 10, 10, 4, STONE_DK)
-    b.box(6, 6, 0, 9, 9, 5, (20, 18, 22))
-    # coping stones on the curb rim
-    for x in range(3, 13):
-        b.set(x, 3, 4, STONE_LT)
-        b.set(x, 12, 4, STONE_LT)
-    for y in range(4, 12):
-        b.set(3, y, 4, STONE_LT)
-        b.set(12, y, 4, STONE_LT)
-    # posts
-    b.box(3, 4, 4, 4, 5, 15, WOOD_DK)
-    b.box(11, 4, 4, 12, 5, 15, WOOD_DK)
-    b.box(3, 10, 4, 4, 11, 15, WOOD_DK)
-    b.box(11, 10, 4, 12, 11, 15, WOOD_DK)
-    # crossbeams and windlass
-    b.box(3, 6, 15, 12, 7, 16, WOOD)
-    b.box(3, 8, 15, 12, 9, 16, WOOD)
-    b.box(6, 7, 17, 9, 8, 18, IRON)
-    b.set(5, 7, 17, IRON)
-    b.set(10, 8, 18, IRON)
-    # shingled roof, stepping in toward the ridge
-    b.box(2, 2, 17, 13, 13, 18, SHINGLE)
-    b.box(3, 3, 19, 12, 12, 20, SHINGLE)
-    b.box(4, 4, 21, 11, 11, 22, WOOD)
-    b.box(5, 5, 23, 10, 10, 23, WOOD_DK)
-    # rope and bucket
-    b.box(7, 7, 12, 8, 8, 16, ROPE)
-    b.cylinder(8, 8, 8, 11, 2, WOOD)
-    b.box(6, 6, 12, 9, 9, 12, WOOD_DK)
-    # moss at the base
-    b.box(3, 12, 3, 5, 13, 4, MOSS)
+    """Starter-hamlet village well: catalogue footprint 2.5 x 2.25 m = 20 x 18 cells.
+
+    Stone curb with chamfered corners, water inside, timber posts, a shingled roof
+    and a rope-and-bucket.  Authored on the 0.125 structural grid.
+    """
+    b = Builder(20, 18, 24)
+    # Stone curb: 18 x 16 footprint, chamfered at the corners.
+    b.box(1, 1, 0, 18, 16, 6, STONE_MID)
+    for cx, cy in ((1, 1), (18, 1), (1, 16), (18, 16)):
+        b.cells.pop((cx, cy, 6), None)
+        b.cells.pop((cx, cy, 5), None)
+    # Cope (top ring) in a lighter stone, with a chamfered outer edge.
+    for x in range(1, 19):
+        for y in range(1, 17):
+            if 3 <= x <= 16 and 3 <= y <= 14:
+                continue
+            b.set(x, y, 7, STONE_LIGHT)
+    # Hollow interior: water surface sits two cells below the cope.
+    for x in range(3, 17):
+        for y in range(3, 15):
+            for z in range(0, 6):
+                b.cells.pop((x, y, z), None)
+    b.box(3, 3, 0, 16, 14, 3, STONE_DARK)
+    b.slab(3, 3, 4, 16, 14, WATER)
+    b.slab(4, 4, 5, 15, 13, WATER_LIGHT)
+    # Two timber posts carrying the roof.
+    b.box(2, 3, 8, 3, 4, 17, WOOD_DARK)
+    b.box(16, 13, 8, 17, 14, 17, WOOD_DARK)
+    # Cross beam and roof.
+    b.box(2, 3, 18, 17, 14, 18, WOOD_MID)
+    for step in range(6):
+        z = 19 + step
+        x0, x1 = 1 + step, 18 - step
+        y0, y1 = 2 + step, 15 - step
+        if x0 >= x1 or y0 >= y1:
+            break
+        b.slab(x0, y0, z, x1, y1, WOOD_MID if step % 2 == 0 else WOOD_LIGHT)
+    b.box(9, 8, 24, 10, 9, 24, WOOD_DARK)  # ridge cap
+    # Rope, crank and bucket.
+    b.box(10, 8, 12, 10, 9, 17, IRON_MID)
+    b.box(10, 9, 11, 10, 11, 11, IRON)
+    b.shell(9, 8, 7, 11, 10, 10, WOOD_MID)
+    b.slab(9, 8, 6, 11, 10, WOOD_DARK)
     return b
 
 
 def build_chopping_block() -> Builder:
-    """Chopping block: stone footing, stump with growth rings, chips, moss."""
-    b = Builder(16, 16, 14)
-    b.cylinder(8, 8, 0, 2, 6, STONE)
-    b.cylinder(8, 8, 3, 3, 5, STONE_DK)
-    b.cylinder(8, 8, 4, 9, 4, WOOD)
-    b.cylinder(8, 8, 10, 10, 4, WOOD_LT)
-    b.cylinder(8, 8, 11, 11, 3, WOOD)
-    b.cylinder(8, 8, 12, 12, 2, WOOD_LT)
-    b.cylinder(8, 8, 13, 13, 1, WOOD_DK)
-    # bark band around the stump
-    b.cylinder(8, 8, 4, 9, 4, WOOD_DK, shell_only=True)
-    # moss and wood chips
-    b.box(3, 12, 3, 5, 13, 4, MOSS)
-    b.box(13, 9, 3, 14, 10, 4, WOOD_LT)
-    b.box(12, 12, 3, 13, 13, 4, WOOD)
+    """Starter-hamlet chopping block: catalogue footprint 1.0 x 1.0 m = 8 x 8 cells."""
+    b = Builder(8, 8, 14)
+    b.cyl(4, 4, 0, 3, 3, WOOD_DARK)
+    b.cyl(4, 4, 4, 9, 3, LOG_BARK)
+    # Top face: growth rings with a wedge split and a blade nick.
+    for x in range(8):
+        for y in range(8):
+            dx, dy = x - 3.5, y - 3.5
+            d2 = dx * dx + dy * dy
+            if d2 > 10:
+                continue
+            col = LOG_RING
+            if d2 >= 8:
+                col = LOG_BARK
+            if abs(x - y) <= 1 and x >= 3 and y >= 3:
+                col = WOOD_DARK
+            b.set(x, y, 10, col)
+    b.set(5, 2, 11, IRON)
+    b.set(6, 1, 11, IRON)
     return b
 
 
 def build_log_stack() -> Builder:
-    """Log stack: pallet, straw, and a 3-2-1 pyramid of cut logs."""
-    b = Builder(16, 14, 20)
-    # pallet: deck boards on stringers
-    b.box(1, 1, 0, 14, 12, 1, WOOD_DK)
-    b.box(1, 1, 2, 3, 12, 3, WOOD_DK)
-    b.box(12, 1, 2, 14, 12, 3, WOOD_DK)
-    b.box(4, 1, 3, 11, 2, 4, STRAW)
-    # 3 / 2 / 1 pyramid, logs lying along +X with cut faces at +X
-    r = 2
-    b.log(2, 13, 3, 7, r, WOOD, WOOD_LT, WOOD_DK)
-    b.log(2, 13, 7, 7, r, WOOD, WOOD_LT, WOOD_DK)
-    b.log(2, 13, 11, 7, r, WOOD, WOOD_LT, WOOD_DK)
-    b.log(2, 13, 5, 12, r, WOOD, WOOD_LT, WOOD_DK)
-    b.log(2, 13, 9, 12, r, WOOD, WOOD_LT, WOOD_DK)
-    b.log(2, 13, 7, 17, r, WOOD, WOOD_LT, WOOD_DK)
+    """Starter-hamlet log stack: catalogue footprint 1.5 x 1.0 m = 12 x 8 cells.
+
+    Three logs in a pyramid on a plinth; a short offcut leans at the side.
+    """
+    b = Builder(12, 8, 14)
+    b.box(0, 0, 0, 11, 7, 1, WOOD_DARK)
+    b.box(1, 1, 2, 10, 6, 2, WOOD_DARK)
+    b.log(1, 10, 2, 5, 1, LOG_BARK, LOG_RING, LOG_CRACK)
+    b.log(1, 10, 5, 5, 1, LOG_BARK, LOG_RING, LOG_CRACK)
+    b.log(1, 10, 3, 8, 1, LOG_BARK, LOG_RING, LOG_CRACK)
+    b.log(1, 4, 1, 4, 1, LOG_BARK, LOG_RING, LOG_CRACK)
     return b
 
 
-PROPS = {
-    "hearthvale_prop_village_well": build_well,
-    "hearthvale_prop_chopping_block": build_chopping_block,
-    "hearthvale_prop_log_stack": build_log_stack,
+def build_bench() -> Builder:
+    """Starter-hamlet bench: catalogue footprint 1.5 x 0.625 m = 12 x 5 cells."""
+    b = Builder(12, 5, 12)
+    # Legs.
+    for px in (1, 9):
+        b.box(px, 1, 0, px + 1, 3, 5, WOOD_DARK)
+        b.box(px, 1, 6, px + 1, 3, 6, WOOD_DARK)
+    # Seat: three slats with a chamfered front edge.
+    b.box(0, 0, 7, 11, 4, 7, WOOD_MID)
+    b.box(0, 0, 8, 11, 1, 8, WOOD_LIGHT)
+    # Backrest: two slats.
+    b.box(0, 0, 9, 11, 1, 10, WOOD_MID)
+    b.box(0, 0, 11, 11, 0, 11, WOOD_LIGHT)
+    return b
+
+
+def build_barrel_planter() -> Builder:
+    """Starter-hamlet barrel planter: catalogue footprint 0.75 x 0.75 m = 6 x 6 cells."""
+    b = Builder(6, 6, 10)
+    b.cyl(3, 3, 0, 6, 2, WOOD_MID)
+    # Hoops.
+    for z in (1, 4):
+        b.ring(3, 3, z, 2, IRON)
+    # Soil and a small flowering plant.
+    b.slab(1, 1, 7, 4, 4, WOOD_DARK)
+    b.set(2, 2, 8, GRASS)
+    b.set(3, 3, 8, GRASS_LIGHT)
+    b.set(2, 3, 8, HARVEST_BRICK)
+    b.set(3, 2, 9, HARVEST_GOLD)
+    return b
+
+
+def build_signpost() -> Builder:
+    """Starter-hamlet signpost: catalogue footprint 0.625 x 0.625 m = 5 x 5 cells."""
+    b = Builder(5, 5, 20)
+    b.box(1, 1, 0, 3, 3, 1, WOOD_DARK)
+    b.box(2, 2, 2, 2, 2, 17, WOOD_MID)
+    b.box(0, 1, 13, 4, 2, 15, WOOD_LIGHT)
+    b.box(1, 2, 9, 4, 3, 11, WOOD_LIGHT)
+    return b
+
+
+# The starter-hamlet set lives on the 0.125 structural grid and is authored to the
+# exact catalogue footprint.  The street-prop set (hay bale, market stall, crop
+# crates) is canonically 0.0625 with counts registered in
+# scripts/m2_street_prop_assets.gd and is not authored here.
+PROPS: dict[str, dict] = {
+    "hearthvale_prop_village_well": dict(build=build_well, unit=0.125, footprint=(2.5, 2.25)),
+    "hearthvale_prop_chopping_block": dict(build=build_chopping_block, unit=0.125, footprint=(1.0, 1.0)),
+    "hearthvale_prop_log_stack": dict(build=build_log_stack, unit=0.125, footprint=(1.5, 1.0)),
+    "hearthvale_bench": dict(build=build_bench, unit=0.125, footprint=(1.5, 0.625)),
+    "hearthvale_barrel_planter": dict(build=build_barrel_planter, unit=0.125, footprint=(0.75, 0.75)),
+    "hearthvale_signpost": dict(build=build_signpost, unit=0.125, footprint=(0.625, 0.625)),
 }
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--out", required=True, help="directory to write .vox sources into")
-    ap.add_argument("--only", help="author just this prop name")
-    ap.add_argument("--selftest", action="store_true", help="round-trip a tracked .vox through the writer")
-    args = ap.parse_args()
+def main(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--out", type=pathlib.Path, default=pathlib.Path("assets/source/magicavoxel"))
+    ap.add_argument("--only", action="append", default=[])
+    ap.add_argument("--selftest", action="store_true")
+    args = ap.parse_args(argv)
 
     if args.selftest:
-        src = Path("assets/source/magicavoxel/hearthvale_bench.vox")
-        size, voxels, palette = read_vox(src)
-        tmp = Path(args.out) / "roundtrip.vox"
-        write_vox(tmp, size, voxels, palette)
-        size2, voxels2, palette2 = read_vox(tmp)
-        ok = size == size2 and voxels == voxels2 and palette == palette2
-        tmp.unlink()
-        print(f"round-trip {'PASS' if ok else 'FAIL'}: {len(voxels)} voxels, size {size}")
-        sys.exit(0 if ok else 1)
+        return selftest(args.out)
 
-    out = Path(args.out)
-    for name, fn in PROPS.items():
-        if args.only and name != args.only:
-            continue
-        b = fn()
-        path = out / f"{name}.vox"
-        b.save(path)
-        print(f"{name}: {len(b.voxels)} voxels, size {b.size}, {path}")
+    names = args.only or list(PROPS)
+    for name in names:
+        if name not in PROPS:
+            print(f"unknown prop {name}", file=sys.stderr)
+            return 2
+        spec = PROPS[name]
+        builder = spec["build"]()
+        count = builder.write(args.out / f"{name}.vox")
+        w, d, h = builder.size
+        unit = spec["unit"]
+        fw, fd = spec["footprint"]
+        dx, dy = w * unit, d * unit
+        flag = "ok" if (abs(dx - fw) < 1e-9 and abs(dy - fd) < 1e-9) else "FOOTPRINT MISMATCH"
+        print(f"{name:32s} cells={count:6d} size={w}x{d}x{h} grid={unit} -> {dx:.3f}x{dy:.3f} m ({flag})")
+    return 0
+
+
+def selftest(out_dir: pathlib.Path) -> int:
+    """Round-trip a tracked source: parse it, re-author it, compare cell sets."""
+    name = "hearthvale_bench"
+    path = out_dir / f"{name}.vox"
+    if not path.exists():
+        print(f"selftest: {path} missing", file=sys.stderr)
+        return 1
+    data = path.read_bytes()
+    version = int.from_bytes(data[4:8], "little")
+    if data[:4] != b"VOX " or version != 150:
+        print(f"selftest: not MagicaVoxel format 150 (magic {data[:4]!r}, version {version})", file=sys.stderr)
+        return 1
+    main_at = data.index(b"MAIN")
+    size_at = data.index(b"SIZE", main_at)
+    x = int.from_bytes(data[size_at + 12:size_at + 16], "little")
+    z = int.from_bytes(data[size_at + 16:size_at + 20], "little")
+    y = int.from_bytes(data[size_at + 20:size_at + 24], "little")
+    xyzi = data.index(b"XYZI", main_at)
+    count = int.from_bytes(data[xyzi + 4:xyzi + 8], "little") // 4
+    tracked = {(cx, cz, cy): data[xyzi + 8 + i * 4 + 3]
+               for i, (cx, cz, cy) in enumerate(
+                   (tuple(data[xyzi + 8 + i * 4 + k] for k in (0, 2, 1)) for i in range(count)))}
+    authored = PROPS[name]["build"]().cells
+    if authored == tracked:
+        print(f"selftest: {name} round-trips ({count} cells, {x}x{y}x{z})")
+        return 0
+    print(f"selftest: {name} differs (tracked {len(tracked)} cells, authored {len(authored)} cells)",
+          file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main(sys.argv[1:]))
