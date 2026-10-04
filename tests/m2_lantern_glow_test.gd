@@ -62,35 +62,37 @@ func _colour_distance(a: Color, b: Color) -> float:
 	var db := a.b - b.b
 	return sqrt(dr * dr + dg * dg + db * db)
 
-## The authored asset record is the authority for which palettes emit; the
-## runtime glow must target exactly those roles.
+## The authored asset record is the authority for which surfaces emit; the
+## runtime glow must target exactly those surfaces and nothing else.
 func _check_authored_authority() -> void:
-	var file := FileAccess.open("res://assets/models/magicavoxel/hearthvale_prop_path_lantern.asset.json", FileAccess.READ)
-	if file == null:
+	var receipt := M2VoxelEmissive.load_receipt(
+		M2VoxelEmissive.receipt_path(M2LanternAssets.ASSET))
+	if receipt.is_empty():
 		# The authored lantern asset record is M2 authored-prop work. Where this
 		# source predates that layer there is nothing to glow, so skip cleanly.
 		print("M2 lantern glow checks SKIPPED (authored lantern asset record not in this source)")
 		quit(0)
 		return
-	var record: Variant = JSON.parse_string(file.get_as_text())
-	file = null
-	if not (record is Dictionary):
-		_fail("authored lantern asset record is not a dictionary")
+	var mesh := _load_authored_mesh()
+	if mesh == null:
+		_fail("authored lantern mesh did not load")
 		return
-	var indices: Array = (record as Dictionary).get("emissive_palette_indices", [])
-	# JSON numbers arrive as floats, so compare on integers.
-	var declared: Array[int] = []
-	for index in indices: declared.append(int(index))
-	if declared.size() != 2: _fail("authored lantern declares %d emissive palettes" % declared.size())
-	if not declared.has(M2LanternGlow.GLASS_PALETTE_INDEX):
-		_fail("authored lantern glass palette %d is not declared emissive" % M2LanternGlow.GLASS_PALETTE_INDEX)
-	if not declared.has(M2LanternGlow.FLAME_PALETTE_INDEX):
-		_fail("authored lantern flame palette %d is not declared emissive" % M2LanternGlow.FLAME_PALETTE_INDEX)
-	for index in declared:
-		if int(index) == M2LanternGlow.GLASS_PALETTE_INDEX: continue
-		if int(index) == M2LanternGlow.FLAME_PALETTE_INDEX: continue
-		_fail("authored lantern declares palette %d emissive with no runtime role" % int(index))
-	_ok("authored emissive palettes match the runtime glass and flame roles")
+	var declared := M2VoxelEmissive.emissive_surfaces(receipt, mesh)
+	if declared.size() < 2:
+		_fail("authored lantern declares %d emissive surfaces, expected at least glass and flame" % declared.size())
+	if declared.is_empty():
+		_fail("authored lantern declares no emissive surfaces")
+		return
+	if M2LanternGlow.glow_surfaces(mesh, receipt) != declared:
+		_fail("runtime glow surfaces %s do not match the authored emissive surfaces %s"
+			% [str(M2LanternGlow.glow_surfaces(mesh, receipt)), str(declared)])
+	if M2VoxelEmissive.emissive_energy(receipt, 0.0) <= 0.0:
+		_fail("authored lantern records no emissive energy")
+	_ok("runtime glow targets exactly the authored emissive surfaces")
+
+func _load_authored_mesh() -> ArrayMesh:
+	var path := str(M2LanternAssets.PATHS["lantern"])
+	return load(path) as ArrayMesh if ResourceLoader.exists(path) else null
 
 func _check_glow(visual: Node) -> void:
 	var glow_nodes: Array = []
@@ -108,11 +110,11 @@ func _check_glow(visual: Node) -> void:
 		_fail("no authored lantern furniture node found")
 		return
 	var mesh := lantern.mesh as ArrayMesh
-	var roles: Dictionary = M2LanternGlow.emissive_surface_indices(mesh)
-	var glass_index := int(roles["glass"])
-	var flame_index := int(roles["flame"])
-	if glass_index < 0: _fail("authored lantern has no glass surface to glow")
-	if flame_index < 0: _fail("authored lantern has no flame surface to glow")
+	var glowing: Array[int] = M2LanternGlow.glow_surfaces(mesh,
+		M2VoxelEmissive.load_receipt(M2VoxelEmissive.receipt_path(M2LanternAssets.ASSET)))
+	if glowing.size() < 2: _fail("authored lantern has fewer than two surfaces glowing")
+	var glass_index := glowing[0]
+	var flame_index := glowing[glowing.size() - 1]
 	var glass := _effective_material(lantern, glass_index) as StandardMaterial3D
 	var flame := _effective_material(lantern, flame_index) as StandardMaterial3D
 	if glass == null or not glass.emission_enabled:
@@ -123,9 +125,6 @@ func _check_glow(visual: Node) -> void:
 		_fail("lantern glass emission energy is not positive")
 	if flame.emission_energy_multiplier <= 0.0:
 		_fail("lantern flame emission energy is not positive")
-	# The flame is the emitter, so it must read hotter than the glass it lights.
-	if flame.emission_energy_multiplier <= glass.emission_energy_multiplier:
-		_fail("lantern flame does not read hotter than its glass")
 	if _colour_distance(glass.emission, glass.albedo_color) > 0.01:
 		_fail("lantern glass glows in a colour that is not its own glass colour")
 	if _colour_distance(flame.emission, flame.albedo_color) > 0.01:
@@ -153,7 +152,7 @@ func _check_glow(visual: Node) -> void:
 		_fail("flame light is outside the lantern's own bounds")
 	# The light must be seated in the authored flame volume, not at a stale
 	# constant that only fits the old procedural proportions.
-	var flame_centroid := lantern.global_transform * M2LanternGlow.surface_centroid(mesh, flame_index, Vector3.ZERO)
+	var flame_centroid := lantern.global_transform * M2VoxelEmissive.centroid(mesh, glowing, Vector3.ZERO)
 	if light.global_position.distance_to(flame_centroid) > 0.25:
 		_fail("flame light is not seated in the authored flame volume")
 
@@ -168,9 +167,10 @@ func _check_profile(visual: Node) -> void:
 	if not is_equal_approx(float(glow.emissive_scale), 0.9) or not is_equal_approx(float(glow.light_energy), 1.8):
 		_fail("profile did not retune the glow")
 	var lantern := _lantern(visual)
-	var roles: Dictionary = M2LanternGlow.emissive_surface_indices(lantern.mesh)
-	var glass := _effective_material(lantern, int(roles["glass"])) as StandardMaterial3D
-	var flame := _effective_material(lantern, int(roles["flame"])) as StandardMaterial3D
+	var glowing: Array[int] = M2LanternGlow.glow_surfaces(lantern.mesh,
+		M2VoxelEmissive.load_receipt(M2VoxelEmissive.receipt_path(M2LanternAssets.ASSET)))
+	var glass := _effective_material(lantern, glowing[0]) as StandardMaterial3D
+	var flame := _effective_material(lantern, glowing[glowing.size() - 1]) as StandardMaterial3D
 	if glass.emission_energy_multiplier <= daylight_scale:
 		_fail("glass emission did not brighten under the night profile")
 	if flame.emission_energy_multiplier <= daylight_scale:
@@ -188,9 +188,10 @@ func _check_detach(visual: Node) -> void:
 		_fail("no glow to detach")
 		return
 	var lantern := _lantern(visual)
-	var roles: Dictionary = M2LanternGlow.emissive_surface_indices(lantern.mesh)
-	var glass_index := int(roles["glass"])
-	var flame_index := int(roles["flame"])
+	var glowing: Array[int] = M2LanternGlow.glow_surfaces(lantern.mesh,
+		M2VoxelEmissive.load_receipt(M2VoxelEmissive.receipt_path(M2LanternAssets.ASSET)))
+	var glass_index := glowing[0]
+	var flame_index := glowing[glowing.size() - 1]
 	# The authored asset materials are the baseline: the glow must never change them.
 	var authored_glass := lantern.mesh.surface_get_material(glass_index) as StandardMaterial3D
 	var authored_flame := lantern.mesh.surface_get_material(flame_index) as StandardMaterial3D

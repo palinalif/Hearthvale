@@ -104,7 +104,10 @@ def convert(source: Path, output: Path, unit: float, greedy: bool = False, emiss
     for (x, y, z), color in sorted(voxels.items()):
         for normal, corners in FACES.items():
             neighbor = (x + normal[0], y + normal[1], z + normal[2])
-            if neighbor not in voxels:
+            # A light source sealed inside a housing (a flame behind glass) has no
+            # air-adjacent face, so an exposed-face-only rule gives it no geometry
+            # and it can never emit. Emissive palettes always emit their faces.
+            if neighbor not in voxels or color in emissive:
                 faces[color].append((normal, corners(x, y, z, x + 1, y + 1, z + 1)))
 
     exposed_quads = sum(len(group) for group in faces.values())

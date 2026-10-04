@@ -5,10 +5,8 @@
     8,
     10
   ],
-  "emitted_quads": 54,
   "exposed_quads": 856,
   "license": "Project-authored; MCP development tool is MIT",
-  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
   "occupied_bounds": {
     "max": [
       27,
@@ -29,11 +27,10 @@
     10
   ],
   "source": "hearthvale_stone_bench.vox",
-  "source_path": "assets/source/magicavoxel/hearthvale_stone_bench.vox",
   "source_sha256": "c1bd3552d8c043565f2facd327301376af9567ee2672f8b399fa7330e87e3348",
   "tool": "https://github.com/Mahinika/magicavoxel-mcp",
   "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
-  "triangles": 108,
+  "triangles": 1712,
   "voxel_count": 852,
   "voxel_tier": "terrain/structure",
   "voxel_unit": 0.125

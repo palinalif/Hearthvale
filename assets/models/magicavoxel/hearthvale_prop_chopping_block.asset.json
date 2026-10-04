@@ -1,0 +1,37 @@
+{
+  "asset": "hearthvale_prop_chopping_block",
+  "declared_dimensions": [
+    8,
+    14,
+    8
+  ],
+  "exposed_quads": 392,
+  "license": "Project-authored; MCP development tool is MIT",
+  "occupied_bounds": {
+    "max": [
+      8,
+      12,
+      8
+    ],
+    "min": [
+      1,
+      0,
+      1
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    2,
+    5,
+    16,
+    17
+  ],
+  "source": "hearthvale_prop_chopping_block.vox",
+  "source_sha256": "c46db0cb195b17a194dfe7fd1335323fc2d96fc31c8663513d2696abda19d042",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 784,
+  "voxel_count": 404,
+  "voxel_tier": "terrain/structure",
+  "voxel_unit": 0.125
+}

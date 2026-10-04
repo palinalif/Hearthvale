@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://cploa6c46ltxb"
+path="res://.godot/imported/hearthvale_furniture_market_cross.obj-c1ecf827f2340eac42a1eb5b1e17fddb.mesh"
+
+[deps]
+
+files=["res://.godot/imported/hearthvale_furniture_market_cross.obj-c1ecf827f2340eac42a1eb5b1e17fddb.mesh"]
+
+source_file="res://assets/models/magicavoxel/hearthvale_furniture_market_cross.obj"
+dest_files=["res://.godot/imported/hearthvale_furniture_market_cross.obj-c1ecf827f2340eac42a1eb5b1e17fddb.mesh", "res://.godot/imported/hearthvale_furniture_market_cross.obj-c1ecf827f2340eac42a1eb5b1e17fddb.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

@@ -8,6 +8,10 @@ class_name M2CompositionVisual
 ## builders remain as the fallback for any unmatched style or size.
 
 const GARDEN_MESH_CELL := 0.0625
+## Emissive strength for a procedural mesh surface nominated as a light source
+## (legacy lantern glass). Authored assets carry their own energy in the bake
+## receipt, so this only applies to the procedural fallback presentation.
+const PROCEDURAL_EMISSIVE_ENERGY := 2.2
 const GARDEN_MESHES := {
 	"cottage_flowers:16x32": "res://assets/models/magicavoxel/hearthvale_garden_flowers_16x32.res",
 	"cottage_flowers:48x32": "res://assets/models/magicavoxel/hearthvale_garden_flowers_48x32.res",
@@ -524,7 +528,7 @@ func _mesh_from_builder(builder: Dictionary, colours: Array, preview: bool = fal
 			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			material.emission_enabled = true
 			material.emission = emissive[index]
-			material.emission_energy_multiplier = M2LanternGlow.FLAME_EMISSIVE_BOOST
+			material.emission_energy_multiplier = PROCEDURAL_EMISSIVE_ENERGY
 		mesh.surface_set_material(mesh.get_surface_count() - 1, material)
 		has_geometry = true
 	return mesh if has_geometry else null

@@ -5,10 +5,8 @@
     64,
     12
   ],
-  "emitted_quads": 191,
   "exposed_quads": 1336,
   "license": "Project-authored; MCP development tool is MIT",
-  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
   "occupied_bounds": {
     "max": [
       11,
@@ -28,11 +26,10 @@
     10
   ],
   "source": "hearthvale_maypole.vox",
-  "source_path": "assets/source/magicavoxel/hearthvale_maypole.vox",
   "source_sha256": "4a07569cc20deaea289b694cd829e48e30af439643d5ac3209993e80569021c0",
   "tool": "https://github.com/Mahinika/magicavoxel-mcp",
   "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
-  "triangles": 382,
+  "triangles": 2672,
   "voxel_count": 1066,
   "voxel_tier": "terrain/structure",
   "voxel_unit": 0.125

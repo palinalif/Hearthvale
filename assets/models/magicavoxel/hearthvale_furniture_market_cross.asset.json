@@ -1,0 +1,41 @@
+{
+  "asset": "hearthvale_furniture_market_cross",
+  "declared_dimensions": [
+    24,
+    41,
+    24
+  ],
+  "exposed_quads": 5468,
+  "license": "Project-authored; MCP development tool is MIT",
+  "occupied_bounds": {
+    "max": [
+      24,
+      41,
+      24
+    ],
+    "min": [
+      0,
+      0,
+      0
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    2,
+    3,
+    5,
+    7,
+    8,
+    10,
+    15,
+    18
+  ],
+  "source": "hearthvale_furniture_market_cross.vox",
+  "source_sha256": "45fdcc28bb7123660d9ed67bff81945e086be5a0f6f32232998bbca71bca63f7",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 10936,
+  "voxel_count": 8535,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}

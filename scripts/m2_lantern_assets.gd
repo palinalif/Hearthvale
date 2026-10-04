@@ -13,8 +13,9 @@ const STYLE_IDS: Array[String] = ["lantern"]
 const DEFINITIONS := {
 	"lantern": {"name": "Path lantern", "size": FOOTPRINT, "summary": "Iron post lamp with inset glass and a flame over a stone plinth"},
 }
+const ASSET := "hearthvale_prop_path_lantern"
 const PATHS := {
-	"lantern": "res://assets/models/magicavoxel/hearthvale_prop_path_lantern.res",
+	"lantern": "res://assets/models/magicavoxel/%s.res" % ASSET,
 }
 const VOXEL_COUNTS := {"lantern": 316}
 const SWATCHES := [Color("#454a47"), Color("#655344"), Color("#d7a85e"), Color("#8c765c")]

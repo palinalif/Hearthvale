@@ -1,0 +1,43 @@
+{
+  "asset": "hearthvale_prop_village_well",
+  "declared_dimensions": [
+    20,
+    24,
+    18
+  ],
+  "exposed_quads": 2426,
+  "license": "Project-authored; MCP development tool is MIT",
+  "occupied_bounds": {
+    "max": [
+      19,
+      24,
+      17
+    ],
+    "min": [
+      1,
+      0,
+      1
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    2,
+    3,
+    4,
+    5,
+    7,
+    8,
+    9,
+    10,
+    11,
+    23
+  ],
+  "source": "hearthvale_prop_village_well.vox",
+  "source_sha256": "529fe45145626ba587e3f9755dadff6aaf9919af8c066bdbc7f5d15ca5160750",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 4852,
+  "voxel_count": 3141,
+  "voxel_tier": "terrain/structure",
+  "voxel_unit": 0.125
+}

@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://c474cwo6rgxw1"
+path="res://.godot/imported/hearthvale_furniture_pumpkin_post.obj-e26a74f3d355cba34b6d947fb9d1435c.mesh"
+
+[deps]
+
+files=["res://.godot/imported/hearthvale_furniture_pumpkin_post.obj-e26a74f3d355cba34b6d947fb9d1435c.mesh"]
+
+source_file="res://assets/models/magicavoxel/hearthvale_furniture_pumpkin_post.obj"
+dest_files=["res://.godot/imported/hearthvale_furniture_pumpkin_post.obj-e26a74f3d355cba34b6d947fb9d1435c.mesh", "res://.godot/imported/hearthvale_furniture_pumpkin_post.obj-e26a74f3d355cba34b6d947fb9d1435c.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

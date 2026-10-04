@@ -1,0 +1,39 @@
+{
+  "asset": "hearthvale_furniture_notice_board",
+  "declared_dimensions": [
+    20,
+    27,
+    4
+  ],
+  "exposed_quads": 1142,
+  "license": "Project-authored; MCP development tool is MIT",
+  "occupied_bounds": {
+    "max": [
+      20,
+      27,
+      4
+    ],
+    "min": [
+      0,
+      0,
+      0
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    2,
+    3,
+    4,
+    11,
+    14,
+    18
+  ],
+  "source": "hearthvale_furniture_notice_board.vox",
+  "source_sha256": "89e9cf0c6d5bf2acdf3b0fc3ed6cd61074310e495ee704061bc5b63dc2dda28d",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 2284,
+  "voxel_count": 1349,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}
