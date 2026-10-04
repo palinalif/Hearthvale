@@ -64,6 +64,6 @@ jobs:
       - name: Run the lighting test suites
         run: |
           set -euo pipefail
-          for suite in tests/visual_lighting_profile_test.gd tests/m2_lantern_glow_test.gd tests/m2_window_glow_test.gd; do
+          for suite in tests/visual_lighting_profile_test.gd tests/m2_lantern_glow_test.gd tests/m2_lantern_mesh_contract_test.gd tests/m2_window_glow_test.gd; do
             "$GODOT_BIN" --headless --path . --script "res://${suite}"
           done

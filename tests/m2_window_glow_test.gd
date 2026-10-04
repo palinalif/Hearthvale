@@ -98,14 +98,11 @@ func _check_cottage_windows_are_the_only_lit_parts() -> void:
 	var cottage: Node = CottageVisual.new()
 	root.add_child(cottage)
 	await process_frame
-	cottage.call("apply_building", _view(), -1)
+	cottage.call("apply_building", _view(), world_revision())
 	var materials: Array = cottage.call("window_glow_materials")
-	if materials.is_empty():
-		print("M2_WINDOW_GLOW_TEST: cottage integration checks SKIPPED (this source builds no window panes from the test view)")
-		root.remove_child(cottage)
-		cottage.queue_free()
-		await process_frame
-		return
+	# A silent skip is how an unwired cottage passed this test before: the pane
+	# materials must exist, and panes must actually be in the built tree.
+	_expect(not materials.is_empty(), "the cottage builds lit pane materials")
 	for material: StandardMaterial3D in materials:
 		_expect(material.emission_enabled, "cottage windows glow")
 		_expect(material.emission_energy_multiplier > 0.0, "cottage windows are not dark glass")
@@ -114,14 +111,7 @@ func _check_cottage_windows_are_the_only_lit_parts() -> void:
 	for mesh in _meshes_under(cottage, ""):
 		total += 1
 		if _emits(mesh): lit += 1
-	if total == 0:
-		# This source's cottage builds its joinery through a view contract this
-		# test does not drive; the pane-material checks above are the portable part.
-		print("M2_WINDOW_GLOW_TEST: cottage integration checks SKIPPED (no meshes built from this view contract)")
-		root.remove_child(cottage)
-		cottage.queue_free()
-		await process_frame
-		return
+	_expect(total > 0, "the cottage built meshes from the building view")
 	_expect(lit > 0, "the cottage has at least one lit surface")
 	# Only the pane materials glow: joinery, shutters and walls stay unlit so
 	# the light reads as coming from inside the house.
@@ -160,27 +150,27 @@ func _emits(mesh: MeshInstance3D) -> bool:
 func _meshes_under(node: Node, name: String) -> Array:
 	var found: Array = []
 	for child in node.get_children():
-		if child is MeshInstance3D and child.name.contains(name): found.append(child)
+		# Godot's String.contains("") is false, so an empty filter has to mean
+		# "every mesh" explicitly; relying on contains("") silently matched none.
+		var matches := name.is_empty() or child.name.contains(name)
+		if child is MeshInstance3D and matches: found.append(child)
 		found.append_array(_meshes_under(child, name))
 	return found
 
 func _view() -> Dictionary:
-	var view: Dictionary = BUILDING.duplicate(true)
-	view["revision"] = 1
-	view["surfaces"] = [{"id": "front", "orientation": "front"}]
-	view["details"] = [
-		{
-			"id": "window-1", "kind": "window", "visible": true, "needs_placement": false,
-			"resolved_position": Vector3(-1.2, 1.6, 2.51),
-			"anchor": {"surface_id": "front"},
-		},
-		{
-			"id": "window-2", "kind": "window", "visible": true, "needs_placement": false,
-			"resolved_position": Vector3(1.2, 1.6, 2.51),
-			"anchor": {"surface_id": "front"},
-		},
-	]
+	# A real building view from the authoritative world, not a hand-made stub:
+	# the cottage only builds panes for details anchored to its real surface
+	# ids, and a synthetic view silently produced zero windows and skipped the
+	# integration checks.
+	var world := BuildingWorld.new()
+	var view: Dictionary = world.get_building("building-1")
+	# apply_building refuses a view whose revision does not match the source
+	# revision it was built against, so pass the world's own revision.
+	view["revision"] = world.get_revision()
 	return view
+
+func world_revision() -> int:
+	return BuildingWorld.new().get_revision()
 
 func _expect(condition: bool, message: String) -> void:
 	if not condition: failures.append(message)
