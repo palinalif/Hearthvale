@@ -1455,3 +1455,30 @@ change it. Note for whoever owns the test: `m2_planter_placement_test` is **not 
 CI workflow's test list** (`ci-glow.yml` has zero planter entries; only
 `cottage-playtest.yml` mentions planters, as screenshot scenes), so a green CI has
 never covered this assertion.
+
+## 2026-10-04 (glow CI export step: two stacked bugs; signing decision recorded)
+
+`M2 glow` had been failing in ~50 s at `Export debug Android APK` on every run
+since that step was added, so the job never produced its debug APK. Two
+independent bugs, found one under the other:
+
+1. `find /tmp/voxel ... -name 'libvoxel.godot.so.*.release.java'` — `/tmp/voxel`
+   is never created (the install step downloads `/tmp/voxel.zip` and unzips into
+   the repo, so the extension is in `addons/zylann.voxel/bin`), **and** the
+   pinned release ships no `.java` wrapper at all. The injection was unnecessary:
+   `voxel.gdextension` maps `android.release.arm64` to
+   `./bin/libvoxel.android.template_release.arm64.so`. → `6595541`
+2. Underneath it: `ERROR: Invalid export preset name: Android (debug).` The
+   project declares `Android ARM64`, `Windows Playtest`,
+   `Android ARM64 Compatibility`, `Windows Compatibility`; the Thor workflow
+   already uses `--export-debug 'Android ARM64'`. → `2603987`
+
+The post-export check for `lib/arm64-v8a/libvoxel*.so` remains the guard against
+the known silent failure. Local suite on the corrected bake: 0 failures.
+
+**Signing decision (user):** CI's Thor APK is signed with an ephemeral per-run
+debug keystore, so it cannot update in place over the existing playtest install.
+The user chose a **clean install** — install the CI APK as its own package and
+leave existing installs and saves untouched. No new local keystore is to be
+generated, and the documented local signing identity stays untouched. The glow
+preset's package is `org.hearthvale.game.test.m2night`.
