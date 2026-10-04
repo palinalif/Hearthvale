@@ -49,18 +49,33 @@ func _initialize() -> void:
 	# emission so an authored prop glows by itself, without a runtime shader hack.
 	var receipt := _receipt(args[0])
 	var emissive := _emissive_settings(receipt)
+	# Canonicalize in two passes: snap every vertex to the presentation grid
+	# first, then drop the whole model so its lowest point sits at y = 0.  A
+	# prop authored with empty space under it (a maypole pole, a hanging sign)
+	# would otherwise float where the runtime expects a ground pivot.
 	var snapped_vertices := 0
+	var lowest := INF
+	var surfaces: Array = []
 	for surface in source.get_surface_count():
 		var arrays := source.surface_get_arrays(surface)
 		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 		for index in vertices.size():
 			vertices[index] = Vector3(snappedf(vertices[index].x, unit), snappedf(vertices[index].y, unit), snappedf(vertices[index].z, unit))
+			lowest = minf(lowest, vertices[index].y)
 			snapped_vertices += 1
 		arrays[Mesh.ARRAY_VERTEX] = vertices
-		baked.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		surfaces.append(arrays)
+	var ground_offset := 0.0 if lowest == INF else lowest
+	for surface_index in surfaces.size():
+		var surface_arrays: Array = surfaces[surface_index]
+		var shifted: PackedVector3Array = surface_arrays[Mesh.ARRAY_VERTEX]
+		for vertex_index in shifted.size():
+			shifted[vertex_index] = shifted[vertex_index] - Vector3(0.0, ground_offset, 0.0)
+		surface_arrays[Mesh.ARRAY_VERTEX] = shifted
+		baked.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_arrays)
 		# OBJ's legacy Ns interpretation can import near-metallic materials.
 		# These palette groups describe matte bark and foliage.
-		var imported_material := source.surface_get_material(surface) as StandardMaterial3D
+		var imported_material := source.surface_get_material(surface_index) as StandardMaterial3D
 		if imported_material == null:
 			push_error("palette surface requires a StandardMaterial3D")
 			quit(2)
@@ -68,14 +83,14 @@ func _initialize() -> void:
 		var material := imported_material.duplicate() as StandardMaterial3D
 		material.metallic = 0.0
 		material.roughness = 1.0
-		var palette_index := _palette_index(receipt, surface)
+		var palette_index := _palette_index(receipt, surface_index)
 		if emissive["indices"].has(palette_index):
 			material.emission_enabled = true
 			material.emission = material.albedo_color
 			material.emission_energy_multiplier = emissive["energy"]
-		baked.surface_set_material(surface, material)
+		baked.surface_set_material(surface_index, material)
 	var error := ResourceSaver.save(baked, str(args[1]))
-	print(JSON.stringify({"ok": error == OK, "source": str(args[0]), "output": str(args[1]), "unit": unit, "surfaces": baked.get_surface_count(), "vertices": snapped_vertices, "error": error}))
+	print(JSON.stringify({"ok": error == OK, "source": str(args[0]), "output": str(args[1]), "unit": unit, "surfaces": baked.get_surface_count(), "vertices": snapped_vertices, "ground_offset": ground_offset, "error": error}))
 	quit(0 if error == OK else 1)
 
 

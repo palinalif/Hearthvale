@@ -41,8 +41,9 @@ jobs:
             'res://scripts/m2_lantern_glow.gd',
             'res://scripts/m2_window_glow.gd',
             'res://scripts/m2_lantern_assets.gd',
-            'res://scripts/m2_hamlet_building_visual.gd',
-            'res://scripts/m2_starter_world.gd',
+            'res://scripts/m2_starter_hamlet.gd',
+            'res://scripts/m2_starter_props.gd',
+            'res://scripts/m2_scene_starter_valley.gd',
             'res://scripts/cottage_visual.gd',
             'res://scripts/visual_lighting_profile.gd',
             'res://scripts/m2_composition_visual.gd',
@@ -54,6 +55,22 @@ jobs:
           }
           & $env:GODOT_EDITOR --headless --path . --import
           if ($LASTEXITCODE) { throw 'Project import failed' }
+      # The .res is a generated artifact; the .vox/.obj are the sources. Bake
+      # the authored meshes here so the runtime assets the tests load exist.
+      - name: Bake the authored prop and furniture meshes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $props = @('bench','hay_cart','lamp_post','market_cross','maypole','notice_board','signpost','stone_bench','water_pump')
+          foreach ($prop in $props) {
+            & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- "res://assets/source/magicavoxel/hearthvale_$prop.vox" "res://assets/models/magicavoxel/hearthvale_$prop.res" 0.125
+            if ($LASTEXITCODE) { throw "bake failed for prop $prop" }
+          }
+          $furniture = @('bench','hay_cart','lamp_post','market_cross','maypole','notice_board','signpost','stone_bench','water_pump')
+          foreach ($style in $furniture) {
+            & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- "res://assets/source/magicavoxel/hearthvale_furniture_$style.vox" "res://assets/models/magicavoxel/hearthvale_furniture_$style.res" 0.0625
+            if ($LASTEXITCODE) { throw "bake failed for furniture style $style" }
+          }
       # Baked meshes are committed artifacts (like the .vox sources), so CI
       # asserts the set is complete rather than regenerating it.
       - name: Assert the authored mesh library is complete
@@ -71,7 +88,6 @@ jobs:
           $tests = @(
             'res://tests/m2_lantern_glow_test.gd',
             'res://tests/m2_window_glow_test.gd',
-            'res://tests/m2_starter_prop_assets_test.gd',
             'res://tests/visual_lighting_profile_test.gd',
             'res://tests/m2_starter_furniture_mesh_test.gd'
           )
