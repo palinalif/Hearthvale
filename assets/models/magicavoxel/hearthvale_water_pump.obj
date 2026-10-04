@@ -1,6 +1,6 @@
 # Generated from hearthvale_prop_water_pump.vox
 # source_sha256 30426dee7b7a0549506a7e55dde48f24f92ab84bc4ee578eeb1cd76dcedbfbaa
-mtllib hearthvale_prop_water_pump.mtl
+mtllib hearthvale_water_pump.mtl
 o hearthvale_magicavoxel_asset
 g palette_6
 usemtl palette_6

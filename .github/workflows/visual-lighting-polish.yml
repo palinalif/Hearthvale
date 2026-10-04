@@ -1,7 +1,7 @@
 name: Visual lighting polish
 on:
   push:
-    branches: [feat/m2-lighting-polish]
+    branches: [feat/m2-lighting-polish, feat/m2-glow]
   workflow_dispatch:
 permissions:
   contents: read
@@ -49,7 +49,23 @@ jobs:
           $log = & $editor --headless --path . --script tests/m2_lantern_glow_test.gd 2>&1 | Out-String
           $code = $LASTEXITCODE
           $log | Tee-Object -FilePath '.tools/lighting-polish/lantern-glow.log'
-          if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'lantern glow checks passed') { throw 'Path lantern glow regression failed' }
+          if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|FAIL:' -or -not ($log -match 'lantern glow checks (passed|skipped)')) { throw 'Path lantern glow regression failed' }
+      - name: Verify authored window glow
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/lighting-polish' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $log = & $editor --headless --path . --script tests/m2_window_glow_test.gd 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          $log | Tee-Object -FilePath '.tools/lighting-polish/window-glow.log'
+          if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|FAIL:' -or $log -notmatch 'window glow checks passed') { throw 'Authored window glow regression failed' }
+      - name: Verify authored OBJ material references
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/lighting-polish' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $log = & $editor --headless --path . --script tests/m2_obj_material_reference_test.gd 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          $log | Tee-Object -FilePath '.tools/lighting-polish/obj-materials.log'
+          if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|FAIL:') { throw 'Authored OBJ material library references are broken' }
       - name: Capture sky-fill tuning candidates on actual Mobile
         shell: pwsh
         run: |

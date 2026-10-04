@@ -1,6 +1,6 @@
 # Generated from hearthvale_prop_maypole.vox
 # source_sha256 4a07569cc20deaea289b694cd829e48e30af439643d5ac3209993e80569021c0
-mtllib hearthvale_prop_maypole.mtl
+mtllib hearthvale_maypole.mtl
 o hearthvale_magicavoxel_asset
 g palette_5
 usemtl palette_5
