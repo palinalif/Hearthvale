@@ -1,1 +1,17 @@
-0 0
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://c3ppbsf81dmfc"
+path="res://.godot/imported/hearthvale_prop_village_well.vox-f627bbe7486d60109de555ad7e946bf7.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_prop_village_well.vox"
+dest_files=["res://.godot/imported/hearthvale_prop_village_well.vox-f627bbe7486d60109de555ad7e946bf7.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://b1v2w6aj8tmno"
+path="res://.godot/imported/hearthvale_prop_path_lantern.vox-8a74351fd8c42104f80d225071be1140.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_prop_path_lantern.vox"
+dest_files=["res://.godot/imported/hearthvale_prop_path_lantern.vox-8a74351fd8c42104f80d225071be1140.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

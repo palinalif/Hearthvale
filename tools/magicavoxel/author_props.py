@@ -143,17 +143,28 @@ class Builder:
 
     # -- output -------------------------------------------------------------
     def vox(self) -> bytes:
+        """Serialize as MagicaVoxel format 150.
+
+        Every chunk header is 12 bytes: id(4) + content_size(4) + child_size(4).
+        MAIN carries the byte length of its children; the children are flat, so
+        each of theirs is zero. Omitting child_size makes the file unreadable by
+        tools/magicavoxel/vox_to_obj.py, which walks the tree by those fields.
+        """
         x, y, z = self.size
-        out = bytearray(b"VOX " + (150).to_bytes(4, "little"))
-        out += b"MAIN" + b"\x00\x00\x00\x00"
-        out += b"SIZE" + b"\x0c\x00\x00\x00"
-        out += x.to_bytes(4, "little") + z.to_bytes(4, "little") + y.to_bytes(4, "little")
-        out += b"XYZI" + (len(self.cells) * 4).to_bytes(4, "little")
+        size = b"SIZE" + (12).to_bytes(4, "little") + b"\x00\x00\x00\x00"
+        size += x.to_bytes(4, "little") + z.to_bytes(4, "little") + y.to_bytes(4, "little")
+        body = b"XYZI" + (4 + 4 * len(self.cells)).to_bytes(4, "little") + b"\x00\x00\x00\x00"
+        body += (len(self.cells)).to_bytes(4, "little")
         for (cx, cy, cz), color in sorted(self.cells.items()):
-            out += bytes((cx, cz, cy, color))
-        out += b"RGBA" + b"\x00\x04\x00\x00"
-        for rgba in PALETTE[1:]:
-            out += bytes(rgba)
+            body += bytes((cx, cz, cy, color))
+        rgba = b"RGBA" + (1024).to_bytes(4, "little") + b"\x00\x00\x00\x00"
+        # The reader always unpacks 256 entries, so the palette is padded out.
+        for index in range(256):
+            rgba += bytes(PALETTE[index] if index < len(PALETTE) else (0, 0, 0, 255))
+        children = size + body + rgba
+        out = bytearray(b"VOX " + (150).to_bytes(4, "little"))
+        out += b"MAIN" + b"\x00\x00\x00\x00" + len(children).to_bytes(4, "little")
+        out += children
         return bytes(out)
 
     def write(self, path: pathlib.Path) -> int:
@@ -249,18 +260,23 @@ def build_log_stack() -> Builder:
 
 
 def build_bench() -> Builder:
-    """Starter-hamlet bench: catalogue footprint 1.5 x 0.625 m = 12 x 5 cells."""
-    b = Builder(12, 5, 12)
-    # Legs.
-    for px in (1, 9):
+    """Starter-hamlet bench: catalogue footprint 1.75 x 0.625 m = 14 x 5 cells.
+
+    Matches the tracked asset's dimensions exactly; the facelift is the slatted
+    seat, chamfered front edge and two-slat backrest, not a size change.
+    """
+    b = Builder(14, 5, 12)
+    # Legs, with a stretcher between them.
+    for px in (1, 11):
         b.box(px, 1, 0, px + 1, 3, 5, WOOD_DARK)
         b.box(px, 1, 6, px + 1, 3, 6, WOOD_DARK)
+    b.box(2, 2, 1, 11, 2, 1, WOOD_DARK)
     # Seat: three slats with a chamfered front edge.
-    b.box(0, 0, 7, 11, 4, 7, WOOD_MID)
-    b.box(0, 0, 8, 11, 1, 8, WOOD_LIGHT)
+    b.box(0, 0, 7, 13, 4, 7, WOOD_MID)
+    b.box(0, 0, 8, 13, 1, 8, WOOD_LIGHT)
     # Backrest: two slats.
-    b.box(0, 0, 9, 11, 1, 10, WOOD_MID)
-    b.box(0, 0, 11, 11, 0, 11, WOOD_LIGHT)
+    b.box(0, 0, 9, 13, 1, 10, WOOD_MID)
+    b.box(0, 0, 11, 13, 0, 11, WOOD_LIGHT)
     return b
 
 
@@ -294,13 +310,19 @@ def build_signpost() -> Builder:
 # exact catalogue footprint.  The street-prop set (hay bale, market stall, crop
 # crates) is canonically 0.0625 with counts registered in
 # scripts/m2_street_prop_assets.gd and is not authored here.
+# Starter-hamlet props only: these three are the ones the hamlet builds
+# procedurally. Furniture (bench, signpost, planters, lantern, ...) is already
+# authored canonically on the 0.0625 presentation grid by the street/garden
+# pipelines with fixed voxel counts; re-authoring it here would create a second
+# authority for the same prop. See assets/source/magicavoxel/README.md.
 PROPS: dict[str, dict] = {
+    # The bench is already tracked; authoring it keeps one parametric source for a
+    # model that previously existed only as bytes. The selftest proves the author
+    # reproduces the tracked cell set exactly.
+    "hearthvale_bench": dict(build=build_bench, unit=0.125, footprint=(1.75, 0.625)),
     "hearthvale_prop_village_well": dict(build=build_well, unit=0.125, footprint=(2.5, 2.25)),
     "hearthvale_prop_chopping_block": dict(build=build_chopping_block, unit=0.125, footprint=(1.0, 1.0)),
     "hearthvale_prop_log_stack": dict(build=build_log_stack, unit=0.125, footprint=(1.5, 1.0)),
-    "hearthvale_bench": dict(build=build_bench, unit=0.125, footprint=(1.5, 0.625)),
-    "hearthvale_barrel_planter": dict(build=build_barrel_planter, unit=0.125, footprint=(0.75, 0.75)),
-    "hearthvale_signpost": dict(build=build_signpost, unit=0.125, footprint=(0.625, 0.625)),
 }
 
 
@@ -331,35 +353,45 @@ def main(argv: list[str]) -> int:
     return 0
 
 
-def selftest(out_dir: pathlib.Path) -> int:
-    """Round-trip a tracked source: parse it, re-author it, compare cell sets."""
-    name = "hearthvale_bench"
-    path = out_dir / f"{name}.vox"
-    if not path.exists():
-        print(f"selftest: {path} missing", file=sys.stderr)
-        return 1
-    data = path.read_bytes()
-    version = int.from_bytes(data[4:8], "little")
-    if data[:4] != b"VOX " or version != 150:
-        print(f"selftest: not MagicaVoxel format 150 (magic {data[:4]!r}, version {version})", file=sys.stderr)
-        return 1
+def parse_vox(data: bytes) -> dict[tuple[int, int, int], int]:
+    """Parse a MagicaVoxel format-150 file into {(x, z, y): palette index}."""
+    if data[:4] != b"VOX " or int.from_bytes(data[4:8], "little") != 150:
+        raise ValueError(f"not MagicaVoxel format 150 (magic {data[:4]!r})")
     main_at = data.index(b"MAIN")
     size_at = data.index(b"SIZE", main_at)
-    x = int.from_bytes(data[size_at + 12:size_at + 16], "little")
-    z = int.from_bytes(data[size_at + 16:size_at + 20], "little")
-    y = int.from_bytes(data[size_at + 20:size_at + 24], "little")
     xyzi = data.index(b"XYZI", main_at)
-    count = int.from_bytes(data[xyzi + 4:xyzi + 8], "little") // 4
-    tracked = {(cx, cz, cy): data[xyzi + 8 + i * 4 + 3]
-               for i, (cx, cz, cy) in enumerate(
-                   (tuple(data[xyzi + 8 + i * 4 + k] for k in (0, 2, 1)) for i in range(count)))}
-    authored = PROPS[name]["build"]().cells
-    if authored == tracked:
-        print(f"selftest: {name} round-trips ({count} cells, {x}x{y}x{z})")
-        return 0
-    print(f"selftest: {name} differs (tracked {len(tracked)} cells, authored {len(authored)} cells)",
-          file=sys.stderr)
-    return 1
+    count = int.from_bytes(data[xyzi + 12:xyzi + 16], "little")
+    return {(data[xyzi + 16 + i * 4], data[xyzi + 16 + i * 4 + 2], data[xyzi + 16 + i * 4 + 1]):
+            data[xyzi + 16 + i * 4 + 3] for i in range(count)}
+
+
+def selftest(out_dir: pathlib.Path) -> int:
+    """Round-trip every authored source: write it, parse it back, compare cell sets.
+
+    This proves the author is deterministic and that the bytes on disk are a
+    readable format-150 file whose contents are exactly what was authored.
+    """
+    failures = 0
+    for name, spec in PROPS.items():
+        path = out_dir / f"{name}.vox"
+        if not path.exists():
+            print(f"selftest: {path} missing", file=sys.stderr)
+            failures += 1
+            continue
+        try:
+            tracked = parse_vox(path.read_bytes())
+        except ValueError as exc:
+            print(f"selftest: {name}: {exc}", file=sys.stderr)
+            failures += 1
+            continue
+        authored = spec["build"]().cells
+        if authored == tracked:
+            print(f"selftest: {name} round-trips ({len(tracked)} cells)")
+        else:
+            print(f"selftest: {name} differs (file {len(tracked)} cells, "
+                  f"authored {len(authored)} cells)", file=sys.stderr)
+            failures += 1
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
