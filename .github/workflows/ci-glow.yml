@@ -61,23 +61,23 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force build/magicavoxel | Out-Null
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd res://assets/source/magicavoxel/hearthvale_bench.vox build/magicavoxel/bench.res
+          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_bench.vox build/magicavoxel/bench.res
           if ($LASTEXITCODE) { throw 'bench mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd res://assets/source/magicavoxel/hearthvale_hay_cart.vox build/magicavoxel/hay_cart.res
+          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_hay_cart.vox build/magicavoxel/hay_cart.res
           if ($LASTEXITCODE) { throw 'hay_cart mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd res://assets/source/magicavoxel/hearthvale_lamp_post.vox build/magicavoxel/lamp_post.res
+          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_lamp_post.vox build/magicavoxel/lamp_post.res
           if ($LASTEXITCODE) { throw 'lamp_post mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd res://assets/source/magicavoxel/hearthvale_market_cross.vox build/magicavoxel/market_cross.res
+          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_market_cross.vox build/magicavoxel/market_cross.res
           if ($LASTEXITCODE) { throw 'market_cross mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd res://assets/source/magicavoxel/hearthvale_maypole.vox build/magicavoxel/maypole.res
+          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_maypole.vox build/magicavoxel/maypole.res
           if ($LASTEXITCODE) { throw 'maypole mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd res://assets/source/magicavoxel/hearthvale_notice_board.vox build/magicavoxel/notice_board.res
+          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_notice_board.vox build/magicavoxel/notice_board.res
           if ($LASTEXITCODE) { throw 'notice_board mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd res://assets/source/magicavoxel/hearthvale_signpost.vox build/magicavoxel/signpost.res
+          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_signpost.vox build/magicavoxel/signpost.res
           if ($LASTEXITCODE) { throw 'signpost mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd res://assets/source/magicavoxel/hearthvale_stone_bench.vox build/magicavoxel/stone_bench.res
+          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_stone_bench.vox build/magicavoxel/stone_bench.res
           if ($LASTEXITCODE) { throw 'stone_bench mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd res://assets/source/magicavoxel/hearthvale_water_pump.vox build/magicavoxel/water_pump.res
+          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_water_pump.vox build/magicavoxel/water_pump.res
           if ($LASTEXITCODE) { throw 'water_pump mesh bake failed' }
           & $env:GODOT_EDITOR --headless --path . -e --import
           if ($LASTEXITCODE) { throw 'Post-bake import failed' }
