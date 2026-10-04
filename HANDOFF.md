@@ -1,4 +1,90 @@
-# 2026-10-04 — branch merge note
+# 2026-10-04 (evening) — window glow, per-part materials, greedy meshing
+
+Branch `feat/m2-glow`, pushed to `origin`. Not merged to `main`.
+
+## Landed and verified
+
+**Lit windows** (`526052f`). `scripts/m2_window_glow.gd` adds one additive,
+shimmer-stable `StandardMaterial3D` per built building's window glass, using the
+existing `M2PresentationLighting.window_glow_color()` (the same warm source the
+lanterns use). It is wired through `M2CompositionVisual`'s existing
+`set_building_view` seam, so every building style gets it from one owner, and
+the material is applied only to the glass surface (index 1) — frames, sills and
+trim are untouched. `tests/m2_window_glow_test.gd` builds a real cottage, finds
+the glass surface by its material name, and asserts the glass is additive, has
+emission, and is the only emissive surface on the building. Desktop Mobile
+capture of a built cottage at night: windows read as lit, warm, with bloom.
+
+**Rebake of every authored asset** (`02b2a11`). `tools/magicavoxel/bake_mesh.gd`
+now (a) merges coplanar same-palette exposed faces into rectangles instead of
+emitting six triangles per voxel, and (b) assigns each palette entry its own
+surface material, so a lantern's glass, wood and flame keep separate materials
+in the runtime `.res`.
+
+  - bench: 948 → 90 triangles, 80 KB → 7.5 KB
+  - beehive: 596 → 190 triangles
+  - 70 assets rebaked; voxel counts, silhouettes and coverage unchanged
+
+The `.material` sidecars are gitignored, so the emissive look is defined by the
+committed bake tool, not by generated files.
+
+**Test-harness fix** (same commit). `tests/m2_starter_furniture_mesh_test.gd`
+called `quit(0)` without `return`; `quit()` only schedules the exit, so the
+failure branch ran afterwards and the suite exited 1 while printing "PASS: 0
+failures". CI reads only the exit code, so this suite has been red in CI since
+the day it was added. Added the `return`.
+
+**CI repairs** (`33f6af1`, `4e546ee`, plus three earlier): the glow job called a
+reusable workflow that does not exist; a second workflow pinned a Godot download
+URL that 404s; neither triggered on the branch carrying the work; the glow job
+fetched a `voxel-linux-template-release.zip` that is not in the v1.7.1 release
+(404) and now installs the locked archive's `voxel.windows.x86_64.dll` like the
+proven M2 job; the APK job checks the voxel DLL the archive actually ships
+(`voxel.windows.*`) instead of `libvoxel*`, which never matches a template
+archive.
+
+## Tests run here
+
+`tools/run-suite` (new) runs suites headless and gates on Godot's exit code, the
+same contract CI uses. Green: `magicavoxel_asset_test`,
+`m2_lantern_mesh_test`, `m2_lantern_mesh_contract_test`,
+`m2_starter_furniture_mesh_test`, `visual_lighting_profile_test`,
+`m2_window_glow_test`, `m2_lantern_glow_test`.
+
+`chain_resolution_probe`, `m2_house_edit_ux_test`, `m2_house_shapes_render_test`
+fail here for renderer availability ("No rendering driver available", "Failed
+loading scene due to missing RendererEnvironment"), not from these changes.
+
+## Not delivered
+
+- **No APK from this host** — it has no Java SDK or Android build-tools, so
+  `--export-debug "Android ARM64"` cannot run. The CI `Thor playtest APK`
+  workflow is the only path to a verified package for this branch.
+- **No Thor evidence** — no `adb` on this host. No rendering, performance,
+  controller or install test. Visual approval of lit windows is the player's.
+- **Lantern-family glow not done.** The per-part materials now exist, so a
+  lantern's glass/flame can be emissive, but `m2_lantern_glow.gd` still paints
+  whole meshes with one material and the lamp post, street lamp, campfire and
+  forge are unchanged.
+- **Prop facelift not delivered.** The 13 re-authored sources stayed in the
+  gitignored staging area and were deleted; canonical sources are unchanged, so
+  assets look exactly as before apart from materials. The garden props (well,
+  log stack, trellis, arch, obelisk, sundial, bench, beehive, bird feeder,
+  wheelbarrow) are **not** authored `.vox` — they are still procedural in
+  `scripts/m2_starter_props.gd`, and the baked `.res` files for them have no
+  consumer (`scripts/m2_garden_prop_assets.gd` was written, found unwired, and
+  removed rather than left as dead code).
+
+## Next
+
+1. Promote the 13 facelifted sources by regenerating them into
+   `assets/source/magicavoxel/` (the MCP writes gitignored `.vox.gz`, so the
+   promotion copy step is mandatory), rebake, and update the voxel-count
+   assertions in `m2_lantern_mesh_test` / `m2_starter_furniture_mesh_test`.
+2. Wire the garden `.res` assets through one seam in `M2CompositionVisual`.
+3. Make the lantern family emissive per part.
+
+## 2026-10-04 — branch merge note
 
 `feat/m2-vox-props` (authored-prop sources, authoring/bake tooling) merged into
 `feat/m2-glow`. Reason: `tests/m2_lantern_glow_test.gd` asserts against the
