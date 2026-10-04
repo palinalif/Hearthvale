@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://b0ynhjkil88b"
+path="res://.godot/imported/hearthvale_prop_fence.vox-37ab2362b1c8419c4afa244db6eca3aa.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_prop_fence.vox"
+dest_files=["res://.godot/imported/hearthvale_prop_fence.vox-37ab2362b1c8419c4afa244db6eca3aa.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

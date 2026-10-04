@@ -1,135 +1,137 @@
 #!/usr/bin/env python3
-"""Author the Tier B garden props as MagicaVoxel .vox sources.
+"""Author the Tier B starter-hamlet garden props as MagicaVoxel sources.
 
-Tier B is the set the runtime used to build procedurally from boxes:
-fence, bush, hedge, flower, grass tuft, rock. Those are standalone
-presentation props, so per the project contract they are authored as
-voxel assets; the runtime now only imports the baked result.
+These six props used to be boxes and cylinders assembled in GDScript.  They are
+now authored voxel assets so they get the same treatment as everything else the
+hamlet places: a reviewable .vox source, per-part colours from the shared
+palette, greedy-meshed geometry, and a Mobile-friendly material per part.
 
-Every dimension is on the 0.125 structural grid and matches the
-placement records the builder emits, so existing saves keep their
-objects. Cells are added and removed to shape the silhouette; nothing
-is stretched.
+Grid: the project contract puts native terrain and authoritative structure on
+0.125, and allows decorative presentation down to 0.0625.  These props are
+decorative, so they are authored on 0.125 and bake on 0.0625 like the rest of
+the presentation set.  Sizes below are in cells of 0.125 m.
 
-Voxels are (x, y, z) with y = height above the ground, which is the
-axis order the project's importer reads.
+Authoring uses the Builder in author_props.py, which is the only writer in this
+repo that emits MagicaVoxel format 150 -- the format Godot's voxel importer can
+read.  Files written by the legacy MagicaVASE writer in vox_write.py are not
+importable by Godot.
 """
-import os
+
+from __future__ import annotations
+
 import sys
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vox_write import write_vox  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-SIZE = 0.125
-PALETTE = [(0, 0, 0, 0)] + [
-    (104, 74, 44, 255),   # 1 wood
-    (142, 104, 62, 255),  # 2 light wood
-    (122, 122, 128, 255), # 3 iron
-    (46, 106, 46, 255),   # 4 leaf dark
-    (62, 132, 58, 255),   # 5 leaf
-    (86, 156, 70, 255),   # 6 leaf light
-    (122, 116, 104, 255), # 7 stone
-    (146, 140, 126, 255), # 8 stone light
-    (96, 92, 84, 255),    # 9 stone dark
-    (214, 172, 62, 255),  # 10 flower gold
-    (206, 96, 118, 255),  # 11 flower rose
-    (152, 176, 96, 255),  # 12 stem
-    (176, 160, 128, 255), # 13 thatch
-]
+from author_props import Builder
 
+CELL = 0.125
 
-def box(x0, y0, z0, x1, y1, z1, colour):
-    return {(x, y, z): colour
-            for x in range(x0, x1 + 1)
-            for y in range(y0, y1 + 1)
-            for z in range(z0, z1 + 1)}
+# Shared palette indices, taken from author_props.PALETTE so the props match
+# the colours the rest of the hamlet already uses.
+WOOD = 15        # (150, 106, 62)
+WOOD_DARK = 1    # (122, 84, 50)
+LEAF = 11        # (104, 152, 78)
+LEAF_LIGHT = 12  # (140, 184, 104)
+STONE = 22       # (126, 132, 138)
+STONE_LIGHT = 7  # (168, 164, 156)
+PETAL_RED = 18
+PETAL_YELLOW = 13
+PETAL_WHITE = 19
+PETAL_PINK = 3
 
 
-def fence():
-    """One 1.000 x 0.125 x 0.875 fence section: two posts, two rails."""
-    v = {}
-    for px in (0, 7):
-        for y in range(7):
-            v[(px, y, 0)] = 1 if y < 5 else 2
-        v[(px, 5, 0)] = 2
-        v[(px, 6, 0)] = 2
-    v |= box(1, 4, 0, 6, 4, 0, 2)
-    v |= box(1, 2, 0, 6, 2, 0, 1)
-    return (8, 7, 1), v
+def fence() -> Builder:
+    """One 1.000 x 0.875 fence section: two posts, two rails, chamfered post tops.
+
+    Width along x, depth along y, height along z.  The rails sit at the front
+    face so a row of sections reads as a continuous fence from the walk side.
+    """
+    b = Builder(8, 1, 7)
+    for post_x in (0, 7):
+        for z in range(7):
+            b.set(post_x, 0, z, WOOD if z % 3 else WOOD_DARK)
+        # Chamfered post cap.
+        b.cells.pop((post_x, 0, 6), None)
+    for rail_z in (2, 4):
+        for x in range(1, 7):
+            b.set(x, 0, rail_z, WOOD_DARK)
+    return b
 
 
-def bush():
-    """A rounded 0.750 cube of foliage: wide middle, clipped corners."""
-    v = {}
-    rings = [(0, 5, 1, 4), (0, 5, 0, 5), (1, 4, 0, 5), (1, 4, 0, 5), (2, 3, 1, 4)]
-    for y, (x0, x1, z0, z1) in enumerate(rings):
-        for x in range(x0, x1 + 1):
-            for z in range(z0, z1 + 1):
-                v[(x, y, z)] = 4 if (x + z) % 3 == 0 else 5
-    for x in range(2, 4):
-        for z in range(2, 4):
-            v[(x, 5, z)] = 6
-    for (x, z) in ((1, 2), (4, 3)):
-        v[(x, 0, z)] = 9
-    return (6, 6, 6), v
+def bush() -> Builder:
+    """A 0.625 m bush: a 5 x 5 x 4 mass with every top corner clipped."""
+    b = Builder(5, 5, 4)
+    for x in range(5):
+        for y in range(5):
+            for z in range(4):
+                # Taper the base and clip the top corners so it is not a cube.
+                if z == 0 and (x == 0 and y == 0 or x == 4 and y == 0
+                               or x == 0 and y == 4 or x == 4 and y == 4):
+                    continue
+                if z == 3 and (x + y) in (0, 8):
+                    continue
+                shade = LEAF_LIGHT if (x + y + z) % 3 == 0 else LEAF
+                b.set(x, y, z, shade)
+    return b
 
 
-def hedge():
-    """A 1.000 x 0.250 x 0.750 clipped hedge wall with an uneven top."""
-    v = {}
-    for y in range(6):
-        for x in range(8):
-            for z in range(2):
-                v[(x, y, z)] = 4 if (x + z + y) % 3 == 0 else 5
+def hedge() -> Builder:
+    """A 1.000 x 0.375 x 0.500 hedge with a clipped, two-tone top face."""
+    b = Builder(8, 3, 4)
     for x in range(8):
-        cap = 6 if x % 3 == 1 else 5
-        for y in range(6, cap):
-            for z in range(2):
-                v[(x, y, z)] = 6
-    return (8, 6, 2), v
+        for y in range(3):
+            for z in range(4):
+                if z == 3 and (x == 0 or x == 7):
+                    continue
+                shade = LEAF_LIGHT if z == 3 or (x + y) % 4 == 0 else LEAF
+                b.set(x, y, z, shade)
+    return b
 
 
-def flower():
-    """A 0.375 stem with a five-cell head and two leaves."""
-    v = {}
-    for y in range(2):
-        v[(1, y, 1)] = 12
-    v[(1, 2, 1)] = 10
-    for (x, z) in ((0, 1), (2, 1), (1, 0), (1, 2)):
-        v[(x, 2, z)] = 11
-    v[(0, 1, 1)] = 12
-    v[(1, 1, 2)] = 12
-    return (3, 3, 3), v
+def flower() -> Builder:
+    """A 0.375 m flower: stem, two leaves, five-cell head with a pollen centre."""
+    b = Builder(4, 4, 5)
+    b.set(1, 1, 0, LEAF)
+    b.set(1, 1, 1, LEAF)
+    b.set(1, 1, 2, LEAF)
+    b.set(0, 1, 1, LEAF_LIGHT)
+    b.set(1, 2, 2, LEAF_LIGHT)
+    for x, y in ((0, 0), (2, 0), (1, 1), (0, 2), (2, 2)):
+        b.set(x, y, 3, PETAL_RED)
+    b.set(1, 1, 3, PETAL_YELLOW)
+    b.set(1, 1, 4, PETAL_YELLOW)
+    return b
 
 
-def grass():
-    """A 0.375 tuft: a tight base fanning to five blades."""
-    v = {}
-    for x in range(2):
-        for z in range(2):
-            v[(x, 0, z)] = 4
-    for (x, z, y) in ((0, 0, 2), (2, 0, 1), (1, 2, 2), (0, 2, 1), (2, 2, 2), (1, 1, 1)):
-        v[(x, y, z)] = 5
-    for (x, z) in ((0, 0), (2, 2)):
-        v[(x, 2, z)] = 6
-    return (3, 3, 3), v
+def grass() -> Builder:
+    """A 0.500 x 0.500 x 0.375 grass tuft: nine blades of staggered height."""
+    b = Builder(4, 4, 3)
+    heights = {(0, 0): 2, (0, 2): 3, (1, 1): 3, (2, 0): 2, (2, 2): 3,
+               (3, 1): 2, (1, 3): 2, (3, 3): 3, (0, 3): 1}
+    for (x, y), top in heights.items():
+        for z in range(top + 1):
+            b.set(x, y, z, LEAF_LIGHT if z == top else LEAF)
+    return b
 
 
-def rock():
-    """A 0.500 x 0.375 x 0.250 boulder with a lit shoulder and a dark foot."""
-    v = {}
+def rock() -> Builder:
+    """A 0.500 x 0.500 x 0.375 boulder: a chamfered, two-tone stone mass."""
+    b = Builder(4, 4, 3)
     for x in range(4):
-        for z in range(3):
-            v[(x, 0, z)] = 9 if x in (0, 3) else 7
-    for x in range(1, 3):
-        for z in range(1, 2):
-            v[(x, 1, z)] = 8
-    v[(1, 1, 0)] = 8
-    v[(2, 1, 2)] = 7
-    return (4, 2, 3), v
+        for y in range(4):
+            for z in range(3):
+                if z == 2 and (x + y) in (0, 6):
+                    continue
+                if z == 0 and (x == 0 and y == 0 or x == 3 and y == 3):
+                    continue
+                top = z == 2 or (z == 1 and x >= 2 and y >= 2)
+                b.set(x, y, z, STONE_LIGHT if top else STONE)
+    return b
 
 
-BUILDERS = {
+MODELS = {
     "fence": fence,
     "bush": bush,
     "hedge": hedge,
@@ -139,16 +141,17 @@ BUILDERS = {
 }
 
 
-def main(argv):
-    out_dir = argv[1] if len(argv) > 1 else os.path.dirname(__file__)
-    for name, builder in BUILDERS.items():
-        size, voxels = builder()
-        path = os.path.join(out_dir, "hearthvale_prop_%s.vox" % name)
-        count = write_vox(path, voxels, PALETTE)
-        dims = " x ".join("%.3f" % (c * SIZE) for c in size)
-        print("%-8s %5d cells  size %s  dims %s" % (name, count, size, dims))
+def main(argv: list[str]) -> int:
+    out = Path(argv[0]) if argv else Path("assets/source/magicavoxel")
+    out.mkdir(parents=True, exist_ok=True)
+    for name, builder in MODELS.items():
+        model = builder()
+        path = out / ("hearthvale_prop_%s.vox" % name)
+        count = model.write(path)
+        x, y, z = model.size
+        print(f"{name:11s} {count:4d} cells  {x * CELL:.3f} x {z * CELL:.3f} x {y * CELL:.3f} m")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    sys.exit(main(sys.argv[1:]))
