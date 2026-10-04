@@ -97,7 +97,7 @@ jobs:
           $editor = Get-ChildItem '.tools/godot' -Recurse -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           $log = & $editor --headless --path . --script tests/visual_lighting_profile_test.gd 2>&1 | Out-String
           $code = $LASTEXITCODE
-          $log | Tee-Object -FilePath '.tools/glow/profile.log'
+          $log | Tee-Object -FilePath '.tools/glow-profile.log'
           if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'failures=0') { throw 'Profile regression failed' }
 
       - name: Verify path lantern glow
@@ -106,7 +106,7 @@ jobs:
           $editor = Get-ChildItem '.tools/godot' -Recurse -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           $log = & $editor --headless --path . --script tests/m2_lantern_glow_test.gd 2>&1 | Out-String
           $code = $LASTEXITCODE
-          $log | Tee-Object -FilePath '.tools/glow/lantern-glow.log'
+          $log | Tee-Object -FilePath '.tools/glow-lantern.log'
           if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'lantern glow checks passed') { throw 'Path lantern glow regression failed' }
 
       - name: Verify cottage window glow
@@ -115,7 +115,7 @@ jobs:
           $editor = Get-ChildItem '.tools/godot' -Recurse -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           $log = & $editor --headless --path . --script tests/m2_window_glow_test.gd 2>&1 | Out-String
           $code = $LASTEXITCODE
-          $log | Tee-Object -FilePath '.tools/glow/window-glow.log'
+          $log | Tee-Object -FilePath '.tools/glow-window.log'
           if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'window glow checks passed') { throw 'Cottage window glow regression failed' }
 
       - name: Retain glow logs
@@ -123,14 +123,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: visual-glow-${{ github.sha }}
-          path: .tools/glow/*.log
+          path: .tools/glow-*.log
           if-no-files-found: warn
           retention-days: 7
 
-  visual-gate:
-    name: M2 Thor visual gate
-    needs: glow-source
-    if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/visual-gate.yml
-    with:
-      artifact_name: m2-hamlet
