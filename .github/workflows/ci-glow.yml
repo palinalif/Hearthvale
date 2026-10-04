@@ -98,7 +98,8 @@ jobs:
             tests/m2_starter_prop_asset_test.gd \
             tests/visual_lighting_profile_test.gd \
             tests/m2_lantern_glow_test.gd \
-            tests/m2_window_glow_test.gd
+            tests/m2_window_glow_test.gd \
+            tests/m2_planter_placement_test.gd
           do
             echo "::group::${suite}"
             "$godot_bin" --headless --path . --script "res://${suite}"

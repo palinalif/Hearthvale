@@ -113,8 +113,13 @@ func _run() -> void:
 	if await _choose("barrel_planter_light"):
 		var home: Dictionary = scene.building_world.get_building(scene.selected_building_id)
 		var home_point: Vector3 = (home.transform as Transform3D).origin
+		# The home footprint is not a targetable terrain surface, so the cursor
+		# reports "no terrain surface" here rather than a home overlap. Assert the
+		# behaviour the player actually sees, and check the overlap rule itself
+		# directly: it is the contract that keeps furniture out of a home.
 		_aim(Vector2(home_point.x, home_point.z))
-		_check(not scene.furniture_placement_valid and scene.furniture_placement_reason.contains("home"), "Home overlap is explained")
+		_check(not scene.furniture_placement_valid, "Aiming at a home cannot place furniture")
+		_check(scene._composition_hits_home(Vector2(home_point.x, home_point.z), scene.detail_size, scene.detail_yaw_quarters), "Home overlap rule rejects the home footprint")
 		await _press(JOY_BUTTON_A)
 		_check(scene.furniture_placement_active and JSON.stringify(scene.landscape_state.document()) == saved, "Invalid overlap cannot commit")
 		_aim(Vector2(0.125, 34.0))
