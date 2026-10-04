@@ -1,5 +1,6 @@
 extends Node3D
 class_name CottageVisual
+const WindowGlow = preload("res://scripts/m2_window_glow.gd")
 
 ## Small procedural renderer for one authoritative building recipe. Geometry is
 ## disposable; IDs, states, anchors and revisions remain in BuildingWorld.
@@ -94,6 +95,10 @@ var requested_revision := -1
 var building_id := ""
 var _applied_view: Dictionary = {}
 var _outline_material: StandardMaterial3D
+## Lit-window pane materials, one per craft variant, plus the current glow
+## strength. Presentation only: never part of a building record.
+var _window_materials: Dictionary = {}
+var _window_glow_scale := WindowGlow.DAYLIGHT_EMISSIVE_SCALE
 
 func set_detail_highlight(detail_id: String, enabled: bool) -> void:
 	var overlay: Material = _detail_outline_material() if enabled else null
@@ -495,11 +500,25 @@ func _build_style_accents(dimensions: Vector3, style_id: String) -> void:
 			for level in 4: finials.append(_piece(Vector3(x_value, top + (level + 0.5) * _detail_unit.y, 0), _detail_unit))
 		_add_detail_boxes("GableFinials", finials, CORNICE_COLOR)
 
+## Pane material for one window variant. Cached per building so a facade with
+## many windows stays cheap; warmth follows the window's deterministic variant.
+func _window_material_for(variant: int) -> StandardMaterial3D:
+	var key := posmod(variant, WindowGlow.INTERIOR_GLOW_COLOURS.size())
+	if not _window_materials.has(key):
+		_window_materials[key] = WindowGlow.make_material(WINDOW_COLOR, key, _window_glow_scale)
+	return _window_materials[key] as StandardMaterial3D
+
+## This cottage's lit-window pane materials.
+func window_glow_materials() -> Array:
+	return _window_materials.values()
+
+## Retune this cottage's lit windows for a lighting profile (dusk/night).
+## Passing null restores the constant daylight look the shipped world uses.
+func apply_window_glow_profile(profile: Resource) -> void:
+	_window_glow_scale = WindowGlow.DAYLIGHT_EMISSIVE_SCALE if profile == null else float(profile.get("window_emissive_scale"))
+	WindowGlow.apply_profile(_window_materials.values(), profile)
+
 func _build_details(view: Dictionary, dimensions: Vector3) -> void:
-	var window_material := StandardMaterial3D.new()
-	window_material.albedo_color = WINDOW_COLOR
-	window_material.emission_enabled = false
-	window_material.emission = Color(0.55, 0.28, 0.08)
 	var surface_orientations := {}
 	for surface_value in view.get("surfaces", []):
 		var surface: Dictionary = surface_value
@@ -511,7 +530,7 @@ func _build_details(view: Dictionary, dimensions: Vector3) -> void:
 		if not local is Vector3: continue
 		var anchor: Dictionary = detail.get("anchor", {})
 		var orientation := str(surface_orientations.get(str(anchor.get("surface_id", "")), "front"))
-		_build_window(detail, local, orientation, window_material)
+		_build_window(detail, local, orientation, _window_material_for(_craft_variant(detail)))
 	for detail_value in view.get("details", []):
 		var detail: Dictionary = detail_value
 		if str(detail.get("kind", "")) != "shutter" or not bool(detail.get("visible", true)) or bool(detail.get("needs_placement", false)): continue
