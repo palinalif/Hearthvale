@@ -961,3 +961,17 @@ stump, wood pile, wood cart (43 asset records total); `m2_lantern_glow.gd`;
 `m2_window_glow.gd` wired into `cottage_visual.gd`/`m1_scene.gd`;
 `visual_lighting_profile.gd` emissive stops; glow tests that skip where a source
 lacks the authored-prop layer.
+
+## 2026-09-20 — CI finding: the lighting-polish workflow cannot pass as written
+
+`visual-lighting-polish.yml` (Windows runner) runs its Mobile capture step as **headful** Godot with
+`--rendering-driver d3d12`, which needs a GPU context GitHub Windows runners do not provide — it
+times out at 420 s. Its gate also asserts `LIGHTING_POLISH_RENDER` and `"captures": 15`, while its
+own test emits `LIGHTING_PROFILE_RENDER` with `"captures": 16` (8 looks × 2 cameras). Both are
+unsatisfiable, so that step can never pass. It went unnoticed because it only triggers on
+`feat/m2-lighting-polish`.
+
+This branch briefly widened that trigger, which made this branch's CI red for reasons unrelated to
+this work; the trigger is back to its own branch. Glow checks are gated in `visual-glow.yml`, which
+has no GPU-dependent step. Fixing the lighting-polish study is its owner's call: run it on a
+GPU-equipped machine and assert the markers the test actually prints.
