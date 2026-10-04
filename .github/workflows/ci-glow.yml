@@ -1,7 +1,7 @@
 name: M2 glow
 on:
   push:
-    branches: [feat/m2-vox-props]
+    branches: [feat/m2-glow, feat/m2-vox-props]
   pull_request:
     branches: [main]
   workflow_dispatch:
