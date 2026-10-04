@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://du2g6bbnxoswu"
+path="res://.godot/imported/hearthvale_furniture_chopping_block.vox-3e980a1c86ac72c7cfc41da1ce3ee532.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_furniture_chopping_block.vox"
+dest_files=["res://.godot/imported/hearthvale_furniture_chopping_block.vox-3e980a1c86ac72c7cfc41da1ce3ee532.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true

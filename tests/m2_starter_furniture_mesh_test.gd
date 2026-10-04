@@ -78,6 +78,29 @@ func _check_style(style_id: String, mesh_path: String) -> void:
 	_check(absf(lowest) < 0.0001, "%s: mesh pivots at ground level" % style_id,
 		"lowest y %.4f" % lowest)
 
+	# A mesh can carry on-grid vertices and still be a degenerate sliver, which is
+	# exactly how a broken bake hides from a vertex count. The authored source
+	# records its voxel dimensions; the baked footprint must be within the two-cell
+	# inset the exposed-face mesher uses, and must occupy every axis.
+	var box: AABB = mesh.get_aabb()
+	_check(box.size.x > 0.0 and box.size.y > 0.0 and box.size.z > 0.0,
+		"%s: mesh occupies all three axes" % style_id, "aabb %s" % box)
+	var receipt_path := mesh_path.replace(".res", ".asset.json")
+	if FileAccess.file_exists(receipt_path):
+		var json := JSON.new()
+		if json.parse(FileAccess.get_file_as_string(receipt_path)) == OK:
+			var dims: Array = (json.data as Dictionary).get("occupied_bounds", {}) as Dictionary
+			var lo: Array = dims.get("min", []) as Array
+			var hi: Array = dims.get("max", []) as Array
+			if lo.size() == 3 and hi.size() == 3:
+				var want := Vector3(
+					float(hi[0]) - float(lo[0]), float(hi[1]) - float(lo[1]), float(hi[2]) - float(lo[2])
+				) * UNIT
+				var drift := (box.size - want).abs()
+				_check(drift.x <= 2.0 * UNIT and drift.y <= 2.0 * UNIT and drift.z <= 2.0 * UNIT,
+					"%s: baked footprint matches the authored dimensions" % style_id,
+					"aabb %s vs authored %s" % [box.size, want])
+
 func _check(ok: bool, label: String, detail := "") -> void:
 	if ok:
 		return
