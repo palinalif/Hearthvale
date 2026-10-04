@@ -15,6 +15,7 @@ Branch `feat/m2-glow` (from `origin/main` at `1808420`) carries the lighting pas
 - `scenes/m2_hamlet.tscn`, `scripts/cottage.gd` and `scripts/m2_hamlet_scene.gd` are **untracked** — the M2 gameplay scene exists only as loose files in the shared checkout, in no commit and no backup.
 - `m2_upper_storey_auto_windows_test` fails identically on `origin/main` (2 failures) and is unrelated to this work.
 - `m2_street_prop_asset_test` had an inverted exit code (pass reported failure); fixed.
+- **The MagicaVoxel sources are not missing.** All 43 `assets/models/magicavoxel/*.asset.json` record a `source` basename and `source_sha256`, and every one matches a tracked `.vox` in `assets/source/magicavoxel/` byte-for-byte. Regenerating each OBJ from its source reproduces the committed geometry. An intermediate note claimed the sources were absent; that came from resolving the bare `source` basename against the runtime `models/` directory instead of `source/`. `tools/magicavoxel/obj_to_vox.py` (added on this branch) recovers a `.vox` from an OBJ by surface equivalence and is only for the case where a source really is lost.
 
 ---
 
@@ -975,3 +976,21 @@ This branch briefly widened that trigger, which made this branch's CI red for re
 this work; the trigger is back to its own branch. Glow checks are gated in `visual-glow.yml`, which
 has no GPU-dependent step. Fixing the lighting-polish study is its owner's call: run it on a
 GPU-equipped machine and assert the markers the test actually prints.
+
+## Prop authoring on the glow branch
+
+- `tools/magicavoxel/author_props.py` generates starter-hamlet prop `.vox`
+  sources parametrically in MagicaVoxel **format 150** (`VOX `/MAIN with
+  `SIZE`/`XYZI`/`RGBA` as direct children — the layout the MagicaVoxel MCP
+  writes and `vox_to_obj.py` reads). `--selftest` round-trips a tracked source.
+- Authored here: `hearthvale_prop_village_well` (16×16×24),
+  `hearthvale_prop_chopping_block` (16×16×14), `hearthvale_prop_log_stack`
+  (16×14×20). These replace the three props the starter hamlet built
+  procedurally; they are sources only — no runtime OBJ/`asset.json` and no
+  placement wiring yet, so nothing in-game changed.
+- The MagicaVoxel MCP is **not** a build dependency: its tool surface changed
+  three times during this session and its save target moved, which lost an
+  authored well. Generation is in-repo and deterministic.
+- Ten `hearthvale_prop_*.vox` concept files from the prop-concept line are
+  present in this worktree **untracked** and are deliberately left alone; that
+  work belongs to `feat/m2-voxel-prop-concepts`, not to this branch.
