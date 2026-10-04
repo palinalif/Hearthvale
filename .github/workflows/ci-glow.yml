@@ -50,46 +50,16 @@ jobs:
           }
           & $env:GODOT_EDITOR --headless --path . --import
           if ($LASTEXITCODE) { throw 'Project import failed' }
-      # The bake tool writes the OBJ into a Godot-visible staging directory:
-      # Godot skips dot-directories, so a hidden staging dir imports the OBJ
-      # into nothing and the .res it writes has no .import companion.
-      # The bake tool writes the OBJ into a Godot-visible staging directory:
-      # Godot skips dot-directories, so a hidden staging dir imports the OBJ
-      # into nothing and the .res it writes has no .import companion.
-      - name: Bake authored prop meshes
+      # Baked meshes are committed artifacts (like the .vox sources), so CI
+      # asserts the set is complete rather than regenerating it.
+      - name: Assert the authored mesh library is complete
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          New-Item -ItemType Directory -Force build/magicavoxel | Out-Null
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_bench.vox build/magicavoxel/bench.res
-          if ($LASTEXITCODE) { throw 'bench mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_hay_cart.vox build/magicavoxel/hay_cart.res
-          if ($LASTEXITCODE) { throw 'hay_cart mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_lamp_post.vox build/magicavoxel/lamp_post.res
-          if ($LASTEXITCODE) { throw 'lamp_post mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_market_cross.vox build/magicavoxel/market_cross.res
-          if ($LASTEXITCODE) { throw 'market_cross mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_maypole.vox build/magicavoxel/maypole.res
-          if ($LASTEXITCODE) { throw 'maypole mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_notice_board.vox build/magicavoxel/notice_board.res
-          if ($LASTEXITCODE) { throw 'notice_board mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_signpost.vox build/magicavoxel/signpost.res
-          if ($LASTEXITCODE) { throw 'signpost mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_stone_bench.vox build/magicavoxel/stone_bench.res
-          if ($LASTEXITCODE) { throw 'stone_bench mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- res://assets/source/magicavoxel/hearthvale_water_pump.vox build/magicavoxel/water_pump.res
-          if ($LASTEXITCODE) { throw 'water_pump mesh bake failed' }
-          & $env:GODOT_EDITOR --headless --path . -e --import
-          if ($LASTEXITCODE) { throw 'Post-bake import failed' }
-          if (-not (Test-Path -LiteralPath 'build/magicavoxel/bench.res.import')) { throw 'bench mesh was not imported' }
-          if (-not (Test-Path -LiteralPath 'build/magicavoxel/hay_cart.res.import')) { throw 'hay_cart mesh was not imported' }
-          if (-not (Test-Path -LiteralPath 'build/magicavoxel/lamp_post.res.import')) { throw 'lamp_post mesh was not imported' }
-          if (-not (Test-Path -LiteralPath 'build/magicavoxel/market_cross.res.import')) { throw 'market_cross mesh was not imported' }
-          if (-not (Test-Path -LiteralPath 'build/magicavoxel/maypole.res.import')) { throw 'maypole mesh was not imported' }
-          if (-not (Test-Path -LiteralPath 'build/magicavoxel/notice_board.res.import')) { throw 'notice_board mesh was not imported' }
-          if (-not (Test-Path -LiteralPath 'build/magicavoxel/signpost.res.import')) { throw 'signpost mesh was not imported' }
-          if (-not (Test-Path -LiteralPath 'build/magicavoxel/stone_bench.res.import')) { throw 'stone_bench mesh was not imported' }
-          if (-not (Test-Path -LiteralPath 'build/magicavoxel/water_pump.res.import')) { throw 'water_pump mesh was not imported' }
+          $meshes = @('bench','hay_cart','lamp_post','market_cross','maypole','notice_board','signpost','stone_bench','water_pump')
+          foreach ($mesh in $meshes) {
+            if (-not (Test-Path -LiteralPath "assets/models/magicavoxel/hearthvale_$mesh.res")) { throw "baked mesh missing: hearthvale_$mesh.res" }
+          }
       - name: Run glow tests
         shell: pwsh
         run: |
