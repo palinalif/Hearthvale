@@ -43,8 +43,9 @@ const FURNITURE_COLOURS := {
 
 # Styles that carry a light source: surface index -> emissive colour.
 # The lantern's glass core is surface 2 of its builder.
+const LANTERN_EMBER_COLOR := Color("#d7a85e")
 const FURNITURE_EMISSIVE := {
-	"lantern": {2: M2LanternGlow.LANTERN_EMBER_COLOR},
+	"lantern": {2: LANTERN_EMBER_COLOR},
 }
 
 var _furniture_nodes: Array[MeshInstance3D] = []

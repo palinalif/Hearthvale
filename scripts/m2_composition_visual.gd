@@ -524,7 +524,7 @@ func _mesh_from_builder(builder: Dictionary, colours: Array, preview: bool = fal
 			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			material.emission_enabled = true
 			material.emission = emissive[index]
-			material.emission_energy_multiplier = M2LanternGlow.LANTERN_EMBER_INTENSITY
+			material.emission_energy_multiplier = M2LanternGlow.FLAME_EMISSIVE_BOOST
 		mesh.surface_set_material(mesh.get_surface_count() - 1, material)
 		has_geometry = true
 	return mesh if has_geometry else null
