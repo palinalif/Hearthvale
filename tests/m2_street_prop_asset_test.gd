@@ -109,4 +109,4 @@ func _run() -> void:
 func _finish() -> void:
 	print("street_prop_asset_test checks=%d failures=%d" % [checks, failures.size()])
 	for message in failures: print("FAIL: " + message)
-	quit(1 if failures.is_empty() else 0)
+	quit(0 if failures.is_empty() else 1)
