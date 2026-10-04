@@ -39,6 +39,10 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $scripts = @(
             'res://scripts/m2_lantern_glow.gd',
+            'res://scripts/m2_window_glow.gd',
+            'res://scripts/m2_lantern_assets.gd',
+            'res://scripts/m2_hamlet_building_visual.gd',
+            'res://scripts/m2_starter_world.gd',
             'res://scripts/cottage_visual.gd',
             'res://scripts/visual_lighting_profile.gd',
             'res://scripts/m2_composition_visual.gd',
@@ -67,7 +71,9 @@ jobs:
           $tests = @(
             'res://tests/m2_lantern_glow_test.gd',
             'res://tests/m2_window_glow_test.gd',
-            'res://tests/m2_starter_prop_assets_test.gd'
+            'res://tests/m2_starter_prop_assets_test.gd',
+            'res://tests/visual_lighting_profile_test.gd',
+            'res://tests/m2_starter_furniture_mesh_test.gd'
           )
           foreach ($test in $tests) {
             & $env:GODOT_EDITOR --headless --path . --script $test
