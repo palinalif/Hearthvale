@@ -1,7 +1,7 @@
 name: Visual lighting polish
 on:
   push:
-    branches: [feat/m2-lighting-polish, feat/m2-glow]
+    branches: [feat/m2-lighting-polish]
   workflow_dispatch:
 permissions:
   contents: read
