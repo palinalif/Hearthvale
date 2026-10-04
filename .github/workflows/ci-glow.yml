@@ -38,13 +38,13 @@ jobs:
           echo "Fetching $url"
           curl -fsSL -o /tmp/voxel.zip "$url"
           echo "$sha  /tmp/voxel.zip" | sha256sum -c -
-          mkdir -p /tmp/voxel
-          unzip -q -o /tmp/voxel.zip -d /tmp/voxel
-          editor_so=$(find /tmp/voxel -name 'libvoxel.godot.so.*.editor.java' | head -1)
-          test -n "$editor_so"
-          mkdir -p addons/zylann.voxel/bin
-          install -m755 "$editor_so" addons/zylann.voxel/bin/libvoxel.godot.so
-          ls -l addons/zylann.voxel/bin
+          # The pinned release is laid out exactly as the project expects:
+          # addons/zylann.voxel/bin/libvoxel.<platform>.<editor|template_release>.<arch>.so,
+          # and voxel.gdextension references those names directly.
+          unzip -q -o /tmp/voxel.zip -d .
+          test -f addons/zylann.voxel/bin/libvoxel.linux.editor.x86_64.so
+          test -f addons/zylann.voxel/bin/libvoxel.android.template_release.arm64.so
+          ls -l addons/zylann.voxel/bin | head -20
 
       - name: Install Godot
         run: |
@@ -65,6 +65,12 @@ jobs:
           set -euo pipefail
           python3 tools/magicavoxel/author_furniture.py
           python3 tools/magicavoxel/author_props.py
+          python3 tools/magicavoxel/author_tier_b.py
+          # Every committed source must round-trip through the project's reader.
+          for vox in assets/source/magicavoxel/*.vox; do
+            python3 tools/magicavoxel/vox_to_obj.py "$vox" /tmp/check.obj --greedy >/dev/null
+          done
+          echo "all committed .vox sources parse"
 
       - name: Run the lighting test suites
         # Godot's --script exits non-zero when the script calls quit(1), so each
