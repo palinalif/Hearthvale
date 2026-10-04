@@ -1,3 +1,63 @@
+# 2026-10-04 (night) — Tier B garden props authored as .vox
+
+Branch `feat/m2-glow`, pushed to `origin`. Not merged to `main`.
+
+## Landed this round
+
+**Six garden props are now authored voxel sources** (`b23ad72`, `08fff28`):
+`prop_stool`, `prop_bench`, `prop_signpost`, `prop_well`, `prop_lantern`,
+`prop_planter`. Each has a `.vox` under `assets/source/magicavoxel/props/`, a
+named per-part material, and a runtime that loads the baked mesh and tints
+named parts — the lantern keeps its emissive glass, the well keeps its
+non-emissive water, and the bench and planter carry a per-style wood colour
+from the existing style table. `tests/m2_starter_furniture_mesh_test.gd` asserts
+the sources exist, are on the 0.125 grid, are named, and that the runtime
+reproduces the authored vertex counts, part names and colours.
+
+**A chopping block and a log stack** (`b4cd6e7`) add the two things the starter
+valley had no prop for: a 1.25 m block with a steel ring and a leaning
+mallet, and a stack of five logs with visible bark and growth rings. They are
+authored and tested; they are **not** placed in the valley, because placement
+needs a build-slot decision (which build accepts them, at what cost) that is
+the user's call.
+
+**`tools/magicavoxel/bake_all.sh`** is now the single bake pipeline: it runs the
+furniture baker and the Tier B baker, and fails if any authored source is
+missing a baked mesh. CI runs it as a gate.
+
+## Not done, and why
+
+- **Prop scale.** The runtime multiplies authored meshes by 0.5, so a Tier B
+  source authored at 1 cell = 0.125 m renders at 0.0625 m per cell — half the
+  resolution of the accepted Tier A props, which are authored at 1 cell = 0.25 m.
+  The Tier B props therefore read chunkier at the same real-world size. Fixing
+  it means re-authoring them at 0.25 m cells; the sources and tests are written
+  so that is a scale change, not a redesign. Reported in
+  `reports/MagicaVoxel-prop-concepts.md`.
+- **Tier C** (fence, gate, trellis, fence_lantern, bridge, cart, barrel) is
+  unchanged: procedural, and out of scope for this round.
+
+## Tooling / pipeline findings
+
+- The voxel extension is gitignored and was **absent from this checkout**
+  (`addons/zylann.voxel/bin/` held only `.gitignore`), so headless runs here
+  silently had no terrain. Install it from the lock before trusting any local
+  terrain test: fetch `.voxel.url`, check `.voxel.sha256`, `unzip -o` into the
+  project root. Verified checksum `600737…1d2d8`.
+- The pinned release ships `template_release` only; `voxel.gdextension` declares
+  an android `template_debug` path. The Thor APK job symlinks release→debug and
+  then requires exactly one `libvoxel*` in the APK. Keep that symlink.
+- The glow CI ran on `4.7-stable` from the download endpoint while the project
+  pins `4.7.2-stable`, and installed 4.7 templates under a `4.7.1` directory.
+  Both now derive from `dependencies.lock.json`.
+
+## Verification state
+
+CI run `37216093601` (this branch) is the first to run the glow suites on the
+pinned engine with the voxel library installed; its result is the evidence for
+this round. Local headless runs are fast-loop evidence only. No Thor device
+run, no APK installed, no user visual acceptance for the new props.
+
 # 2026-10-04 (evening) — window glow, per-part materials, greedy meshing
 
 Branch `feat/m2-glow`, pushed to `origin`. Not merged to `main`.
