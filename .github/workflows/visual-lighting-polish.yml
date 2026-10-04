@@ -57,7 +57,7 @@ jobs:
           $log = & $editor --headless --path . --script tests/m2_window_glow_test.gd 2>&1 | Out-String
           $code = $LASTEXITCODE
           $log | Tee-Object -FilePath '.tools/lighting-polish/window-glow.log'
-          if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|FAIL:' -or $log -notmatch 'window glow checks passed') { throw 'Authored window glow regression failed' }
+          if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|M2_WINDOW_GLOW_TEST_FAIL' -or $log -notmatch 'M2_WINDOW_GLOW_TEST_PASS') { throw 'Authored window glow regression failed' }
       - name: Verify authored OBJ material references
         shell: pwsh
         run: |
