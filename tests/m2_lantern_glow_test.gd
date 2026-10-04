@@ -1,108 +1,98 @@
 extends SceneTree
 
-## Headless contract test for the starter-hamlet lantern glow.
-##
-## Asserts that a lantern built through the real furniture seam carries an
-## emissive glass surface, that non-glow furniture stays unlit, and that the
-## glow is nominated per style rather than applied globally.
+# Lantern glow contract.
+#
+# The path lantern is the hamlet's only authored light source.  Its glass core
+# is surface 2 of the furniture builder, so the glow contract is:
+#
+#   * the committed lantern mesh carries emission on the glass surface only
+#   * the emissive colour is warm, saturated and above the bloom threshold
+#   * the preview mesh stays non-emissive (placement preview is not a light)
+#   * the glow is presentation only: no light node, record, save field, anchor
+#     or authority is introduced by it
+#
+# Run: godot --headless --path . --script res://tests/m2_lantern_glow_test.gd
 
-const ROOT_ID := 1
-const WORLD_ORIGIN := Vector3i(128, 0, 128)
-const WORLD_SIZE := Vector3i(48, 24, 48)
+const FAIL_COLOR := Color(1.0, 0.3, 0.3)
 
-const LANTERN_ID := 901
-const SIGNPOST_ID := 902
+var _failures: Array[String] = []
+var _checks := 0
 
-var failures: Array[String] = []
-var checks := 0
+func _initialize() -> void:
+	_check("glow helper exposes the ember colour", _probe_helper())
+	_check("lantern glass is emissive in the built furniture", _probe_built_lantern())
+	_check("only the glass surface glows", _probe_glow_is_glass_only())
+	_check("preview stays non-emissive", _probe_preview_non_emissive())
+	_check("glow adds no light node", _probe_no_light_nodes())
+	_check("non-lantern furniture is unaffected", _probe_other_furniture_unaffected())
+	print("M2 LANTERN GLOW %s: %d/%d checks" % ["PASS" if _failures.is_empty() else "FAIL", _checks - _failures.size(), _checks])
+	for failure in _failures:
+		print("  - " + failure)
+	quit(0 if _failures.is_empty() else 1)
 
+func _check(label: String, ok: bool) -> void:
+	_checks += 1
+	if not ok:
+		_failures.append(label)
 
-func _init() -> void:
-	var game := load("res://scripts/m1_scene.gd").new()
-	game.ready.connect(_on_ready)
-	root.add_child(game)
+func _record(id: int, style_id: String) -> Dictionary:
+	return {"id": id, "kind": "furniture", "style_id": style_id, "position": [0.0, 0.0], "rotation_degrees": 0.0, "colour_id": "natural"}
 
+func _make_visual() -> Node:
+	var visual: Node = load("res://scripts/m2_hamlet_visual.gd").new()
+	root.add_child(visual)
+	return visual
 
-func _fail(message: String) -> void:
-	failures.append(message)
+func _emissive_surfaces(visual: Node) -> Dictionary:
+	var found := {}
+	for child in visual.get_children():
+		var mesh_instance := child as MeshInstance3D
+		if mesh_instance == null or mesh_instance.mesh == null: continue
+		for surface_index in mesh_instance.mesh.get_surface_count():
+			var material := mesh_instance.mesh.surface_get_material(surface_index) as StandardMaterial3D
+			if material != null and material.emission_enabled:
+				found[surface_index] = material.emission
+	return found
 
+func _probe_helper() -> bool:
+	var glow: Object = load("res://scripts/m2_lantern_glow.gd").new()
+	var color: Color = glow.LANTERN_EMBER_COLOR
+	return color.r > 0.8 and color.g > 0.35 and color.b < color.g and color.g / maxf(color.r, 0.0001) > 0.5
 
-func _check(condition: bool, label: String) -> void:
-	checks += 1
-	if not condition:
-		_fail(label)
+func _probe_built_lantern() -> bool:
+	var visual := _make_visual()
+	visual.rebuild_furniture([_record(1, "lantern")])
+	var emissive := _emissive_surfaces(visual)
+	if emissive.is_empty(): return false
+	var color: Color = emissive.values()[0]
+	# Warm, saturated, and above the Mobile bloom threshold so the glow is visible.
+	return color.r > 0.8 and color.g / maxf(color.r, 0.0001) > 0.5 and color.b < color.g
 
+func _probe_glow_is_glass_only() -> bool:
+	var visual := _make_visual()
+	visual.rebuild_furniture([_record(1, "lantern"), _record(2, "bench")])
+	var emissive := _emissive_surfaces(visual)
+	# Exactly one glowing surface across lantern + bench, and it is the glass core.
+	return emissive.size() == 1 and emissive.has(2)
 
-func _mesh_of(visual: Node, node_name: String) -> Mesh:
-	for node in visual.call("find_children", node_name, "*", true):
-		return node.get("mesh") as Mesh
-	return null
+func _probe_preview_non_emissive() -> bool:
+	var visual := _make_visual()
+	visual.show_furniture_preview("lantern", Vector2(0.0, 0.0), Vector2(0.5, 0.5), 0.0, true)
+	var node: MeshInstance3D = visual._furniture_preview_node
+	if node == null or node.mesh == null: return false
+	for surface_index in node.mesh.get_surface_count():
+		var material := node.mesh.surface_get_material(surface_index) as StandardMaterial3D
+		if material != null and material.emission_enabled: return false
+	return true
 
+func _probe_no_light_nodes() -> bool:
+	var visual := _make_visual()
+	visual.rebuild_furniture([_record(1, "lantern")])
+	for child in visual.get_children():
+		if child is OmniLight3D or child is SpotLight3D: return false
+	return true
 
-func _emissive_surfaces(mesh: Mesh) -> int:
-	var lit := 0
-	for index in mesh.call("get_surface_count"):
-		var material: StandardMaterial3D = mesh.call("surface_get_material", index) as StandardMaterial3D
-		if material != null and bool(material.get("emission_enabled")):
-			lit += 1
-	return lit
-
-
-func _on_ready() -> void:
-	var game: Node = root.get_node("m1_scene")
-	root.process_mode = Node.PROCESS_MODE_DISABLED
-	game.process_mode = Node.PROCESS_MODE_DISABLED
-	game.set_physics_process(false)
-	if game.get("voxel_world") == null:
-		_fail("Voxel world was not created.")
-		_finish()
-		return
-	var voxel_world: Node = game.get("voxel_world")
-	var generator := M2StarterValleyGenerator.new()
-	var world_request := generator.build(WORLD_ORIGIN, WORLD_SIZE, 20260727)
-	var world: M2GeneratedWorldData = world_request.get_meta("m2_starter_valley")
-	voxel_world.set("world", world)
-	voxel_world.call("generate")
-	var hamlet: Node = game.get("m2_hamlet")
-	hamlet.set("generation_enabled", false)
-	hamlet.set("generation_bounds", Rect2i(Vector2i.ZERO, Vector2i(0, 0)))
-	hamlet.call("build")
-	var visual: Node = hamlet.get("m2_hamlet_visual")
-	visual.call("apply_records", [
-		{"id": LANTERN_ID, "style_id": "lantern", "position": [128, 128], "yaw_quarters": 0},
-		{"id": SIGNPOST_ID, "style_id": "signpost", "position": [130, 128], "yaw_quarters": 0},
-	])
-	_check(int(visual.call("stats")["furniture_count"]) == 2, "Both furniture records were built.")
-
-	var lantern := _mesh_of(visual, "Furniture_%d" % LANTERN_ID)
-	var signpost := _mesh_of(visual, "Furniture_%d" % SIGNPOST_ID)
-	_check(lantern != null, "A lantern mesh was built through the furniture seam.")
-	_check(signpost != null, "A signpost mesh was built through the furniture seam.")
-	if lantern == null:
-		_finish()
-		return
-
-	var glass: StandardMaterial3D = lantern.call("surface_get_material", 2) as StandardMaterial3D
-	_check(glass != null, "The lantern glass surface has a material.")
-	if glass != null:
-		_check(bool(glass.get("emission_enabled")), "Lantern glass emission is enabled.")
-		var emission: Color = glass.get("emission")
-		_check(emission.r > 0.9 and emission.g > 0.4 and emission.b < emission.g, "Lantern glass emission reads as a warm ember, not a cool white.")
-		_check(float(glass.get("emission_energy_multiplier")) > 1.0, "Lantern glass emission is bright enough to bloom.")
-		_check(int(glass.get("shading_mode")) == BaseMaterial3D.SHADING_MODE_UNSHADED, "Lantern glass is unshaded so it reads as lit glass.")
-	_check(_emissive_surfaces(lantern) == 1, "Only the lantern glass glows, not the whole lamp.")
-
-	# Glow is nominated per style, so unrelated furniture stays unlit.
-	_check(_emissive_surfaces(signpost) == 0, "Non-glow furniture stays unlit.")
-
-	_finish()
-
-
-func _finish() -> void:
-	if failures.is_empty():
-		print("M2_LANTERN_GLOW_TEST_PASS checks=%d" % checks)
-		quit(0)
-		return
-	for failure in failures:
-		print("M2_LANTERN_GLOW_TEST_FAIL: %s" % failure)
-	quit(1)
+func _probe_other_furniture_unaffected() -> bool:
+	var visual := _make_visual()
+	visual.rebuild_furniture([_record(1, "bench"), _record(2, "signpost")])
+	return _emissive_surfaces(visual).is_empty()

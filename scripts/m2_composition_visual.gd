@@ -525,7 +525,6 @@ func _mesh_from_builder(builder: Dictionary, colours: Array, preview: bool = fal
 			material.emission_enabled = true
 			material.emission = emissive[index]
 			material.emission_energy_multiplier = M2LanternGlow.LANTERN_EMBER_INTENSITY
-			material.emission_specular = M2LanternGlow.LANTERN_EMBER_GLOW_SPECULAR
 		mesh.surface_set_material(mesh.get_surface_count() - 1, material)
 		has_geometry = true
 	return mesh if has_geometry else null

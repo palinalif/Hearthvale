@@ -10,7 +10,6 @@ Kept out of the deep gameplay inheritance chain so it can be tested on its own.
 
 const LANTERN_EMBER_COLOR := Color(1.0, 0.62, 0.24)
 const LANTERN_EMBER_INTENSITY := 2.4
-const LANTERN_EMBER_GLOW_SPECULAR := 0.6
 const LANTERN_UNLIT_EMBER_INTENSITY := 0.0
 
 
@@ -22,7 +21,6 @@ static func apply(glass: MeshInstance3D, lit: bool) -> bool:
 	material.albedo_color = Color(1.0, 0.82, 0.55, 0.88)
 	material.emission_enabled = true
 	material.emission = LANTERN_EMBER_COLOR
-	material.emission_energy_multiplier = LANTERN_EMBER_INTENSITY if lit else LANTERN_EMBER_UNLIT_EMBER_INTENSITY
-	material.emission_specular = LANTERN_EMBER_GLOW_SPECULAR
+	material.emission_energy_multiplier = LANTERN_EMBER_INTENSITY if lit else LANTERN_UNLIT_EMBER_INTENSITY
 	glass.material_override = material
 	return true
