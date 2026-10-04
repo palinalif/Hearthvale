@@ -42,7 +42,11 @@ func _init() -> void:
 			FURNITURE_STAGE + "hearthvale_furniture_%s.res" % furniture)
 	if failures == 0:
 		print("M2 STARTER FURNITURE MESH PASS: %d authored styles verified" % checked)
+		# quit() only schedules the exit for the end of the frame, so without this
+		# return the failure branch below also runs and the suite exits 1 while
+		# reporting zero failures.
 		quit(0)
+		return
 	print("M2 STARTER FURNITURE MESH FAIL: %d failures" % failures)
 	quit(1)
 

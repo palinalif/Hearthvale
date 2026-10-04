@@ -2,7 +2,7 @@ name: Thor playtest APK
 
 on:
   push:
-    branches: [feat/m1-ui-ux-overhaul]
+    branches: [feat/m1-ui-ux-overhaul, feat/m2-glow]
     paths:
       - .github/workflows/thor-apk.yml
       - project.godot

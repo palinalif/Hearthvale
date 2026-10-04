@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Run Godot test scripts and report each one's verdict.
+#
+# Godot headless `--script` exits non-zero on parse/runtime errors, and the project's CI gates on
+# exactly that (`set -euo pipefail` around each suite), so the exit code is the authoritative
+# verdict here. A test that exits 0 while printing a script error is still reported as a failure.
+#
+# Usage: tools/run-suite tests/a_test.gd tests/b_test.gd ...
+# Exit code: 0 if every suite passed, 1 otherwise.
+set -u
+cd "$(dirname "$0")/.."
+
+if [ "$#" -eq 0 ]; then
+  echo "usage: tools/run-suite tests/<name>_test.gd ..." >&2
+  exit 2
+fi
+
+failed=0
+passed=0
+for t in "$@"; do
+  if [ ! -f "$t" ]; then
+    echo "MISSING  $t"
+    failed=$((failed + 1))
+    continue
+  fi
+  out="/tmp/run-suite.$(basename "$t" .gd).log"
+  timeout 600 tools/run-test "$t" > "$out" 2>&1
+  code=$?
+  if [ "$code" -ne 0 ]; then
+    printf 'FAIL     %-34s exit=%s\n' "$t" "$code"
+    tail -25 "$out" | sed 's/^/         /'
+    failed=$((failed + 1))
+  elif grep -qiE "SCRIPT ERROR|Parse Error|Cannot open" "$out"; then
+    printf 'ERROR    %-34s exit=0 but the output reports a script error\n' "$t"
+    grep -iE "SCRIPT ERROR|Parse Error|Cannot open" "$out" | head -5 | sed 's/^/         /'
+    failed=$((failed + 1))
+  else
+    printf 'PASS     %-34s\n' "$t"
+    passed=$((passed + 1))
+  fi
+done
+
+echo "---- ${passed} passed, ${failed} failed"
+[ "$failed" -eq 0 ]

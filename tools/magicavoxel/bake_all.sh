@@ -22,8 +22,14 @@ PLAN=/tmp/hearthvale-bake-plan.tsv
 python3 tools/magicavoxel/author_props.py
 python3 tools/magicavoxel/author_furniture.py
 
-# 2. Vectorize every .vox into an OBJ, carrying the unit and emissive
-#    palettes recorded in that asset's own receipt.
+# 2. Vectorize every .vox into an OBJ, carrying the unit, emissive palettes and
+#    meshing mode recorded in that asset's own receipt.
+#
+#    Meshing mode matters: greedy coplanar merging is what keeps a dense canopy
+#    inside the triangle budget (the orchard tree is 5618 triangles greedy,
+#    32832 without). Baking a greedy asset without the flag silently ships a
+#    6x more expensive mesh, so the mode is read back from the receipt rather
+#    than assumed.
 rm -f "$PLAN"
 while read -r vox; do
   name=$(basename "$vox" .vox)
@@ -31,13 +37,16 @@ while read -r vox; do
   unit=0.125
   emissive=""
   energy=1.5
+  greedy=0
   if [ -f "$receipt" ]; then
     unit=$(python3 -c "import json;print(json.load(open('$receipt')).get('voxel_unit',0.125))")
     emissive=$(python3 -c "import json;print(','.join(map(str,json.load(open('$receipt')).get('emissive_palette_indices',[]))))")
     energy=$(python3 -c "import json;print(json.load(open('$receipt')).get('emissive_energy',1.5))")
+    greedy=$(python3 -c "import json;print(1 if str(json.load(open('$receipt')).get('meshing','')).startswith('greedy') else 0)")
   fi
   python3 tools/magicavoxel/vox_to_obj.py --unit "$unit" \
     ${emissive:+--emissive "$emissive"} --emissive-energy "$energy" \
+    ${greedy:+--greedy} \
     "$vox" "$MESH_DIR/$name.obj" >/dev/null
   printf '%s\t%s\t%s\t%s\n' "$name" "$unit" "$emissive" "$energy" >> "$PLAN"
 done < <(find "$SOURCE_DIR" -name '*.vox' | sort)

@@ -5,8 +5,10 @@
     30,
     8
   ],
+  "emitted_quads": 91,
   "exposed_quads": 1358,
   "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
   "occupied_bounds": {
     "max": [
       23,
@@ -31,7 +33,7 @@
   "source_sha256": "f45f552dc8c0cd166ee2b01724a2f4f19bbb950d5d4c82594b4032f9d5a3e804",
   "tool": "https://github.com/Mahinika/magicavoxel-mcp",
   "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
-  "triangles": 2716,
+  "triangles": 182,
   "voxel_count": 1038,
   "voxel_tier": "terrain/structure",
   "voxel_unit": 0.125
