@@ -107,7 +107,13 @@ jobs:
           $badgingLines = & $aapt dump badging $apk 2>&1 | ForEach-Object { "$_" }
           $badging = $badgingLines -join "`n"
           Write-Output ($badgingLines | Select-Object -First 1)
-          if (-not $badging.Contains("package: name='org.hearthvale.game'")) { throw 'APK package metadata verification failed' }
+          # The playtest preset installs as its own package so it updates in
+          # place next to the user's existing app and saves; check against the
+          # package the preset actually declares rather than a hardcoded name.
+          $presetPackage = (Select-String -Path export_presets.cfg -Pattern 'package/unique_name="([^"]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+          if (-not $presetPackage) { throw 'could not read package/unique_name from export_presets.cfg' }
+          Write-Output "expected package $presetPackage"
+          if (-not $badging.Contains("package: name='$presetPackage'")) { throw "APK package metadata verification failed (expected $presetPackage)" }
           & $apksigner verify --verbose $apk
           $signExit = $LASTEXITCODE
           if ($signExit -ne 0) { throw "APK signature verification failed (exit=$signExit)" }
