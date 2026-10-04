@@ -1,0 +1,41 @@
+{
+  "asset": "hearthvale_furniture_chopping_block",
+  "declared_dimensions": [
+    16,
+    23,
+    16
+  ],
+  "emitted_quads": 402,
+  "exposed_quads": 840,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      16,
+      23,
+      14
+    ],
+    "min": [
+      2,
+      0,
+      3
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    13
+  ],
+  "source": "hearthvale_furniture_chopping_block.vox",
+  "source_sha256": "d03ba844d954aa38850d2075ccd52b199ac600866287fd2fd3ab88a5522dd551",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 804,
+  "voxel_count": 799,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}

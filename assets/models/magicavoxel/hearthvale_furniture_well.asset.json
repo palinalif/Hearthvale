@@ -1,0 +1,42 @@
+{
+  "asset": "hearthvale_furniture_well",
+  "declared_dimensions": [
+    28,
+    45,
+    28
+  ],
+  "emitted_quads": 515,
+  "exposed_quads": 7652,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      28,
+      45,
+      28
+    ],
+    "min": [
+      0,
+      0,
+      0
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    2,
+    3,
+    5,
+    7,
+    8,
+    16,
+    18
+  ],
+  "source": "hearthvale_furniture_well.vox",
+  "source_sha256": "02524137d0e639f7ad1fe0b55087aec8c69ce39fc2a59300ac1868bb6c2efb7a",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 1030,
+  "voxel_count": 9077,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}

@@ -1,0 +1,42 @@
+{
+  "asset": "hearthvale_furniture_water_pump",
+  "declared_dimensions": [
+    12,
+    25,
+    12
+  ],
+  "emitted_quads": 299,
+  "exposed_quads": 1396,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      12,
+      23,
+      12
+    ],
+    "min": [
+      0,
+      0,
+      0
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    2,
+    3,
+    5,
+    6,
+    7,
+    8,
+    16
+  ],
+  "source": "hearthvale_furniture_water_pump.vox",
+  "source_sha256": "7457bee1e16f18355ff35356bd135e11b4fcf1f85ef38ca0915f721b2587f5a4",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 598,
+  "voxel_count": 1579,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}

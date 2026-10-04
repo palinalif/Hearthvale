@@ -1420,3 +1420,21 @@ extension the scene never finishes loading, the 65 s deadline trips, the test pr
 runs. A run that "passes" can therefore be a timeout, and a run that fails at check 87
 is the deeper, more informative result. Treat a check-1 timeout as an environment
 failure, not a verdict.
+
+## 2026-10-04 (the de-bake overreached; the exclusion set is now only the 9 bare aliases)
+
+Removing 22 baked assets broke CI, and the reason is a contract I had wrong:
+`tests/m2_starter_furniture_mesh_test.gd` is the contract for the 13 `furniture_*`
+meshes, so they must bake even though the hamlet builds its furniture procedurally
+today. CI said exactly that — `FAIL: furniture_bench: baked mesh is committed
+(res://assets/models/magicavoxel/hearthvale_furniture_bench.res)` and the same for
+`hay_cart`, `lamp_post`, `maypole`, `notice_board`, `pumpkin_post`.
+
+The exclusion set in `tools/magicavoxel/bake_targets.py` is now only the **9 bare Tier
+C aliases** — `hearthvale_bench`, `stone_bench`, `signpost`, `lamp_post`, `maypole`,
+`notice_board`, `water_pump`, `hay_cart`, `market_cross` — which no test and no runtime
+script references (verified by grep across `tests/` and `scripts/`). Baked output is
+69 `.obj` (was 78); the 9 aliases remain as reviewable voxel art.
+
+`m2_starter_furniture_mesh_test` (26 authored styles), `m2_starter_prop_asset_test`
+(64 checks) and `m2_lantern_mesh_contract_test` all pass on the corrected state.

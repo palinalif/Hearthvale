@@ -40,24 +40,13 @@ EMISSIVE = {
 # loads buys 2 MB of device storage for pixels nobody sees.  Wiring one up
 # means moving its name out of this set and giving the runtime a path to it.
 UNWIRED = {
-    # Tier A furniture.  The hamlet still builds these procedurally; only the
-    # lantern has a runtime consumer (and a mesh contract test).
-    "hearthvale_furniture_bench",
-    "hearthvale_furniture_signpost",
-    "hearthvale_furniture_lamp_post",
-    "hearthvale_furniture_maypole",
-    "hearthvale_furniture_notice_board",
-    "hearthvale_furniture_pumpkin_post",
-    "hearthvale_furniture_hay_cart",
-    "hearthvale_furniture_well",
-    "hearthvale_furniture_market_cross",
-    "hearthvale_furniture_stone_bench",
-    "hearthvale_furniture_water_pump",
-    "hearthvale_furniture_chopping_block",
-    "hearthvale_furniture_log_stack",
     # Tier C aliases of the same Tier A shapes.  The composition layer places
     # the village well, chopping block and log stack under their prop_ names,
-    # so these bare duplicates have no consumer.
+    # and nothing loads these bare duplicates, so they stay as voxel art.
+    #
+    # The Tier A furniture_* meshes are NOT listed here: m2_starter_furniture_
+    # mesh_test.gd is their contract, so they bake even though the hamlet
+    # currently builds its furniture procedurally.
     "hearthvale_bench",
     "hearthvale_stone_bench",
     "hearthvale_signpost",
