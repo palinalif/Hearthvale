@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://banogbj7aewfl"
+path="res://.godot/imported/hearthvale_lamp_post.vox-4ff77160d865acd4a6a27e7a88be5101.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_lamp_post.vox"
+dest_files=["res://.godot/imported/hearthvale_lamp_post.vox-4ff77160d865acd4a6a27e7a88be5101.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true
