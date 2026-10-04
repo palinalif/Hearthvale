@@ -47,18 +47,26 @@ jobs:
           ls -l addons/zylann.voxel/bin | head -20
 
       - name: Install Godot
+        # Pinned to the tag in dependencies.lock.json. The lock records the
+        # Windows editor the desktop uses; the Linux headless build at the same
+        # tag is the equivalent, so the suites run on the pinned engine version
+        # rather than whatever the download endpoint currently serves.
         run: |
           set -euo pipefail
-          curl -sSfL -o /tmp/godot.zip \
-            "https://downloads.godotengine.org/?version=4.7&channel=stable&build=release&os=linux_x86_64"
-          unzip -q /tmp/godot.zip -d /tmp/godot
-          chmod +x /tmp/godot/Godot_v4.7-stable_linux.x86_64
-          echo "GODOT_BIN=/tmp/godot/Godot_v4.7-stable_linux.x86_64" >> "$GITHUB_ENV"
+          TAG=$(jq -r '.engine.tag' dependencies.lock.json)
+          LINUX="Godot_v${TAG}_linux.x86_64"
+          curl -sSfL -o godot_linux.zip \
+            "https://github.com/godotengine/godot-builds/releases/download/${TAG}/${LINUX}"
+          mkdir -p "$HOME/.local/share"
+          mv godot_linux.zip "$HOME/.local/share/$LINUX"
+          chmod +x "$HOME/.local/share/$LINUX"
+          echo "godot_bin=$HOME/.local/share/$LINUX" >> "$GITHUB_ENV"
+          "$HOME/.local/share/$LINUX" --version
 
       - name: Import the project
         run: |
           set -euo pipefail
-          "$GODOT_BIN" --headless --path . --import
+          "$godot_bin" --headless --path . --import
 
       - name: Verify the authored voxel sources
         run: |
@@ -90,21 +98,28 @@ jobs:
             tests/m2_window_glow_test.gd
           do
             echo "::group::${suite}"
-            "$GODOT_BIN" --headless --path . --script "res://${suite}"
+            "$godot_bin" --headless --path . --script "res://${suite}"
             echo "::endgroup::"
           done
 
       - name: Install the Android export templates
+        # Pinned to the lock, and installed under the version directory Godot
+        # looks for. The archive's inner directory name varies by release, so
+        # locate it by its version.txt rather than hardcoding a name.
         run: |
           set -euo pipefail
-          curl -sSfL -o /tmp/templates.tpz \
-            "https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_export_templates.tpz"
+          TAG=$(jq -r '.engine.tag' dependencies.lock.json)
+          SHA=$(jq -r '.engine.templates_sha512' dependencies.lock.json)
+          URL=$(jq -r '.engine.templates_url' dependencies.lock.json)
+          curl -sSfL -o /tmp/templates.tpz "$URL"
+          echo "$SHA  /tmp/templates.tpz" | sha512sum -c -
+          VER="${TAG%-stable}.stable"
           unzip -q /tmp/templates.tpz -d /tmp/templates
-          # The archive contains a single 'templates' directory.
-          test -d /tmp/templates/templates
-          mkdir -p "$HOME/.local/share/godot/export_templates/4.7.1"
-          cp -a /tmp/templates/templates/. "$HOME/.local/share/godot/export_templates/4.7.1/"
-          ls "$HOME/.local/share/godot/export_templates/4.7.1" | head -5
+          SRC=$(dirname "$(find /tmp/templates -name version.txt | head -1)")
+          test -n "$SRC"
+          mkdir -p "$HOME/.local/share/godot/export_templates/$VER"
+          cp -a "$SRC"/. "$HOME/.local/share/godot/export_templates/$VER/"
+          ls "$HOME/.local/share/godot/export_templates/$VER" | head -5
 
       - name: Prepare the Android debug keystore
         # Godot needs a keystore to sign the APK. Generate an ephemeral debug
@@ -134,7 +149,7 @@ jobs:
           install -m755 "$arm_so" "$template_dir/android_arm64/"
           ls -l "$template_dir/android_arm64"
           mkdir -p builds
-          "$GODOT_BIN" --headless --path . \
+          "$godot_bin" --headless --path . \
             --export-debug "Android (debug)" \
             "builds/hearthvale-m2-glow-debug.apk"
           ls -l builds
