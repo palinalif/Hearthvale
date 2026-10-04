@@ -142,15 +142,13 @@ jobs:
       - name: Export debug Android APK
         run: |
           set -euo pipefail
-          # The Android export template finds the extension's arm64 library in
-          # the template directory. Without it the APK exports "successfully"
-          # and renders no terrain.
-          template_dir="$HOME/.local/share/godot/export_templates/4.7.1"
-          mkdir -p "$template_dir/android_arm64"
-          arm_so=$(find /tmp/voxel -path '*android_arm64*' -name 'libvoxel.godot.so.*.release.java' | head -1)
-          test -n "$arm_so"
-          install -m755 "$arm_so" "$template_dir/android_arm64/"
-          ls -l "$template_dir/android_arm64"
+          # The extension's arm64 library is resolved by voxel.gdextension from
+          # addons/zylann.voxel/bin (android.release.arm64 -> the pinned
+          # template_release .so), which the install step verified above. The
+          # pinned release ships no .java wrapper, so there is nothing to inject
+          # into the export-template directory; the APK check below is the guard
+          # against the known silent failure (export succeeds, terrain absent).
+          test -f addons/zylann.voxel/bin/libvoxel.android.template_release.arm64.so
           mkdir -p builds
           "$godot_bin" --headless --path . \
             --export-debug "Android (debug)" \
