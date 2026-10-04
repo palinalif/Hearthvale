@@ -2,13 +2,15 @@ extends "res://scripts/m2_composition_visual.gd"
 class_name M2HamletVisual
 
 ## Street-furniture presentation layered over the shared bridge/garden/fence
-## renderer. Authority remains in compact composition records. Planters use real
-## baked MagicaVoxel assets; other furniture retains its existing presentation.
+## renderer. Authority remains in compact composition records. Placed furniture
+## uses real baked MagicaVoxel assets; primitives remain only as the fallback for
+## styles that have no authored model.
 
 const StarterProps = preload("res://scripts/m2_starter_props.gd")
 const Planters = preload("res://scripts/m2_planter_assets.gd")
 const TableAssets = preload("res://scripts/m2_table_assets.gd")
 const LanternAssets = preload("res://scripts/m2_lantern_assets.gd")
+const PropAssets = preload("res://scripts/m2_authored_prop_assets.gd")
 const LanternGlow = preload("res://scripts/m2_lantern_glow.gd")
 
 ## Flame position inside a lantern, in the lantern's own rotated frame. Matches
@@ -164,6 +166,7 @@ func _authored_assets(style_id: String) -> GDScript:
 	if Planters.has_style(style_id): return Planters
 	if TableAssets.has_style(style_id): return TableAssets
 	if LanternAssets.has_style(style_id): return LanternAssets
+	if PropAssets.has_style(style_id): return PropAssets
 	return null
 
 func _planter_transform(record: Dictionary) -> Transform3D:
