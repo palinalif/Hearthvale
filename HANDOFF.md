@@ -1400,3 +1400,23 @@ runtime a path to it.
 
 `hearthvale_furniture_lantern` stays baked: `m2_lantern_mesh_contract_test.gd`
 is the authority for its extents (≤ 0.0625) and the runtime glow consumes it.
+## 2026-07-30 (`m2_planter_placement_test` fails on main too — not the assets); **The planter failure is pre-existing, and the test's 65-second scene-load deadline hides it.**
+
+`m2_planter_placement_test` fails with `{"checks":87,"failures":1,"messages":["Home
+overlap is explained"]}` — **identically on `main` and on `feat/m2-glow`**. Proven by
+running it in a clean worktree of `origin/main` with the gitignored Zylann voxel
+extension installed: same 87 checks, same single failure. So the Tier C assets, the
+bake-scale fix and the window glow are not implicated.
+
+The assertion aims a barrel planter at the home building's origin and requires
+`furniture_placement_reason` to contain `home`. The refactored detail-placement code
+(`scripts/m2_scene_hamlet_details.gd`, which now owns the reason strings, e.g.
+`"%s overlaps a home"`) does not reach that branch for this case, so the planter is
+judged valid ground on top of the home.
+
+**Second finding, for whoever owns the test:** on a worktree *without* the voxel
+extension the scene never finishes loading, the 65 s deadline trips, the test prints
+`Native planter test scene ready` and quits at check 1 — so the real assertion never
+runs. A run that "passes" can therefore be a timeout, and a run that fails at check 87
+is the deeper, more informative result. Treat a check-1 timeout as an environment
+failure, not a verdict.
