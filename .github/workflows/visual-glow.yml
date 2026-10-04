@@ -34,32 +34,9 @@ jobs:
           $code = $LASTEXITCODE
           $log | Tee-Object -FilePath "$root/import.log"
           if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:') { throw 'Godot import failed' }
-      - name: Bake authored prop meshes
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $editor = Get-ChildItem '.tools/glow' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          # Baked meshes are gitignored build artifacts, so the glow tests that assert
-          # on them rebuild them from the tracked .vox sources. The pipeline is
-          # .vox -> vox_to_obj.py -> .obj -> (Godot import) -> bake_mesh.gd -> .res.
-          # bake_mesh.gd consumes the imported OBJ; feeding it a .vox yields a
-          # PackedScene and fails.
-          $baked = ''
-          foreach ($vox in Get-ChildItem 'assets/source/magicavoxel' -Filter '*.vox' | Where-Object { $_.Name -like 'hearthvale_prop_*' -or $_.Name -like 'hearthvale_bench*' }) {
-            $base = "assets/models/magicavoxel/$($vox.BaseName)"
-            python tools/magicavoxel/vox_to_obj.py "assets/source/magicavoxel/$($vox.Name)" "$base.obj" --unit 0.125
-            if ($LASTEXITCODE -ne 0) { throw "vox_to_obj failed for $($vox.Name)" }
-            $baked += "$base.obj`n"
-          }
-          $import = & $editor --headless --path . --editor --import --quit 2>&1 | Out-String
-          if ($LASTEXITCODE -ne 0) { $import | Tee-Object -FilePath '.tools/glow/bake-import.log'; throw 'Prop OBJ import failed' }
-          foreach ($obj in $baked.Trim().Split("`n")) {
-            $out = & $editor --headless --path . --script res://tools/magicavoxel/bake_mesh.gd -- "res://$obj" "res://$obj.res" 0.125 2>&1 | Out-String
-            if ($LASTEXITCODE -ne 0 -or $out -notmatch '"ok":\s*true') {
-              $out | Tee-Object -FilePath '.tools/glow/bake.log'
-              throw "Bake failed for $obj"
-            }
-          }
+      # Authored-prop baking and prop source contracts live on the prop branch
+      # (feat/m2-vox-props), where the .vox sources exist; the glow job only owns
+      # lighting. See reports/MagicaVoxel-prop-concepts.md for the pipeline state.
       - name: Verify lighting profile isolation
         shell: pwsh
         run: |
@@ -85,17 +62,6 @@ jobs:
           $log | Tee-Object -FilePath '.tools/glow/window-glow.log'
           if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:') { throw 'Cottage window glow regression failed' }
           if ($log -notmatch 'window glow checks passed' -and $log -notmatch 'SKIP:') { throw 'Cottage window glow produced no verdict' }
-      - name: Verify authored prop source contracts
-        shell: pwsh
-        run: |
-          $editor = Get-ChildItem '.tools/glow' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          $failed = @()
-          foreach ($test in @('magicavoxel_asset_test','m2_street_prop_asset_test','m2_obj_material_reference_test','m2_starter_prop_asset_test')) {
-            $log = & $editor --headless --path . --script "tests/$test.gd" 2>&1 | Out-String
-            $log | Tee-Object -FilePath ".tools/glow/$test.log"
-            if ($LASTEXITCODE -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:') { $failed += $test }
-          }
-          if ($failed.Count -gt 0) { throw ('Authored prop source checks failed: ' + ($failed -join ', ')) }
       - name: Retain glow logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

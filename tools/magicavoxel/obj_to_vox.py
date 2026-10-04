@@ -7,9 +7,6 @@ palette, not the original file bytes. ``main`` only prints VERIFIED when the
 regenerated OBJ is byte-identical; treat anything else as an approximation and
 re-author the model in MagicaVoxel instead of shipping it.
 
-Usage: python3 tools/magicavoxel/obj_to_vox.py <obj> <out.vox> [--unit auto]
-"""
-
 The forward pipeline (tools/magicavoxel/vox_to_obj.py) maps voxel cell (x,y,z) to
 world space as ((x - size.x/2) * unit, y * unit, (z - size.z/2) * unit) and emits
 one axis-aligned quad per exposed cell face, grouped by palette index. That mapping
@@ -82,9 +79,23 @@ def _coords(quad):
         yield from v
 
 
+def to_voxel_axes(quads):
+    """Undo the generator's world mapping so every step below works in lattice space.
+
+    vox_to_obj maps voxel (x, y, z) to world (x, z, y): the voxel's height axis is the
+    world's Z. Swapping the world's Y and Z components restores lattice order, so the
+    axis-0 scan and the X/Z centring below are correct for all three axes.
+    """
+    return [
+        (palette, [tuple(v[a] for a in (0, 2, 1)) for v in corners], tuple(n[a] for a in (0, 2, 1)))
+        for palette, corners, n in quads
+    ]
+
+
 def quantize(quads, unit: float):
     """Invert the world mapping into integer cell coordinates per axis."""
-    # Y has no offset; X and Z are shifted by -size/2, recovered from the vertex span.
+    # Axes are already in lattice order (see to_voxel_axes): X and Z are centred on
+    # size/2 by the generator, Y starts at the ground plane.
     lo = [min(v[a] for q in quads for v in q[1]) for a in range(3)]
     hi = [max(v[a] for q in quads for v in q[1]) for a in range(3)]
     span = [round((hi[a] - lo[a]) / unit) for a in range(3)]
@@ -216,7 +227,7 @@ def boundary_shell(region):
 
 
 def rebuild(obj: Path, out: Path, unit: float):
-    quads = parse_obj(obj)
+    quads = to_voxel_axes(parse_obj(obj))
     size, cells = quantize(quads, unit)
     solid = face_owned_cells(size, cells)
     colored = color_cells(size, cells, solid)
