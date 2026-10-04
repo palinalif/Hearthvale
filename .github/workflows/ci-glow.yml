@@ -1,0 +1,75 @@
+name: M2 glow
+on:
+  push:
+    branches: [feat/m2-vox-props]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  glow-source:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install pinned Godot and voxel extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $lock = Get-Content dependencies.lock.json -Raw | ConvertFrom-Json
+          $root = Join-Path (Get-Location) '.tools/glow'
+          New-Item -ItemType Directory -Force $root | Out-Null
+          Set-Content -LiteralPath (Join-Path (Split-Path $root) '.gdignore') -Value ''
+          Invoke-WebRequest -Uri $lock.engine.editor_url -OutFile (Join-Path $root 'editor.zip')
+          if ((Get-FileHash -LiteralPath (Join-Path $root 'editor.zip') -Algorithm SHA512).Hash.ToLowerInvariant() -ne $lock.engine.editor_sha512.ToLowerInvariant()) { throw 'Editor archive hash mismatch' }
+          Invoke-WebRequest -Uri $lock.voxel.url -OutFile (Join-Path $root 'voxel.zip')
+          if ((Get-FileHash -LiteralPath (Join-Path $root 'voxel.zip') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $lock.voxel.sha256.ToLowerInvariant()) { throw 'Voxel archive hash mismatch' }
+          Expand-Archive -LiteralPath (Join-Path $root 'editor.zip') -DestinationPath $root -Force
+          Expand-Archive -LiteralPath (Join-Path $root 'voxel.zip') -DestinationPath (Get-Location) -Force
+          $editor = Get-ChildItem $root -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $editor) { throw 'Console editor missing' }
+          if (-not (Test-Path -LiteralPath 'addons/zylann.voxel/bin/libvoxel.msvc.windows.release.x86_64.dll')) { throw 'Windows voxel extension missing' }
+          $editor | ForEach-Object { $_.FullName } | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Import project
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scripts = @(
+            'res://scripts/m2_lantern_glow.gd',
+            'res://scripts/cottage_visual.gd',
+            'res://scripts/visual_lighting_profile.gd',
+            'res://scripts/m2_composition_visual.gd',
+            'res://scripts/m2_hamlet_visual.gd'
+          )
+          foreach ($script in $scripts) {
+            & $env:GODOT_EDITOR --headless --path . --check-only --script $script
+            if ($LASTEXITCODE) { throw "$script check failed" }
+          }
+          & $env:GODOT_EDITOR --headless --path . --import
+          if ($LASTEXITCODE) { throw 'Project import failed' }
+      # Baked meshes are committed artifacts (like the .vox sources), so CI
+      # asserts the set is complete rather than regenerating it.
+      - name: Assert the authored mesh library is complete
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $meshes = @('bench','hay_cart','lamp_post','market_cross','maypole','notice_board','signpost','stone_bench','water_pump')
+          foreach ($mesh in $meshes) {
+            if (-not (Test-Path -LiteralPath "assets/models/magicavoxel/hearthvale_$mesh.res")) { throw "baked mesh missing: hearthvale_$mesh.res" }
+          }
+      - name: Run glow tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tests = @(
+            'res://tests/m2_lantern_glow_test.gd',
+            'res://tests/m2_window_glow_test.gd',
+            'res://tests/m2_starter_prop_assets_test.gd'
+          )
+          foreach ($test in $tests) {
+            & $env:GODOT_EDITOR --headless --path . --script $test
+            if ($LASTEXITCODE) { throw "$test failed" }
+          }

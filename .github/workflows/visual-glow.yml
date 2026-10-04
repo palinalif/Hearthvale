@@ -1,71 +1,136 @@
 name: Visual glow (lantern + window)
+
+# Authored props and the lighting that rides on them. The lantern glow test
+# asserts against the authored lantern asset record, so prop baking and lighting
+# are gated together: a prop bake that changes the lantern, its palette, or its
+# dimensions fails this job, and so does a lighting change that leaks past the
+# Low preset.
+#
+# The bake runs in ONE Godot process over the whole catalogue. Launching one
+# process per prop made this step longer than its own job timeout.
+
 on:
-  push:
-    branches: [feat/m2-glow]
   workflow_dispatch:
-permissions:
-  contents: read
+  pull_request:
+    paths:
+      - assets/source/magicavoxel/**
+      - assets/models/magicavoxel/**
+      - scripts/m2_lantern_glow.gd
+      - scripts/m2_window_glow.gd
+      - scripts/m2_hamlet_visual.gd
+      - scripts/cottage_visual.gd
+      - scripts/m2_composition_visual.gd
+      - scripts/m2_starter_hamlet_layout.gd
+      - tests/m2_lantern_glow_test.gd
+      - tests/m2_window_glow_test.gd
+      - tests/visual_lighting_profile_test.gd
+      - tests/m2_starter_furniture_mesh_test.gd
+      - tools/magicavoxel/**
+      - .github/workflows/visual-glow.yml
+  push:
+    branches:
+      - main
+      - feat/m2-glow
+    paths:
+      - assets/source/magicavoxel/**
+      - assets/models/magicavoxel/**
+      - scripts/m2_lantern_glow.gd
+      - scripts/m2_window_glow.gd
+      - scripts/m2_hamlet_visual.gd
+      - scripts/cottage_visual.gd
+      - scripts/m2_composition_visual.gd
+      - scripts/m2_starter_hamlet_layout.gd
+      - tests/m2_lantern_glow_test.gd
+      - tests/m2_window_glow_test.gd
+      - tests/visual_lighting_profile_test.gd
+      - tests/m2_starter_furniture_mesh_test.gd
+      - tools/magicavoxel/**
+      - .github/workflows/visual-glow.yml
+
 jobs:
   glow-source:
-    runs-on: windows-2022
-    timeout-minutes: 10
+    name: M2 glow source checks
+    runs-on: windows-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          persist-credentials: false
-      - name: Install pinned Godot and voxel extension
+      - uses: actions/checkout@v4
+
+      - name: Setup pinned Godot
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
           $lock = Get-Content dependencies.lock.json -Raw | ConvertFrom-Json
-          $root = Join-Path (Get-Location) '.tools/glow'
-          New-Item -ItemType Directory -Force $root | Out-Null
-          Set-Content -LiteralPath (Join-Path (Split-Path $root) '.gdignore') -Value ''
-          Invoke-WebRequest -Uri $lock.engine.editor_url -OutFile (Join-Path $root 'editor.zip')
-          if ((Get-FileHash -LiteralPath (Join-Path $root 'editor.zip') -Algorithm SHA512).Hash.ToLowerInvariant() -ne $lock.engine.editor_sha512.ToLowerInvariant()) { throw 'Editor archive hash mismatch' }
-          Invoke-WebRequest -Uri $lock.voxel.url -OutFile (Join-Path $root 'voxel.zip')
-          if ((Get-FileHash -LiteralPath (Join-Path $root 'voxel.zip') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $lock.voxel.sha256.ToLowerInvariant()) { throw 'Voxel archive hash mismatch' }
-          Expand-Archive -LiteralPath (Join-Path $root 'editor.zip') -DestinationPath $root -Force
-          Expand-Archive -LiteralPath (Join-Path $root 'voxel.zip') -DestinationPath (Get-Location) -Force
-          $editor = Get-ChildItem $root -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $editor) { throw 'Pinned Godot console editor missing' }
-          if ((& $editor --version | Out-String).Trim() -ne $lock.engine.version) { throw 'Unexpected Godot version' }
-          $log = & $editor --headless --path . --editor --import --quit 2>&1 | Out-String
+          $godot = "https://github.com/godotengine/godot/releases/download/$($lock.godot.version)-stable/godot-$($lock.godot.version)-stable_windows_mono_full_templates.zip"
+          Invoke-WebRequest -Uri $godot -OutFile godot.zip
+          Expand-Archive godot.zip -DestinationPath .tools/godot
+
+      - name: Install pinned voxel extension
+        shell: pwsh
+        run: |
+          $lock = Get-Content dependencies.lock.json -Raw | ConvertFrom-Json
+          New-Item -ItemType Directory -Force .tools/downloads | Out-Null
+          Invoke-WebRequest -Uri $lock.voxel.url -OutFile .tools/downloads/voxel.zip
+          $hash = (Get-FileHash .tools/downloads/voxel.zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $lock.voxel.sha256) { throw 'voxel archive hash mismatch' }
+          Expand-Archive .tools/downloads/voxel.zip -DestinationPath .
+
+      - name: Bake authored prop meshes
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/godot' -Recurse -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $log = & $editor --headless --path . --script tools/magicavoxel/bake_props.gd 2>&1 | Out-String
           $code = $LASTEXITCODE
-          $log | Tee-Object -FilePath "$root/import.log"
-          if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:') { throw 'Godot import failed' }
-      # Authored-prop baking and prop source contracts live on the prop branch
-      # (feat/m2-vox-props), where the .vox sources exist; the glow job only owns
-      # lighting. See reports/MagicaVoxel-prop-concepts.md for the pipeline state.
+          $log | Tee-Object -FilePath '.tools/glow-bake.log'
+          if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:' -or $log -notmatch '"ok":true') { throw 'Authored prop bake failed' }
+
+      - name: Verify authored prop mesh contract
+        shell: pwsh
+        run: |
+          $editor = Get-ChildItem '.tools/godot' -Recurse -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $log = & $editor --headless --path . --script tests/m2_starter_furniture_mesh_test.gd 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          $log | Tee-Object -FilePath '.tools/glow-mesh.log'
+          if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'checks passed') { throw 'Authored prop mesh contract failed' }
+
       - name: Verify lighting profile isolation
         shell: pwsh
         run: |
-          $editor = Get-ChildItem '.tools/glow' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $editor = Get-ChildItem '.tools/godot' -Recurse -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           $log = & $editor --headless --path . --script tests/visual_lighting_profile_test.gd 2>&1 | Out-String
           $code = $LASTEXITCODE
           $log | Tee-Object -FilePath '.tools/glow/profile.log'
           if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'failures=0') { throw 'Profile regression failed' }
+
       - name: Verify path lantern glow
         shell: pwsh
         run: |
-          $editor = Get-ChildItem '.tools/glow' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $editor = Get-ChildItem '.tools/godot' -Recurse -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           $log = & $editor --headless --path . --script tests/m2_lantern_glow_test.gd 2>&1 | Out-String
           $code = $LASTEXITCODE
           $log | Tee-Object -FilePath '.tools/glow/lantern-glow.log'
           if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'lantern glow checks passed') { throw 'Path lantern glow regression failed' }
+
       - name: Verify cottage window glow
         shell: pwsh
         run: |
-          $editor = Get-ChildItem '.tools/glow' -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          $editor = Get-ChildItem '.tools/godot' -Recurse -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
           $log = & $editor --headless --path . --script tests/m2_window_glow_test.gd 2>&1 | Out-String
           $code = $LASTEXITCODE
           $log | Tee-Object -FilePath '.tools/glow/window-glow.log'
-          if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:') { throw 'Cottage window glow regression failed' }
-          if ($log -notmatch 'window glow checks passed' -and $log -notmatch 'SKIP:') { throw 'Cottage window glow produced no verdict' }
+          if ($code -ne 0 -or $log -match 'SCRIPT ERROR|Parse Error|ERROR:|FAIL:' -or $log -notmatch 'window glow checks passed') { throw 'Cottage window glow regression failed' }
+
       - name: Retain glow logs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@v4
         with:
           name: visual-glow-${{ github.sha }}
-          path: |
-            .tools/glow/*.log
+          path: .tools/glow/*.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  visual-gate:
+    name: M2 Thor visual gate
+    needs: glow-source
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/visual-gate.yml
+    with:
+      artifact_name: m2-hamlet

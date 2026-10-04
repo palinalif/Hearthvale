@@ -41,6 +41,12 @@ const FURNITURE_COLOURS := {
 	"barrel_planter_light": Planters.SWATCHES,
 }
 
+# Styles that carry a light source: surface index -> emissive colour.
+# The lantern's glass core is surface 2 of its builder.
+const FURNITURE_EMISSIVE := {
+	"lantern": {2: M2LanternGlow.LANTERN_EMBER_COLOR},
+}
+
 var _furniture_nodes: Array[MeshInstance3D] = []
 var _glow_layers: Array[Node] = []
 var _furniture_preview_node: MeshInstance3D
@@ -73,7 +79,7 @@ func rebuild_furniture(composition_values: Array, terrain_backend: Node = null) 
 			var builder := _new_builder(4)
 			_append_furniture(builder, record)
 			_furniture_geometry_cells += _builder_cell_count(builder)
-			mesh = _mesh_from_builder(builder, _record_colours(FURNITURE_COLOURS[style_id], record))
+			mesh = _mesh_from_builder(builder, _record_colours(FURNITURE_COLOURS[style_id], record), false, FURNITURE_EMISSIVE.get(style_id, {}))
 		if mesh == null: continue
 		var node := MeshInstance3D.new()
 		node.name = "Furniture_%s" % int(record.get("id", 0))

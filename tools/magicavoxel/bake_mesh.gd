@@ -35,7 +35,10 @@ func _initialize() -> void:
 		push_error("voxel unit must be 0.125 or 0.0625")
 		quit(2)
 		return
-	var source: Mesh = load(str(args[0]))
+	# Godot's MagicaVoxel importer yields a PackedScene wrapping a
+	# MeshInstance3D, not a Mesh, so accept either shape.  A scene with several
+	# mesh instances is combined in traversal order.
+	var source: Mesh = _load_source_mesh(str(args[0]))
 	if source == null:
 		push_error("could not load source mesh")
 		quit(2)
@@ -74,3 +77,42 @@ func _initialize() -> void:
 	var error := ResourceSaver.save(baked, str(args[1]))
 	print(JSON.stringify({"ok": error == OK, "source": str(args[0]), "output": str(args[1]), "unit": unit, "surfaces": baked.get_surface_count(), "vertices": snapped_vertices, "error": error}))
 	quit(0 if error == OK else 1)
+
+
+# Resolve a bake source to a Mesh.  `.vox` files import as a PackedScene whose
+# MeshInstance3D children carry the geometry, so a plain `load()` never yields
+# a Mesh; combine every mesh instance under the source, in traversal order.
+func _load_source_mesh(path: String) -> Mesh:
+	var resource: Resource = load(path)
+	if resource == null:
+		return null
+	if resource is Mesh:
+		return resource as Mesh
+	if not resource is PackedScene:
+		push_error("source resource is neither a Mesh nor a PackedScene")
+		return null
+	var scene_root: Node = (resource as PackedScene).instantiate()
+	if scene_root == null:
+		return null
+	var combined := ArrayMesh.new()
+	var instances: Array[MeshInstance3D] = []
+	_collect_mesh_instances(scene_root, instances)
+	for instance: MeshInstance3D in instances:
+		var mesh: Mesh = instance.mesh
+		if mesh == null:
+			continue
+		for surface in mesh.get_surface_count():
+			combined.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, mesh.surface_get_arrays(surface))
+			var material: Material = instance.material_override
+			if material == null:
+				material = mesh.surface_get_material(surface)
+			combined.surface_set_material(combined.get_surface_count() - 1, material)
+	scene_root.queue_free()
+	return combined if combined.get_surface_count() > 0 else null
+
+
+func _collect_mesh_instances(node: Node, out: Array[MeshInstance3D]) -> void:
+	if node is MeshInstance3D:
+		out.append(node as MeshInstance3D)
+	for child: Node in node.get_children():
+		_collect_mesh_instances(child, out)

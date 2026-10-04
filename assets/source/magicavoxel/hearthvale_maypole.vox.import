@@ -1,0 +1,17 @@
+[remap]
+
+importer="VoxelVoxSceneImporter"
+type="PackedScene"
+uid="uid://b4mi4oijnf0x8"
+path="res://.godot/imported/hearthvale_maypole.vox-55b9769a704cc06884415e412c33284a.tscn"
+
+[deps]
+
+source_file="res://assets/source/magicavoxel/hearthvale_maypole.vox"
+dest_files=["res://.godot/imported/hearthvale_maypole.vox-55b9769a704cc06884415e412c33284a.tscn"]
+
+[params]
+
+store_colors_in_texture=false
+scale=1.0
+enable_baked_lighting=true
