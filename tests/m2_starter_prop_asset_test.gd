@@ -47,7 +47,7 @@ func _run() -> void:
 
 		var bytes: PackedByteArray = FileAccess.get_file_as_bytes(source)
 		_check(bytes.size() > 8 and bytes.slice(0, 4).get_string_from_ascii() == "VOX ", "%s is a MagicaVoxel file" % name)
-		var format := bytes.get_u32(4) if bytes.size() > 8 else 0
+		var format: int = bytes.decode_u32(4) if bytes.size() > 8 else 0
 		_check(format == 150, "%s uses the format the pipeline reads (got %d)" % [name, format])
 
 		var mesh := load(asset + ".res") as Mesh
@@ -70,9 +70,11 @@ func _run() -> void:
 		_check(declared.size() == 3, "%s receipt declares dimensions" % name)
 		if declared.size() == 3:
 			var size: Vector2 = definition.get("size", Vector2.ZERO)
-			# The catalogue footprint is the authored x/y extent; the third axis is height.
+			# declared_dimensions is in Godot axes (x, height, depth): the bake maps the
+			# voxel file's vertical axis onto Godot Y. The catalogue footprint is width
+			# and depth, so it pairs with declared[0] and declared[2].
 			_check(absf(float(declared[0]) * UNIT - size.x) <= UNIT, "%s declared width matches its catalogue footprint" % name)
-			_check(absf(float(declared[1]) * UNIT - size.y) <= UNIT, "%s declared depth matches its catalogue footprint" % name)
+			_check(absf(float(declared[2]) * UNIT - size.y) <= UNIT, "%s declared depth matches its catalogue footprint" % name)
 			for axis in 3:
 				var cells := float(declared[axis])
 				_check(cells >= 1.0 and absf(cells - roundf(cells)) < 0.001, "%s dimension %d is a whole number of cells" % [name, axis + 1])

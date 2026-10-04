@@ -32,6 +32,6 @@
   "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
   "triangles": 140,
   "voxel_count": 653,
-  "voxel_tier": "terrain/structure",
-  "voxel_unit": 0.125
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
 }

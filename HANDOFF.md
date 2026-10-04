@@ -1,3 +1,55 @@
+# 2026-10-04 (late night) — the bake regression: root cause and fix
+
+Branch `feat/m2-glow`, pushed to `origin`. Not merged to `main`.
+
+## Root cause (measured, not inferred)
+
+`bake_mesh.gd` applied `vertices[index] * unit` to **every** source. That is correct
+for `.vox` sources — Godot's MagicaVoxel importer emits geometry in **cell units** —
+but `vox_to_obj.py` already writes **metres**. Every `.obj` bake was therefore scaled
+by 0.125 a second time: the bench measured `2.5 × 1.75 × 0.75` in Godot and baked to
+`0.25 × 0.25 × 0.0`. Tier A/B's shipped meshes predate the `.vox` support that added
+the factor, which is why `HEAD` bakes passed and a rebake of an authored `.obj` failed.
+
+Fix: the scale now belongs to the **source format**, not the bake. `bake_mesh.gd` takes
+an explicit `source_scale` (1.0 for `.obj`, 0.125 for `.vox`); `bake_all.sh` passes it.
+
+## Second defect found in the same pass
+
+The bake aborted (`push_error`) when an imported `.obj` yielded no surface material, so
+those bakes wrote **nothing** and left a stale `.res` on disk — the asset looked current
+while the bake had failed. It now synthesizes a material from the OBJ group name when
+the import has none, so a missing `.mtl` degrades to a named colour instead of silently
+keeping an old mesh.
+
+## Guard that made this visible
+
+`m2_starter_furniture_mesh_test.gd` now asserts each baked mesh's extents against the
+authored source bounds (1.25 m tolerance, generous enough for the mesher's rounding,
+tight enough to catch a 8× collapse). It is registered in `ci-full.yml`, so a silent
+collapse can no longer ship.
+
+## Sources are now reproducible
+
+`hearthvale_furniture_bench.vox` was committed so Tier B's generators can run, and the
+Tier B/C sources were **regenerated from their generators** — the `.vox` files on disk
+had drifted from the canvases the generators declare, which is what made the catalogue
+footprint checks disagree.
+
+## Test correction
+
+`m2_starter_prop_asset_test.gd` compared the catalogue's *depth* against
+`declared_dimensions[1]`. The bake reports **Godot** axes (`x, height, depth`) because it
+maps the voxel file's vertical axis onto Godot Y, so depth is `declared[2]`. The
+assertion compared the wrong axis; the assets were correct.
+
+## Verification
+
+- Rebake gate: all 13 Tier A/B/C assets pass, `GATE_EXIT=0`.
+- `m2_starter_prop_asset_test`: 64 checks, 0 failures.
+- `m2_starter_furniture_mesh_test`: 26 authored styles verified.
+- Full registered suite: see the run below this entry.
+
 # 2026-10-04 (night) — Tier B garden props authored as .vox
 
 Branch `feat/m2-glow`, pushed to `origin`. Not merged to `main`.

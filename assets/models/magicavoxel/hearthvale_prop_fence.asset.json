@@ -1,0 +1,37 @@
+{
+  "asset": "hearthvale_prop_fence",
+  "declared_dimensions": [
+    8,
+    7,
+    1
+  ],
+  "emitted_quads": 44,
+  "exposed_quads": 96,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      8,
+      6,
+      1
+    ],
+    "min": [
+      0,
+      0,
+      0
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    1,
+    15
+  ],
+  "source": "hearthvale_prop_fence.vox",
+  "source_sha256": "f292555dfa450a034f33aea1c30527f0240c5937b024ef53822869e803cffbba",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 88,
+  "voxel_count": 24,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}

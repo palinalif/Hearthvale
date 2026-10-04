@@ -1,0 +1,37 @@
+{
+  "asset": "hearthvale_prop_rock",
+  "declared_dimensions": [
+    4,
+    3,
+    4
+  ],
+  "emitted_quads": 33,
+  "exposed_quads": 80,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      4,
+      3,
+      4
+    ],
+    "min": [
+      0,
+      0,
+      0
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    7,
+    22
+  ],
+  "source": "hearthvale_prop_rock.vox",
+  "source_sha256": "6b2a2491c5183178e40436b0596e0bb84c12d0ff8775bfb7bbda7e13f3635136",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 66,
+  "voxel_count": 44,
+  "voxel_tier": "prop/detail",
+  "voxel_unit": 0.0625
+}

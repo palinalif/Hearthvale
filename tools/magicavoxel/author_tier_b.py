@@ -28,6 +28,26 @@ from author_props import Builder
 
 CELL = 0.125
 
+# The accepted Tier A props are authored at 0.25 m per voxel, and the runtime
+# scales authored meshes by 0.5. Drawing on that same cell keeps every prop in
+# the hamlet at one resolution; the designs below are drawn on 0.125 cells and
+# emitted at double resolution, so they land at the accepted size.
+AUTHOR_CELL = 0.25
+UPSCALE = int(round(AUTHOR_CELL / CELL))
+
+
+def authored(model: Builder) -> Builder:
+    """Re-draw a 0.125-cell design on the 0.25 m cell the Tier A props use."""
+    if UPSCALE == 1:
+        return model
+    out = Builder(*(d * UPSCALE for d in model.size))
+    for (x, y, z), colour in model.cells.items():
+        for dx in range(UPSCALE):
+            for dy in range(UPSCALE):
+                for dz in range(UPSCALE):
+                    out.cells[(x * UPSCALE + dx, y * UPSCALE + dy, z * UPSCALE + dz)] = colour
+    return out
+
 # Shared palette indices, taken from author_props.PALETTE so the props match
 # the colours the rest of the hamlet already uses.
 WOOD = 15        # (150, 106, 62)
@@ -145,11 +165,11 @@ def main(argv: list[str]) -> int:
     out = Path(argv[0]) if argv else Path("assets/source/magicavoxel")
     out.mkdir(parents=True, exist_ok=True)
     for name, builder in MODELS.items():
-        model = builder()
+        model = authored(builder())
         path = out / ("hearthvale_prop_%s.vox" % name)
         count = model.write(path)
         x, y, z = model.size
-        print(f"{name:11s} {count:4d} cells  {x * CELL:.3f} x {z * CELL:.3f} x {y * CELL:.3f} m")
+        print(f"{name:11s} {count:5d} cells  {x * AUTHOR_CELL:.3f} x {z * AUTHOR_CELL:.3f} x {y * AUTHOR_CELL:.3f} m")
     return 0
 
 

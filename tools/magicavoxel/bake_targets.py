@@ -25,9 +25,17 @@ import planter_assets
 # them bake on the fine 0.0625 grid; native terrain keeps the 0.125 grid.
 DECORATIVE = "0.0625"
 
+# Palette roles that emit light, and how hot.  The bake writes these into the
+# asset receipt and gives those surfaces emissive materials, so the runtime
+# glow targets exactly what was authored rather than guessing.
+EMISSIVE = {
+    "hearthvale_prop_path_lantern": ((5, 6), 2.2),
+    "hearthvale_furniture_lantern": ((20, 22), 2.0),
+}
 
-def targets() -> list[tuple[str, str]]:
-    out: list[tuple[str, str]] = []
+
+def targets() -> list[tuple[str, str, tuple[int, ...], float]]:
+    out: list[tuple[str, str, tuple[int, ...], float]] = []
     for mesh in author_furniture.FURNITURE:
         out.append(("hearthvale_furniture_%s" % mesh, DECORATIVE))
     for name in author_tier_b.MODELS:
@@ -43,4 +51,12 @@ def targets() -> list[tuple[str, str]]:
 
 
 if __name__ == "__main__":
-    print(" ".join("%s=%s" % pair for pair in targets()))
+    # "name=grid[:emissive:energy]" -- emissive roles ride along with the grid
+    # so the bake has one place to enumerate every authored asset.
+    for name, grid in targets():
+        indices, energy = EMISSIVE.get(name, ((), 0.0))
+        if indices:
+            print("%s=%s:%s:%s" % (name, grid, ",".join(str(i) for i in indices), energy), end=" ")
+        else:
+            print("%s=%s" % (name, grid), end=" ")
+    print()

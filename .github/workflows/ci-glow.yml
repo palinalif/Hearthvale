@@ -92,6 +92,7 @@ jobs:
             tests/magicavoxel_asset_test.gd \
             tests/m2_lantern_mesh_contract_test.gd \
             tests/m2_starter_furniture_mesh_test.gd \
+            tests/m2_starter_prop_asset_test.gd \
             tests/visual_lighting_profile_test.gd \
             tests/m2_lantern_glow_test.gd \
             tests/m2_window_glow_test.gd
