@@ -130,6 +130,7 @@ func _update_brush_preview() -> void:
 	if stroke_active and not stale and _layer_plan.get("center", null) is Vector3:
 		_terrain_target_point = _layer_plan["center"]
 		preview_center = _terrain_target_point
+	_refresh_terrain_target_label()
 	_update_reference_guides(preview_center, sample)
 
 func _invalidate_layer_preview() -> void:
@@ -173,6 +174,19 @@ func _update_presentation() -> void:
 	if sculpt_tool in ["foliage", "tree", "clear_planting"]:
 		target_label.text = target_label.text.replace("str %.1f falloff %.1f" % [brush_strength, brush_falloff], "planting")
 		return
+	_refresh_terrain_target_label()
+
+	var _ul_t1 := Time.get_ticks_usec()
+	last_frame_costs["upd_m1_scene_terrain_ux"] = (_ul_t1 - _ul_t0) / 1000.0
+
+## Terrain HUD line for the sculpt tools. Reads `_layer_plan`, so it must run
+## whenever the plan changes: the exact preview is an async job that completes
+## after `_update_presentation()` has already run for the frame, so a purely
+## per-frame write always renders the previous (empty) plan and the add/remove
+## horizon summary never appears.
+func _refresh_terrain_target_label() -> void:
+	if not target_label or view_context != "terrain": return
+	if sculpt_tool in ["foliage", "tree", "clear_planting"]: return
 	var stale := bool(_layer_plan.get("_stale", false))
 	var summary := "Exact preview updating • target marker remains live"
 	if stale:
@@ -187,8 +201,6 @@ func _update_presentation() -> void:
 		else: summary = "No connected cells to change • void or terrain boundary"
 	target_label.text = "%s • Radius %.2f • Strength %d/10 • %s\n%s" % [sculpt_tool.capitalize(), brush_radius, brush_strength_level, "PRECISION (quarter speed)" if precision_mode else "L3 precision", summary]
 
-	var _ul_t1 := Time.get_ticks_usec()
-	last_frame_costs["upd_m1_scene_terrain_ux"] = (_ul_t1 - _ul_t0) / 1000.0
 func _update_debug_overlay() -> void:
 	super._update_debug_overlay()
 	if debug_label and debug_label.visible:

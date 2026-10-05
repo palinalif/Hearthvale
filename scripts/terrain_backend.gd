@@ -200,7 +200,13 @@ func _expand_startup_visual_viewer() -> void:
 ## Keep the visual streaming box centered on the camera so a short
 ## RUNTIME_VIEW_DISTANCE_WORLD still shows the terrain under and around the
 ## player instead of a fixed region of the map.
+## Gated on readiness: the startup viewer is deliberately parked on
+## `startup_mesh_focus_world` until its startup box has meshed. Following the
+## camera from the first frame moves the only mesh demand off that box, so the
+## startup area never meshes and readiness is never reached.
 func update_visual_focus(world_pos: Vector3) -> void:
+	if not _backend_ready:
+		return
 	if _startup_visual_viewer != null and is_instance_valid(_startup_visual_viewer):
 		_startup_visual_viewer.global_position = world_pos
 
@@ -241,7 +247,9 @@ func world_size() -> Vector3:
 func _whole_world_view_distance(floor_value: float, from_center: bool = true) -> float:
 	var extent := _world_size().length()
 	extent *= 0.5 if from_center else 1.25
-	return maxf(floor_value, extent)
+	# VoxelViewer.view_distance is an integer, so a fractional radius is
+	# truncated on assignment and would shave the far corner off the coverage.
+	return ceilf(maxf(floor_value, extent))
 
 func _world_size() -> Vector3:
 	return Vector3(patch_size) * voxel_scale

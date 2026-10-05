@@ -27,9 +27,9 @@ var brush_preview: Node3D
 var preview_cells: Array[Vector3i] = []
 var preview_center := Vector3.ZERO
 var _preview_key := ""
-var cursor := Vector3(32.0, 8.0, 28.0)
-var terrain_cursor := Vector3(32.0, 8.0, 28.0)
-var cottage_cursor := Vector3(22.0, 10.0, 18.0)
+var cursor := M1PatchGenerator.starter_camera_target()
+var terrain_cursor := M1PatchGenerator.starter_camera_target()
+var cottage_cursor := M1PatchGenerator.starter_home_origin() + Vector3(0.0, 2.0, 0.0)
 var camera_yaw := -1.1
 var camera_pitch := 0.66
 var camera_distance := 36.0
@@ -1060,9 +1060,11 @@ func _create_backend() -> void:
 	# Keep the same world bounds; native grid and asset cells share one edge.
 	backend.set("patch_size", M1PatchGenerator.PATCH_SIZE)
 	backend.set("voxel_scale", M1PatchGenerator.VOXEL_SCALE)
-	# Startup only waits for the initial cottage/play area to mesh; the full
-	# 64-unit valley remains authoritative, editable and continues streaming.
-	backend.set("startup_mesh_focus_world", Vector3(24.0, 8.0, 22.0))
+	# Startup only waits for the initial home/play area to mesh; the full
+	# valley remains authoritative, editable and continues streaming. The focus
+	# is derived from the village green so it stays on flat ground when the map
+	# is resized.
+	backend.set("startup_mesh_focus_world", M1PatchGenerator.starter_camera_target())
 	backend.set("startup_mesh_radius_world", 12.0)
 	backend.set("startup_mesh_height_world", 16.0)
 	if test_mode: backend.set("initialization_budget_override_ms", 90000)
@@ -1958,7 +1960,7 @@ func _cycle_building(direction: int) -> void:
 func _focus_selected_building() -> void:
 	if view_context == "terrain":
 		_cancel_current_edit("Terrain focus reset")
-		terrain_cursor = Vector3(32.0, 8.0, 28.0)
+		terrain_cursor = M1PatchGenerator.starter_camera_target()
 		cursor = terrain_cursor
 		_terrain_target_valid = false
 		_terrain_target_point = Vector3.ZERO

@@ -30,6 +30,10 @@ func _initialize() -> void:
 	world._reflow_automatic_windows(building)
 	world._refresh_buckets(building)
 	buildings[index] = building
+	# The fixture mutates the document directly. Production runs this reflow inside a
+	# mutator that bumps the revision, which invalidates the resolved-building
+	# cache get_building() serves; without it the view stays pre-storey.
+	world._revision += 1
 
 	view = world.get_building(building_id)
 	var automatic: Array[Dictionary] = _active_upper_windows(view)
@@ -59,6 +63,10 @@ func _initialize() -> void:
 	world._reflow_automatic_windows(building)
 	world._refresh_buckets(building)
 	buildings[index] = building
+	# The fixture mutates the document directly. Production runs this reflow inside a
+	# mutator that bumps the revision, which invalidates the resolved-building
+	# cache get_building() serves; without it the view stays pre-storey.
+	world._revision += 1
 	view = world.get_building(building_id)
 	check(str(_detail(view, styled_id).get("asset_id", "")) == "window_arch_casement" and str(_detail(view, styled_id).get("state", "")) == "modified_locked", "reflow preserves a player-restyled automatic window")
 	check(str(_detail(view, suppressed_id).get("state", "")) == "suppressed", "reflow does not resurrect a suppressed automatic window")
@@ -85,6 +93,10 @@ func _initialize() -> void:
 	world._reflow_automatic_windows(building)
 	world._refresh_buckets(building)
 	buildings[index] = building
+	# The fixture mutates the document directly. Production runs this reflow inside a
+	# mutator that bumps the revision, which invalidates the resolved-building
+	# cache get_building() serves; without it the view stays pre-storey.
+	world._revision += 1
 	view = world.get_building(building_id)
 	check(bool(_detail(view, styled_id).get("needs_placement", false)), "player-restyled window enters recovery when its floor disappears")
 	check(str(_detail(view, suppressed_id).get("state", "")) == "suppressed", "suppressed player choice remains suppressed after floor removal")

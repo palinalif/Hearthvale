@@ -46,7 +46,7 @@ static func validate_document(document: Dictionary) -> bool:
 
 func _init() -> void:
 	_document = {"schema_version": SCHEMA_VERSION, "generator_version": GENERATOR_VERSION, "revision": 0, "next_id": 1, "buildings": []}
-	var building := _new_cottage("building-1", Vector3(18.0, 7.0, 14.0), Vector3(22.0, 8.0, 18.0), 1042)
+	var building := _new_cottage("building-1", Vector3(18.0, 7.0, 14.0), M1PatchGenerator.starter_home_origin(), 1042)
 	_document["buildings"] = [building]
 	_next_id = 2
 	_document["next_id"] = _next_id

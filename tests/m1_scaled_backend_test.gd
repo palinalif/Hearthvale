@@ -5,6 +5,7 @@ extends SceneTree
 
 const Backend := preload("res://scripts/terrain_backend.gd")
 const Generator := preload("res://scripts/m1_patch_generator.gd")
+const Bounds := preload("res://scripts/m2_world_bounds.gd")
 const BuildingWorld := preload("res://scripts/building_world.gd")
 
 var checks := 0
@@ -12,7 +13,7 @@ var failures := 0
 var backend: Node
 
 func _initialize() -> void:
-	var focus_world := Vector3(24.0, 8.0, 22.0)
+	var focus_world := Generator.starter_camera_target()
 	var startup_radius_world := 12.0
 	var startup_height_world := 16.0
 	var startup_area: AABB = Backend.startup_mesh_area(Generator.PATCH_SIZE, Generator.VOXEL_SCALE, focus_world, startup_radius_world, startup_height_world)
@@ -51,8 +52,11 @@ func _initialize() -> void:
 			_check(is_equal_approx(float(visual_viewer.get("view_distance_vertical_ratio")), 0.75), "visual voxel viewer limits cold-start vertical demand")
 		if data_viewers.size() == 1:
 			var data_viewer := data_viewers[0] as Node3D
-			_check(data_viewer.position.is_equal_approx(Vector3(40.0, 16.0, 40.0)), "data-only voxel viewer stays at valley center")
-			_check(is_equal_approx(float(data_viewer.get("view_distance")), 64.0), "data-only voxel viewer keeps the full valley resident")
+			# Derived from the live world size: the data viewer must stay parked at
+			# the map centre with enough range to keep the whole map resident. The
+			# old literals were the pre-doubling 80 m valley.
+			_check(data_viewer.position.is_equal_approx(backend.world_size() * 0.5), "data-only voxel viewer stays at valley center")
+			_check(float(data_viewer.get("view_distance")) >= backend.world_size().length() * 0.5, "data-only voxel viewer keeps the full valley resident")
 			_check(not bool(data_viewer.get("requires_collisions")), "data-only voxel viewer does not request collision meshes")
 	var deadline := Time.get_ticks_msec() + 60000
 	while not backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame
@@ -60,20 +64,20 @@ func _initialize() -> void:
 	if not backend.is_ready():
 		_finish()
 		return
-	_check(backend.world_size().is_equal_approx(Vector3(80, 32, 80)), "Valley expansion uses 80x32x80 world bounds")
-	_check(backend.patch_size == Vector3i(640, 256, 640) and backend.patch_size == Generator.PATCH_SIZE, "Expanded map uses 640x256x640 index grid")
+	_check(backend.world_size().is_equal_approx(Vector3(Generator.PATCH_SIZE) * Generator.VOXEL_SCALE), "Valley expansion uses the canonical native world bounds")
+	_check(backend.patch_size == Generator.PATCH_SIZE and backend.patch_size == Bounds.NATIVE_SIZE, "Expanded map uses the canonical index grid")
 	_check(is_equal_approx(backend.voxel_scale, 0.125), "M1 uses eighth-unit editable voxels")
 	_check(backend.terrain.bounds.size == Vector3(Generator.PATCH_SIZE), "native bounds use index dimensions")
 	_check(backend.terrain.scale.is_equal_approx(Vector3.ONE * Generator.VOXEL_SCALE), "native terrain scales geometry uniformly")
 	_check(backend.voxel_at(Generator.PATCH_SIZE - Vector3i.ONE) >= 0 and backend.voxel_at(Generator.PATCH_SIZE) == 0, "index bounds are clamped")
 
-	var plane: Dictionary = backend.sample_surface_plane(Vector3(20.0, 8.0, 18.0), Vector3.UP, 3.0)
+	var plane: Dictionary = backend.sample_surface_plane(Generator.starter_camera_target(), Vector3.UP, 3.0)
 	_check(bool(plane.get("valid", false)), "world-space surface sample is valid")
 	if bool(plane.get("valid", false)):
 		_check(absf((plane["point"] as Vector3).y - 8.0) <= 1.0, "surface sample returns world height")
 		_check((plane["normal"] as Vector3).is_finite(), "surface normal is finite")
 
-	var preview: Array[Vector3i] = backend.preview_sphere(Vector3(20.0, 8.0, 18.0), 2.0, true)
+	var preview: Array[Vector3i] = backend.preview_sphere(Generator.starter_camera_target(), 2.0, true)
 	_check(not preview.is_empty(), "world radius converts to native sphere cells")
 	var preview_valid := true
 	var preview_min := Generator.PATCH_SIZE
@@ -84,7 +88,7 @@ func _initialize() -> void:
 		preview_max = Vector3i(maxi(preview_max.x, cell.x), maxi(preview_max.y, cell.y), maxi(preview_max.z, cell.z))
 	_check(preview_valid, "preview cells remain inside M1 grid")
 	if not preview.is_empty():
-		var center := Vector3(20.0, 8.0, 18.0)
+		var center := Generator.starter_camera_target()
 		var physical_extent := Vector3(preview_max - preview_min + Vector3i.ONE) * Generator.VOXEL_SCALE
 		_check(physical_extent.x <= 4.5 and physical_extent.y <= 4.5 and physical_extent.z <= 4.5, "preview footprint matches physical brush radius")
 		_check((Vector3(preview_min) * Generator.VOXEL_SCALE).distance_to(center) <= 4.0, "preview origin stays near world center")

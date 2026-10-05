@@ -103,9 +103,14 @@ func _initialize() -> void:
 	scene._cancel_bridge_placement()
 
 	scene._begin_bridge_placement()
-	_aim(Vector2(10.0, 10.0))
+	# The old fixture aimed at (10,10), which sits outside the starter valley on
+	# the canonical map: the cursor finds no terrain surface there, so the near
+	# bank never anchored and the span was never measured. Anchor on the starter
+	# home and derive the length from the limit it is meant to exceed.
+	var overlong_half := State.BRIDGE_MAX_SPAN * 0.5 + 0.5
+	_aim(Vector2(home_center.x - overlong_half, home_center.z))
 	await _press(JOY_BUTTON_A)
-	_aim(Vector2(21.0, 10.0))
+	_aim(Vector2(home_center.x + overlong_half, home_center.z))
 	_check(not scene.bridge_placement_valid and scene.bridge_placement_reason.contains("too long"), "overlong bridge span is rejected")
 	scene._cancel_bridge_placement()
 	await _finish()

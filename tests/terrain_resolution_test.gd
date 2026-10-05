@@ -5,6 +5,7 @@ const Generator = preload("res://scripts/m1_patch_generator.gd")
 const Grid = preload("res://scripts/visual_grid.gd")
 const Store = preload("res://scripts/checkpoint_store.gd")
 const World = preload("res://scripts/building_world.gd")
+const Bounds = preload("res://scripts/m2_world_bounds.gd")
 var checks := 0
 var failures := 0
 var backend: Node
@@ -16,7 +17,7 @@ func _initialize() -> void:
 	for arg in args:
 		if arg.begins_with("--fixture-root="): fixture_root = arg.trim_prefix("--fixture-root=")
 	_check(Generator.VOXEL_SCALE == Grid.UNIT and Grid.UNIT == 0.125, "native terrain and visible geometry share .125 world cells")
-	_check(Generator.PATCH_SIZE == Vector3i(640, 256, 640), "finite fine-grid dimensions are explicit")
+	_check(Generator.PATCH_SIZE == Bounds.NATIVE_SIZE, "finite fine-grid dimensions are explicit")
 	var began := Time.get_ticks_msec()
 	backend = Backend.new(); backend.initial_generator = Generator; backend.generator_id = Generator.GENERATOR_ID
 	backend.patch_size = Generator.PATCH_SIZE; backend.voxel_scale = Generator.VOXEL_SCALE
@@ -25,9 +26,9 @@ func _initialize() -> void:
 	var deadline := Time.get_ticks_msec() + 60000
 	while not backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame
 	metrics["native_ready_ms"] = Time.get_ticks_msec() - began
-	_check(backend.is_ready(), "640x256x640 native volume initializes and meshes within bounded time")
+	_check(backend.is_ready(), "canonical native volume initializes and meshes within bounded time")
 	if not backend.is_ready(): print(backend.stats()); _finish(); return
-	_check(backend.world_size() == Vector3(80, 32, 80), "world bounds stay fixed")
+	_check(backend.world_size() == Vector3(Generator.PATCH_SIZE) * Generator.VOXEL_SCALE, "world bounds stay fixed")
 	_check(backend.terrain.scale == Vector3.ONE * Grid.UNIT, "actual native terrain transform uses shared unit")
 	_check(backend.terrain.mesh_block_size == 32 and backend.terrain.get_data_block_size() == 16, "supported native mesh grouping preserves 16-cell data blocks")
 	if "--read-fixture" in args:
@@ -44,13 +45,17 @@ func _initialize() -> void:
 		fine_steps[int(backend._column_surface_y(backend.voxels, x, 70)) % 4] = true
 	_check(fine_steps.size() > 1, "fresh terrain exposes fine height steps instead of old half-unit terraces")
 	var initial_hash := _hash(backend.voxels)
-	var center := Vector3(20, 8, 18)
+	# Every brush arithmetic below assumes a flat authored 8 m base surface, so
+	# the stroke anchor must sit on the village green. The old anchor was the
+	# pre-doubling cottage spot, which is now ~25 m of mountain.
+	var center := Generator.starter_camera_target()
+	var center_cell := Vector2i(int(center.x / Generator.VOXEL_SCALE), int(center.z / Generator.VOXEL_SCALE))
 	var settings := {"radius": 0.75, "strength": 6.0, "falloff": 0.5}
 	began = Time.get_ticks_usec()
 	_check(backend.begin_stroke("raise", center, settings), "fine terrain raise starts")
 	for _i in 30: backend.update_stroke(center, 1.0 / 60.0)
 	metrics["half_second_stroke_cpu_ms"] = (Time.get_ticks_usec() - began) / 1000.0
-	_check(backend._column_surface_y(backend.voxels, 160, 144) == 88.0, "fine brush grows exactly three world units in half a second")
+	_check(backend._column_surface_y(backend.voxels, center_cell.x, center_cell.y) == 88.0, "fine brush grows exactly three world units in half a second")
 	_check(backend.end_stroke(), "fine held brush commits")
 	var raised_hash := _hash(backend.voxels)
 	_check(raised_hash != initial_hash, "fine brush changes authoritative bytes")
@@ -61,12 +66,12 @@ func _initialize() -> void:
 	_check(backend.undo() and _hash(backend.voxels) == initial_hash, "timing comparison restores fixture")
 	# A constructed 45-degree fine-grid incline verifies that bounded plane
 	# sampling still derives the physical local slope rather than a voxel face.
-	var ramp_min := Vector3i(140, 0, 124)
-	var ramp_max := Vector3i(181, 96, 165)
+	var ramp_min := Vector3i(center_cell.x - 20, 0, center_cell.y - 20)
+	var ramp_max := Vector3i(center_cell.x + 21, 96, center_cell.y + 21)
 	var ramp_before: Object = backend._clone_region(backend.voxels, ramp_min, ramp_max)
 	backend.voxels.fill_area(0, ramp_min, ramp_max, 0)
 	for x in range(ramp_min.x, ramp_max.x):
-		backend.voxels.fill_area(1, Vector3i(x, 0, ramp_min.z), Vector3i(x + 1, 64 + x - 160, ramp_max.z), 0)
+		backend.voxels.fill_area(1, Vector3i(x, 0, ramp_min.z), Vector3i(x + 1, 64 + x - center_cell.x, ramp_max.z), 0)
 	var sampled: Dictionary = backend.sample_surface_plane(center, Vector3.UP, 2.0)
 	_check(bool(sampled.get("valid", false)) and sampled.get("point", Vector3.ZERO) == center, "bounded fine plane sampling preserves exact centre hit")
 	_check(absf(float(sampled.get("slope_x", 0.0)) - 1.0) < 0.001 and absf(float(sampled.get("slope_z", 1.0))) < 0.001, "bounded fine plane sampling recovers actual 45-degree incline")
@@ -75,18 +80,18 @@ func _initialize() -> void:
 	var fast := {"radius": 0.75, "strength": 16.0, "falloff": 0.5}
 	_check(backend.begin_stroke("raise", center, fast), "fast fine raise starts")
 	for _i in 15: backend.update_stroke(center, 1.0 / 60.0)
-	_check(backend._column_surface_y(backend.voxels, 160, 144) == 96.0, "16 unit/sec fine raise grows four units in quarter second")
+	_check(backend._column_surface_y(backend.voxels, center_cell.x, center_cell.y) == 96.0, "16 unit/sec fine raise grows four units in quarter second")
 	_check(backend.get_stroke_preview_center(center) == center + Vector3.UP * 4, "raise preview follows actual fine surface")
 	_check(backend.cancel_stroke() and _hash(backend.voxels) == initial_hash, "fast raise cancel exact")
 	_check(backend.begin_stroke("dig", center, fast), "fast fine dig starts")
 	for _i in 15: backend.update_stroke(center, 1.0 / 60.0)
-	_check(backend._column_surface_y(backend.voxels, 160, 144) == 32.0, "16 unit/sec fine dig removes four units in quarter second")
+	_check(backend._column_surface_y(backend.voxels, center_cell.x, center_cell.y) == 32.0, "16 unit/sec fine dig removes four units in quarter second")
 	_check(backend.get_stroke_preview_center(center) == center - Vector3.UP * 4, "dig preview follows actual fine surface without distant retarget")
 	_check(backend.cancel_stroke() and _hash(backend.voxels) == initial_hash, "fast dig cancel exact")
 	var plane := {"valid": true, "point": center + Vector3.UP * 6.0, "normal": Vector3.UP}
 	_check(backend.begin_stroke("level", center, fast, plane), "fast fine level starts")
 	for _i in 15: backend.update_stroke(center, 1.0 / 60.0)
-	_check(backend._column_surface_y(backend.voxels, 160, 144) == 96.0, "16 unit/sec fine level advances four units in quarter second")
+	_check(backend._column_surface_y(backend.voxels, center_cell.x, center_cell.y) == 96.0, "16 unit/sec fine level advances four units in quarter second")
 	_check(backend.cancel_stroke() and _hash(backend.voxels) == initial_hash, "fast level cancel exact")
 	# Build the old native resolution with independent native volume fills.
 	# A cave, disconnected overhang, high-valued material and edge cells must
