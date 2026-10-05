@@ -1,6 +1,6 @@
 # Generated from hearthvale_prop_lamp_post.vox
 # source_sha256 82fd32d1052356369b4c7499678447e22a56969f7d3707071cbb6da75b00de7c
-mtllib hearthvale_prop_lamp_post.mtl
+mtllib hearthvale_lamp_post.mtl
 o hearthvale_magicavoxel_asset
 g palette_9
 usemtl palette_9

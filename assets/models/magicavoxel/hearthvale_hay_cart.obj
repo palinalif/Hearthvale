@@ -1,6 +1,6 @@
 # Generated from hearthvale_prop_hay_cart.vox
 # source_sha256 02257d97c20ef8bfcb56fde73de076d881ea36dd328f125238d9687aa1dcaa5f
-mtllib hearthvale_prop_hay_cart.mtl
+mtllib hearthvale_hay_cart.mtl
 o hearthvale_magicavoxel_asset
 g palette_1
 usemtl palette_1

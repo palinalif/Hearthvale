@@ -1,6 +1,6 @@
 # Generated from hearthvale_prop_market_cross.vox
 # source_sha256 a78d9461164db344ee0a0aaae123944cf51076cb8f201dc855fce9a991a128ed
-mtllib hearthvale_prop_market_cross.mtl
+mtllib hearthvale_market_cross.mtl
 o hearthvale_magicavoxel_asset
 g palette_1
 usemtl palette_1

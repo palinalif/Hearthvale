@@ -1,6 +1,6 @@
 # Generated from hearthvale_prop_signpost.vox
 # source_sha256 1ac9b0b3a203453870f5b0563836bfd9da74f2b386215df10ed29425260ef894
-mtllib hearthvale_prop_signpost.mtl
+mtllib hearthvale_signpost.mtl
 o hearthvale_magicavoxel_asset
 g palette_1
 usemtl palette_1

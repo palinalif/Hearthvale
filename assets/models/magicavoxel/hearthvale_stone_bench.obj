@@ -1,6 +1,6 @@
 # Generated from hearthvale_prop_stone_bench.vox
 # source_sha256 c1bd3552d8c043565f2facd327301376af9567ee2672f8b399fa7330e87e3348
-mtllib hearthvale_prop_stone_bench.mtl
+mtllib hearthvale_stone_bench.mtl
 o hearthvale_magicavoxel_asset
 g palette_2
 usemtl palette_2
