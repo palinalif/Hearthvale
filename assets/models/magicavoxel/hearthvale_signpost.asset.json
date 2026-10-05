@@ -1,0 +1,41 @@
+{
+  "asset": "hearthvale_signpost",
+  "declared_dimensions": [
+    12,
+    34,
+    12
+  ],
+  "emitted_quads": 104,
+  "exposed_quads": 532,
+  "license": "Project-authored; MCP development tool is MIT",
+  "meshing": "greedy coplanar same-palette rectangles; exact exposed-cell coverage",
+  "occupied_bounds": {
+    "max": [
+      11,
+      34,
+      9
+    ],
+    "min": [
+      1,
+      0,
+      3
+    ]
+  },
+  "orientation": "MCP documented Y-up mapped directly to Godot Y-up",
+  "palette_indices": [
+    1,
+    6,
+    7,
+    8,
+    10
+  ],
+  "source": "hearthvale_signpost.vox",
+  "source_path": "assets/source/magicavoxel/hearthvale_signpost.vox",
+  "source_sha256": "1ac9b0b3a203453870f5b0563836bfd9da74f2b386215df10ed29425260ef894",
+  "tool": "https://github.com/Mahinika/magicavoxel-mcp",
+  "tool_commit": "710671d49bdc89e4e3d1ff7c60541c1d0383ac16",
+  "triangles": 208,
+  "voxel_count": 305,
+  "voxel_tier": "terrain/structure",
+  "voxel_unit": 0.125
+}

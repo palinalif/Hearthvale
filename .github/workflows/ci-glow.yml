@@ -1,0 +1,87 @@
+name: M2 glow
+on:
+  push:
+    branches: [feat/m2-vox-props]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  glow-source:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install pinned Godot and voxel extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $lock = Get-Content dependencies.lock.json -Raw | ConvertFrom-Json
+          $root = Join-Path (Get-Location) '.tools/glow'
+          New-Item -ItemType Directory -Force $root | Out-Null
+          Set-Content -LiteralPath (Join-Path (Split-Path $root) '.gdignore') -Value ''
+          Invoke-WebRequest -Uri $lock.engine.editor_url -OutFile (Join-Path $root 'editor.zip')
+          if ((Get-FileHash -LiteralPath (Join-Path $root 'editor.zip') -Algorithm SHA512).Hash.ToLowerInvariant() -ne $lock.engine.editor_sha512.ToLowerInvariant()) { throw 'Editor archive hash mismatch' }
+          Invoke-WebRequest -Uri $lock.voxel.url -OutFile (Join-Path $root 'voxel.zip')
+          if ((Get-FileHash -LiteralPath (Join-Path $root 'voxel.zip') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $lock.voxel.sha256.ToLowerInvariant()) { throw 'Voxel archive hash mismatch' }
+          Expand-Archive -LiteralPath (Join-Path $root 'editor.zip') -DestinationPath $root -Force
+          Expand-Archive -LiteralPath (Join-Path $root 'voxel.zip') -DestinationPath (Get-Location) -Force
+          $editor = Get-ChildItem $root -Filter '*_console.exe' | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $editor) { throw 'Console editor missing' }
+          # The pinned release names its libraries libvoxel.<platform>.<editor|template_release>.<arch>.<ext>.
+          # The editor library is what headless import and --script load on this runner.
+          if (-not (Test-Path -LiteralPath 'addons/zylann.voxel/bin/libvoxel.windows.editor.x86_64.dll')) { throw 'Windows voxel extension missing' }
+          "GODOT_EDITOR=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Import project
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scripts = @(
+            'res://scripts/m2_lantern_glow.gd',
+            'res://scripts/cottage_visual.gd',
+            'res://scripts/visual_lighting_profile.gd',
+            'res://scripts/m2_composition_visual.gd',
+            'res://scripts/m2_hamlet_visual.gd'
+          )
+          # Import first: --check-only resolves class_name identifiers from the
+          # project's global class cache, which only exists after an import.
+          # Checking before importing fails on a fresh checkout with
+          # 'Identifier "M2LanternGlow" not declared in the current scope'.
+          & $env:GODOT_EDITOR --headless --path . --import
+          if ($LASTEXITCODE) { throw 'Project import failed' }
+          foreach ($script in $scripts) {
+            & $env:GODOT_EDITOR --headless --path . --check-only --script $script
+            if ($LASTEXITCODE) { throw "$script check failed" }
+          }
+      # This branch authors the voxel sources; the baked .res library and the
+      # mesh-contract tests live on feat/m2-glow, where the bake pipeline is
+      # complete. Asserting baked meshes here would assert artifacts this branch
+      # never produced, so CI checks the sources this branch actually ships.
+      - name: Verify the authored prop voxel sources
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $props = @('bench','hay_cart','lamp_post','market_cross','maypole','notice_board','signpost','stone_bench','water_pump')
+          foreach ($prop in $props) {
+            $vox = "assets/source/magicavoxel/hearthvale_$prop.vox"
+            if (-not (Test-Path -LiteralPath $vox)) { throw "authored source missing: $vox" }
+            python tools/magicavoxel/vox_to_obj.py $vox "$env:RUNNER_TEMP/$prop.obj" --greedy
+            if ($LASTEXITCODE -ne 0) { throw "vox source does not parse: $vox" }
+            if ((Get-Item "$env:RUNNER_TEMP/$prop.obj").Length -lt 1000) { throw "baked OBJ is empty/collapsed: $vox" }
+          }
+      - name: Run glow tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tests = @(
+            'res://tests/magicavoxel_asset_test.gd',
+            'res://tests/m2_lantern_glow_test.gd',
+            'res://tests/m2_window_glow_test.gd'
+          )
+          foreach ($test in $tests) {
+            & $env:GODOT_EDITOR --headless --path . --script $test
+            if ($LASTEXITCODE) { throw "$test failed" }
+          }
