@@ -247,7 +247,9 @@ func world_size() -> Vector3:
 func _whole_world_view_distance(floor_value: float, from_center: bool = true) -> float:
 	var extent := _world_size().length()
 	extent *= 0.5 if from_center else 1.25
-	return maxf(floor_value, extent)
+	# VoxelViewer.view_distance is an integer, so a fractional radius is
+	# truncated on assignment and would shave the far corner off the coverage.
+	return ceilf(maxf(floor_value, extent))
 
 func _world_size() -> Vector3:
 	return Vector3(patch_size) * voxel_scale
