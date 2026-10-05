@@ -32,6 +32,32 @@ const MOUNTAIN_RADIUS := 80.0
 const SOURCE_CENTER := Vector2(82.0, 143.5)
 const SOURCE_LEVEL := 23.0
 const SOURCE_LIP_Z := 140.0
+const VILLAGE_GREEN_LEVEL := 8.0
+
+## Canonical starter-hamlet anchor: the flat centre of the village green.
+## Spawn positions used to be free-floating literals, so resizing the map
+## silently left the starter home inside a mountain and the startup mesh box
+## under a hillside. Deriving them from the pad keeps them valid for any
+## future map size.
+static func village_green_center() -> Vector2:
+	return VILLAGE_GREEN.position + VILLAGE_GREEN.size * 0.5
+
+## Ground level of the starter home, on the native 0.125 structural grid.
+static func starter_ground_level() -> float:
+	return snappedf(terrain_height(village_green_center().x, village_green_center().y), VOXEL_SCALE)
+
+## Origin of the starter home, inset from the green centre so the green stays
+## open ground in front of the door.
+static func starter_home_origin() -> Vector3:
+	var center := village_green_center()
+	return Vector3(center.x - 6.0, starter_ground_level(), center.y - 6.0)
+
+## Open ground in front of the starter home: the point the starter camera
+## aims at and the terrain cursor starts on. Ground level, like every terrain
+## cursor (the camera adds its own +2 lift).
+static func starter_camera_target() -> Vector3:
+	var center := village_green_center()
+	return Vector3(center.x, starter_ground_level(), center.y)
 
 static func river_center_x(world_z: float) -> float:
 	# Doubled v4 centre line: 2 * f(z/2) == 2*f(z) at the doubled wavelength.
