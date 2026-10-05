@@ -10,7 +10,10 @@ class SavedV2Backend extends Node:
 	func is_ready() -> bool: return true
 	func voxel_at(cell: Vector3i) -> int:
 		if cell.y == 24: return 1
-		if cell.y == 39 and not (cell.x >= 312 and cell.z >= 80 and cell.z < 348): return 1
+		# An authored v2 channel is bounded on both banks. Leaving the east bank
+		# open describes an open flood plain, not a river, and the rebuilt surface
+		# correctly follows that authored gap all the way to the map edge.
+		if cell.y == 39 and not (cell.x >= 312 and cell.x < 384 and cell.z >= 80 and cell.z < 348): return 1
 		return 0
 
 func _initialize() -> void:
@@ -25,12 +28,20 @@ func _initialize() -> void:
 		min_center = minf(min_center, center); max_center = maxf(max_center, center)
 		min_width = minf(min_width, width); max_width = maxf(max_width, width)
 		_check(_on_grid(center) and _on_grid(width), "river bounds remain on the native grid")
-		_check(Generator.terrain_height(center, z) < 5.0, "river bed stays below the water surface")
+		# "Bed below the water surface" is the flowing reach only. Above the
+		# source lip the valley deliberately rises to feed the waterfall, so
+		# there is no submerged bed to assert there.
+		if z < Generator.SOURCE_LIP_Z:
+			_check(Generator.terrain_height(center, z) < 5.0, "river bed stays below the water surface")
+		else:
+			_check(Generator.terrain_height(center, z) >= 5.0, "waterfall source stands above the water surface")
 		_check(Generator.terrain_height(center - width * 0.5 - 0.25, z) >= 5.0, "west shoreline stays above water")
 		_check(Generator.terrain_height(center + width * 0.5 + 0.25, z) >= 5.0, "east shoreline stays above water")
 	_check(max_center - min_center >= 1.5, "river has a readable meander")
 	_check(max_width - min_width >= 0.5, "river width varies along its course")
-	_check(is_equal_approx(Generator.terrain_height(20.0, 18.0), 8.0), "cottage pad remains unchanged")
+	var home := Generator.starter_home_origin()
+	_check(is_equal_approx(Generator.terrain_height(home.x, home.z), home.y), "starter home pad sits on its authored ground")
+	_check(is_equal_approx(Generator.terrain_height(home.x + 4.0, home.z), home.y) and is_equal_approx(Generator.terrain_height(home.x, home.z + 4.0), home.y), "starter home pad is flat")
 
 	var scene := SceneScript.new()
 	root.add_child(scene)
