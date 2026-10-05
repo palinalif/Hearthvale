@@ -1553,3 +1553,35 @@ furniture is not in the game.
 `.asset_2d` → `.res`, byte-exact against the shipped `.asset_2d` files) and
 `tools/magicavoxel/build_props.py` (staging → canonical, with a 0.125-grid
 check) are now committed.
+
+## 2026-10-05 — glow line at v81; authored coverage measured; local Android toolchain is gone
+
+**Branch `feat/m2-glow`, head `af80edd`+ (v81 stamp, `.uid` fix).** CI: `M2 glow` green on every
+commit in this stretch; `Thor playtest APK` green, artifact verified `arm64-v8a` only with exactly
+one `lib/arm64-v8a/libvoxel*` and no dev directories shipped.
+
+**Authored coverage, measured not asserted.** A runtime probe through the real builder
+(`_authored_assets` → `mesh_for`) over `m2_scene_street_furniture.gd`'s 22-style catalogue returns
+**22 authored / 0 procedural**. The earlier "12 styles missing" note was wrong and has been
+corrected above.
+
+**Lantern-family glow: nothing left to light.** `lamp_post`, `street_lamp`, `market_cross`,
+`maypole`, `notice_board`, `pumpkin_post` and `hay_cart` are authored `.vox` sources with **no
+placement code** — the only reference anywhere is `m2_starter_furniture_mesh_test.gd`'s bake
+contract. They are not in the furniture catalogue and no scene builds them, so there is no second
+in-game lamp to attach glow to. `barrel_planter_light` has no warm emitter palette (its top colours
+are wood/stone), so it is not a light source. Glow therefore stays exactly where it is:
+lanterns (flame inset behind glass) and cottage windows.
+
+**Local Android work is currently impossible on this machine** — the reset removed the toolchain:
+no `adb` anywhere, no `/root/Android/Sdk` (editor settings still point there, so
+`--export-debug "Android ARM64"` fails with *"Unable to find Android SDK build-tools' apksigner"*),
+and `/root/.local/share/godot/keystores/` is empty, so the debug signing identity used by every
+prior local playtest build is unrecoverable. Export templates (`android_debug.apk`,
+`android_release.apk`) and the gitignored Zylann ARM64 `.so` files are present. Consequence: the
+only APK available is the CI one, whose keystore is ephemeral per run — it cannot upgrade-install
+over a device build signed by the old local identity. **Do not mint a new keystore to work around
+this**; that is the user's call, and uninstalling to change signing identity discards saves.
+
+**Not run:** Thor rendering, glow appearance, draw-call/perf impact of the five newly wired
+authored props, touch interaction. Desktop evidence only.
