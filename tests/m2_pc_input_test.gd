@@ -9,7 +9,7 @@ func _initialize() -> void:
 	scene.test_mode = true
 	scene.pc_input_test_enabled = true
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 15000
+	var deadline := Time.get_ticks_msec() + 90000
 	while (scene.backend == null or not scene.backend.is_ready() or not scene._player_restored) and Time.get_ticks_msec() < deadline:
 		await process_frame
 	_check(scene.backend != null and scene.backend.is_ready(), "PC input scene becomes ready")

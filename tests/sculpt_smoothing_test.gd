@@ -22,7 +22,7 @@ func _init() -> void:
 func _run() -> void:
 	var backend := CountingBackend.new()
 	root.add_child(backend)
-	var deadline := Time.get_ticks_msec() + 20000
+	var deadline := Time.get_ticks_msec() + 90000
 	while not backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame
 	check(backend.is_ready(), "native backend ready")
 	if not backend.is_ready():

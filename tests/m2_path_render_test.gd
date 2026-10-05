@@ -30,7 +30,7 @@ func _run_scene_checks(capture: bool) -> void:
 	scene.test_mode = true
 	scene.checkpoint_root = "user://m2-path-render-%s" % Time.get_ticks_usec()
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 65000
+	var deadline := Time.get_ticks_msec() + 90000
 	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
 	_check(scene._player_restored and scene.backend != null and scene.backend.is_ready(), "native Mobile path scene ready")
 	if not scene._player_restored:

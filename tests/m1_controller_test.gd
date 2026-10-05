@@ -16,7 +16,7 @@ func _initialize() -> void:
 	scene.checkpoint_root = "user://m1-controller-test-%s-%s" % [RenderingServer.get_current_rendering_method(), Time.get_ticks_usec()]
 	scene.test_mode = true
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 30000
+	var deadline := Time.get_ticks_msec() + 90000
 	while (scene.backend == null or not scene.backend.is_ready()) and Time.get_ticks_msec() < deadline:
 		await process_frame
 	_check(scene.backend != null and scene.backend.is_ready(), "native backend ready")

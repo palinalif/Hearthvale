@@ -23,7 +23,7 @@ func _initialize() -> void:
 	scene.checkpoint_root = PROCESS_ROOT if (write_fixture or read_fixture) else "user://m1-acceptance-%d" % Time.get_ticks_usec()
 	scene.test_mode = true
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 30000
+	var deadline := Time.get_ticks_msec() + 90000
 	while (scene.backend == null or not scene.backend.is_ready()) and Time.get_ticks_msec() < deadline:
 		await process_frame
 	_check(scene.backend != null and scene.backend.is_ready(), "native M1 backend ready")

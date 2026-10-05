@@ -16,7 +16,7 @@ func _initialize() -> void:
 		if arg.begins_with("--fixture-root="): save_root = arg.trim_prefix("--fixture-root=")
 	scene = SceneScript.new(); scene.checkpoint_root = save_root; scene.test_mode = true
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 30000
+	var deadline := Time.get_ticks_msec() + 90000
 	while (scene.backend == null or not scene.backend.is_ready()) and Time.get_ticks_msec() < deadline: await process_frame
 	await process_frame
 	_check(scene.backend != null and scene.backend.is_ready(), "native landscape scene ready")

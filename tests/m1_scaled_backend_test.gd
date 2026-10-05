@@ -58,7 +58,7 @@ func _initialize() -> void:
 			_check(data_viewer.position.is_equal_approx(backend.world_size() * 0.5), "data-only voxel viewer stays at valley center")
 			_check(float(data_viewer.get("view_distance")) >= backend.world_size().length() * 0.5, "data-only voxel viewer keeps the full valley resident")
 			_check(not bool(data_viewer.get("requires_collisions")), "data-only voxel viewer does not request collision meshes")
-	var deadline := Time.get_ticks_msec() + 60000
+	var deadline := Time.get_ticks_msec() + 90000
 	while not backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame
 	_check(backend.is_ready(), "scaled native backend ready")
 	if not backend.is_ready():

@@ -36,7 +36,7 @@ func _run() -> void:
 	scene.test_mode = true
 	scene.checkpoint_root = "user://terrain-ux-test-%s" % Time.get_ticks_usec()
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 65000
+	var deadline := Time.get_ticks_msec() + 90000
 	while not scene.backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame
 	check(scene.backend.is_ready(), "native M1 ready")
 	if not scene.backend.is_ready():

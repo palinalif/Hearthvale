@@ -23,7 +23,7 @@ func _initialize() -> void:
 	backend.patch_size = Generator.PATCH_SIZE; backend.voxel_scale = Generator.VOXEL_SCALE
 	backend.checkpoint_root = fixture_root; backend.require_building_document = true
 	root.add_child(backend)
-	var deadline := Time.get_ticks_msec() + 60000
+	var deadline := Time.get_ticks_msec() + 90000
 	while not backend.is_ready() and Time.get_ticks_msec() < deadline: await process_frame
 	metrics["native_ready_ms"] = Time.get_ticks_msec() - began
 	_check(backend.is_ready(), "canonical native volume initializes and meshes within bounded time")

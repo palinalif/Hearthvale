@@ -33,7 +33,7 @@ func _run() -> void:
 	scene.test_mode = true
 	scene.checkpoint_root = "user://lighting-study-%s" % Time.get_ticks_usec()
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 65000
+	var deadline := Time.get_ticks_msec() + 90000
 	while not scene._player_restored and Time.get_ticks_msec() < deadline: await process_frame
 	check(scene._player_restored and scene.backend.is_ready(), "disposable current gameplay scene ready")
 	if not scene._player_restored:

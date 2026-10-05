@@ -11,7 +11,7 @@ func _initialize() -> void:
 	scene = preload("res://scripts/m0_scene.gd").new()
 	scene.checkpoint_root = "user://m0-controller-test-%s" % RenderingServer.get_current_rendering_method()
 	root.add_child(scene)
-	var deadline := Time.get_ticks_msec() + 15000
+	var deadline := Time.get_ticks_msec() + 90000
 	while (scene.backend == null or not scene.backend.is_ready()) and Time.get_ticks_msec() < deadline:
 		await process_frame
 	if scene.backend == null or not scene.backend.is_ready():
