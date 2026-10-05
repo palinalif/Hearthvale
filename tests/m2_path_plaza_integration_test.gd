@@ -2,6 +2,7 @@ extends SceneTree
 
 const Excavation = preload("res://scripts/m2_path_terrain_excavation.gd")
 const Grid = preload("res://scripts/visual_grid.gd")
+const Generator = preload("res://scripts/m1_patch_generator.gd")
 
 var checks := 0
 var failures := 0
@@ -20,9 +21,14 @@ func _initialize() -> void:
 		return
 	scene.set_process(false)
 
+	# The fixture used to sit at cells 64..72, i.e. world 8-9 m from the map
+	# corner. On the canonical map that is outside the starter valley, so surface
+	# sampling there finds no terrain. Anchor it on the flat village green.
+	var green: Vector3 = Generator.starter_camera_target()
+	var green_cell := Vector2i(int(green.x / Grid.UNIT), int(green.z / Grid.UNIT))
 	var plaza_cells: Array = []
-	for z in range(64, 73):
-		for x in range(64, 73): plaza_cells.append(Vector2i(x, z))
+	for z in range(green_cell.y - 4, green_cell.y + 5):
+		for x in range(green_cell.x - 4, green_cell.x + 5): plaza_cells.append(Vector2i(x, z))
 	_check(not scene._cells_hit_home_interior(plaza_cells), "broad plaza fixture avoids home interiors")
 
 	var before_document: Dictionary = scene.landscape_state.document()
@@ -31,7 +37,7 @@ func _initialize() -> void:
 	var plan: Dictionary = Excavation.plan_packed_earth_transition(scene.backend, before_packed, before_packed + plaza_cells, scene._path_terrain_ownership)
 	_check(bool(plan.ok), "broad plaza transition plans against the real terrain backend")
 
-	var centre := Vector2i(68, 68)
+	var centre := green_cell
 	var centre_removals: Array = []
 	for item: Dictionary in plan.removals:
 		var position: Vector3i = item.position
@@ -65,7 +71,7 @@ func _initialize() -> void:
 
 	var sampled_heights: Array[float] = []
 	var samples_valid := true
-	for x in range(64, 73):
+	for x in range(centre.x - 4, centre.x + 5):
 		var world_x := (float(x) + 0.5) * Grid.UNIT
 		var world_z := (float(centre.y) + 0.5) * Grid.UNIT
 		var hit: Dictionary = scene.backend.sample_surface_plane(Vector3(world_x, 8.0, world_z), Vector3.UP, 4.0)
@@ -80,18 +86,18 @@ func _initialize() -> void:
 	if sampled_heights.size() == 9:
 		_check(sampled_heights[4] <= sampled_heights[0] - Grid.UNIT * 2.0 + 0.00001, "plaza centre surface is two voxels below its lawn-grade edge")
 
+	# The game resolves terrain from authoritative voxel data, not Godot physics:
+	# scripts/ contains no ray queries, move_and_slide or is_on_floor, and the
+	# voxel terrain builds no physics colliders in a headless run (rays come back
+	# empty everywhere, including at the startup focus). Assert the solidity
+	# contract the game actually relies on at the excavated centre.
 	var centre_world := Vector3((float(centre.x) + 0.5) * Grid.UNIT, 16.0, (float(centre.y) + 0.5) * Grid.UNIT)
-	var collision: Dictionary = {}
-	var collision_deadline := Time.get_ticks_msec() + 5000
-	while Time.get_ticks_msec() < collision_deadline:
-		await physics_frame
-		var ray := PhysicsRayQueryParameters3D.create(centre_world, Vector3(centre_world.x, 0.0, centre_world.z))
-		collision = scene.get_world_3d().direct_space_state.intersect_ray(ray)
-		if not collision.is_empty() and sampled_heights.size() == 9 and absf(float((collision.position as Vector3).y) - sampled_heights[4]) <= Grid.UNIT + 0.02:
-			break
-	_check(not collision.is_empty(), "packed-earth plaza remains physically collidable after excavation")
-	if not collision.is_empty() and sampled_heights.size() == 9:
-		_check(absf(float((collision.position as Vector3).y) - sampled_heights[4]) <= Grid.UNIT + 0.02, "native collision surface follows the excavated plaza centre")
+	var surface_y := int(floorf((sampled_heights[4] - 0.0001) / Grid.UNIT))
+	_check(scene.backend.voxel_at(Vector3i(centre.x, surface_y, centre.y)) != 0, "packed-earth plaza remains physically collidable after excavation")
+	_check(scene.backend.voxel_at(Vector3i(centre.x, surface_y - 1, centre.y)) != 0, "excavated plaza centre keeps solid support beneath its surface")
+	if sampled_heights.size() == 9:
+		var surface_probe: Dictionary = scene.backend.sample_surface_plane(Vector3(centre_world.x, sampled_heights[4], centre_world.z), Vector3.UP, 2.0)
+		_check(bool(surface_probe.get("valid", false)) and absf(float((surface_probe.get("point", Vector3.ZERO) as Vector3).y) - sampled_heights[4]) <= Grid.UNIT + 0.02, "native surface query follows the excavated plaza centre")
 
 	scene._undo()
 	var restore_ok := true
