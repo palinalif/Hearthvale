@@ -134,7 +134,13 @@ func apply_building(view: Dictionary, source_revision: int) -> bool:
 	# Cancelling a preview invalidates the scene's presentation key, not every
 	# cottage's geometry. Keep identical instances (and their draw order) alive.
 	# Compare a private snapshot: preview dictionaries can be edited in place.
-	if source_revision == applied_revision and view == _applied_view:
+	# Identical authoritative content means identical geometry, so a revision
+	# bump alone must not force a rebuild: any terrain edit advances the world
+	# revision, and rebuilding every cottage on the map from one local edit is
+	# the dominant cost of a presentation pass. Stale results are still rejected
+	# by the requested_revision / applied_revision checks above, which run first.
+	if view == _applied_view:
+		applied_revision = source_revision
 		return true
 	_applied_view = view.duplicate(true)
 	for child in get_children(): child.free()
