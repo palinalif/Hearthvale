@@ -26,7 +26,7 @@ function Invoke-TerrainGate([string]$label) {
     }
     $joined = $output -join "`n"
     $plain = $joined -match 'failures=0'
-    $json = $joined -match '"failures"\s*:\s*0' -and $joined -match '"ok"\s*:\s*true'
+    $json = ($joined -match '"failures"\s*:\s*0' -or $joined -match '"failures"\s*:\s*\[\s*\]') -and $joined -match '"ok"\s*:\s*true'
     if (-not ($plain -or $json)) { throw "Missing successful test receipt: $label" }
 }
 

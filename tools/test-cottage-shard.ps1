@@ -32,7 +32,7 @@ function Invoke-NativeTests([string[]]$tests) {
         $output | Tee-Object -FilePath (Join-Path $review "$test.log")
         $joined = $output -join "`n"
         $plain = $joined -match 'failures=0'
-        $json = $joined -match '"failures"\s*:\s*0' -and $joined -match '"ok"\s*:\s*true'
+        $json = ($joined -match '"failures"\s*:\s*0' -or $joined -match '"failures"\s*:\s*\[\s*\]') -and $joined -match '"ok"\s*:\s*true'
         if ($exitCode -ne 0 -or ($output -match 'ERROR:|Parse Error:|FAIL:') -or -not ($plain -or $json)) {
             throw "Cottage regression failed: $test"
         }
