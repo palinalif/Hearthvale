@@ -34,7 +34,7 @@ jobs:
           # The pinned release names its libraries libvoxel.<platform>.<editor|template_release>.<arch>.<ext>.
           # The editor library is what headless import and --script load on this runner.
           if (-not (Test-Path -LiteralPath 'addons/zylann.voxel/bin/libvoxel.windows.editor.x86_64.dll')) { throw 'Windows voxel extension missing' }
-          $editor | ForEach-Object { $_.FullName } | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "GODOT_EDITOR=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Import project
         shell: pwsh
         run: |
