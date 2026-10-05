@@ -1522,3 +1522,34 @@ gitignored `.tools/magicavoxel/` staging area and deleted with it, so the
 `.vox` → `.asset_2d` conversion step must be rebuilt before any new prop can
 ship. The `.vox` sources, `author_props.py` and `author_furniture.py` are
 committed and unaffected.
+
+## 2026-07-30 — verified asset inventory (measured, supersedes the table above)
+
+Checked by grepping every style name in `scripts/` and cross-referencing
+`assets/source/magicavoxel/*.vox` against the runtime loaders.
+
+**All 22 furniture styles are authored and wired** — 17 in
+`m2_starter_furniture_assets.gd` (well, chopping block, log stack, bench,
+signpost, clothesline, cart, cross, maypole, notice board, pumpkins, barrel,
+crate, barrel crate, ladder, hedge, bush, flower patch) plus planter, table and
+lantern in their own modules. The earlier "12 procedural furniture styles
+remain" note was wrong: `clothesline`, `hay_cart`, `market_cross`, `maypole`,
+`notice_board`, `pumpkin_post` and the rest have `.vox` sources and are loaded
+as baked meshes. No bed/wardrobe/shelf/counter/chair exist anywhere — that
+furniture is not in the game.
+
+**Genuinely procedural, and correctly so:**
+
+- Fences (`scripts/fence_mesh.gd`) — variable-length runs, stretchable by the
+  project's own rule.
+- Vegetation (`scripts/vegetation_mesh.gd`: tree, bush, flower, rock, stump,
+  log, reeds, cattail, moss, pebble, root, shelf, overhang, cliff face) and
+  landscape features (`m2_composition_visual.gd` garden/bush/hedge/flower/rock
+  clusters) — landscape-scale, generated from world seed.
+- Terrain, water, cottage/bridge/keep shells, roads, fields, gardens, wells,
+  signs, loom, forge, kiln, stockpile, particles, all UI.
+
+**Pipeline gap is closed:** `tools/magicavoxel/vox_to_asset.py` (`.vox` →
+`.asset_2d` → `.res`, byte-exact against the shipped `.asset_2d` files) and
+`tools/magicavoxel/build_props.py` (staging → canonical, with a 0.125-grid
+check) are now committed.
