@@ -46,12 +46,16 @@ jobs:
             'res://scripts/m2_composition_visual.gd',
             'res://scripts/m2_hamlet_visual.gd'
           )
+          # Import first: --check-only resolves class_name identifiers from the
+          # project's global class cache, which only exists after an import.
+          # Checking before importing fails on a fresh checkout with
+          # 'Identifier "M2LanternGlow" not declared in the current scope'.
+          & $env:GODOT_EDITOR --headless --path . --import
+          if ($LASTEXITCODE) { throw 'Project import failed' }
           foreach ($script in $scripts) {
             & $env:GODOT_EDITOR --headless --path . --check-only --script $script
             if ($LASTEXITCODE) { throw "$script check failed" }
           }
-          & $env:GODOT_EDITOR --headless --path . --import
-          if ($LASTEXITCODE) { throw 'Project import failed' }
       # This branch authors the voxel sources; the baked .res library and the
       # mesh-contract tests live on feat/m2-glow, where the bake pipeline is
       # complete. Asserting baked meshes here would assert artifacts this branch
