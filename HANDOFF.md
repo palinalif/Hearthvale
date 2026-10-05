@@ -1,4 +1,84 @@
+# 2026-10-05 — `feat/m2-vox-props`: authored voxel prop pipeline + a green glow gate
+
+Head `4881ef6`, 15 commits ahead of `origin/main`, pushed, working tree clean.
+Pinned engine: Godot `4.7.2.stable.official.ed1daf0bf` (`dependencies.lock.json`).
+
+## What is on `feat/m2-vox-props`
+
+- **Authored prop pipeline.** 54 `.vox` sources and 53 `asset.json` records, plus the staging
+  tools `tools/magicavoxel/vox_to_obj.py`, `vox_to_asset.py`, `build_props.py`,
+  `bake_furniture.sh` and `bake_mesh.gd`. Concept report in
+  `reports/MagicaVoxel-prop-concepts.md`.
+- **Lantern glow** as `scripts/m2_lantern_glow.gd`, tested by `tests/m2_lantern_glow_test.gd`.
+- **Window glow is procedural, inside `scripts/cottage_visual.gd`** (window light nodes, no
+  emission material). `tests/m2_window_glow_test.gd` tests that implementation. The standalone
+  `scripts/m2_window_glow.gd` from the discarded `2ca8b70` branch was **not** landed: it calls a
+  `M2CottageVisual.window_glow` / `window_glow_root` seam that does not exist here.
+- **`ci-glow.yml` (`M2 glow`)** runs on push to this branch: install pinned editor + voxel lib →
+  `--import` → five `--check-only` gates → parse the nine authored `.vox` sources to OBJ over a
+  size floor → run `magicavoxel_asset_test`, `m2_lantern_glow_test`, `m2_window_glow_test`.
+
+## Verified
+
+- `M2 glow` **green** on `4881ef6` (run 37290860532, every step success). The job had never been
+  green before; it took three stacked fixes — see "Glow CI" below.
+- Whole job sequence reproduced green locally on a cold `.godot` cache: import 0, five check-only
+  gates 0, three test scripts 0, nine `.vox` sources → OBJ over the floor.
+
+## Not run / not delivered
+
+- No APK export, no Thor device run, no actual-Mobile visual capture from this branch. Desktop
+  headless evidence only; visual approval belongs to the user.
+- The baked `.res` mesh library is **not** on this branch (`assets/runtime/meshes/` is empty).
+  CI deliberately asserts the `.vox` sources, not baked artifacts.
+
+## Glow CI — three stacked defects, all fixed
+
+1. Voxel library installed as `template_release` instead of the editor build (`7eda4a7`).
+2. `GODOT_EDITOR` was appended to `GITHUB_ENV` as a **bare path** with no `GODOT_EDITOR=`
+   prefix, so the variable was never set (`4f7a232`).
+3. `--check-only` ran **before** `--import`. Check-only resolves `class_name` identifiers from
+   the project global class cache, which only exists after an import, so a fresh checkout always
+   failed with `Identifier "M2LanternGlow" not declared`. Import-then-check-only is clean
+   (`4f7a232`).
+
+Also `4881ef6`: `tests/m2_starter_furniture_mesh_test.gd.uid` was the only tracked test script
+with no committed `.uid`, so every fresh import regenerated an untracked one.
+
+Two traps for whoever touches CI next:
+
+- `gh run rerun` re-runs the **original** `head_sha`, not current HEAD. Reading a rerun looks
+  like reading a fix and is not one.
+- The job previously listed seven tests, four of which never existed (`cottage_visual_test`,
+  `cottage_ward_visual_test`, `m2_composition_visual_test`, `m2_hamlet_visual_test`).
+
+## Open: main CI is red, deliberately out of scope here
+
+`Hearthvale verified Drive delivery` fails 28/30 jobs on `4881ef6`. `main` has failed since
+Sept 17 (9 jobs), so this predates the branch, but the branch adds 21 newly-failing jobs. All 21
+are `windows-2022` shards under `tools/test-m1-placement.ps1` / `tools/test-cottage-shard.ps1`.
+GitHub's log endpoint returns empty for them; the shard scripts gate on `Invoke-MobileReview`,
+which launches Godot with `--rendering-method mobile --rendering-driver d3d12` and requires a
+render receipt. Untested hypothesis. The user is handling this in a separate session.
+
+## Deferred from the `2ca8b70` harvest
+
+- **Window-glow emission re-land** — needs a replace-vs-coexist decision on
+  `scripts/cottage_visual.gd`'s procedural window lights, plus art acceptance. Medium.
+- **`visual-glow.yml` + its three tests** — the workflow names `m2_hamlet_visual_test`,
+  `m2_composition_visual_test`, `cottage_ward_visual_test`; none exist, and
+  `scripts/cottage_ward_visual.gd` does not exist. Gated on the item above.
+- **Naming** — nothing to do. `m2_` is this repo's existing convention (12 files on main) and
+  `scripts/m2_hamlet_visual.gd` has no plural twin; the collision reported earlier was a
+  misread.
+
+---
+
 # 2026-10-04 (glow round) — `feat/m2-glow`: emissive lantern + interior window glow, on a clean branch off main
+
+> Historical. Describes `feat/m2-glow`, not the branch above. Its "What is on `feat/m2-glow`"
+> file list (including a standalone `scripts/m2_window_glow.gd`) does **not** apply to
+> `feat/m2-vox-props`.
 
 ## Why this branch exists
 
