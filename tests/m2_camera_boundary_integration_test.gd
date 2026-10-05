@@ -29,7 +29,18 @@ func _run() -> void:
 	scene._update_camera()
 	var target: Vector3 = scene._selected_building_camera_target()
 	_check((scene._bounded_camera_focus as Vector3).is_equal_approx(target), "native house remains camera focus")
-	_check(scene.camera.position.distance_to(target) < 27.99, "fixture actually reaches a clamped camera edge")
+	# The clamp only engages when the camera would leave the world. The starter
+	# home sits 44 m from the west edge of the canonical map, so the 28 m camera
+	# limit can never reach a boundary from it; the old fixture relied on the 80 m
+	# map. Exercise the same production seam with an offset that leaves the live
+	# west edge, then reframe from real state so the mode-switch checks below see
+	# an untouched scene.
+	var world_extent: Vector3 = scene.backend.world_size()
+	var edge_target := Vector3(scene.camera_distance, 8.0, world_extent.z * 0.5)
+	scene._position_bounded_camera(edge_target, Vector3(-scene.camera_distance, 0.0, 0.0))
+	_check(scene.camera.position.x > 0.0 and scene.camera.position.x < edge_target.x, "boundary pulls the camera inward from the west edge")
+	_check(scene.camera.position.distance_to(edge_target) < scene.camera_distance, "fixture actually reaches a clamped camera edge")
+	scene._update_camera()
 	_check(scene._set_view_context("terrain", "camera boundary integration"), "leave house editing at boundary")
 	scene._update_camera()
 	_check((scene._bounded_camera_focus as Vector3).is_equal_approx(target), "mode switch retains real focus rather than extrapolating zoom")
