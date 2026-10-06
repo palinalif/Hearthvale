@@ -59,6 +59,9 @@ func _run() -> void:
 		await _select_card(style)
 		if not scene.furniture_placement_active: continue
 		_aim(points[index])
+		# A failed aim is otherwise opaque: report the scene's own placement reason and the
+		# terrain/building baselines the placement recorded, so a readiness race is visible.
+		print("PLANTER_AIM " + JSON.stringify({"style":style, "point":[points[index].x, points[index].y], "valid":scene.furniture_placement_valid, "reason":scene.furniture_placement_reason, "terrain_revision":scene._terrain_revision(), "terrain_baseline":scene._detail_terrain_revision, "building_revision":scene.building_world.get_revision(), "building_baseline":scene._detail_building_revision}))
 		_check(scene.furniture_placement_valid, "Valid target for " + style)
 		var ghost: MeshInstance3D = scene.composition_visual._furniture_preview_node
 		_check(ghost != null and ghost.get_meta("authored_asset", "") == Planters.PATHS[style], "Preview uses exported asset " + style)
