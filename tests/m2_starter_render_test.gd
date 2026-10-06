@@ -50,7 +50,11 @@ func run() -> void:
 	check(scene.building_world.get_buildings().size() == 3, "Production cold start has three homes")
 	# Native startup initially meshes only a small focus box. A panorama must
 	# wait for the expanded viewer, otherwise captures contain floating water.
-	var mesh_deadline := Time.get_ticks_msec() + 300000
+	# Full-valley meshing is time-sliced per rendered frame, and hosted Mobile
+	# review runners sit at 1-2 fps, so this budget is wall-clock, not frames.
+	# A hosted run exhausted 300s with the valley still unmeshed while all 11
+	# captures themselves succeeded.
+	var mesh_deadline := Time.get_ticks_msec() + 900000
 	var whole_world := AABB(Vector3.ZERO, Vector3(scene.backend.patch_size))
 	while not scene.backend.terrain.is_area_meshed(whole_world) and Time.get_ticks_msec() < mesh_deadline:
 		await process_frame

@@ -17,7 +17,9 @@ jobs:
   cottage-shards:
     name: cottage-${{ matrix.shard }}
     runs-on: windows-2022
-    timeout-minutes: 25
+    # The starter-valley and planters shards each wrap a 20-minute Mobile
+    # review, which has to fit alongside project import and the native tests.
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:

@@ -179,7 +179,7 @@ switch ($Shard) {
             'm2_starter_migration_test',
             'm2_starter_scene_test'
         )
-        Invoke-MobileReview 'starter-valley' 'tests/m2_starter_render_test.gd' 600000 @(
+        Invoke-MobileReview 'starter-valley' 'tests/m2_starter_render_test.gd' 1200000 @(
             'STARTER_MOBILE_CAPTURE',
             '"ok"\s*:\s*true',
             '"renderer"\s*:\s*"mobile"'
