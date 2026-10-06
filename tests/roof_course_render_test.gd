@@ -136,5 +136,8 @@ func _finish() -> void:
 		await process_frame
 		await process_frame
 	check(captures == 12, "all six cases have matched before/after captures")
+	# The instance-count assertion is per-case, but only the aggregate was printed, so a
+	# failure named the rule and not the roof profile that broke. Emit the per-case metrics.
+	print("ROOF_COURSE_RECEIPTS " + JSON.stringify(receipts))
 	print("ROOF_COURSE_RENDER " + JSON.stringify({"ok": failures == 0, "checks": checks, "failures": failures, "captures": captures}))
 	quit(1 if failures else 0)
