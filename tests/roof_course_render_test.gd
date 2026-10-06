@@ -80,7 +80,7 @@ func _run() -> void:
 			if custom: custom_geometry[label] = _custom_signature(custom)
 			var metrics := _roof_metrics(visual, false)
 			complexity[label] = metrics
-			receipts.append({"case": spec[0], "finish": label, "path": path, "roof_instances": metrics[0], "roof_batches": metrics[1]})
+			receipts.append({"case": spec[0], "finish": label, "path": path, "roof_instances": metrics[0], "roof_batches": metrics[1], "roof_nodes": _roof_nodes(visual)})
 			captures += 1
 			check(scene.building_world.serialize_document() == before and JSON.stringify(scene.landscape_state.document()) == landscape_before, "roof presentation leaves every authoritative record unchanged")
 		if spec[1] in ["hip", "saltbox"]:
@@ -102,6 +102,24 @@ func _force_rebuild() -> void:
 	scene._roof_pick_key = ""
 	scene._presentation_key = ""
 	scene._update_presentation()
+
+# Courses deliberately no-ops in several documented roof situations, each of which leaves
+# the geometry identical to the baseline. Report the roof nodes and their node class so a
+# "count unchanged" failure says whether the course skin was applied at all.
+func _roof_nodes(node: Node3D, inherited: bool = false) -> Array[String]:
+	var result: Array[String] = []
+	if not node.visible: return result
+	var name_value := str(node.name)
+	var roof := inherited or name_value == "M2RoofDesign" or name_value.begins_with("RoofTiles_") or name_value.begins_with("JoinedRoof") or name_value in ["RidgeCourses", "RoofEdgeLip"]
+	if name_value.contains("Fill"): roof = false
+	if roof:
+		var kind := "other"
+		if node is MultiMeshInstance3D: kind = "multimesh:%d" % (node as MultiMeshInstance3D).multimesh.instance_count
+		elif node is MeshInstance3D: kind = "mesh"
+		result.append("%s=%s%s" % [name_value, kind, "|skinned" if node.has_meta("joined_course_skin") else ""])
+	for child in node.get_children():
+		if child is Node3D: result += _roof_nodes(child, roof)
+	return result
 
 func _roof_metrics(node: Node3D, inherited: bool) -> Vector2i:
 	if not node.visible: return Vector2i.ZERO
