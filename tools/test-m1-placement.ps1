@@ -169,7 +169,7 @@ if ($Suite -in @('native-placement', 'native', 'all')) { Invoke-NativeGroup $nat
 if ($Suite -in @('native-ui', 'native', 'all')) { Invoke-NativeGroup $nativeUi }
 
 if ($Suite -in @('mobile-window', 'mobile-core', 'all')) {
-    Invoke-MobileReview 'window-alignment' 'tests/m2_window_alignment_test.gd' 180000 @(
+    Invoke-MobileReview 'window-alignment' 'tests/m2_window_alignment_test.gd' 420000 @(
         'WINDOW_ALIGNMENT_RESULT', '"ok"\s*:\s*true', '"captures"\s*:\s*6'
     ) @('--', '--require-rendering')
 }

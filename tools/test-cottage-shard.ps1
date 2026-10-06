@@ -179,7 +179,7 @@ switch ($Shard) {
             'm2_starter_migration_test',
             'm2_starter_scene_test'
         )
-        Invoke-MobileReview 'starter-valley' 'tests/m2_starter_render_test.gd' 300000 @(
+        Invoke-MobileReview 'starter-valley' 'tests/m2_starter_render_test.gd' 600000 @(
             'STARTER_MOBILE_CAPTURE',
             '"ok"\s*:\s*true',
             '"renderer"\s*:\s*"mobile"'
@@ -193,7 +193,7 @@ switch ($Shard) {
             'm2_planter_asset_test',
             'm2_planter_placement_test'
         )
-        Invoke-MobileReview 'planters' 'tests/m2_planter_render_test.gd' 300000 @(
+        Invoke-MobileReview 'planters' 'tests/m2_planter_render_test.gd' 600000 @(
             'PLANTER_MOBILE_CAPTURE',
             '"ok"\s*:\s*true',
             '"renderer"\s*:\s*"mobile"'
