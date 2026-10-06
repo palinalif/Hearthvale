@@ -101,6 +101,10 @@ func _force_rebuild() -> void:
 	scene._roof_overlay_signatures.clear()
 	scene._roof_pick_key = ""
 	scene._presentation_key = ""
+	# The massing-shell refresh is memoized per building and the roof-finish
+	# stage runs inside it. Leaving the memo in place makes an unchanged view
+	# skip the whole stage, so toggling the skin compares two stale states.
+	scene._last_shell_key.clear()
 	scene._update_presentation()
 
 # Courses deliberately no-ops in several documented roof situations, each of which leaves
