@@ -73,7 +73,10 @@ func _run() -> void:
 			check(image.save_png(path) == OK, "comparison saved")
 			captures += 1
 			var visual: Node3D = scene.cottage_visuals[scene.selected_building_id]
-			var joined := visual.get_node("M2JoinedMassing") as Node3D
+			var joined := visual.get_node_or_null("M2JoinedMassing") as Node3D
+			check(joined != null, "joined massing shell exists for the multi-section home")
+			if joined == null:
+				break
 			var meshes := 0
 			var triangles := 0
 			for shade in 3:
@@ -90,7 +93,10 @@ func _run() -> void:
 				var tile_count := Massing.roof_tiles(scene.building_world.get_building(scene.selected_building_id)).size()
 				check(triangles <= tile_count * 12, "surface-only meshing reduces triangles versus old boxes")
 				check(pixels != before_pixels, "physical relief visibly changes the rendered roof")
-				var first := joined.get_node("JoinedRoof_0") as MeshInstance3D
+				var first := joined.get_node_or_null("JoinedRoof_0") as MeshInstance3D
+				check(first != null, "skinned roof exposes a JoinedRoof_0 mesh")
+				if first == null:
+					continue
 				var mesh_id := first.mesh.get_instance_id()
 				var stable_signature := _mesh_signature(visual)
 				scene._update_presentation()
@@ -124,6 +130,11 @@ func _force_rebuild() -> void:
 	scene._roof_overlay_signatures.clear()
 	scene._roof_pick_key = ""
 	scene._presentation_key = ""
+	# The massing-shell refresh is memoized per building and the joined shell is
+	# created inside it. Leaving the memo in place lets a restored recipe skip
+	# the refresh, so M2JoinedMassing never exists and the shell probe below
+	# crashes on a null node.
+	scene._last_shell_key.clear()
 	scene._update_presentation()
 	scene.hud.visible = false
 	scene.garden_visual.set_wind_enabled(false)
