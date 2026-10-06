@@ -150,7 +150,11 @@ $nativeUi = @(
 
 function Invoke-NativeGroup([string[]]$tests) {
     foreach ($test in $tests) {
-        Invoke-Gate $test @('--headless', '--path', '.', '--script', "tests/$test.gd") 120000
+        # A native test boots the production scene, which procedurally generates and meshes
+        # the starter valley before the first assertion. Measured locally that startup alone
+        # is ~24 s and the heaviest suite runs ~97 s; hosted runners render in software, so
+        # the old 120 s gate killed passing tests. 240 s fits measured reality with headroom.
+        Invoke-Gate $test @('--headless', '--path', '.', '--script', "tests/$test.gd") 240000
     }
 }
 

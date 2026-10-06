@@ -5,7 +5,10 @@
 param(
     [ValidateSet('all','camera-catalogue','section-preview','section-commit')]
     [string]$Group = 'all',
-    [int]$TimeoutMs = 420000
+    # The guard runs a whole scenario group under a real Mobile renderer. On hosted runners
+    # that renderer is software (llvmpipe), so the measured 420 s budget was not enough to
+    # finish a group; the job then died with no receipt. Sized to stay inside the job gate.
+    [int]$TimeoutMs = 900000
 )
 
 $ErrorActionPreference = 'Stop'

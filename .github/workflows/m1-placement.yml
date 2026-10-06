@@ -10,7 +10,7 @@ jobs:
   placement-regressions:
     name: placement-${{ matrix.suite }}
     runs-on: windows-2022
-    timeout-minutes: 15
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
