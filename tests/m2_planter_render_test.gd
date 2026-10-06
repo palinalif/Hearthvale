@@ -53,7 +53,8 @@ func _run() -> void:
 	# Existing saved-style starter planter must resolve to the new full arrangement.
 	_frame(Vector3(23.75, 8.4, 16.0), -1.3, 0.75, 4.5)
 	await _capture("starter-planter-close")
-	var points: Array[Vector2] = [Vector2(21, 25), Vector2(22.125, 25), Vector2(23.25, 25)]
+	var points := _ground_points(Planters.STYLE_IDS.size(), 1.5)
+	_check(points.size() == Planters.STYLE_IDS.size(), "Found a terrain surface for every planter placement")
 	for index in Planters.STYLE_IDS.size():
 		var style: String = Planters.STYLE_IDS[index]
 		await _select_card(style)
@@ -139,6 +140,34 @@ func _press(button: JoyButton) -> void:
 		Input.flush_buffered_events()
 		await process_frame
 	await _settle(80)
+
+# The starter valley is procedurally generated, so a hardcoded aim coordinate can land where
+# no ground surface exists and placement is legitimately refused. Derive the fixture points
+# from the surface the scene actually reports, settled onto the point it keeps reporting.
+func _settle_ground_point(origin: Vector2) -> Vector2:
+	var point := origin
+	for attempt in 4:
+		scene.cursor = Vector3(point.x, 8.0, point.y)
+		scene.terrain_cursor = scene.cursor
+		scene._update_brush_preview()
+		var snapped: Vector2 = scene._path_cursor_point()
+		if not snapped.is_finite(): return Vector2(NAN, NAN)
+		if snapped.distance_to(point) < 0.001: return snapped
+		point = snapped
+	return point
+
+func _ground_points(count: int, spacing: float) -> Array[Vector2]:
+	var found: Array[Vector2] = []
+	var x := 20.0
+	while found.size() < count and x < 32.0:
+		var point := _settle_ground_point(Vector2(x, 25.0))
+		if point.is_finite():
+			var clear := true
+			for prior in found:
+				if prior.distance_to(point) < spacing: clear = false
+			if clear: found.append(point)
+		x += 0.25
+	return found
 
 func _aim(point: Vector2) -> void:
 	scene.cursor = Vector3(point.x, 8.0, point.y)
