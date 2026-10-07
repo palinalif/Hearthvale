@@ -181,24 +181,25 @@ func capture(scene: Node, label: String) -> void:
 ## the camera and capped at 24 m half-extent.
 func _framed_area(scene: Node) -> AABB:
 	var cam: Camera3D = scene.camera
-	var origin := cam.global_position
 	var reach := clampf(cam.far, 32.0, 128.0)
 	var lateral := reach * tan(deg_to_rad(cam.fov) * 0.5) + 8.0
 	var safe := _view_radius_world(scene) / sqrt(2.0)
-	var ground := Vector3(origin.x, 0.0, origin.z)
-	# Centred on the CAMERA, not on a point along the view axis. Meshing streams
-	# outward from the viewer, which is camera-centred, so a region placed far
-	# along the forward vector sits outside the streaming volume and never
-	# meshes - a 440x256x144 box 90 m from the camera burned its whole deadline
-	# while a 227x256x724 box hugging the camera meshed in 1 ms.
-	# Half-extent is also capped: on the software Mobile runner meshing
-	# throughput is the binding cost, so the gate asserts the terrain around the
-	# camera's framing origin. Whole-world meshing is asserted by the
-	# performance shard, where it is measured as a metric rather than gating
-	# screenshots.
+	# Centre on the ORBIT TARGET (scene.cursor), not on the camera.
+	# _update_camera places the camera at cursor + offset with camera_distance
+	# clamped to 8-52 m, and the viewer streams around camera.global_position at
+	# a 128 m radius - so the target is always inside the map and always within
+	# the streaming sphere. The camera is the thing that leaves the map: a
+	# camera-centred region collapses against the patch edge for pulled-back
+	# cameras (basin-overview produced a 72x256x0 zero-depth box), landing far
+	# from the camera and outside the volume that streams.
+	# Half-extent is capped because meshing throughput is the binding cost on a
+	# software Mobile runner. The gate asserts the terrain each capture frames;
+	# whole-world meshing is asserted by the performance shard, where it is
+	# measured as a metric rather than gating screenshots.
+	var focus := Vector3(scene.cursor.x, 0.0, scene.cursor.z)
 	var half := maxf(minf(lateral, 24.0), 4.0)
 	half = minf(half, safe)
-	var centre := ground
+	var centre := focus
 	var scale_value := float(scene.backend.voxel_scale)
 	# patch_size is in NATIVE CELLS; every clamp below is in WORLD METRES.
 	var patch := Vector3(scene.backend.patch_size) * scale_value
