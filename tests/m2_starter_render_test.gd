@@ -173,24 +173,46 @@ func capture(scene: Node, label: String) -> void:
 
 ## Ground region the live camera can frame, in native cell coordinates.
 ## Height spans the full column so a cliff face counts as framed terrain.
+##
+## The region MUST stay inside the visual viewer's streaming volume, which is
+## a SPHERE of _whole_world_view_distance around the camera. A box clamped to
+## the patch has corners at radius*sqrt(2) from the camera, i.e. outside that
+## sphere, and is_area_meshed() then never completes - each capture burns its
+## whole deadline and the shard times out. Bounding the box's half-diagonal by
+## radius/sqrt(2) keeps every corner inside the sphere.
 func _framed_area(scene: Node) -> AABB:
 	var cam: Camera3D = scene.camera
 	var origin := cam.global_position
 	var forward := -cam.global_transform.basis.z.normalized()
 	var reach := clampf(cam.far, 32.0, 128.0)
-	var centre := origin + forward * (reach * 0.5)
 	var lateral := reach * tan(deg_to_rad(cam.fov) * 0.5) + 8.0
+	var radius := _view_radius_world(scene)
+	var safe := radius / sqrt(2.0)
+	var ground := Vector3(origin.x, 0.0, origin.z)
+	var flat := Vector3(forward.x, 0.0, forward.z)
+	var offset := minf(reach * 0.5, safe * 0.5)
+	var centre := ground + (flat.normalized() if flat.length() > 0.01 else Vector3.ZERO) * offset
+	var half := maxf(minf(lateral, safe - offset), 4.0)
 	var patch := Vector3(scene.backend.patch_size)
-	var lo := Vector3(clampf(centre.x - lateral, 0.0, patch.x), 0.0, clampf(centre.z - lateral, 0.0, patch.z))
-	var hi := Vector3(clampf(centre.x + lateral, 0.0, patch.x), patch.y, clampf(centre.z + lateral, 0.0, patch.z))
+	var lo := Vector3(clampf(centre.x - half, 0.0, patch.x), 0.0, clampf(centre.z - half, 0.0, patch.z))
+	var hi := Vector3(clampf(centre.x + half, 0.0, patch.x), patch.y, clampf(centre.z + half, 0.0, patch.z))
 	var scale_value := float(scene.backend.voxel_scale)
 	return AABB(lo / scale_value, (hi - lo) / scale_value)
 
+## Streaming radius the visual viewer actually uses, mirroring
+## TerrainBackend._whole_world_view_distance(RUNTIME_VIEW_DISTANCE_WORLD_FLOOR).
+func _view_radius_world(scene: Node) -> float:
+	var world := Vector3(scene.backend.patch_size) * float(scene.backend.voxel_scale)
+	return ceilf(maxf(TerrainBackend.RUNTIME_VIEW_DISTANCE_WORLD_FLOOR, world.length() * 0.5))
+
 func _mesh_framed_area(scene: Node, label: String) -> void:
 	var area := _framed_area(scene)
-	var deadline := Time.get_ticks_msec() + 120000
+	var started := Time.get_ticks_msec()
+	var deadline := started + 60000
 	while not scene.backend.terrain.is_area_meshed(area) and Time.get_ticks_msec() < deadline:
 		await process_frame
+	var waited_ms := float(Time.get_ticks_msec() - started)
+	print("STARTER_MESH_WAIT ", JSON.stringify({"label": label, "area_cells": [int(area.size.x), int(area.size.y), int(area.size.z)], "meshed": scene.backend.terrain.is_area_meshed(area), "wait_ms": waited_ms}))
 	check(scene.backend.terrain.is_area_meshed(area), label + " frames meshed native terrain")
 
 func settle_frames(milliseconds: int) -> void:
