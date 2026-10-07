@@ -68,11 +68,16 @@ func run() -> void:
 	# review runners sit at 1-2 fps, so this budget is wall-clock, not frames.
 	# A hosted run exhausted 300s with the valley still unmeshed while all 11
 	# captures themselves succeeded.
-	var mesh_deadline := Time.get_ticks_msec() + 900000
-	var whole_world := AABB(Vector3.ZERO, Vector3(scene.backend.patch_size))
-	while not scene.backend.terrain.is_area_meshed(whole_world) and Time.get_ticks_msec() < mesh_deadline:
-		await process_frame
-	check(scene.backend.terrain.is_area_meshed(whole_world), "Full native valley is meshed before capture")
+	# The product meshes a focus box around the camera and streams outward as the
+	# camera moves: terrain_backend.startup_mesh_area uses startup_mesh_radius_world
+	# = 12.0 with a 90s budget, then update_visual_focus keeps the streaming viewer
+	# centred on the camera. It never promises a fully meshed 1280x256x1280 volume
+	# at startup. Demanding that here made eleven captures pay for meshing the
+	# entire world - about 1000s of a 1108s job - to assert a property the game
+	# deliberately does not provide. Each capture now waits for the terrain its own
+	# camera frames, which is the evidence the captures actually need: terrain in
+	# frame, meshed. Full-world meshing is measured in the performance shard, where
+	# it happens concurrently with the scenarios instead of gating every capture.
 	_mark_phase("settle")
 	await settle_frames(1500)
 	scene.set_process(false)
@@ -84,34 +89,34 @@ func run() -> void:
 		check(not scene.camera.is_position_behind(point), "Starter home faces the initial camera")
 		check(Rect2(Vector2.ZERO, Vector2(root.size)).has_point(scene.camera.unproject_position(point)), "Starter home is framed at cold launch")
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUTPUT))
-	await capture("opening-ui")
+	await capture(scene, "opening-ui")
 	scene.hud.visible = false
 	for name in ["brush_preview", "cursor_reticle", "reference_plane", "terrain_hit_marker", "terrain_edit_preview"]:
 		var node = scene.get(name)
 		if node != null: node.visible = false
-	await capture("normal")
+	await capture(scene, "normal")
 	frame_scene(scene, Vector3(47.0, 9.25, 56.0), -1.9, 0.70, 15.0)
-	await capture("commons-close")
+	await capture(scene, "commons-close")
 	frame_scene(scene, Vector3(32.0, 8.75, 60.0), -2.6, 0.75, 9.0)
-	await capture("woodcutters-close")
+	await capture(scene, "woodcutters-close")
 	frame_scene(scene, Vector3(54.0, 10.0, 56.0), 0.70, 0.78, 37.0)
-	await capture("reverse")
+	await capture(scene, "reverse")
 	# Wide scene view and close source view exercise the actual Mobile renderer.
 	scene.camera.attributes = null
 	scene.camera.position = Vector3(175, 165, -65)
 	scene.camera.look_at(Vector3(80, 8, 80))
-	await capture("basin-overview")
+	await capture(scene, "basin-overview")
 	scene.camera.position = Vector3(98, 36, 111)
 	scene.camera.look_at(Vector3(82, 16, 141))
-	await capture("waterfall")
+	await capture(scene, "waterfall")
 	scene.camera.position = Vector3(95, 28, 65)
 	scene.camera.look_at(Vector3(80, 64, 175))
-	await capture("mountain-detail")
+	await capture(scene, "mountain-detail")
 	scene.camera.position = Vector3(132, 34, 111)
 	scene.camera.look_at(Vector3(147, 27, 124))
-	await capture("voxel-transition")
+	await capture(scene, "voxel-transition")
 	frame_scene(scene, Vector3(155.0, 25.0, 80.0), -0.85, 0.74, 22.0)
-	await capture("edge-before")
+	await capture(scene, "edge-before")
 	var point := Vector3(158.0, 25.0, 80.0)
 	var sample: Dictionary = scene.backend.sample_surface_plane(point + Vector3.UP * 4.0, Vector3.UP, 8.0)
 	check(bool(sample.get("valid", false)), "Border terrain can be targeted")
@@ -131,7 +136,7 @@ func run() -> void:
 		for name in ["brush_preview", "cursor_reticle", "reference_plane", "terrain_hit_marker", "terrain_edit_preview"]:
 			var node = scene.get(name)
 			if node != null: node.visible = false
-		await capture("edge-edited")
+		await capture(scene, "edge-edited")
 	_mark_phase("shutdown")
 	var receipt := {"ok":failures.is_empty(), "failures":failures.size(), "messages":failures, "renderer":RenderingServer.get_current_rendering_method(), "size":"1280x720", "production_start":true, "captures":captures, "phase_ms":phase_ms}
 	var file := FileAccess.open(OUTPUT + "/receipt.json", FileAccess.WRITE)
@@ -157,13 +162,36 @@ func frame_scene(scene: Node, target: Vector3, yaw: float, pitch: float, distanc
 	scene.camera_distance = distance
 	scene._update_camera()
 
-func capture(label: String) -> void:
+func capture(scene: Node, label: String) -> void:
 	await settle_frames(500)
+	await _mesh_framed_area(scene, label)
 	await RenderingServer.frame_post_draw
 	var image := root.get_texture().get_image()
 	var path := OUTPUT + "/" + label + ".png"
 	check(not image.is_empty() and image.save_png(path) == OK, "Saved " + label + " capture")
 	captures.append(path)
+
+## Ground region the live camera can frame, in native cell coordinates.
+## Height spans the full column so a cliff face counts as framed terrain.
+func _framed_area(scene: Node) -> AABB:
+	var cam: Camera3D = scene.camera
+	var origin := cam.global_position
+	var forward := -cam.global_transform.basis.z.normalized()
+	var reach := clampf(cam.far, 32.0, 128.0)
+	var centre := origin + forward * (reach * 0.5)
+	var lateral := reach * tan(deg_to_rad(cam.fov) * 0.5) + 8.0
+	var patch := Vector3(scene.backend.patch_size)
+	var lo := Vector3(clampf(centre.x - lateral, 0.0, patch.x), 0.0, clampf(centre.z - lateral, 0.0, patch.z))
+	var hi := Vector3(clampf(centre.x + lateral, 0.0, patch.x), patch.y, clampf(centre.z + lateral, 0.0, patch.z))
+	var scale_value := float(scene.backend.voxel_scale)
+	return AABB(lo / scale_value, (hi - lo) / scale_value)
+
+func _mesh_framed_area(scene: Node, label: String) -> void:
+	var area := _framed_area(scene)
+	var deadline := Time.get_ticks_msec() + 120000
+	while not scene.backend.terrain.is_area_meshed(area) and Time.get_ticks_msec() < deadline:
+		await process_frame
+	check(scene.backend.terrain.is_area_meshed(area), label + " frames meshed native terrain")
 
 func settle_frames(milliseconds: int) -> void:
 	# WARP is a software renderer. A fixed 180-frame delay can consume minutes

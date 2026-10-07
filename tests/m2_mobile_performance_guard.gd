@@ -141,6 +141,23 @@ func _run() -> void:
 		metrics["section_commit_ms"] = commit_ms
 		normalized["section_commit_vs_idle_median"] = commit_ms / idle_median
 
+	# Full-world meshing is a genuine product property, but it is streaming work
+	# driven by the camera, so it is measured here where the scenarios have been
+	# moving the camera for the whole run. The capture shard used to gate every
+	# capture on it, which spent about 1000s of a 1108s job meshing terrain no
+	# capture ever framed.
+	print("PERF_STAGE full-mesh group=" + group)
+	var mesh_started := Time.get_ticks_msec()
+	var whole_world := AABB(Vector3.ZERO, Vector3(scene.backend.patch_size))
+	var mesh_budget_ms := int(baseline.get("full_mesh_budget_ms", 240000))
+	var mesh_deadline := mesh_started + mesh_budget_ms
+	while not scene.backend.terrain.is_area_meshed(whole_world) and Time.get_ticks_msec() < mesh_deadline:
+		await _wait_frames(1)
+	var mesh_ms := Time.get_ticks_msec() - mesh_started
+	metrics["full_world_mesh_ms"] = mesh_ms
+	metrics["full_world_mesh_budget_ms"] = mesh_budget_ms
+	check(scene.backend.terrain.is_area_meshed(whole_world), "full native valley meshes within %d ms" % mesh_budget_ms)
+
 	var allowed := float(baseline.get("allowed_regression_fraction", 0.20))
 	var budgets: Dictionary = baseline.get("normalized_budgets", {})
 	for key in normalized:
