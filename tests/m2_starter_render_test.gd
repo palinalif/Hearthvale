@@ -175,24 +175,30 @@ func capture(scene: Node, label: String) -> void:
 ## Height spans the full column so a cliff face counts as framed terrain.
 ##
 ## The region MUST stay inside the visual viewer's streaming volume, which is
-## a SPHERE of _whole_world_view_distance around the camera. A box clamped to
-## the patch has corners at radius*sqrt(2) from the camera, i.e. outside that
-## sphere, and is_area_meshed() then never completes - each capture burns its
-## whole deadline and the shard times out. Bounding the box's half-diagonal by
-## radius/sqrt(2) keeps every corner inside the sphere.
+## a SPHERE of _whole_world_view_distance around the camera, and it must be
+## small enough for meshing throughput on a software Mobile runner. Meshing
+## streams outward from the camera-centred viewer, so the region is centred on
+## the camera and capped at 24 m half-extent.
 func _framed_area(scene: Node) -> AABB:
 	var cam: Camera3D = scene.camera
 	var origin := cam.global_position
-	var forward := -cam.global_transform.basis.z.normalized()
 	var reach := clampf(cam.far, 32.0, 128.0)
 	var lateral := reach * tan(deg_to_rad(cam.fov) * 0.5) + 8.0
-	var radius := _view_radius_world(scene)
-	var safe := radius / sqrt(2.0)
+	var safe := _view_radius_world(scene) / sqrt(2.0)
 	var ground := Vector3(origin.x, 0.0, origin.z)
-	var flat := Vector3(forward.x, 0.0, forward.z)
-	var offset := minf(reach * 0.5, safe * 0.5)
-	var centre := ground + (flat.normalized() if flat.length() > 0.01 else Vector3.ZERO) * offset
-	var half := maxf(minf(lateral, safe - offset), 4.0)
+	# Centred on the CAMERA, not on a point along the view axis. Meshing streams
+	# outward from the viewer, which is camera-centred, so a region placed far
+	# along the forward vector sits outside the streaming volume and never
+	# meshes - a 440x256x144 box 90 m from the camera burned its whole deadline
+	# while a 227x256x724 box hugging the camera meshed in 1 ms.
+	# Half-extent is also capped: on the software Mobile runner meshing
+	# throughput is the binding cost, so the gate asserts the terrain around the
+	# camera's framing origin. Whole-world meshing is asserted by the
+	# performance shard, where it is measured as a metric rather than gating
+	# screenshots.
+	var half := maxf(minf(lateral, 24.0), 4.0)
+	half = minf(half, safe)
+	var centre := ground
 	var scale_value := float(scene.backend.voxel_scale)
 	# patch_size is in NATIVE CELLS; every clamp below is in WORLD METRES.
 	var patch := Vector3(scene.backend.patch_size) * scale_value
