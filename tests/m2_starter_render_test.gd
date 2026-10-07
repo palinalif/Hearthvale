@@ -4,6 +4,18 @@ extends SceneTree
 const OUTPUT := "res://reports/screenshots/detailed-mountains"
 var failures: Array[String] = []
 var captures: Array[String] = []
+# Phase timing: this shard sets the delivery run's wall time, and its cost was
+# being read off the job wall alone. Record where the seconds actually go so
+# the next optimization targets a measured phase rather than a guess.
+var phase_ms := {}
+var _phase_name := "boot"
+var _phase_start_ms := 0
+
+func _mark_phase(name: String) -> void:
+	var now := Time.get_ticks_msec()
+	phase_ms[_phase_name] = int(phase_ms.get(_phase_name, 0)) + (now - _phase_start_ms)
+	_phase_name = name
+	_phase_start_ms = now
 
 func check(ok: bool, message: String) -> void:
 	if not ok:
@@ -34,11 +46,13 @@ func run() -> void:
 	scene.checkpoint_root = "user://m2-starter-render-%d" % Time.get_ticks_usec()
 	root.add_child(scene)
 	var boot_started := Time.get_ticks_msec()
+	_phase_start_ms = boot_started
 	var deadline := boot_started + 120000
 	while not scene._player_restored and Time.get_ticks_msec() < deadline:
 		await process_frame
 		if scene.backend and not str(scene.backend.stats().get("error", "")).is_empty(): break
 	print("STARTER_BOOT " + JSON.stringify({"elapsed_ms":Time.get_ticks_msec() - boot_started, "restored":scene._player_restored, "backend":scene.backend.stats() if scene.backend else {}}))
+	_mark_phase("mesh")
 	check(scene._player_restored, "Production main scene reached ready")
 	if not scene._player_restored:
 		scene._shutting_down = true
@@ -59,8 +73,10 @@ func run() -> void:
 	while not scene.backend.terrain.is_area_meshed(whole_world) and Time.get_ticks_msec() < mesh_deadline:
 		await process_frame
 	check(scene.backend.terrain.is_area_meshed(whole_world), "Full native valley is meshed before capture")
+	_mark_phase("settle")
 	await settle_frames(1500)
 	scene.set_process(false)
+	_mark_phase("capture")
 	# The first two captures use the real initial camera without moving it.
 	for home: Dictionary in scene.building_world.get_buildings():
 		var transform_value: Transform3D = home["transform"]
@@ -116,7 +132,8 @@ func run() -> void:
 			var node = scene.get(name)
 			if node != null: node.visible = false
 		await capture("edge-edited")
-	var receipt := {"ok":failures.is_empty(), "failures":failures.size(), "messages":failures, "renderer":RenderingServer.get_current_rendering_method(), "size":"1280x720", "production_start":true, "captures":captures}
+	_mark_phase("shutdown")
+	var receipt := {"ok":failures.is_empty(), "failures":failures.size(), "messages":failures, "renderer":RenderingServer.get_current_rendering_method(), "size":"1280x720", "production_start":true, "captures":captures, "phase_ms":phase_ms}
 	var file := FileAccess.open(OUTPUT + "/receipt.json", FileAccess.WRITE)
 	if file != null:
 		file.store_string(JSON.stringify(receipt, "\t"))
