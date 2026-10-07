@@ -193,10 +193,11 @@ func _framed_area(scene: Node) -> AABB:
 	var offset := minf(reach * 0.5, safe * 0.5)
 	var centre := ground + (flat.normalized() if flat.length() > 0.01 else Vector3.ZERO) * offset
 	var half := maxf(minf(lateral, safe - offset), 4.0)
-	var patch := Vector3(scene.backend.patch_size)
+	var scale_value := float(scene.backend.voxel_scale)
+	# patch_size is in NATIVE CELLS; every clamp below is in WORLD METRES.
+	var patch := Vector3(scene.backend.patch_size) * scale_value
 	var lo := Vector3(clampf(centre.x - half, 0.0, patch.x), 0.0, clampf(centre.z - half, 0.0, patch.z))
 	var hi := Vector3(clampf(centre.x + half, 0.0, patch.x), patch.y, clampf(centre.z + half, 0.0, patch.z))
-	var scale_value := float(scene.backend.voxel_scale)
 	return AABB(lo / scale_value, (hi - lo) / scale_value)
 
 ## Streaming radius the visual viewer actually uses, mirroring
