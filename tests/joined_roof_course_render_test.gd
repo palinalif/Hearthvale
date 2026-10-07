@@ -10,6 +10,18 @@ var checks := 0
 var failures := 0
 var captures := 0
 var receipts: Array[Dictionary] = []
+# Phase timing. This shard has been diagnosed as a "timeout" twice when the
+# real cause was a crash, so the receipt now reports where its own time goes
+# instead of leaving the next reader to guess from wall clock alone.
+var phase_ms := {}
+var _phase_name := "scene_boot"
+var _phase_start_ms := 0
+
+func _mark_phase(name: String) -> void:
+	var now := Time.get_ticks_msec()
+	phase_ms[_phase_name] = int(phase_ms.get(_phase_name, 0)) + (now - _phase_start_ms)
+	_phase_name = name
+	_phase_start_ms = now
 
 func check(ok: bool, label: String) -> void:
 	checks += 1
@@ -26,6 +38,7 @@ func _run() -> void:
 		quit(2)
 		return
 	root.size = Vector2i(1280, 720)
+	_phase_start_ms = Time.get_ticks_msec()
 	check(DirAccess.make_dir_recursive_absolute(OUTPUT) == OK, "review folder created")
 	scene = preload("res://scenes/m1.tscn").instantiate()
 	scene.test_mode = true
@@ -36,6 +49,7 @@ func _run() -> void:
 	if not scene_ready:
 		await _finish()
 		return
+	_mark_phase("recipe")
 	scene.set_process(false)
 	scene._set_view_context("building", "test")
 	scene.edit_pointer = Vector2(12,12)
@@ -56,9 +70,11 @@ func _run() -> void:
 		var landscape: String = JSON.stringify(scene.landscape_state.document())
 		var camera_transform := Transform3D.IDENTITY
 		var before_pixels := 0
+		_mark_phase("rebuild")
 		for enabled in [false, true]:
 			Layout.enabled = enabled
 			_force_rebuild()
+			_mark_phase("capture")
 			scene.camera_yaw = PI * float(spec[2])
 			scene.camera_pitch = 0.48
 			scene.camera_distance = float(spec[1])
@@ -72,6 +88,7 @@ func _run() -> void:
 			var path := "%s/%s-%s.png" % [OUTPUT, spec[0], finish]
 			check(image.save_png(path) == OK, "comparison saved")
 			captures += 1
+			_mark_phase("mesh_checks")
 			var visual: Node3D = scene.cottage_visuals[scene.selected_building_id]
 			var joined := visual.get_node_or_null("M2JoinedMassing") as Node3D
 			check(joined != null, "joined massing shell exists for the multi-section home")
@@ -115,11 +132,13 @@ func _run() -> void:
 					check(courtyard, "roof selection never bridges the U courtyard")
 			check(scene.building_world.serialize_document() == saved and JSON.stringify(scene.landscape_state.document()) == landscape, "roof meshing changes no saved building, detail or planting records")
 			receipts.append({"case": spec[0], "finish": finish, "path": path, "roof_triangles": triangles, "skin_draws": meshes})
+		_mark_phase("recipe")
 		var visual: Node3D = scene.cottage_visuals[scene.selected_building_id]
 		var signature := _mesh_signature(visual)
 		check(scene.building_world.load_serialized_document(saved), "edited/concave roof save loads")
 		_force_rebuild()
 		check(_mesh_signature(scene.cottage_visuals[scene.selected_building_id]) == signature, "reload regenerates identical surface meshes")
+	_mark_phase("shutdown")
 	var manifest := FileAccess.open(OUTPUT + "/manifest.json", FileAccess.WRITE)
 	check(manifest != null, "manifest writable")
 	if manifest: manifest.store_string(JSON.stringify({"source": OS.get_environment("GITHUB_SHA"), "engine": Engine.get_version_info(), "renderer": RenderingServer.get_current_rendering_method(), "frames": receipts}, "\t"))
@@ -155,5 +174,6 @@ func _finish() -> void:
 		await process_frame
 		await process_frame
 	check(captures == 8, "normal close reverse and resized-upper views all have two real captures")
-	print("JOINED_COURSE_RENDER " + JSON.stringify({"ok": failures == 0, "checks": checks, "failures": failures, "captures": captures}))
+	_mark_phase("done")
+	print("JOINED_COURSE_RENDER " + JSON.stringify({"ok": failures == 0, "checks": checks, "failures": failures, "captures": captures, "phase_ms": phase_ms}))
 	quit(1 if failures else 0)
