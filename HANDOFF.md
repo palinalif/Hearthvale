@@ -1,13 +1,54 @@
-# 2026-10-05 — current `main` snapshot (verify again before delivery)
+# 2026-10-08 — current `main` snapshot (verify again before delivery)
 
-At this check, `main` and `origin/main` both point to `2de4453` (v88 export stamp). The working tree has an uncommitted `AGENTS.md` issue-triage policy change. The older branch reports below are historical snapshots, **not** the current main status.
+`main` and `origin/main` both point to `95391f2`. `main` **is** the integration branch; the older
+sections below are historical snapshots, **not** current main status.
 
 ## Current source and verification boundaries
 
-- **Authored props:** `feat/m2-vox-props` was merged into main (`8fdd172`). All nine starter-hamlet furniture `.res` meshes were committed under `assets/models/magicavoxel/` in `0130ad2`; the earlier claim that they still need baking is obsolete. The renderer's `_authored_assets()` in `scripts/m2_hamlet_visual.gd` currently selects `M2PlanterAssets` and `M2TableAssets`, not these nine meshes; `bench`, `signpost`, and `lantern` still take the procedural fallback. Treat wiring/visual acceptance as separate from baking; check ongoing work before making a new ticket.
-- **Multi-storey houses:** implemented in source via `scripts/m2_scene_multi_floor.gd` and `scripts/m2_house_massing.gd` (`MAX_FLOORS = 4`). `tests/m2_multi_floor_house_test.gd` exercises controller-facing editing, three storeys, save/reload and undo; it is listed in `tools/test-m1-placement.ps1`. The line in `tasks/M2-hamlet-building.md` calling this an unscheduled idea is stale. Source/test presence is not a claim of Thor visual acceptance.
-- **Delivery CI:** latest checked `main` run, `Hearthvale verified Drive delivery` [37379935662](https://github.com/palinalif/Hearthvale/actions/runs/37379935662) on `2de4453`, completed **failure** (multiple Windows test/build shards). The user is handling this in another session; do not open duplicate issues or claim it is fixed from source changes alone. Inspect the latest run again before handoff.
-- **Delivery evidence:** this snapshot did not run tests, export an APK, or perform a Thor playtest. The older branch's green glow job is not evidence that current main delivery is green. No new APK/device or visual acceptance is claimed here.
+- **Delivery CI:** last fully green `Hearthvale verified Drive delivery` run is
+  [37584483874](https://github.com/palinalif/Hearthvale/actions/runs/37584483874) on `8a56b0c`
+  (42 jobs, all success). The five-run red streak on
+  `performance / mobile-performance-section-commit` is closed: that job is green on
+  [37791384646](https://github.com/palinalif/Hearthvale/actions/runs/37791384646) (`5b977de`),
+  which finished 29 success / 1 failure / 2 skipped. The remaining failure is
+  `cottage-and-apk / cottage-starter-valley`. Run
+  [37795933012](https://github.com/palinalif/Hearthvale/actions/runs/37795933012) (`2dbdc8e`) was
+  28 success / 2 failure: the camera sweep worked (all eleven framed gates passed, capture phase
+  584 s → 125 s) and only the whole-patch up-front assertion failed. `95391f2` scopes that gate to
+  the captured region and makes the sweep a time bound rather than an assertion; its CI run is the
+  acceptance check. `terrain-ux / terrain-preview-jobs` also failed on that run in **1 second**, at
+  dependency setup before any gate could run, with an unretrievable log (GitHub returned a server
+  error page); the same suite was green on the previous run and no recent change touches it, so it
+  is recorded as an infra flake, not a code defect. **Verify the newest run again before claiming
+  delivery green.**
+- **Playtest APK:** `.tools/apk/main-e359a15a.apk` (40,369,868 bytes, SHA-256
+  `482507765ea6ef9d0c8af57faf5719f4775eb75bbfc9ece078a199c60c15e12b`), package
+  `org.hearthvale.game.repair.ce359a15a`, version `0.1.3-repair-e359a15a`, versionCode 6, ARM64
+  only, signed with the shared local debug keystore. It is a separate test app with fresh saves and
+  does not replace `org.hearthvale.game`. `git diff e359a15..HEAD` over `scripts/ scenes/ assets/
+  addons/ project.godot export_presets.cfg tools/ .github/` is empty, so it is gameplay-identical
+  to tip. **Thor playtest and visual acceptance are player-owned and not done.**
+- **Authored props:** `feat/m2-vox-props` is merged into main (`8fdd172`). All nine starter-hamlet
+  furniture `.res` meshes are committed under `assets/models/magicavoxel/` in `0130ad2`; the claim
+  that they still need baking is obsolete. `_authored_assets()` in `scripts/m2_hamlet_visual.gd`
+  selects `M2PlanterAssets` and `M2TableAssets`, not those nine meshes; `bench`, `signpost` and
+  `lantern` still take the procedural fallback. Wiring and visual acceptance are separate from
+  baking.
+- **Multi-storey houses:** implemented via `scripts/m2_scene_multi_floor.gd` and
+  `scripts/m2_house_massing.gd` (`MAX_FLOORS = 4`), exercised by `tests/m2_multi_floor_house_test.gd`
+  and listed in `tools/test-m1-placement.ps1`. Source/test presence is not Thor visual acceptance.
+- **Unregistered tests:** 23 files under `tests/` are referenced by no CI workflow or `tools/`
+  script (includes `m2_planter_pipeline_test`, `m2_starter_furniture_mesh_test`,
+  `m2_table_asset_test`, `scene_boot_test`, `signal_teardown_test`). Registering them costs CI wall
+  time; ask the player before adding them.
+- **Local Mobile-renderer runs:** this box has no GPU. `apt-get install mesa-vulkan-drivers xauth`
+  plus `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json` under `xvfb-run` makes
+  `--rendering-method mobile` capture tests runnable locally. Local streaming is roughly an order
+  of magnitude faster than a hosted runner (same map meshes in 32 s locally vs 65-240 s hosted), so
+  local runs prove behavior, not hosted timing budgets.
+- **Extension work is outside this repo:** the `pi-background-tasks` session-shutdown fix
+  (`6716c6b`) was installed by the player; its only surviving copies are the bundle and patch at
+  `/root/bg-tasks-fix-2026-10-07/`. It was never pushed to its upstream.
 
 ---
 
