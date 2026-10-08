@@ -10,7 +10,7 @@ const OUTPUT := "res://reports/screenshots/detailed-mountains"
 const STREAMING_SWEEP_CAP_MS := 300000
 # A framed region is already meshed once the valley has streamed, so this only
 # has to absorb the last in-flight cells for the region a camera frames.
-const FRAMED_MESH_CAP_MS := 15000
+const FRAMED_MESH_CAP_MS := 30000
 # Every framing the capture phase uses, in capture order. The up-front streaming
 # gate is computed from this list and the captures are driven from it, so the
 # gate can never demand terrain the captures do not frame. The last entry is
@@ -265,14 +265,17 @@ func _stream_capture_region(scene: Node) -> void:
 	# world metres, so everything handed to the scene is converted first.
 	var scale_value := float(scene.backend.voxel_scale)
 	var patch := Vector3(scene.backend.patch_size) * scale_value
-	# ONE stable focus. The viewer loads blocks around the focus at
-	# _whole_world_view_distance, and re-pointing the focus abandons the blocks
-	# already in flight. CI run 37803663983 swept 14 vantages in 305 s and left
-	# seven captures' framed areas unmeshed, while the earlier five-vantage sweep
-	# (run 37795933012) left all eleven meshed: switching focus is the cost, not
-	# the distance. The map centre at mid height is the point from which that
-	# radius covers the whole captured region, so park there and let it finish.
-	var focus := Vector3(patch.x * 0.5, patch.y * 0.5, patch.z * 0.5)
+	# ONE stable focus, ABOVE the terrain. The viewer streams the blocks it can
+	# see from the camera, so a camera inside the voxel column streams almost
+	# nothing: CI run 37807523731 held a stable focus at the map centre at mid
+	# height (80, 16, 80 - inside a 32 m column) for 303 s, never meshed the
+	# region, and ten of eleven framed gates failed. The five-vantage sweep that
+	# did pass every framed gate (run 37795933012) sat at y = 40 m, above the
+	# column, looking down at the valley; the panorama capture that meshed in
+	# 5.8 s was parked far above the map too. Height above the terrain is what
+	# made the difference, and re-pointing the focus mid-stream discards the
+	# blocks already in flight, so hold one high vantage and let it finish.
+	var focus := Vector3(patch.x * 0.5, patch.y + 8.0, patch.z * 0.5)
 	var reach := _view_radius_world(scene)
 	var worst := 0.0
 	for x in [region.position.x, region.end.x]:
