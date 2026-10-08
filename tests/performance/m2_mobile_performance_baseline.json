@@ -2,6 +2,7 @@
   "version": 1,
   "kind": "normalized-hosted-runner-budget",
   "allowed_regression_fraction": 0.2,
+  "full_mesh_wait_cap_ms": 600000,
   "normalized_budgets": {
     "camera_p95_vs_idle": 1.35,
     "catalogue_p95_vs_idle": 1.75,
@@ -14,6 +15,8 @@
     "These are normalized CI budgets, not Ayn Thor FPS targets.",
     "Every scenario is divided by same-run idle timing to reduce hosted-runner variance.",
     "The 20 percent allowance is applied by the guard before failure.",
+    "full_world_mesh_ms is reported as a metric, not a budget: hosted runs of one build measured 65699, 144472 and 240317 ms at near-identical idle medians, so no duration threshold near that spread is stable. The old absolute 240000 ms budget failed at 240317 ms on runner variance.",
+    "full_mesh_wait_cap_ms is the streaming cap the guard asserts: camera-driven meshing must finish the valley inside it. It bounds the shard and is not a duration threshold.",
     "Calibrate these budgets to measured healthy-run values after the current Thor section-placement regression is repaired."
   ]
 }
