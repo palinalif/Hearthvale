@@ -1,32 +1,31 @@
 # 2026-10-08 — current `main` snapshot (verify again before delivery)
 
-`main` and `origin/main` both point to `95391f2`. `main` **is** the integration branch; the older
+`main` and `origin/main` both point to `07336eb`. `main` **is** the integration branch; the older
 sections below are historical snapshots, **not** current main status.
 
 ## Current source and verification boundaries
 
-- **Delivery CI:** last fully green `Hearthvale verified Drive delivery` run is
-  [37584483874](https://github.com/palinalif/Hearthvale/actions/runs/37584483874) on `8a56b0c`
-  (42 jobs, all success). The five-run red streak on
-  `performance / mobile-performance-section-commit` is closed: that job is green on
-  [37791384646](https://github.com/palinalif/Hearthvale/actions/runs/37791384646) (`5b977de`),
-  which finished 29 success / 1 failure / 2 skipped. The remaining failure is
-  `cottage-and-apk / cottage-starter-valley`. Run
-  [37795933012](https://github.com/palinalif/Hearthvale/actions/runs/37795933012) (`2dbdc8e`) was
-  28 success / 2 failure: the camera sweep worked (all eleven framed gates passed, capture phase
-  584 s → 125 s) and only the whole-patch up-front assertion failed. `95391f2` scopes that gate to
-  the captured region and makes the sweep a time bound rather than an assertion; its CI run is the
-  acceptance check. `terrain-ux / terrain-preview-jobs` also failed on that run in **1 second**, at
-  dependency setup before any gate could run, with an unretrievable log (GitHub returned a server
-  error page); the same suite was green on the previous run and no recent change touches it, so it
-  is recorded as an infra flake, not a code defect. **Verify the newest run again before claiming
-  delivery green.**
+- **Delivery CI:** `Hearthvale verified Drive delivery` run
+  [37842846331](https://github.com/palinalif/Hearthvale/actions/runs/37842846331) on `07336eb` is
+  **42 jobs, all success** — the first fully green run since the red streak began. The weeks-long
+  `cottage-and-apk / cottage-starter-valley` failure is closed by the cluster streaming sweep
+  (`07336eb`): three vantages (village / north / east, all above the voxel column) each dwell
+  until their cluster's framed boxes mesh, and per-capture framed gates assert the invariant with
+  a 120 s per-gate cap under a 480 s shared budget. Hosted evidence: all eleven framed gates
+  passed (ten at 0–1 ms; `edge-before` streamed live in 100.5 s inside the cap with 379 s of
+  budget left), receipt `ok:true`. Measured streaming law for future tuning: a fresh 48 m box
+  centred under the streaming focus meshes on a hosted software Mobile runner in ~80–100 s, but
+  50 m off-focus it had not finished after 330 s; a viewer buried mid-column streams almost
+  nothing. Earlier red-streak history (perf-job streak closed on `5b977de`; the 1-second
+  `terrain-preview-jobs` infra flake, green since) is superseded — everything is green on tip.
+  **Verify the newest run again before claiming delivery green.**
 - **Playtest APK:** `.tools/apk/main-e359a15a.apk` (40,369,868 bytes, SHA-256
   `482507765ea6ef9d0c8af57faf5719f4775eb75bbfc9ece078a199c60c15e12b`), package
   `org.hearthvale.game.repair.ce359a15a`, version `0.1.3-repair-e359a15a`, versionCode 6, ARM64
   only, signed with the shared local debug keystore. It is a separate test app with fresh saves and
   does not replace `org.hearthvale.game`. `git diff e359a15..HEAD` over `scripts/ scenes/ assets/
-  addons/ project.godot export_presets.cfg tools/ .github/` is empty, so it is gameplay-identical
+  addons/ project.godot export_presets.cfg tools/ .github/` is empty (everything since is
+  `tests/` and docs), so it is gameplay-identical
   to tip. **Thor playtest and visual acceptance are player-owned and not done.**
 - **Authored props:** `feat/m2-vox-props` is merged into main (`8fdd172`). All nine starter-hamlet
   furniture `.res` meshes are committed under `assets/models/magicavoxel/` in `0130ad2`; the claim
