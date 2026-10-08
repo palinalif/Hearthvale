@@ -2,6 +2,14 @@ extends SceneTree
 ## Actual main-scene cold start, native Mobile captures and a real border edit.
 ## Uses a unique checkpoint root; player saves and the live scene are untouched.
 const OUTPUT := "res://reports/screenshots/detailed-mountains"
+# Wall-clock bound for the single up-front streaming gate. The visual viewer's
+# radius covers the whole valley, so this is the same streaming work every
+# capture depends on; a hosted software Mobile runner completes it in roughly
+# six minutes at 1-2 fps. This bounds the shard, it is not the pass threshold.
+const WHOLE_WORLD_MESH_CAP_MS := 420000
+# A framed region is already meshed once the valley has streamed, so this only
+# has to absorb the last in-flight cells for the region a camera frames.
+const FRAMED_MESH_CAP_MS := 15000
 var failures: Array[String] = []
 var captures: Array[String] = []
 # Phase timing: this shard sets the delivery run's wall time, and its cost was
@@ -64,20 +72,14 @@ func run() -> void:
 	check(scene.building_world.get_buildings().size() == 3, "Production cold start has three homes")
 	# Native startup initially meshes only a small focus box. A panorama must
 	# wait for the expanded viewer, otherwise captures contain floating water.
-	# Full-valley meshing is time-sliced per rendered frame, and hosted Mobile
-	# review runners sit at 1-2 fps, so this budget is wall-clock, not frames.
-	# A hosted run exhausted 300s with the valley still unmeshed while all 11
-	# captures themselves succeeded.
-	# The product meshes a focus box around the camera and streams outward as the
-	# camera moves: terrain_backend.startup_mesh_area uses startup_mesh_radius_world
-	# = 12.0 with a 90s budget, then update_visual_focus keeps the streaming viewer
-	# centred on the camera. It never promises a fully meshed 1280x256x1280 volume
-	# at startup. Demanding that here made eleven captures pay for meshing the
-	# entire world - about 1000s of a 1108s job - to assert a property the game
-	# deliberately does not provide. Each capture now waits for the terrain its own
-	# camera frames, which is the evidence the captures actually need: terrain in
-	# frame, meshed. Full-world meshing is measured in the performance shard, where
-	# it happens concurrently with the scenarios instead of gating every capture.
+	# The streaming viewer's radius covers the whole map, so every capture is
+	# gated on the same whole-valley streaming work no matter which region its
+	# camera frames. Gating each capture separately paid for that work up to
+	# eleven times: a hosted software run burned 60-63 s on each of seven labels,
+	# captured terrain that was never meshed, and spent 584 s in the capture phase.
+	# Mesh once up front, then let each capture assert the terrain it frames,
+	# which is instant once the valley has streamed.
+	await _mesh_whole_world(scene)
 	_mark_phase("settle")
 	await settle_frames(1500)
 	scene.set_process(false)
@@ -213,14 +215,28 @@ func _view_radius_world(scene: Node) -> float:
 	var world := Vector3(scene.backend.patch_size) * float(scene.backend.voxel_scale)
 	return ceilf(maxf(TerrainBackend.RUNTIME_VIEW_DISTANCE_WORLD_FLOOR, world.length() * 0.5))
 
-func _mesh_framed_area(scene: Node, label: String) -> void:
-	var area := _framed_area(scene)
+## One streaming gate for the whole valley, taken before any capture is framed.
+## The viewer streams the entire map, so this is the work every capture is waiting
+## for; paying for it once is cheaper and deterministic, while per-capture gates
+## each paid up to their own cap for the same streaming.
+func _mesh_whole_world(scene: Node) -> void:
+	var area := AABB(Vector3.ZERO, Vector3(scene.backend.patch_size))
 	var started := Time.get_ticks_msec()
-	var deadline := started + 60000
+	var deadline := started + WHOLE_WORLD_MESH_CAP_MS
 	while not scene.backend.terrain.is_area_meshed(area) and Time.get_ticks_msec() < deadline:
 		await process_frame
 	var waited_ms := float(Time.get_ticks_msec() - started)
-	print("STARTER_MESH_WAIT ", JSON.stringify({"label": label, "area_cells": [int(area.size.x), int(area.size.y), int(area.size.z)], "meshed": scene.backend.terrain.is_area_meshed(area), "wait_ms": waited_ms}))
+	print("STARTER_MESH_WAIT ", JSON.stringify({"label": "whole-world", "area_cells": [int(area.size.x), int(area.size.y), int(area.size.z)], "meshed": scene.backend.terrain.is_area_meshed(area), "wait_ms": waited_ms, "cap_ms": WHOLE_WORLD_MESH_CAP_MS}))
+	check(scene.backend.terrain.is_area_meshed(area), "native valley streams fully meshed within the %d ms cap" % WHOLE_WORLD_MESH_CAP_MS)
+
+func _mesh_framed_area(scene: Node, label: String) -> void:
+	var area := _framed_area(scene)
+	var started := Time.get_ticks_msec()
+	var deadline := started + FRAMED_MESH_CAP_MS
+	while not scene.backend.terrain.is_area_meshed(area) and Time.get_ticks_msec() < deadline:
+		await process_frame
+	var waited_ms := float(Time.get_ticks_msec() - started)
+	print("STARTER_MESH_WAIT ", JSON.stringify({"label": label, "area_cells": [int(area.size.x), int(area.size.y), int(area.size.z)], "meshed": scene.backend.terrain.is_area_meshed(area), "wait_ms": waited_ms, "cap_ms": FRAMED_MESH_CAP_MS}))
 	check(scene.backend.terrain.is_area_meshed(area), label + " frames meshed native terrain")
 
 func settle_frames(milliseconds: int) -> void:
