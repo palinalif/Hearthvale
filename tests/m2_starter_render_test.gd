@@ -2,13 +2,26 @@ extends SceneTree
 ## Actual main-scene cold start, native Mobile captures and a real border edit.
 ## Uses a unique checkpoint root; player saves and the live scene are untouched.
 const OUTPUT := "res://reports/screenshots/detailed-mountains"
-# Wall-clock budget for the up-front streaming warm-up. Streaming follows the
-# camera and re-pointing the focus discards in-flight block loads, so the gate
-# parks the camera at one stable vantage and lets the viewer finish. It is a
-# warm-up and a reported metric only: the whole captured union never finished
-# inside any hosted cap (meshed:false at 315 s, run 37828200376), so a long
-# sweep is pure wall time - the per-capture framed gates are the assertion.
-const STREAMING_SWEEP_CAP_MS := 120000
+# Wall-clock budget per streaming vantage. Streaming follows the focus and
+# re-pointing it discards in-flight block loads, so the sweep parks the focus
+# over one capture cluster at a time and stays until that cluster's framed
+# boxes mesh (or the cap). Hosted streaming meshes a fresh 48 m box centred
+# under the viewer in ~80-90 s (commons-close 89 s, woodcutters-close 79 s,
+# run 37833542710), but a box 50 m off-focus competes with the rest of the
+# 128 m sphere and had not finished after 330 s (opening-ui + normal +
+# commons-close combined, same run). The sweep is a warm-up and a reported
+# metric; the per-capture framed gates are the assertion.
+const SWEEP_VANTAGE_CAP_MS := 120000
+# One vantage per capture cluster, in capture order, at column top + 8 m -
+# a viewer buried mid-height streams almost nothing (run 37807523731). The
+# five-vantage tour of run 37795933012 was the only hosted design to pass
+# 11/11 framed gates; the 14-vantage failure (37803663983) was fixed 20 s
+# dwell thrashing, so dwell on demand instead of on a clock.
+const SWEEP_VANTAGES: Array[Dictionary] = [
+	{"focus": Vector3(43.0, 40.0, 58.0), "labels": ["opening-ui", "normal", "commons-close", "woodcutters-close", "reverse"]},
+	{"focus": Vector3(80.0, 40.0, 108.0), "labels": ["basin-overview", "waterfall", "mountain-detail"]},
+	{"focus": Vector3(145.0, 40.0, 102.0), "labels": ["voxel-transition", "edge-before", "edge-edited"]},
+]
 # A framed gate that finds its region unstreamed must stream a fresh 48 m box
 # on a software Mobile runner, which measures ~80-100 s hosted (run
 # 37828200376: opening-ui failed at 60 s while the same box finished 19 s into
@@ -18,7 +31,7 @@ const FRAMED_MESH_CAP_MS := 120000
 # only drains on genuine streaming work; once it is exhausted the gates stop
 # absorbing a regression and fail with the starving label instead of letting
 # eleven full caps blow the shard's step timeout.
-const FRAMED_MESH_TOTAL_BUDGET_MS := 600000
+const FRAMED_MESH_TOTAL_BUDGET_MS := 480000
 var _framed_budget_ms := FRAMED_MESH_TOTAL_BUDGET_MS
 # Every framing the capture phase uses, in capture order. The up-front streaming
 # gate is computed from this list and the captures are driven from it, so the
@@ -224,15 +237,13 @@ func _view_radius_world(scene: Node) -> float:
 	var world := Vector3(scene.backend.patch_size) * float(scene.backend.voxel_scale)
 	return ceilf(maxf(TerrainBackend.RUNTIME_VIEW_DISTANCE_WORLD_FLOOR, world.length() * 0.5))
 
-## The terrain the capture phase frames, as one region: the union of every
-## framing in CAPTURE_PLAN, in NATIVE CELLS like the framed areas it is built
-## from. A panorama frames what its camera looks at, so its centre is the look
-## target; an orbit frames its target; the two cold-launch captures frame the
-## scene's own cursor. Height spans the full native column.
-func _capture_region(scene: Node) -> AABB:
+## The terrain one sweep vantage must stream: the union of the framed areas of
+## the captures it covers, in NATIVE CELLS like the framed gates it feeds.
+func _cluster_area(scene: Node, labels: Array) -> AABB:
 	var union: AABB
 	var first := true
-	for entry: Dictionary in CAPTURE_PLAN:
+	for label: String in labels:
+		var entry: Dictionary = CAPTURE_PLAN.filter(func(e): return String(e.get("label", "")) == label)[0]
 		var centre: Vector3 = entry.get("look", entry.get("target", scene.cursor))
 		var framed := _framed_area_around(scene, centre)
 		union = framed if first else union.merge(framed)
@@ -255,54 +266,31 @@ func _hide_terrain_overlays(scene: Node) -> void:
 		var node = scene.get(name)
 		if node != null: node.visible = false
 
-## Stream the terrain the captures frame, once, before any capture runs. The
-## live scene re-points the streaming focus at the camera every frame, so the
-## test drives that focus directly with the scene's own process disabled; the
-## voxel streaming itself keeps running on frames.
-##
-## CI run 37795933012 demanded the whole 1280x256x1280 patch from the
-## cold-launch camera, exhausted the 420 s cap with meshed:false, and still
-## passed every per-capture framed gate. So the sweep is a time bound and a
-## reported metric, not an assertion: the invariant - every capture frames
-## meshed terrain - is asserted by the framed gates, which fail with the label
-## of the capture that could not stream. The camera is restored from the scene's
-## orbit state afterwards, which is the same call the live scene makes, so the
+## Stream the terrain the captures frame, once, before any capture runs, one
+## cluster vantage at a time. The live scene re-points the streaming focus at
+## the camera every frame, so the test drives that focus directly with the
+## scene's own process disabled; the voxel streaming itself keeps running on
+## frames. Each vantage holds until its cluster's boxes mesh (bounded), so a
+## slow hosted runner spends its streaming time where the next captures need
+## it instead of on a whole-map union it never finishes (meshed:false at
+## 315 s, run 37828200376). The camera is restored from the scene's orbit
+## state afterwards, which is the same call the live scene makes, so the
 ## cold-launch captures are unchanged.
 func _stream_capture_region(scene: Node) -> void:
-	var region := _capture_region(scene)
-	# The region is in native cells; the camera and the streaming focus are in
-	# world metres, so everything handed to the scene is converted first.
-	var scale_value := float(scene.backend.voxel_scale)
-	var patch := Vector3(scene.backend.patch_size) * scale_value
-	# ONE stable focus, ABOVE the terrain. The viewer streams the blocks it can
-	# see from the camera, so a camera inside the voxel column streams almost
-	# nothing: CI run 37807523731 held a stable focus at the map centre at mid
-	# height (80, 16, 80 - inside a 32 m column) for 303 s, never meshed the
-	# region, and ten of eleven framed gates failed. The five-vantage sweep that
-	# did pass every framed gate (run 37795933012) sat at y = 40 m, above the
-	# column, looking down at the valley; the panorama capture that meshed in
-	# 5.8 s was parked far above the map too. Height above the terrain is what
-	# made the difference, and re-pointing the focus mid-stream discards the
-	# blocks already in flight, so hold one high vantage and let it finish.
-	var focus := Vector3(patch.x * 0.5, patch.y + 8.0, patch.z * 0.5)
-	var reach := _view_radius_world(scene)
-	var worst := 0.0
-	for x in [region.position.x, region.end.x]:
-		for z in [region.position.z, region.end.z]:
-			for y in [0.0, float(region.size.y)]:
-				worst = maxf(worst, (Vector3(x, y, z) * scale_value).distance_to(focus))
 	var cam: Camera3D = scene.camera
-	cam.position = focus
-	cam.look_at(Vector3(focus.x, 0.0, focus.z))
-	scene.backend.update_visual_focus(focus)
-	var started := Time.get_ticks_msec()
-	var deadline := started + STREAMING_SWEEP_CAP_MS
-	while not scene.backend.terrain.is_area_meshed(region) and Time.get_ticks_msec() < deadline:
-		scene.backend.update_visual_focus(focus)
-		await settle_frames(20000)
+	for vantage_index in SWEEP_VANTAGES.size():
+		var vantage: Dictionary = SWEEP_VANTAGES[vantage_index]
+		var focus: Vector3 = vantage["focus"]
+		var area := _cluster_area(scene, vantage["labels"])
+		cam.position = focus
+		cam.look_at(Vector3(focus.x, 0.0, focus.z))
+		var started := Time.get_ticks_msec()
+		var deadline := started + SWEEP_VANTAGE_CAP_MS
+		while not scene.backend.terrain.is_area_meshed(area) and Time.get_ticks_msec() < deadline:
+			scene.backend.update_visual_focus(focus)
+			await settle_frames(5000)
+		print("STARTER_MESH_WAIT ", JSON.stringify({"label": "sweep-%d" % vantage_index, "focus_metres": [focus.x, focus.y, focus.z], "area_cells": [int(area.size.x), int(area.size.y), int(area.size.z)], "meshed": scene.backend.terrain.is_area_meshed(area), "wait_ms": Time.get_ticks_msec() - started, "cap_ms": SWEEP_VANTAGE_CAP_MS}))
 	scene._update_camera()
-	var waited_ms := float(Time.get_ticks_msec() - started)
-	print("STARTER_MESH_WAIT ", JSON.stringify({"label": "capture-region", "area_cells": [int(region.size.x), int(region.size.y), int(region.size.z)], "meshed": scene.backend.terrain.is_area_meshed(region), "wait_ms": waited_ms, "cap_ms": STREAMING_SWEEP_CAP_MS, "focus_metres": [focus.x, focus.y, focus.z], "viewer_radius": reach, "farthest_region_corner": worst, "covered": worst <= reach}))
 
 func _mesh_framed_area(scene: Node, label: String) -> void:
 	var area := _framed_area(scene)
