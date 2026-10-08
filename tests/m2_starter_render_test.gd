@@ -2,18 +2,24 @@ extends SceneTree
 ## Actual main-scene cold start, native Mobile captures and a real border edit.
 ## Uses a unique checkpoint root; player saves and the live scene are untouched.
 const OUTPUT := "res://reports/screenshots/detailed-mountains"
-# Wall-clock budget for the up-front streaming gate. Streaming follows the
+# Wall-clock budget for the up-front streaming warm-up. Streaming follows the
 # camera and re-pointing the focus discards in-flight block loads, so the gate
-# parks the camera at one stable vantage and lets the viewer finish. A hosted
-# software Mobile runner needs a few minutes for that. The gate only bounds the
-# shard's time - the invariant is asserted by the per-capture framed gates.
-const STREAMING_SWEEP_CAP_MS := 300000
-# A framed region is already meshed once the valley has streamed, so this only
-# has to absorb the last in-flight cells for the region a camera frames. The
-# cap is generous because a gate that finds its region unmeshed must stream a
-# fresh 48 m box on a software Mobile runner, and a warm edge-region gate
-# already measured 29 s hosted (run 37811836652).
-const FRAMED_MESH_CAP_MS := 60000
+# parks the camera at one stable vantage and lets the viewer finish. It is a
+# warm-up and a reported metric only: the whole captured union never finished
+# inside any hosted cap (meshed:false at 315 s, run 37828200376), so a long
+# sweep is pure wall time - the per-capture framed gates are the assertion.
+const STREAMING_SWEEP_CAP_MS := 120000
+# A framed gate that finds its region unstreamed must stream a fresh 48 m box
+# on a software Mobile runner, which measures ~80-100 s hosted (run
+# 37828200376: opening-ui failed at 60 s while the same box finished 19 s into
+# the next gate; woodcutters-close failed at 60 s with a fresh western box).
+const FRAMED_MESH_CAP_MS := 120000
+# Shared budget across all framed gates. A warm gate costs 0 ms, so the budget
+# only drains on genuine streaming work; once it is exhausted the gates stop
+# absorbing a regression and fail with the starving label instead of letting
+# eleven full caps blow the shard's step timeout.
+const FRAMED_MESH_TOTAL_BUDGET_MS := 600000
+var _framed_budget_ms := FRAMED_MESH_TOTAL_BUDGET_MS
 # Every framing the capture phase uses, in capture order. The up-front streaming
 # gate is computed from this list and the captures are driven from it, so the
 # gate can never demand terrain the captures do not frame. The last entry is
@@ -301,23 +307,28 @@ func _stream_capture_region(scene: Node) -> void:
 func _mesh_framed_area(scene: Node, label: String) -> void:
 	var area := _framed_area(scene)
 	var started := Time.get_ticks_msec()
-	var deadline := started + FRAMED_MESH_CAP_MS
-	# World-metres centre of the area this gate demands. The live scene re-points
-	# the streaming focus at the camera every frame (m1_scene.gd _process), but
-	# this test freezes scene processing for clean captures, so the gate must
-	# drive that focus itself. It centres on the FRAMED AREA, not the camera:
-	# a panorama parks its camera ~234 m from what it looks at, outside the
-	# viewer's 128 m sphere, so a camera-following focus would stream away from
-	# the very terrain the capture frames. With the focus left wherever the
+	var deadline := started + mini(FRAMED_MESH_CAP_MS, maxi(_framed_budget_ms, 10000))
+	# World-metres centre of the area this gate demands, lifted ABOVE the voxel
+	# column. The live scene re-points the streaming focus at the camera every
+	# frame (m1_scene.gd _process), but this test freezes scene processing for
+	# clean captures, so the gate must drive that focus itself. It centres on
+	# the FRAMED AREA, not the camera: a panorama parks its camera ~234 m from
+	# what it looks at, outside the viewer's 128 m sphere, so a camera-following
+	# focus would stream away from the very terrain the capture frames. And it
+	# must sit above the column: a viewer buried mid-height streamed almost
+	# nothing (run 37807523731), while the same focus at column top + 8 m
+	# finished the region (run 37811836652). With the focus left wherever the
 	# sweep left it, captures framing regions the sweep did not stream starve
 	# forever (run 37811836652: the first four captures burned their whole caps
 	# while seven later gates passed at 0 ms).
 	var focus := area.get_center() * float(scene.backend.voxel_scale)
+	focus.y = float(scene.backend.patch_size.y) * float(scene.backend.voxel_scale) + 8.0
 	while not scene.backend.terrain.is_area_meshed(area) and Time.get_ticks_msec() < deadline:
 		scene.backend.update_visual_focus(focus)
 		await process_frame
 	var waited_ms := float(Time.get_ticks_msec() - started)
-	print("STARTER_MESH_WAIT ", JSON.stringify({"label": label, "area_cells": [int(area.size.x), int(area.size.y), int(area.size.z)], "meshed": scene.backend.terrain.is_area_meshed(area), "wait_ms": waited_ms, "cap_ms": FRAMED_MESH_CAP_MS}))
+	_framed_budget_ms -= int(waited_ms)
+	print("STARTER_MESH_WAIT ", JSON.stringify({"label": label, "area_cells": [int(area.size.x), int(area.size.y), int(area.size.z)], "meshed": scene.backend.terrain.is_area_meshed(area), "wait_ms": waited_ms, "cap_ms": mini(FRAMED_MESH_CAP_MS, maxi(_framed_budget_ms + int(waited_ms), 10000)), "budget_left_ms": _framed_budget_ms}))
 	check(scene.backend.terrain.is_area_meshed(area), label + " frames meshed native terrain")
 
 func settle_frames(milliseconds: int) -> void:
