@@ -9,8 +9,11 @@ const OUTPUT := "res://reports/screenshots/detailed-mountains"
 # shard's time - the invariant is asserted by the per-capture framed gates.
 const STREAMING_SWEEP_CAP_MS := 300000
 # A framed region is already meshed once the valley has streamed, so this only
-# has to absorb the last in-flight cells for the region a camera frames.
-const FRAMED_MESH_CAP_MS := 30000
+# has to absorb the last in-flight cells for the region a camera frames. The
+# cap is generous because a gate that finds its region unmeshed must stream a
+# fresh 48 m box on a software Mobile runner, and a warm edge-region gate
+# already measured 29 s hosted (run 37811836652).
+const FRAMED_MESH_CAP_MS := 60000
 # Every framing the capture phase uses, in capture order. The up-front streaming
 # gate is computed from this list and the captures are driven from it, so the
 # gate can never demand terrain the captures do not frame. The last entry is
@@ -299,7 +302,19 @@ func _mesh_framed_area(scene: Node, label: String) -> void:
 	var area := _framed_area(scene)
 	var started := Time.get_ticks_msec()
 	var deadline := started + FRAMED_MESH_CAP_MS
+	# World-metres centre of the area this gate demands. The live scene re-points
+	# the streaming focus at the camera every frame (m1_scene.gd _process), but
+	# this test freezes scene processing for clean captures, so the gate must
+	# drive that focus itself. It centres on the FRAMED AREA, not the camera:
+	# a panorama parks its camera ~234 m from what it looks at, outside the
+	# viewer's 128 m sphere, so a camera-following focus would stream away from
+	# the very terrain the capture frames. With the focus left wherever the
+	# sweep left it, captures framing regions the sweep did not stream starve
+	# forever (run 37811836652: the first four captures burned their whole caps
+	# while seven later gates passed at 0 ms).
+	var focus := area.get_center() * float(scene.backend.voxel_scale)
 	while not scene.backend.terrain.is_area_meshed(area) and Time.get_ticks_msec() < deadline:
+		scene.backend.update_visual_focus(focus)
 		await process_frame
 	var waited_ms := float(Time.get_ticks_msec() - started)
 	print("STARTER_MESH_WAIT ", JSON.stringify({"label": label, "area_cells": [int(area.size.x), int(area.size.y), int(area.size.z)], "meshed": scene.backend.terrain.is_area_meshed(area), "wait_ms": waited_ms, "cap_ms": FRAMED_MESH_CAP_MS}))
