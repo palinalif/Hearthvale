@@ -2,9 +2,10 @@ extends SceneTree
 ## Actual main-scene cold start, native Mobile captures and a real border edit.
 ## Uses a unique checkpoint root; player saves and the live scene are untouched.
 const OUTPUT := "res://reports/screenshots/detailed-mountains"
-# Wall-clock budget for the single up-front streaming sweep. Streaming follows
-# the camera, so the sweep drives the camera over the captured region; a hosted
-# software Mobile runner needs a few minutes for that. The sweep only bounds the
+# Wall-clock budget for the up-front streaming gate. Streaming follows the
+# camera and re-pointing the focus discards in-flight block loads, so the gate
+# parks the camera at one stable vantage and lets the viewer finish. A hosted
+# software Mobile runner needs a few minutes for that. The gate only bounds the
 # shard's time - the invariant is asserted by the per-capture framed gates.
 const STREAMING_SWEEP_CAP_MS := 300000
 # A framed region is already meshed once the valley has streamed, so this only
@@ -261,31 +262,35 @@ func _hide_terrain_overlays(scene: Node) -> void:
 func _stream_capture_region(scene: Node) -> void:
 	var region := _capture_region(scene)
 	# The region is in native cells; the camera and the streaming focus are in
-	# world metres, so the vantages are converted before use.
+	# world metres, so everything handed to the scene is converted first.
 	var scale_value := float(scene.backend.voxel_scale)
-	var centre_cells := region.get_center()
-	var vantages: Array[Vector3] = [Vector3(centre_cells.x * scale_value, 40.0, centre_cells.z * scale_value)]
-	for corner in [
-		Vector3(region.position.x * scale_value, 40.0, region.position.z * scale_value),
-		Vector3(region.end.x * scale_value, 40.0, region.position.z * scale_value),
-		Vector3(region.position.x * scale_value, 40.0, region.end.z * scale_value),
-		Vector3(region.end.x * scale_value, 40.0, region.end.z * scale_value),
-	]:
-		vantages.append(corner)
-	var look_at := Vector3(centre_cells.x * scale_value, 0.0, centre_cells.z * scale_value)
+	var patch := Vector3(scene.backend.patch_size) * scale_value
+	# ONE stable focus. The viewer loads blocks around the focus at
+	# _whole_world_view_distance, and re-pointing the focus abandons the blocks
+	# already in flight. CI run 37803663983 swept 14 vantages in 305 s and left
+	# seven captures' framed areas unmeshed, while the earlier five-vantage sweep
+	# (run 37795933012) left all eleven meshed: switching focus is the cost, not
+	# the distance. The map centre at mid height is the point from which that
+	# radius covers the whole captured region, so park there and let it finish.
+	var focus := Vector3(patch.x * 0.5, patch.y * 0.5, patch.z * 0.5)
+	var reach := _view_radius_world(scene)
+	var worst := 0.0
+	for x in [region.position.x, region.end.x]:
+		for z in [region.position.z, region.end.z]:
+			for y in [0.0, float(region.size.y)]:
+				worst = maxf(worst, (Vector3(x, y, z) * scale_value).distance_to(focus))
+	var cam: Camera3D = scene.camera
+	cam.position = focus
+	cam.look_at(Vector3(focus.x, 0.0, focus.z))
+	scene.backend.update_visual_focus(focus)
 	var started := Time.get_ticks_msec()
 	var deadline := started + STREAMING_SWEEP_CAP_MS
-	var vantage := 0
 	while not scene.backend.terrain.is_area_meshed(region) and Time.get_ticks_msec() < deadline:
-		var cam: Camera3D = scene.camera
-		cam.position = vantages[vantage % vantages.size()]
-		cam.look_at(look_at)
-		scene.backend.update_visual_focus(cam.global_position)
-		vantage += 1
+		scene.backend.update_visual_focus(focus)
 		await settle_frames(20000)
 	scene._update_camera()
 	var waited_ms := float(Time.get_ticks_msec() - started)
-	print("STARTER_MESH_WAIT ", JSON.stringify({"label": "capture-region", "area_cells": [int(region.size.x), int(region.size.y), int(region.size.z)], "meshed": scene.backend.terrain.is_area_meshed(region), "wait_ms": waited_ms, "cap_ms": STREAMING_SWEEP_CAP_MS, "vantages": vantage}))
+	print("STARTER_MESH_WAIT ", JSON.stringify({"label": "capture-region", "area_cells": [int(region.size.x), int(region.size.y), int(region.size.z)], "meshed": scene.backend.terrain.is_area_meshed(region), "wait_ms": waited_ms, "cap_ms": STREAMING_SWEEP_CAP_MS, "focus_metres": [focus.x, focus.y, focus.z], "viewer_radius": reach, "farthest_region_corner": worst, "covered": worst <= reach}))
 
 func _mesh_framed_area(scene: Node, label: String) -> void:
 	var area := _framed_area(scene)
