@@ -2,14 +2,24 @@ extends SceneTree
 ## Actual main-scene cold start, native Mobile captures and a real border edit.
 ## Uses a unique checkpoint root; player saves and the live scene are untouched.
 const OUTPUT := "res://reports/screenshots/detailed-mountains"
-# Wall-clock bound for the single up-front streaming gate. The visual viewer's
-# radius covers the whole valley, so this is the same streaming work every
-# capture depends on; a hosted software Mobile runner completes it in roughly
-# six minutes at 1-2 fps. This bounds the shard, it is not the pass threshold.
+# Wall-clock bound for the single up-front streaming gate. Streaming follows the
+# camera, so the gate drives the camera over the map; a hosted software Mobile
+# runner finishes the valley in a few minutes that way. This bounds the shard.
 const WHOLE_WORLD_MESH_CAP_MS := 420000
 # A framed region is already meshed once the valley has streamed, so this only
 # has to absorb the last in-flight cells for the region a camera frames.
 const FRAMED_MESH_CAP_MS := 15000
+# Vantage points for the streaming sweep. m1_scene calls
+# backend.update_visual_focus(camera.global_position) every frame, so meshing
+# demand follows the camera; the viewer radius covers the whole valley from any
+# of these, and the four corners pull the far edges into demand.
+const STREAMING_VANTAGES: Array[Vector3] = [
+	Vector3(80.0, 40.0, 80.0),
+	Vector3(10.0, 40.0, 10.0),
+	Vector3(150.0, 40.0, 10.0),
+	Vector3(10.0, 40.0, 150.0),
+	Vector3(150.0, 40.0, 150.0),
+]
 var failures: Array[String] = []
 var captures: Array[String] = []
 # Phase timing: this shard sets the delivery run's wall time, and its cost was
@@ -72,17 +82,18 @@ func run() -> void:
 	check(scene.building_world.get_buildings().size() == 3, "Production cold start has three homes")
 	# Native startup initially meshes only a small focus box. A panorama must
 	# wait for the expanded viewer, otherwise captures contain floating water.
-	# The streaming viewer's radius covers the whole map, so every capture is
-	# gated on the same whole-valley streaming work no matter which region its
-	# camera frames. Gating each capture separately paid for that work up to
-	# eleven times: a hosted software run burned 60-63 s on each of seven labels,
-	# captured terrain that was never meshed, and spent 584 s in the capture phase.
-	# Mesh once up front, then let each capture assert the terrain it frames,
-	# which is instant once the valley has streamed.
-	await _mesh_whole_world(scene)
+	# Streaming demand follows the camera, so a static camera streams slowly:
+	# gating every capture separately paid for the same work up to eleven times
+	# (seven labels burned 60-63 s each and still captured unmeshed terrain), and
+	# demanding the whole map from the cold-launch camera exhausted 425 s without
+	# finishing it. The wide panorama capture, which parks the camera high above
+	# the map, finished its meshing in 57 s - so drive the camera over the valley
+	# once, up front, then restore it and let each capture assert the terrain it
+	# frames, which is instant once the valley has streamed.
+	scene.set_process(false)
+	await _stream_whole_world(scene)
 	_mark_phase("settle")
 	await settle_frames(1500)
-	scene.set_process(false)
 	_mark_phase("capture")
 	# The first two captures use the real initial camera without moving it.
 	for home: Dictionary in scene.building_world.get_buildings():
@@ -215,18 +226,28 @@ func _view_radius_world(scene: Node) -> float:
 	var world := Vector3(scene.backend.patch_size) * float(scene.backend.voxel_scale)
 	return ceilf(maxf(TerrainBackend.RUNTIME_VIEW_DISTANCE_WORLD_FLOOR, world.length() * 0.5))
 
-## One streaming gate for the whole valley, taken before any capture is framed.
-## The viewer streams the entire map, so this is the work every capture is waiting
-## for; paying for it once is cheaper and deterministic, while per-capture gates
-## each paid up to their own cap for the same streaming.
-func _mesh_whole_world(scene: Node) -> void:
+## Stream the whole valley once, before any capture is framed, by moving the
+## camera over it. The live scene re-points the streaming focus at the camera
+## every frame, so the test drives that focus directly with the scene's own
+## process disabled; the voxel streaming itself keeps running on frames.
+## The camera is restored from the scene's orbit state afterwards, which is the
+## same call the live scene makes, so the cold-launch captures are unchanged.
+func _stream_whole_world(scene: Node) -> void:
 	var area := AABB(Vector3.ZERO, Vector3(scene.backend.patch_size))
 	var started := Time.get_ticks_msec()
 	var deadline := started + WHOLE_WORLD_MESH_CAP_MS
+	var vantage := 0
 	while not scene.backend.terrain.is_area_meshed(area) and Time.get_ticks_msec() < deadline:
+		if vantage < STREAMING_VANTAGES.size() and Time.get_ticks_msec() - started > vantage * 20000:
+			var cam: Camera3D = scene.camera
+			cam.position = STREAMING_VANTAGES[vantage]
+			cam.look_at(Vector3(80.0, 8.0, 80.0))
+			scene.backend.update_visual_focus(cam.global_position)
+			vantage += 1
 		await process_frame
+	scene._update_camera()
 	var waited_ms := float(Time.get_ticks_msec() - started)
-	print("STARTER_MESH_WAIT ", JSON.stringify({"label": "whole-world", "area_cells": [int(area.size.x), int(area.size.y), int(area.size.z)], "meshed": scene.backend.terrain.is_area_meshed(area), "wait_ms": waited_ms, "cap_ms": WHOLE_WORLD_MESH_CAP_MS}))
+	print("STARTER_MESH_WAIT ", JSON.stringify({"label": "whole-world", "area_cells": [int(area.size.x), int(area.size.y), int(area.size.z)], "meshed": scene.backend.terrain.is_area_meshed(area), "wait_ms": waited_ms, "cap_ms": WHOLE_WORLD_MESH_CAP_MS, "vantages": vantage}))
 	check(scene.backend.terrain.is_area_meshed(area), "native valley streams fully meshed within the %d ms cap" % WHOLE_WORLD_MESH_CAP_MS)
 
 func _mesh_framed_area(scene: Node, label: String) -> void:
